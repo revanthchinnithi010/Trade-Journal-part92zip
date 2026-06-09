@@ -274,9 +274,12 @@ export default function Trades() {
 
         <button
           onClick={openModal}
-          className="flex items-center gap-2 px-4 h-9 rounded-xl bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-primary/25 shrink-0"
+          className="flex items-center gap-2 px-4 h-9 rounded-xl border-2 border-white bg-white text-black sm:border-0 sm:bg-primary sm:text-white text-[13px] font-semibold hover:bg-white/90 sm:hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-black/10 sm:shadow-primary/25 shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-black sm:hidden">
+            <Plus className="w-3 h-3 text-white" />
+          </span>
+          <Plus className="hidden sm:block w-4 h-4" />
           Log Trade
         </button>
       </div>
