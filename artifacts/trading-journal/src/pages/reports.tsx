@@ -57,7 +57,7 @@ function MetricCard({
   color?: string; iconBg?: string; iconColor?: string; bar?: number;
 }) {
   return (
-    <div className="glass-card p-5 h-full relative overflow-hidden group hover:border-white/[0.12] transition-all duration-300">
+    <div className="glass-card p-5 h-full relative overflow-hidden group transition-all duration-300">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
       <div className="flex items-center justify-between mb-4">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>

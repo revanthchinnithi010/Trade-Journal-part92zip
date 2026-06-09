@@ -425,11 +425,18 @@
    Light: white NeoMorph cards with soft depth
    ══════════════════════════════════════════════════════════════════ */
 .glass-card {
-  background: rgba(12, 14, 18, 0.82);
+  background:
+    rgba(12, 14, 18, 0.82) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.38) 0%,
+      rgba(255, 255, 255, 0.10) 28%,
+      rgba(255, 255, 255, 0.04) 58%,
+      rgba(255, 255, 255, 0.22) 100%
+    ) border-box;
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-top: 1px solid rgba(255, 255, 255, 0.10);
+  border: 1px solid transparent;
   border-radius: 20px;
   box-shadow:
     0 4px 32px rgba(0, 0, 0, 0.60),
@@ -438,10 +445,18 @@
   transform: translateZ(0);
   will-change: auto;
   contain: layout style;
-  transition: box-shadow 0.22s ease, border-color 0.22s ease;
+  transition: box-shadow 0.22s ease;
 }
 .glass-card:hover {
-  border-top-color: rgba(255, 255, 255, 0.14);
+  background:
+    rgba(12, 14, 18, 0.82) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.52) 0%,
+      rgba(255, 255, 255, 0.15) 28%,
+      rgba(255, 255, 255, 0.07) 58%,
+      rgba(255, 255, 255, 0.32) 100%
+    ) border-box;
   box-shadow:
     0 8px 40px rgba(0, 0, 0, 0.65),
     0 1px 0 rgba(255, 255, 255, 0.08) inset,
@@ -449,11 +464,18 @@
 }
 
 .glass-card-elevated {
-  background: rgba(12, 14, 18, 0.88);
+  background:
+    rgba(12, 14, 18, 0.88) padding-box,
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.42) 0%,
+      rgba(255, 255, 255, 0.11) 28%,
+      rgba(255, 255, 255, 0.05) 58%,
+      rgba(255, 255, 255, 0.26) 100%
+    ) border-box;
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid transparent;
   border-radius: 20px;
   box-shadow:
     0 8px 48px rgba(0, 0, 0, 0.68),

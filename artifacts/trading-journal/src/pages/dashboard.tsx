@@ -86,7 +86,7 @@ const StatCard = memo(function StatCard({
   positive?: boolean; accent?: boolean; bar?: number; trend?: string;
 }) {
   return (
-    <div className="glass-card stat-card-glow h-full relative overflow-hidden group hover:border-white/[0.12] transition-colors duration-200 p-5">
+    <div className="glass-card stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-primary/[0.04] pointer-events-none" />
 
@@ -596,7 +596,7 @@ export default function Dashboard() {
             <div
               key={w.label}
               onClick={isLive ? () => setShowLiveSymbols(true) : undefined}
-              className={`glass-card px-4 py-3.5 flex items-center gap-3 group hover:border-white/[0.12] transition-colors duration-200 relative overflow-hidden ${isLive ? "cursor-pointer active:scale-[0.98]" : ""}`}
+              className={`glass-card px-4 py-3.5 flex items-center gap-3 group transition-colors duration-200 relative overflow-hidden ${isLive ? "cursor-pointer active:scale-[0.98]" : ""}`}
               style={isLive ? { borderColor: "rgba(59,130,246,0.25)" } : {}}
             >
               <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center flex-shrink-0 group-hover:bg-primary/10 group-hover:border-primary/20 transition-colors duration-200">

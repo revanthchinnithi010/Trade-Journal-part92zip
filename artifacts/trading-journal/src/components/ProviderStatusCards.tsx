@@ -66,7 +66,7 @@ const ProviderCard = memo(function ProviderCard({ stats, now }: { stats: Provide
   const info = PROVIDER_DISPLAY[stats.name] ?? { label: stats.displayName, symbols: stats.subscriptions.join(" · ") };
 
   return (
-    <div className="glass-card relative overflow-hidden group hover:border-white/[0.12] transition-colors duration-200">
+    <div className="glass-card relative overflow-hidden group transition-colors duration-200">
       <div
         className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
         style={{ background: `radial-gradient(ellipse at top left, ${stats.color}08, transparent 70%)` }}
