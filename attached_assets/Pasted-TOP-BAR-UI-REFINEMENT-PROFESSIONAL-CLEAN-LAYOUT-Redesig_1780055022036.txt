@@ -1,0 +1,165 @@
+TOP BAR UI REFINEMENT — PROFESSIONAL CLEAN LAYOUT
+
+Redesign and simplify the top toolbar exactly as requested.
+
+==================================================
+1. SYMBOL PANEL POSITION CHANGE
+==================================================
+
+CURRENT:
+Symbol box (BTC, price, %) is inside top toolbar row.
+
+NEW BEHAVIOR:
+Move symbol panel slightly DOWN into chart area.
+
+Requirements:
+✅ floating overlay style
+✅ transparent background
+✅ glassmorphism effect
+✅ not attached to toolbar height
+✅ positioned above chart candles
+✅ no solid block feeling
+
+Style:
+- background: rgba(10,18,14,0.45)
+- backdrop blur
+- border subtle green glow
+- floating professional TradingView/Binance style
+
+==================================================
+2. CHART TYPES SIMPLIFY
+==================================================
+
+In chart type section ONLY keep:
+
+✅ Candlestick
+✅ Heikin Ashi
+✅ Line
+
+REMOVE:
+❌ area chart
+❌ bar chart
+❌ baseline
+❌ hollow candles
+❌ any extra chart styles
+
+Topbar must stay minimal and clean.
+
+==================================================
+3. REMOVE EXTRA BUTTONS
+==================================================
+
+Remove the 2 buttons right side of Indicators.
+
+Delete:
+❌ drawing preset button
+❌ extra tools/settings button
+
+Keep ONLY:
+✅ Indicators
+✅ Drawing tool
+✅ Alert
+✅ Replay
+
+==================================================
+4. MOVE 3 BUTTONS TO RIGHT MINI CONTROLBAR
+==================================================
+
+CURRENT:
+Camera
+Fullscreen
+Settings
+
+are near Trade button in topbar.
+
+NEW:
+Move them into RIGHT SIDE MINI CONTROLBAR.
+
+Right controlbar should contain:
+✅ bookmark
+✅ notifications
+✅ watchlist
+✅ apps
+✅ calculator
+✅ camera
+✅ fullscreen
+✅ settings
+
+Arrange vertically.
+
+==================================================
+5. REMOVE CLOCK & COUNTDOWN
+==================================================
+
+Remove from topbar:
+❌ live clock
+❌ countdown timer
+
+Topbar must become cleaner and compact.
+
+==================================================
+6. FINAL TOPBAR DESIGN
+==================================================
+
+Goal:
+Ultra clean professional crypto terminal.
+
+Topbar should contain ONLY:
+
+LEFT:
+✅ floating menu button
+✅ floating symbol panel
+
+CENTER:
+✅ timeframe buttons
+✅ chart type selector
+✅ indicators
+✅ drawing tool
+✅ alerts
+✅ replay
+
+RIGHT:
+✅ undo
+✅ redo
+✅ trade button
+
+Everything else removed or moved.
+
+==================================================
+7. MOBILE/TABLET OPTIMIZATION
+==================================================
+
+Requirements:
+✅ no overcrowding
+✅ better spacing
+✅ touch friendly
+✅ no horizontal overflow
+✅ smooth rendering
+✅ ultra fast interactions
+✅ no lag
+
+==================================================
+8. PERFORMANCE
+==================================================
+
+Use:
+✅ memoization
+✅ lightweight renders
+✅ avoid rerendering chart
+✅ GPU accelerated transforms
+✅ CSS transitions only
+
+Avoid:
+❌ layout thrashing
+❌ unnecessary React rerenders
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need a modern:
+✅ TradingView + Binance hybrid UI
+✅ minimal
+✅ cinematic
+✅ ultra clean
+✅ optimized for tablet trading

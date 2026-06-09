@@ -1,0 +1,171 @@
+FIX MULTI-CHART LAYOUTS — ALWAYS SHOW LEFT DRAWING TOOLBAR
+
+====================================================
+CURRENT PROBLEM
+====================================================
+
+When switching to:
+✅ 2-chart layout
+✅ split layout
+✅ multi-chart mode
+
+LEFT DRAWING TOOLBAR disappears.
+
+This is WRONG.
+
+====================================================
+MAIN REQUIREMENT
+====================================================
+
+Left drawing toolbar must ALWAYS remain visible
+in ALL chart layouts.
+
+====================================================
+SUPPORTED LAYOUTS
+====================================================
+
+Toolbar must work in:
+
+✅ Single chart
+✅ 2 vertical split
+✅ 2 horizontal split
+✅ 4 chart grid
+✅ custom layouts
+
+====================================================
+EXPECTED BEHAVIOR
+====================================================
+
+Toolbar should:
+----------------------------------------------------
+
+✅ stay docked on far left side
+✅ span full chart workspace height
+✅ remain above all chart panels
+✅ never disappear on layout change
+
+====================================================
+MULTI-CHART TOOL TARGETING
+====================================================
+
+When user clicks any chart:
+----------------------------------------------------
+
+that chart becomes:
+ACTIVE CHART
+
+Toolbar actions apply ONLY to active chart.
+
+====================================================
+ACTIVE CHART VISUAL
+====================================================
+
+Currently active chart should show:
+
+✅ subtle glowing border
+OR
+✅ highlighted outline
+
+Border color:
+rgba(183,255,90,0.45)
+
+====================================================
+DRAWING TOOL LOGIC
+====================================================
+
+If user:
+----------------------------------------------------
+1. taps ETH chart
+2. selects trendline tool
+3. draws line
+
+THEN:
+----------------------------------------------------
+drawing only appears on ETH chart.
+
+NOT all charts.
+
+====================================================
+TOOLBAR POSITION FIX
+====================================================
+
+Toolbar must use:
+----------------------------------------------------
+
+position: absolute/fixed
+
+left: 0
+
+top:
+below topbar
+
+bottom:
+above bottom panel
+
+z-index:
+higher than charts
+
+====================================================
+LAYOUT ENGINE FIX
+====================================================
+
+Current layout switching likely re-renders chart container
+and destroys toolbar component.
+
+Fix:
+----------------------------------------------------
+
+Toolbar must exist OUTSIDE layout grid.
+
+Correct structure:
+----------------------------------------------------
+
+<App>
+
+<Topbar />
+
+<LeftToolbar />
+
+<ChartWorkspace>
+   <ChartGrid />
+</ChartWorkspace>
+
+<RightSidebar />
+
+</App>
+
+====================================================
+IMPORTANT FIX
+====================================================
+
+Currently toolbar hidden because:
+----------------------------------------------------
+toolbar mounted inside single-chart component.
+
+Move toolbar into:
+GLOBAL WORKSPACE LAYER.
+
+====================================================
+MULTI-CHART INTERACTION
+====================================================
+
+When changing active chart:
+----------------------------------------------------
+
+✅ toolbar state persists
+✅ selected tool persists
+✅ drawings remain independent
+✅ alerts remain independent
+✅ no UI flickering
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+✅ left toolbar always visible
+✅ works in every layout
+✅ professional TradingView-style multi-chart system
+✅ active chart targeting works correctly
+✅ drawings isolated per chart
+✅ stable institutional trading workspace

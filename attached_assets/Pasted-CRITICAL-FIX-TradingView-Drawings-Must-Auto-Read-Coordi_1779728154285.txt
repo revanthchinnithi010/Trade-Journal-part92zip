@@ -1,0 +1,117 @@
+CRITICAL FIX — TradingView Drawings Must Auto-Read Coordinates
+
+The current implementation is WRONG.
+
+Right now the app asks the user to manually enter:
+- point times
+- point prices
+
+This should NEVER happen.
+
+==================================================
+REQUIRED BEHAVIOR
+==================================================
+
+When user draws:
+- trendline
+- ray
+- horizontal line
+- rectangle
+- channel
+
+the app must AUTOMATICALLY extract:
+
+- point1 time
+- point1 price
+- point2 time
+- point2 price
+
+DIRECTLY from the TradingView drawing object.
+
+==================================================
+REMOVE MANUAL INPUT
+==================================================
+
+DELETE these manual fields from popup:
+- point1 time input
+- point2 time input
+- point1 price input
+- point2 price input
+
+User should NOT manually type coordinates.
+
+==================================================
+AUTO DETECT DRAWINGS
+==================================================
+
+When drawing is selected:
+1. read drawing coordinates automatically
+2. populate alert engine automatically
+3. show extracted values as read-only labels
+
+Example:
+
+Point 1:
+25 May 2026 15:11 UTC
+1.16489
+
+Point 2:
+25 May 2026 16:21 UTC
+1.16427
+
+==================================================
+USE REAL TRADINGVIEW DRAWING API
+==================================================
+
+Implement proper TradingView chart integration.
+
+Use:
+- drawing events
+- shape events
+- entity selection
+- drawing coordinate extraction
+
+The app must track:
+- drawing create
+- drawing move
+- drawing edit
+- drawing delete
+
+==================================================
+LIVE SYNCHRONIZATION
+==================================================
+
+When user moves the line:
+- coordinates auto update
+- alerts auto update
+- projected price recalculates instantly
+
+==================================================
+NO CUSTOM FAKE TIMESTAMPS
+==================================================
+
+Do NOT:
+- generate timestamps
+- use browser time
+- use placeholder values
+- ask user for manual coordinates
+
+ONLY use real chart candle timestamps.
+
+==================================================
+FINAL RESULT
+==================================================
+
+User flow should work exactly like TradingView:
+
+1. Draw line
+2. Click line
+3. Click alert
+4. Alert popup auto-fills everything
+5. User only selects:
+   - condition
+   - timeframe
+   - telegram toggle
+6. Click Create Alert
+
+No manual coordinate entry anywhere.

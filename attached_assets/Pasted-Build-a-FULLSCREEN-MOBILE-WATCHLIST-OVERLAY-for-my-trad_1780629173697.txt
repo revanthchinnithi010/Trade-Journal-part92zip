@@ -1,0 +1,375 @@
+Build a FULLSCREEN MOBILE WATCHLIST OVERLAY for my trading application inspired EXACTLY by TradingView mobile watchlist UI, but with PREMIUM DARK GLASSMORPHISM styling like the second reference image.
+
+IMPORTANT:
+This must open when user taps/clicks the chart symbol area or pair symbol control.
+
+==================================================
+WATCHLIST OVERLAY BEHAVIOR
+==================================================
+
+When user taps:
+- current pair symbol
+OR
+- watchlist button
+OR
+- chart symbol area
+
+THEN:
+Open a FULLSCREEN mobile watchlist overlay.
+
+Animation:
+- smooth slide-up from bottom
+- blurred background
+- cinematic fade
+
+Use:
+- Framer Motion
+- spring animation
+- momentum feel
+
+==================================================
+OVERLAY STRUCTURE
+==================================================
+
+<MobileWatchlistOverlay>
+  <TopHeader />
+  <WatchlistTabs />
+  <WatchlistList />
+  <BottomNavigation />
+</MobileWatchlistOverlay>
+
+==================================================
+OVERLAY STYLE
+==================================================
+
+Visual style must combine:
+
+1. TradingView mobile watchlist layout
+2. Premium glassmorphism from second image
+
+BACKGROUND:
+
+background:
+linear-gradient(
+180deg,
+rgba(8,8,8,0.96),
+rgba(0,0,0,0.985)
+);
+
+backdrop-filter: blur(35px);
+
+Add:
+- subtle blue reflections
+- glossy gradients
+- soft ambient lighting
+- premium futuristic shadows
+
+The entire overlay must feel:
+- ultra premium
+- cinematic
+- futuristic
+- glass hardware UI
+
+==================================================
+TOP HEADER
+==================================================
+
+Layout EXACTLY like TradingView mobile.
+
+LEFT:
+- menu icon
+
+CENTER:
+- app logo
+
+RIGHT:
+- add button
+
+HEADER HEIGHT:
+≈ 72px
+
+STYLE:
+- transparent dark glass
+- thin bottom border
+- floating look
+
+==================================================
+WATCHLIST TABS
+==================================================
+
+Create pill-style tabs:
+
+[ Watchlist ] [ + Add list ]
+
+STYLE:
+
+background:
+rgba(255,255,255,0.06);
+
+border:
+1px solid rgba(255,255,255,0.08);
+
+border-radius: 18px;
+
+Selected tab:
+- brighter glass
+- soft glow
+
+==================================================
+WATCHLIST LIST
+==================================================
+
+This is VERY IMPORTANT.
+
+Build TradingView-style watchlist rows EXACTLY.
+
+Each row contains:
+
+LEFT:
+- symbol icon/logo
+
+CENTER:
+- pair symbol
+- full asset name
+
+RIGHT:
+- live price
+- price change
+- percentage change
+
+==================================================
+SYMBOL ICONS
+==================================================
+
+Support:
+- crypto logos
+- forex flags
+- indices icons
+- commodity icons
+
+Examples:
+- BTC
+- ETH
+- EURUSD
+- NAS100
+- US500
+- XAUUSD
+
+Icons must be:
+- circular
+- premium quality
+- glowing slightly
+- visually identical to TradingView style
+
+==================================================
+WATCHLIST ROW DESIGN
+==================================================
+
+ROW HEIGHT:
+≈ 78px
+
+STYLE:
+- transparent glass row
+- subtle separator
+- hover glow
+- touch ripple
+
+ROW BACKGROUND:
+transparent
+
+ON PRESS:
+rgba(255,255,255,0.04)
+
+SEPARATOR:
+1px rgba(255,255,255,0.05)
+
+==================================================
+TYPOGRAPHY
+==================================================
+
+SYMBOL:
+- bold
+- white
+- 18px
+
+DESCRIPTION:
+- gray
+- 13px
+
+PRICE:
+- white
+- bold
+- right aligned
+
+PROFIT:
+#00ff9d
+
+LOSS:
+#ff4d67
+
+==================================================
+LIVE PRICE UPDATES
+==================================================
+
+Prices must:
+- update in realtime
+- animate smoothly
+- no flicker
+- MT5-like responsiveness
+
+Use:
+requestAnimationFrame()
+
+NOT:
+setInterval()
+
+==================================================
+CHART OPENING BEHAVIOR
+==================================================
+
+VERY IMPORTANT.
+
+When user taps ANY symbol row:
+
+1. close watchlist overlay
+2. instantly load selected chart
+3. chart opens FULLSCREEN
+4. preserve mobile mode UI
+5. preserve dock UI
+
+Example:
+User taps:
+BTCUSD
+
+Then:
+- chart switches to BTCUSD
+- watchlist closes smoothly
+- chart becomes active fullscreen
+- realtime feed updates immediately
+
+==================================================
+SYMBOL SWITCHING SYSTEM
+==================================================
+
+Implement centralized symbol state:
+
+Example:
+
+const [activeSymbol, setActiveSymbol] = useState("BTCUSD");
+
+On watchlist item click:
+setActiveSymbol(symbol)
+
+Then:
+- reload chart data
+- reconnect websocket
+- update live prices
+- update dock symbol display
+
+==================================================
+ANIMATION QUALITY
+==================================================
+
+Use:
+- Framer Motion
+- spring animations
+- inertia
+- opacity fade
+- smooth transforms
+
+Overlay open:
+- slide up
+- blur in
+- fade in
+
+Overlay close:
+- fade out
+- slide down
+
+==================================================
+BOTTOM NAVIGATION
+==================================================
+
+Build TradingView-style bottom navbar EXACTLY.
+
+Tabs:
+- Watchlist
+- Chart
+- Explore
+- Community
+- Menu
+
+STYLE:
+- floating dark glass
+- ultra minimal
+- white icons
+- active tab highlighted
+
+==================================================
+GLASSMORPHISM QUALITY
+==================================================
+
+VERY IMPORTANT.
+
+Match second reference image aesthetic:
+
+Use:
+- glossy reflections
+- layered transparency
+- blue ambient glow
+- blurred glass
+- subtle light streaks
+- premium shadows
+
+Example:
+
+background:
+linear-gradient(
+145deg,
+rgba(25,25,25,0.88),
+rgba(8,8,8,0.94)
+);
+
+backdrop-filter: blur(28px);
+
+box-shadow:
+0 10px 40px rgba(0,0,0,0.65),
+inset 0 1px 0 rgba(255,255,255,0.05);
+
+==================================================
+PERFORMANCE
+==================================================
+
+Must maintain:
+- 60fps
+- smooth scrolling
+- smooth realtime updates
+- GPU acceleration
+
+Use:
+transform: translate3d(0,0,0);
+will-change: transform;
+
+==================================================
+FINAL GOAL
+==================================================
+
+The final result must feel like:
+
+- TradingView mobile watchlist
+- but redesigned with ultra-premium futuristic glassmorphism
+- cinematic dark UI
+- realtime trading terminal aesthetic
+
+The UI should visually feel:
+- premium
+- modern
+- immersive
+- hardware-like
+- luxury fintech quality
+
+Most important:
+- exact TradingView watchlist behavior
+- fullscreen chart opening
+- realtime symbol switching
+- premium glass UI

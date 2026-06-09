@@ -1,0 +1,158 @@
+Refine and optimize the Charts workspace UI for a professional TradingView terminal experience.
+
+Current issues:
+
+1. TradingView chart is NOT using full available screen space.
+2. Duplicate watchlist exists:
+   - custom TradeVault watchlist on left side
+   - TradingView built-in watchlist icon also visible
+3. Need collapsible panels for better fullscreen experience.
+4. Need more immersive chart-focused layout.
+
+--------------------------------------------------
+
+REQUIRED FIXES
+
+1. Make TradingView chart FULLSCREEN RESPONSIVE.
+
+The chart should dynamically expand and occupy all available space.
+
+Requirements:
+- maximize chart area
+- reduce wasted margins/padding
+- chart should resize fluidly
+- optimized for 16:9 Android tablet landscape
+- immersive trading terminal feel
+
+--------------------------------------------------
+
+2. REMOVE TRADINGVIEW BUILT-IN WATCHLIST
+
+Already using custom TradeVault watchlist panel.
+
+Remove/hide:
+- TradingView watchlist icon
+- TradingView side panel toggle
+- duplicate sidebar widgets
+
+Keep ONLY:
+- drawing tools
+- indicators
+- timeframe controls
+- chart controls
+
+--------------------------------------------------
+
+3. ADD COLLAPSIBLE PANELS
+
+Create smooth collapsible behavior for:
+
+A) LEFT WATCHLIST PANEL
+B) BOTTOM TRADEVAULT CONTROL PANEL
+
+--------------------------------------------------
+
+4. LEFT WATCHLIST PANEL
+
+Add:
+- collapse button
+- expand button
+- smooth animation
+- remember state
+
+Behavior:
+- collapsed = icon-only slim sidebar
+- expanded = full watchlist panel
+
+Chart should automatically resize when toggled.
+
+--------------------------------------------------
+
+5. BOTTOM CONTROL PANEL
+
+Current:
+Positions / Orders / Alerts section.
+
+Add:
+- collapse/expand handle
+- draggable resize support
+- smooth animation
+
+Behavior:
+- collapsed → tiny bottom bar
+- expanded → full panel
+
+Chart should grow larger when bottom panel closes.
+
+--------------------------------------------------
+
+6. PROFESSIONAL TERMINAL LAYOUT
+
+Desired layout:
+
+┌────────────────────────────────────┐
+│ Top Toolbar                        │
+├───────┬────────────────────────────┤
+│Watch  │                            │
+│List   │ TradingView Chart          │
+│       │                            │
+│       │                            │
+├───────┴────────────────────────────┤
+│ Bottom Positions/Orders/Alerts    │
+└────────────────────────────────────┘
+
+All sections resizable/collapsible.
+
+--------------------------------------------------
+
+7. UI POLISH
+
+Use:
+- premium glossy green fintech theme
+- subtle animations
+- smooth transitions
+- modern tablet-native design
+- soft shadows
+- clean spacing
+
+--------------------------------------------------
+
+8. PERFORMANCE OPTIMIZATION
+
+Important:
+- no lag during resize
+- throttle resize events
+- prevent chart reinitialization
+- maintain smooth 60fps
+- optimized tablet rendering
+
+--------------------------------------------------
+
+9. ADVANCED BEHAVIOR
+
+When:
+- watchlist collapsed
+- bottom panel collapsed
+
+Then:
+TradingView chart should become near-fullscreen.
+
+Goal:
+Maximum chart visibility with optional panels.
+
+--------------------------------------------------
+
+10. FINAL RESULT
+
+The Charts page should feel like:
+- professional trading terminal
+- institutional desktop platform
+- premium tablet trading app
+- immersive TradingView workspace
+
+After implementation:
+- verify fullscreen responsiveness
+- verify panel animations
+- verify chart resizing
+- verify smooth tablet UX
+- provide final screenshots

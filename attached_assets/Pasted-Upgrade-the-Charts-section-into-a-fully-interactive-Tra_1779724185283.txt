@@ -1,0 +1,212 @@
+Upgrade the Charts section into a fully interactive TradingView-style professional charting system with persistent drawings and alert automation.
+
+==================================================
+MAIN GOAL
+
+Currently:
+
+- trendlines can be drawn
+- drawing toolbar works
+
+But missing:
+
+- trendline alerts
+- drawing persistence
+- save/load system
+- TradingView-style drawing management
+
+Implement all advanced features below.
+
+==================================================
+DRAWING PERSISTENCE SYSTEM
+
+1. Save ALL chart drawings to Supabase database automatically.
+
+Persist:
+
+- trendlines
+- horizontal lines
+- rays
+- rectangles
+- zones
+- fibonacci tools
+- channels
+- text labels
+- arrows
+
+2. Drawings must remain after:
+
+- refresh
+- logout/login
+- browser close
+- device restart
+
+3. Each drawing must store:
+
+- symbol
+- timeframe
+- drawing type
+- coordinates
+- style
+- color
+- thickness
+- timestamps
+- user id
+
+==================================================
+TRADINGVIEW-STYLE DRAWING MENU
+
+When clicking a drawing OR clicking the three-dots menu:
+
+Show floating context menu with:
+
+- Add Alert
+- Save Drawing
+- Clone
+- Lock
+- Hide
+- Delete
+- Change Color
+- Change Thickness
+- Extend Left/Right
+
+==================================================
+TRENDLINE ALERT SYSTEM
+
+Implement advanced trendline alerts.
+
+User should be able to:
+
+1. Draw trendline
+2. Click line
+3. Click "Add Alert"
+
+Then configure:
+
+- crossing up
+- crossing down
+- touch
+- breakout
+- candle close above
+- candle close below
+
+==================================================
+ZONE ALERTS
+
+Add support for:
+
+- supply zones
+- demand zones
+- support/resistance zones
+- rectangle zones
+
+Alert when:
+
+- price enters zone
+- price exits zone
+- breakout happens
+- rejection happens
+
+==================================================
+PRICE ALERTS
+
+Allow users to:
+
+- click price scale
+- add price alert
+- configure conditions
+
+Conditions:
+
+- crossing above
+- crossing below
+- candle close
+- wick touch
+
+==================================================
+ALERT ENGINE
+
+Build real-time websocket alert engine.
+
+Requirements:
+
+- monitor live tick-by-tick prices
+- compare against drawing coordinates
+- trigger instantly
+- work across all symbols/timeframes
+
+==================================================
+ALERT ACTIONS
+
+When alert triggers:
+
+1. Show in-app popup notification
+2. Add notification center entry
+3. Send Telegram alert
+4. Play sound
+5. Highlight chart drawing
+
+==================================================
+DRAWINGS PANEL
+
+Add professional drawings manager panel.
+
+Show:
+
+- all saved drawings
+- symbol
+- timeframe
+- active alerts
+- creation time
+
+Actions:
+
+- edit
+- delete
+- toggle visibility
+- duplicate
+
+==================================================
+DATABASE
+
+Use Supabase PostgreSQL.
+
+Create tables for:
+
+- drawings
+- alerts
+- alert_history
+- chart_layouts
+
+==================================================
+LAYOUT SAVE SYSTEM
+
+Add:
+
+- Save Layout
+- Load Layout
+- Auto-save workspace
+
+Persist:
+
+- indicators
+- zoom
+- chart position
+- drawings
+- watchlists
+
+==================================================
+UI/UX
+
+Use:
+
+- TradingView-style interactions
+- glassmorphism floating menus
+- smooth animations
+- realtime updates
+- professional hedge-fund terminal feel
+
+==================================================
+FINAL GOAL
+
+The chart system should behave like a real TradingView terminal with professional persistent drawings and advanced alert automation.

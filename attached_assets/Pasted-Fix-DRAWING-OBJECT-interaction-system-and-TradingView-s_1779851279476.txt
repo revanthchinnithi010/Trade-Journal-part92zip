@@ -1,0 +1,253 @@
+Fix DRAWING OBJECT interaction system and TradingView-style object controls.
+
+Current issues:
+❌ Favorite star icon not showing on right side for every tool
+❌ Popup menu tools not selectable properly
+❌ Ray tool extending into price scale/right axis
+❌ Drawing objects have no TradingView-style controls
+❌ No settings popup for selected drawing
+❌ No hide/delete quick actions
+
+Need FULL TradingView-style object interaction system.
+
+==================================================
+1. FAVORITE STAR FIX
+==================================================
+
+Every tool row inside popup MUST show:
+
+⭐ Favorite star icon on RIGHT side
+
+Exactly like TradingView.
+
+Requirements:
+✅ visible for ALL tools
+✅ perfectly aligned right
+✅ same spacing
+✅ same size
+✅ click works properly
+
+Star states:
+- outlined star = not favorite
+- filled yellow/green star = favorite
+
+When star clicked:
+tool gets added to bottom horizontal favorites toolbar.
+
+==================================================
+2. TOOL SELECT FIX
+==================================================
+
+Current issue:
+Popup menu tools click not selecting correctly.
+
+Fix:
+When clicking tool row:
+
+✅ tool instantly becomes active
+✅ popup closes automatically
+✅ selected tool highlights in left toolbar
+✅ drawing mode activates immediately
+
+Must use:
+pointer-events properly
+z-index properly
+
+NO blocked clicks.
+
+==================================================
+3. RAY TOOL FIX
+==================================================
+
+Current issue:
+Ray line extends into RIGHT PRICE SCALE.
+
+Fix:
+Drawing area MUST be clipped ONLY inside chart canvas.
+
+Ray/lines should NEVER render over:
+❌ price scale
+❌ right sidebar
+❌ watchlist
+❌ layout panel
+
+Implement canvas clipping region.
+
+Use:
+overflow hidden
+or proper chart viewport clipping.
+
+==================================================
+4. DRAWING OBJECT SELECTION SYSTEM
+==================================================
+
+After drawing:
+When user taps/clicks trendline/ray/rectangle/etc:
+
+Need:
+
+✅ drawing becomes selected
+✅ both anchor points become visible
+✅ endpoints glow/highlight
+✅ draggable handles visible
+✅ line gets active outline
+
+Like TradingView.
+
+==================================================
+5. FLOATING MINI TOOLBAR
+==================================================
+
+When drawing selected:
+Show SMALL floating horizontal toolbar near object.
+
+TradingView style.
+
+Toolbar contains:
+
+⚙ Settings
+🔔 Alerts
+👁 Hide
+🗑 Delete
+
+Design:
+- floating dark rounded panel
+- auto positions near drawing
+- mobile optimized
+- not blocking chart
+
+==================================================
+6. SETTINGS PANEL
+==================================================
+
+When ⚙ clicked:
+
+Open floating medium-size settings card.
+
+NOT fullscreen modal.
+
+Rounded corners:
+18px
+
+Dark glass UI.
+
+==================================================
+7. SETTINGS OPTIONS
+==================================================
+
+Inside settings panel show:
+
+--------------------------------------------------
+LINE SETTINGS
+--------------------------------------------------
+
+✅ Color selection box
+✅ Opacity slider
+✅ Line thickness
+✅ Line style selector
+
+Line styles:
+- solid
+- dotted
+- dashed
+
+Thickness:
+1–6
+
+==================================================
+8. COLOR PICKER
+==================================================
+
+TradingView-like color picker.
+
+Need:
+✅ preset colors
+✅ opacity slider
+✅ custom color picker
+✅ smooth popup
+
+==================================================
+9. HIDE FEATURE
+==================================================
+
+When 👁 clicked:
+
+Object becomes hidden.
+
+Eye icon changes to:
+🚫 crossed eye
+
+Hidden objects:
+- invisible on chart
+- still exist in object tree
+
+==================================================
+10. DELETE FEATURE
+==================================================
+
+When 🗑 clicked:
+
+Object deletes instantly.
+
+Also remove from:
+✅ object tree
+✅ saved layout
+✅ local storage
+
+Deleted object MUST NOT return after refresh.
+
+==================================================
+11. DRAGGING FIX
+==================================================
+
+Selected drawings must support:
+
+✅ drag move
+✅ endpoint move
+✅ resize
+✅ smooth touch drag
+✅ mobile touch support
+
+NO lag.
+
+==================================================
+12. OBJECT INTERACTION PRIORITY
+==================================================
+
+Need proper interaction hierarchy.
+
+Selected object must:
+- stay above candles
+- stay below floating menus
+
+Use proper z-index layers.
+
+==================================================
+13. MOBILE/TABLET OPTIMIZATION
+==================================================
+
+Everything must work smoothly on:
+✅ Android tablet
+✅ touch devices
+✅ portrait
+✅ landscape
+
+Large touch targets required.
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need near-identical TradingView object interaction behavior:
+
+✅ selecting
+✅ editing
+✅ dragging
+✅ hiding
+✅ deleting
+✅ styling
+✅ favorite tools
+✅ floating toolbar
+✅ settings card
+✅ clipping fix
+✅ professional UX

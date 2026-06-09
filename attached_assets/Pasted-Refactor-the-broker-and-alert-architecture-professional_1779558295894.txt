@@ -1,0 +1,112 @@
+Refactor the broker and alert architecture professionally.
+
+Important Fix:
+Delta Exchange should only support crypto assets:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+- BNBUSD
+
+Forex, Indices, and Commodities should use Finnhub market data instead:
+- NAS100
+- US30
+- US500
+- EURUSD
+- XAUUSD
+- Crude Oil
+
+Requirements:
+
+1. Create a new Market Data Providers section.
+
+Providers:
+- Delta Exchange WebSocket
+- Finnhub API/WebSocket
+
+2. Add Finnhub Integration UI:
+
+Create:
+- Finnhub API key input
+- Connection status
+- Test connection button
+- Connected assets list
+- Market data status
+
+3. Add asset routing system:
+
+Crypto assets:
+→ Delta Exchange
+
+Forex/Indices/Commodities:
+→ Finnhub
+
+4. Add provider badges throughout app:
+- Delta badge
+- Finnhub badge
+
+5. Improve Alerts Center:
+
+Trendline alerts:
+- Better trendline visualization
+- Provider source indicator
+- Dynamic asset routing
+
+Zone alerts:
+- Better UI cards
+- Zone color coding
+- Professional alert controls
+
+Price alerts:
+- Real-time provider badge
+- Trigger preview
+
+6. Improve Dashboard Analytics professionally.
+
+Current problem:
+Graphs and analytics look basic and incomplete.
+
+Upgrade:
+- Professional weekly PNL chart
+- Monthly PNL chart
+- Win vs Loss donut chart
+- Equity curve graph
+- Broker performance chart
+- Asset performance chart
+- Animated statistics cards
+
+7. Improve Reports Page:
+- Professional analytics layout
+- Advanced trading statistics
+- Better charts using Recharts
+- Heatmaps
+- RR distribution graph
+- Trading session analysis
+
+8. Improve Charts Styling:
+- TradingView inspired look
+- Better gradients
+- Better tooltips
+- Smooth animations
+- Professional axis styling
+- Responsive chart containers
+
+9. Add realistic sample data:
+- Crypto trades from Delta
+- Forex/Indices trades from Finnhub
+
+10. Add Market Status widgets:
+- Crypto market live
+- Forex market live
+- Indices market live
+- Commodities market live
+
+11. Improve entire app polish:
+- Better spacing
+- Better shadows
+- Better glassmorphism
+- More professional premium trading terminal appearance
+
+12. Keep architecture stable and do not redesign the entire app.
+Only improve and refactor professionally.

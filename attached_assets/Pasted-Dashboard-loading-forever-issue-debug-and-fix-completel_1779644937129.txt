@@ -1,0 +1,83 @@
+Dashboard loading forever issue debug and fix completely.
+
+Current problem:
+- Dashboard skeleton cards load
+- UI opens
+- But data never finishes loading
+- Screen stays in loading state forever
+
+Do a full debugging pass.
+
+==================================================
+CHECK THESE ISSUES
+==================================================
+
+1. Infinite React rerender loops
+2. useEffect dependency mistakes
+3. unresolved promises
+4. websocket reconnect loops
+5. stale loading states
+6. API requests hanging forever
+7. Zustand/store subscription loops
+8. market feed state conflicts
+9. TradingView widget blocking render
+10. components waiting for unavailable backend data
+
+==================================================
+FIX REQUIREMENTS
+==================================================
+
+1. Add proper loading timeout fallback
+2. Prevent infinite websocket reconnect attempts
+3. Ensure dashboard renders even if feed unavailable
+4. Wrap all API calls in try/catch
+5. Add default empty state data
+6. Prevent blocking awaits
+7. Use Promise.allSettled instead of Promise.all
+8. Memoize expensive components
+9. Lazy-load heavy chart widgets
+10. Stop unnecessary rerenders
+
+==================================================
+VERY IMPORTANT
+==================================================
+
+Dashboard MUST render instantly even if:
+
+- Finnhub disconnected
+- Delta disconnected
+- database empty
+- websocket unavailable
+
+==================================================
+ADD DEBUG LOGGING
+==================================================
+
+Console logs needed for:
+
+- dashboard mount
+- websocket connected
+- websocket failed
+- API success/fail
+- loading complete
+- component render timing
+
+==================================================
+PERFORMANCE OPTIMIZATION
+==================================================
+
+Optimize for Android tablet:
+
+- smooth scrolling
+- low memory usage
+- prevent lag
+- prevent UI freeze
+- reduce glow effects
+- reduce excessive blur
+- reduce unnecessary animations
+
+==================================================
+FINAL GOAL
+==================================================
+
+Dashboard should load fully within 2 seconds and never remain stuck on loading forever.

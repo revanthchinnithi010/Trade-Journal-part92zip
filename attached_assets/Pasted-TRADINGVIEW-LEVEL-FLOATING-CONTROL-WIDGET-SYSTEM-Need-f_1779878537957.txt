@@ -1,0 +1,296 @@
+TRADINGVIEW-LEVEL FLOATING CONTROL WIDGET SYSTEM
+Need fully draggable floating drawing control widget
+with premium smooth UX and stable rendering.
+
+==================================================
+MAIN REQUIREMENT
+==================================================
+
+Current drawing control widget is:
+❌ fixed
+❌ flickering
+❌ ugly
+❌ not movable
+❌ laggy
+
+Need EXACT TradingView-style floating movable widget.
+
+==================================================
+1. FLOATING CONTROL WIDGET
+==================================================
+
+When ANY drawing selected:
+
+- trendline
+- ray
+- rectangle
+- fib
+- long position
+- short position
+- brush
+- text
+
+Open floating horizontal control widget.
+
+Widget must:
+✅ appear above drawing
+✅ movable by drag
+✅ remember last moved position
+✅ stay inside chart bounds
+✅ no flickering
+✅ no lag
+✅ GPU accelerated
+
+==================================================
+2. DRAGGABLE CONTROL WIDGET
+==================================================
+
+User must be able to:
+touch + hold + drag widget anywhere.
+
+IMPLEMENT:
+
+pointerdown
+pointermove
+pointerup
+
+Use:
+translate3d()
+
+NOT:
+top/left realtime updates.
+
+Use:
+requestAnimationFrame()
+
+for smooth movement.
+
+==================================================
+3. SAVE WIDGET POSITION
+==================================================
+
+After moving widget:
+save position in local state.
+
+When reopening:
+restore previous position.
+
+Use:
+localStorage:
+drawingControlWidgetPosition
+
+==================================================
+4. WIDGET MOVEMENT RULES
+==================================================
+
+Widget must:
+
+✅ move smoothly
+✅ no jitter
+✅ no rerender
+✅ no lag
+✅ no snapping
+✅ no delay
+
+Clamp movement inside chart area.
+
+Prevent:
+widget going outside screen.
+
+==================================================
+5. CONTROL WIDGET UI
+==================================================
+
+Need EXACT TradingView-style UI.
+
+STYLE:
+✅ dark matte glass background
+✅ soft blur
+✅ rounded 16px
+✅ subtle border glow
+✅ compact spacing
+✅ premium shadow
+✅ smooth hover animations
+
+SIZE:
+height: 52px
+compact width
+responsive for tablet/mobile.
+
+==================================================
+6. CONTROL WIDGET ICONS
+==================================================
+
+Need SAME icon style as TradingView.
+
+Use:
+Lucide React
+OR
+custom SVG icons.
+
+NO emoji icons.
+NO thick ugly icons.
+
+ORDER:
+
+⭐ Favorite
+✏️ Style
+🎨 Color
+📏 Thickness
+👁 Visibility
+🔔 Alert
+🔒 Lock
+➡ Extend
+🗑 Delete
+⋯ More
+
+Icons:
+18px
+perfect spacing.
+
+==================================================
+7. WIDGET DRAG HANDLE
+==================================================
+
+Add LEFT SIDE drag handle like TradingView.
+
+Use:
+6-dot grip icon.
+
+Dragging only works from:
+drag handle section.
+
+NOT entire widget.
+
+==================================================
+8. NO FLICKERING FIX
+==================================================
+
+Current issue:
+toolbar rerenders continuously.
+
+FIX:
+
+✅ useRef for widget position
+✅ React.memo
+✅ requestAnimationFrame
+✅ useCallback
+✅ prevent chart rerender
+✅ render widget in portal layer
+
+Widget must:
+remain stable during drawing drag.
+
+==================================================
+9. TOOL SETTINGS PANEL
+==================================================
+
+Clicking:
+style/color/settings
+
+Open floating settings card.
+
+CARD STYLE:
+✅ TradingView style
+✅ dark glass UI
+✅ rounded corners
+✅ blur background
+✅ shadow
+✅ animated open
+
+OPTIONS:
+- color
+- opacity
+- line style
+- thickness
+- visibility
+- lock
+- delete
+
+==================================================
+10. DRAWING TOOL INTERACTION FIX
+==================================================
+
+After selecting drawing:
+
+✅ clean blue anchor circles
+✅ NO dashed helper lines
+✅ smooth anchor dragging
+✅ realtime updates
+✅ no lag
+
+==================================================
+11. DATE/TIME SCALE FIX
+==================================================
+
+Bottom scale MUST show:
+
+DD-MM-YYYY HH:MM
+
+Examples:
+27-05-2026 15:30
+27-05-2026 16:45
+
+NOT:
+May 27
+
+==================================================
+12. FAVORITE TOOLBAR FIX
+==================================================
+
+Favorite toolbar above date scale:
+
+✅ draggable
+✅ centered
+✅ compact
+✅ TradingView style
+✅ movable
+✅ smooth animations
+
+==================================================
+13. PERFORMANCE OPTIMIZATION
+==================================================
+
+Need ultra smooth performance.
+
+IMPLEMENT:
+
+- will-change: transform
+- transform: translate3d
+- passive listeners
+- RAF throttling
+- memoized components
+- isolated canvas redraw
+
+NO:
+full chart rerenders.
+
+==================================================
+14. MOBILE/TABLET OPTIMIZATION
+==================================================
+
+Touch dragging must feel:
+like native app.
+
+Need:
+✅ smooth 60fps
+✅ no accidental drawing
+✅ proper touch hitboxes
+✅ responsive floating widget
+
+==================================================
+15. FINAL TARGET
+==================================================
+
+Need:
+EXACT TradingView-quality floating movable control widget.
+
+FINAL RESULT:
+✅ movable widget
+✅ stable rendering
+✅ no flicker
+✅ premium UI
+✅ TradingView-style icons
+✅ smooth dragging
+✅ professional drawing UX
+✅ perfect tablet experience

@@ -1,0 +1,81 @@
+The TradingView integration is missing realtime candle countdown and live clock synchronization.
+
+Current issue:
+- candles render
+- prices update
+- but realtime candle timer is missing
+- current candle countdown is not visible
+- chart does not behave exactly like official TradingView
+
+Fix and upgrade the TradingView integration to fully match official TradingView realtime behavior.
+
+Requirements:
+
+1. Enable realtime candle countdown timer.
+2. Show remaining time before candle close.
+3. Enable live chart clock updates.
+4. Synchronize chart time with realtime market data.
+5. Ensure live price marker updates smoothly.
+6. Match official TradingView behavior exactly.
+
+Important:
+Use FULL TradingView Advanced Chart integration.
+Do NOT use lightweight-charts for the main chart.
+
+--------------------------------------------------
+
+FEATURES REQUIRED
+
+Enable:
+- realtime candle countdown
+- live UTC clock
+- smooth live candle updates
+- realtime crosshair updates
+- proper market session timing
+- live current candle rendering
+
+--------------------------------------------------
+
+DISPLAY REQUIREMENTS
+
+Show:
+- candle close countdown
+- realtime market clock
+- timezone support
+- smooth price label movement
+
+Example:
+Current candle:
+"01:18 remaining"
+
+--------------------------------------------------
+
+TECHNICAL REQUIREMENTS
+
+1. Ensure realtime websocket feed active.
+2. Prevent delayed chart refreshes.
+3. Keep candle updating tick-by-tick.
+4. Prevent stale chart rendering.
+5. Use official TradingView realtime APIs/features.
+6. Prevent React rerender resets.
+7. Keep chart instance persistent.
+
+--------------------------------------------------
+
+PERFORMANCE
+
+Optimize:
+- smooth 60fps updates
+- no UI lag
+- tablet optimized rendering
+- efficient realtime updates
+
+--------------------------------------------------
+
+FINAL GOAL
+
+Make the chart behave exactly like official TradingView:
+- realtime candles
+- live countdown timer
+- smooth live price movement
+- professional trading terminal experience

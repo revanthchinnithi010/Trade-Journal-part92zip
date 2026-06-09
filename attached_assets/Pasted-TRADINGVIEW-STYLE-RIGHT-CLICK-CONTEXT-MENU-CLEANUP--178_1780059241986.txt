@@ -1,0 +1,166 @@
+TRADINGVIEW-STYLE RIGHT CLICK CONTEXT MENU CLEANUP
+
+==================================================
+CONTEXT MENU STRUCTURE REORDER
+==================================================
+
+NEW ORDER:
+
+1. TIMEFRAMES
+2. CHART ACTIONS
+3. DRAWING TOOLS
+4. PROFESSIONAL
+5. SETTINGS
+
+==================================================
+1. TIMEFRAMES SECTION (FIRST)
+==================================================
+
+Show at top:
+
+⚡ 1m
+⚡ 5m
+⚡ 15m
+⚡ 30m
+⚡ 1H
+⚡ 4H
+⚡ 1D
+⚡ 1W
+
+Requirements:
+✅ instant switch
+✅ active timeframe highlight
+✅ no rerender lag
+
+==================================================
+2. CHART ACTIONS CLEANUP
+==================================================
+
+REMOVE:
+❌ Auto Scale
+❌ Toggle Crosshair
+
+KEEP ONLY:
+
+✅ Add Alert Here
+✅ Reset Chart View
+✅ Hide Drawings
+✅ Lock Drawings
+✅ Remove All Drawings
+✅ Screenshot Chart
+
+==================================================
+3. ONLY MOUSE RIGHT CLICK
+==================================================
+
+REMOVE:
+❌ long press menu
+❌ touch hold context menu
+
+ONLY:
+✅ desktop mouse right click opens menu
+
+Tablet/mobile touch:
+✅ no popup
+✅ normal touch interactions only
+
+==================================================
+4. DRAWING TOOLS CLEANUP
+==================================================
+
+REMOVE COMPLETELY:
+❌ Trend Line
+❌ Horizontal Line
+❌ Ray
+❌ Rectangle
+❌ Fibonacci
+❌ Brush Tool
+❌ Text Label
+
+ADD ONLY:
+
+📈 Long Position
+📉 Short Position
+
+Requirements:
+✅ TradingView-style risk/reward box
+✅ draggable
+✅ editable
+✅ TP/SL zones
+✅ RR calculation
+
+==================================================
+5. REMOVE INDICATORS SECTION
+==================================================
+
+REMOVE ENTIRELY:
+❌ Indicators section
+❌ Add Indicator
+❌ Favorite Indicators
+❌ Remove Indicators
+
+==================================================
+6. REMOVE CHART STYLE SECTION
+==================================================
+
+REMOVE ENTIRELY:
+❌ Candlestick
+❌ Line Chart
+❌ Heikin Ashi
+
+Chart style switching should ONLY happen from topbar.
+
+==================================================
+7. SETTINGS CLEANUP
+==================================================
+
+REMOVE:
+❌ Theme Settings
+
+KEEP ONLY:
+✅ Chart Settings
+✅ Drawing Settings
+
+==================================================
+8. UI IMPROVEMENTS
+==================================================
+
+Requirements:
+✅ smaller compact menu
+✅ tighter spacing
+✅ smoother animation
+✅ floating glassmorphism
+✅ neon green hover
+✅ instant open/close
+✅ zero lag
+
+==================================================
+9. PERFORMANCE RULES
+==================================================
+
+Do NOT rerender chart when:
+✅ opening context menu
+✅ hovering menu
+✅ closing menu
+
+Use:
+✅ portal rendering
+✅ absolute overlay
+✅ lightweight state only
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need a clean professional TradingView-style desktop context menu:
+
+TIMEFRAMES
+CHART ACTIONS
+DRAWING TOOLS
+PROFESSIONAL
+SETTINGS
+
+Only essential options.
+Ultra clean.
+Ultra fast.
+No mobile long press popup.

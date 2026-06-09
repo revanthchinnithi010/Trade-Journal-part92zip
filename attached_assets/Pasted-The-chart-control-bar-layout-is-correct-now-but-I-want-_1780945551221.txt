@@ -1,0 +1,114 @@
+The chart control bar layout is correct now, but I want a much more premium modern trading-app feel similar to TradingView / Bybit / Binance.
+
+Improve ONLY the styling, animations, and interactions.
+Do NOT change layout structure or button positions.
+
+Requirements:
+
+1. CONTROL BAR VISUAL UPGRADE
+- Increase button size slightly
+- Improve spacing/padding
+- More premium glassmorphism style
+- Better contrast and readability
+- Cleaner icon scaling
+- Smooth rounded corners
+
+2. PREMIUM COLOR SYSTEM
+Use a modern neon trading theme:
+- deep black background
+- emerald/teal glow accents
+- subtle cyan highlights
+- soft gradients
+- premium dark UI
+
+Improve:
+- active button colors
+- inactive button opacity
+- hover/press states
+- glow intensity
+
+3. SMOOTH MICRO-ANIMATIONS
+Add smooth animations for:
+- button press
+- tab switching
+- floating effects
+- glow pulse
+- scale feedback
+- fade transitions
+
+Animations must feel:
+- smooth
+- premium
+- fluid
+- responsive
+- not overdone
+
+4. BOTTOM NAVIGATION BAR ANIMATION
+When switching between bottom navigation buttons:
+- animated moving bubble/highlight should slide smoothly
+- active tab indicator must animate horizontally
+- use spring animation
+- smooth easing
+- premium motion feel
+
+Like:
+- modern fintech apps
+- iOS segmented controls
+- premium crypto exchanges
+
+5. ACTIVE BUTTON EFFECT
+Selected button should have:
+- animated glow
+- soft gradient background
+- elevated effect
+- subtle shadow
+- slight scale-up
+
+6. BUTTON INTERACTIONS
+On touch:
+- slight scale animation
+- haptic-like visual feedback
+- smooth opacity transition
+
+7. CHART CONTROL BAR
+Improve:
+- floating appearance
+- blur quality
+- border glow
+- shadow softness
+- icon alignment
+
+8. PERFORMANCE IMPORTANT
+Animations must remain:
+- smooth at 60fps
+- GPU accelerated
+- no lag
+- no dropped frames
+
+Use:
+- React Native Reanimated
+- transform animations
+- translateX
+- scale
+- opacity
+- shared values
+
+Avoid:
+- expensive layout animations
+- unnecessary rerenders
+
+9. TABLET OPTIMIZATION
+Increase:
+- touch target size
+- spacing
+- readability
+
+for Lenovo tablet landscape mode.
+
+10. FINAL FEEL
+The UI should feel:
+- ultra premium
+- futuristic
+- smooth
+- alive
+- professional trading terminal quality

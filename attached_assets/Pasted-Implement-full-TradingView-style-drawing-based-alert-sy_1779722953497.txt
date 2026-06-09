@@ -1,0 +1,161 @@
+Implement full TradingView-style drawing-based alert system inside Charts section.
+
+FEATURE GOAL:
+Users must create alerts directly from chart drawings.
+
+==================================================
+SUPPORTED DRAWINGS
+==================================================
+
+1. Trendlines
+2. Rays
+3. Horizontal lines
+4. Rectangles / zones
+5. Parallel channels
+
+==================================================
+DRAWING INTERACTION
+==================================================
+
+When user clicks a drawing object:
+
+Show floating context menu:
+- Create Alert
+- Edit Alert
+- Delete Alert
+
+==================================================
+ALERT TYPES
+==================================================
+
+TRENDLINE / RAY:
+- Cross Above
+- Cross Below
+- Touch
+- Breakout
+
+ZONE ALERTS:
+- Enter Zone
+- Exit Zone
+- Breakout
+- Rejection
+
+PRICE ALERTS:
+- Above Price
+- Below Price
+- Touch Price
+
+==================================================
+DRAWING DATA EXTRACTION
+==================================================
+
+Extract and save:
+- symbol
+- timeframe
+- drawing type
+- x1
+- y1
+- x2
+- y2
+- slope
+- projected values
+- created timestamp
+
+==================================================
+REALTIME DETECTION ENGINE
+==================================================
+
+Using:
+- Finnhub websocket
+- Delta Exchange websocket
+
+On every incoming tick:
+
+1. recalculate projected trendline/ray price
+2. compare live price
+3. detect touches/crosses
+4. trigger alerts instantly
+
+==================================================
+TRENDLINE MATH
+==================================================
+
+Projected line formula:
+
+projectedPrice = startPrice + slope * elapsedTime
+
+Must support:
+- future projection
+- ray infinite extension
+- timeframe scaling
+
+==================================================
+TRIGGER ACTIONS
+==================================================
+
+When triggered:
+
+1. Show toast notification
+2. Add entry in Alerts Center
+3. Add recent activity entry
+4. Send Telegram message
+
+==================================================
+TELEGRAM FORMAT
+==================================================
+
+📈 Trendline Alert
+
+Symbol: EURUSD
+Condition: Cross Above
+Projected Price: 1.16384
+Current Price: 1.16402
+Timeframe: 5M
+
+==================================================
+ALERT STATES
+==================================================
+
+Support:
+- Active
+- Triggered
+- Paused
+- Expired
+
+==================================================
+DRAWING SYNCHRONIZATION
+==================================================
+
+If drawing edited:
+- alert updates automatically
+
+If drawing deleted:
+- linked alerts delete automatically
+
+==================================================
+DATABASE TABLES
+==================================================
+
+Create:
+- chart_drawings
+- drawing_alerts
+- alert_events
+
+==================================================
+IMPORTANT
+==================================================
+
+Use REAL TradingView drawing events.
+
+Do NOT build fake UI-only alerts.
+
+Must work with:
+- actual websocket ticks
+- actual projected trendline math
+- actual realtime trigger engine
+
+==================================================
+FINAL GOAL
+==================================================
+
+Make TradeVault behave like professional TradingView native alerts system directly from chart drawings.

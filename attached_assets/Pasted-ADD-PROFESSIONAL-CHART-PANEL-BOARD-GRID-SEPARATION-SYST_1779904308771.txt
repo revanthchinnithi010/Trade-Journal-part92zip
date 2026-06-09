@@ -1,0 +1,153 @@
+ADD PROFESSIONAL CHART PANEL BOARD / GRID SEPARATION SYSTEM
+
+I want the chart panel to have professional board-style separator lines exactly like TradingView.
+
+Reference:
+horizontal and vertical panel border lines visible inside chart area.
+
+====================================================
+REQUIRED FEATURE
+====================================================
+
+Add:
+✅ vertical separator lines
+✅ horizontal separator lines
+✅ panel border system
+✅ chart frame borders
+✅ price/time axis separators
+
+The chart should feel like it is placed inside a professional board/grid layout.
+
+====================================================
+ADD THESE BORDER TYPES
+====================================================
+
+1. OUTER CHART BORDER
+- around full chart panel
+
+2. PRICE SCALE BORDER
+- separator between chart and right price scale
+
+3. TIME SCALE BORDER
+- separator between chart and bottom timeline
+
+4. INNER GRID SEPARATORS
+- subtle vertical and horizontal board lines
+
+====================================================
+DESIGN STYLE
+====================================================
+
+Use ultra subtle premium borders.
+
+Default:
+border-color:
+rgba(211,222,218,0.08)
+
+Glow:
+rgba(184,255,99,0.03)
+
+Thickness:
+1px
+
+====================================================
+LIGHTWEIGHT CHARTS SETTINGS
+====================================================
+
+Enable:
+✅ borderVisible
+✅ priceScale border
+✅ timeScale border
+✅ grid vertical lines
+✅ grid horizontal lines
+
+====================================================
+CREATE SETTINGS PANEL
+====================================================
+
+In Chart Settings > Canvas section add:
+
+----------------------------------------------------
+GRID & BORDERS
+----------------------------------------------------
+
+✅ Toggle Grid
+✅ Toggle Borders
+
+Color Pickers:
+- Grid Line Color
+- Border Color
+- Price Scale Border
+- Time Scale Border
+
+Sliders:
+- Grid Opacity
+- Border Opacity
+- Grid Thickness
+
+====================================================
+LIVE UPDATE REQUIRED
+====================================================
+
+When changing colors/settings:
+chart updates instantly WITHOUT refresh.
+
+====================================================
+DEFAULT COLORS
+====================================================
+
+Grid:
+rgba(211,222,218,0.05)
+
+Borders:
+rgba(211,222,218,0.08)
+
+Active Accent:
+rgba(184,255,99,0.12)
+
+====================================================
+MOBILE/TABLET OPTIMIZATION
+====================================================
+
+Lines must remain:
+✅ crisp
+✅ thin
+✅ non-blurry
+✅ GPU accelerated
+
+====================================================
+PREMIUM EFFECT
+====================================================
+
+Use:
+backdrop contrast
+soft glow
+anti-aliasing
+
+Make chart feel:
+✅ premium
+✅ institutional
+✅ Bloomberg/TradingView style
+✅ glassmorphism compatible
+
+====================================================
+IMPORTANT
+====================================================
+
+Do NOT make lines too bright.
+
+They should remain:
+- subtle
+- elegant
+- professional
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+✅ chart has professional board layout
+✅ separators visible
+✅ borders customizable
+✅ settings panel controls everything
+✅ TradingView-like premium appearance

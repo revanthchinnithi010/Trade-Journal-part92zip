@@ -1,0 +1,208 @@
+REPLIT UI REFACTOR PROMPT — FIX LEFT TOOLBAR LAYOUT + DRAGGABLE FAVORITES + REMOVE VOLUME
+
+IMPORTANT:
+Do NOT change existing drawing functionality.
+Only redesign layout structure professionally like TradingView.
+
+====================================================
+
+1. LEFT DRAWING TOOLBAR MUST HAVE DEDICATED SIDEBAR SPACE
+
+CURRENT ISSUE:
+Left drawing toolbar is floating ON TOP of chart candles like a widget overlay.
+
+REQUIRED:
+Make left toolbar behave exactly like TradingView.
+
+Create a dedicated fixed vertical sidebar space for drawing tools.
+
+STRUCTURE:
+
+| LEFT DRAWING SIDEBAR | CHART AREA | RIGHT ACTION SIDEBAR |
+
+NOT:
+floating over candles.
+
+====================================================
+
+2. LAYOUT REQUIREMENTS
+
+LEFT SIDEBAR:
+- fixed width: 64px to 72px
+- full height
+- separate background layer
+- NOT overlapping chart
+- chart must start AFTER sidebar width
+
+Use:
+display:flex;
+
+Structure:
+
+<div class="app-layout">
+  <aside class="left-toolbar"></aside>
+  <main class="chart-container"></main>
+  <aside class="right-toolbar"></aside>
+</div>
+
+====================================================
+
+3. LEFT TOOLBAR STYLING
+
+STYLE EXACTLY LIKE TRADINGVIEW:
+
+- dark transparent background
+- subtle blur
+- vertical separator line
+- rounded tool buttons
+- proper spacing
+- centered icons
+- hover glow
+- active green state
+
+Use:
+
+background: rgba(10,15,12,0.92);
+backdrop-filter: blur(18px);
+border-right: 1px solid rgba(120,255,120,0.08);
+
+====================================================
+
+4. CHART AREA MUST AUTO RESIZE
+
+After sidebar allocation:
+- chart width must automatically reduce
+- candles should NEVER go below toolbar
+- no overlap
+- no clipping
+
+Use:
+width: calc(100% - leftSidebarWidth - rightSidebarWidth)
+
+====================================================
+
+5. RIGHT SIDEBAR ALIGNMENT
+
+Current right toolbar already has dedicated space.
+Match LEFT sidebar with same spacing system.
+
+Both sides must feel balanced.
+
+====================================================
+
+6. FAVORITE BAR MUST BE DRAGGABLE
+
+CURRENT ISSUE:
+Favorite toolbar fixed at one location.
+
+REQUIRED:
+User must drag and place anywhere.
+
+FEATURES:
+- draggable horizontally
+- draggable vertically
+- smooth movement
+- touch support for tablets
+- mouse support
+- momentum easing
+
+Use:
+pointer events
+translate3d()
+requestAnimationFrame()
+
+====================================================
+
+7. FAVORITE BAR BEHAVIOR
+
+- remember last position
+- save using localStorage
+- stay inside chart boundaries
+- no flickering
+- no jumping
+
+DEFAULT POSITION:
+bottom center above date scale.
+
+====================================================
+
+8. REMOVE VOLUME SECTION COMPLETELY
+
+CURRENT ISSUE:
+Volume bars visible below chart.
+
+REMOVE:
+- volume histogram
+- volume scale
+- volume calculations
+- reserved height
+
+Chart must expand full height after removal.
+
+====================================================
+
+9. AFTER VOLUME REMOVAL
+
+Candlestick chart should:
+- occupy full vertical space
+- stretch smoothly
+- use more chart height
+
+Update:
+- chart padding
+- y-scale height
+- bottom spacing
+
+====================================================
+
+10. PROFESSIONAL ANIMATIONS
+
+Add smooth transitions:
+
+LEFT TOOLBAR:
+transition:
+transform 0.25s ease,
+opacity 0.25s ease;
+
+FAVORITES BAR:
+transition:
+box-shadow 0.2s ease,
+background 0.2s ease;
+
+====================================================
+
+11. TOUCH OPTIMIZATION
+
+Tablet support mandatory.
+
+Use:
+touch-action:none;
+
+for draggable favorite bar.
+
+No accidental chart scroll while dragging.
+
+====================================================
+
+12. FINAL EXPECTED RESULT
+
+LEFT:
+Dedicated professional drawing sidebar.
+
+CENTER:
+Clean full-size chart.
+
+RIGHT:
+Watchlist/action sidebar.
+
+BOTTOM:
+Draggable floating favorites toolbar.
+
+NO:
+- overlay toolbar
+- volume bars
+- candle obstruction
+- overlapping UI
+
+RESULT SHOULD LOOK:
+almost identical layout structure to TradingView desktop/tablet UI.

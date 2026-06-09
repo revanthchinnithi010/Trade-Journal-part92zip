@@ -1,0 +1,949 @@
+import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { createPortal } from "react-dom";
+import {
+  Bell, Plus, X, Search, Play, Pause, Trash2, Edit2,
+  Target, Layers, GitBranch, TrendingUp, TrendingDown,
+  ChevronDown, Clock, CheckCircle2, AlertTriangle, Minus,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  SYMBOLS, TIMEFRAMES,
+  type AnyAlert, type AlertStatus, type AlertType,
+  type PriceAlert, type ZoneAlert, type TrendlineAlert,
+} from "@/data/alertsData";
+import { useAlertStore } from "@/store/alertStore";
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
+const STATUS_CFG: Record<AlertStatus, { label: string; dot: string; text: string; bg: string }> = {
+  active:    { label: "Active",    dot: "#34d399", text: "#34d399", bg: "rgba(52,211,153,0.12)"  },
+  triggered: { label: "Triggered", dot: "#B7FF5A", text: "#B7FF5A", bg: "rgba(183,255,90,0.12)"  },
+  paused:    { label: "Paused",    dot: "#FFC857", text: "#FFC857", bg: "rgba(255,200,87,0.12)"  },
+  expired:   { label: "Expired",   dot: "#9ca3af", text: "#9ca3af", bg: "rgba(156,163,175,0.10)" },
+};
+
+const TYPE_CFG: Record<AlertType, { label: string; Icon: React.ElementType; color: string; bg: string }> = {
+  price:     { label: "Price",     Icon: Target,    color: "#60a5fa", bg: "rgba(96,165,250,0.12)"  },
+  zone:      { label: "Zone",      Icon: Layers,    color: "#fb923c", bg: "rgba(251,146,60,0.12)"  },
+  trendline: { label: "Trendline", Icon: GitBranch, color: "#B7FF5A", bg: "rgba(183,255,90,0.12)"  },
+};
+
+function fmtAlertDesc(a: AnyAlert): string {
+  if (a.type === "price") {
+    const cond = a.condition === "above" ? "↑ Above" : a.condition === "below" ? "↓ Below" : "⟷ Touch";
+    return `${cond} ${a.targetPrice.toLocaleString()}`;
+  }
+  if (a.type === "zone") {
+    return `${a.lowerPrice.toLocaleString()} – ${a.upperPrice.toLocaleString()}`;
+  }
+  if (a.type === "trendline") {
+    return `${a.point1Price.toLocaleString()} → ${a.point2Price.toLocaleString()}`;
+  }
+  return "";
+}
+
+function fmtTime(iso: string) {
+  try {
+    return new Date(iso).toLocaleString([], {
+      month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch { return iso; }
+}
+
+function getTimeframe(a: AnyAlert): string {
+  if (a.type === "price") return "—";
+  return (a as ZoneAlert | TrendlineAlert).timeframe ?? "—";
+}
+
+function getConditionLabel(a: AnyAlert): string {
+  const c = a.condition;
+  const map: Record<string, string> = {
+    above: "Price Above", below: "Price Below", touch: "Touch",
+    break: "Breakout", retest: "Retest",
+  };
+  return map[c] ?? c;
+}
+
+// ── Small UI atoms ─────────────────────────────────────────────────────────────
+function StatusBadge({ status }: { status: AlertStatus }) {
+  const cfg = STATUS_CFG[status];
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "2px 8px", borderRadius: 20,
+      background: cfg.bg, color: cfg.text,
+      fontSize: 10, fontWeight: 700, letterSpacing: "0.02em",
+      border: `1px solid ${cfg.text}25`,
+    }}>
+      <span style={{
+        width: 6, height: 6, borderRadius: "50%", background: cfg.dot, flexShrink: 0,
+        ...(status === "active" ? { animation: "acPulse 1.8s ease-in-out infinite" } : {}),
+      }} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function TypeBadge({ type }: { type: AlertType }) {
+  const cfg = TYPE_CFG[type];
+  const { Icon } = cfg;
+  return (
+    <span style={{
+      display: "inline-flex", alignItems: "center", gap: 4,
+      padding: "2px 7px", borderRadius: 6,
+      background: cfg.bg, color: cfg.color,
+      fontSize: 10, fontWeight: 700,
+    }}>
+      <Icon style={{ width: 10, height: 10 }} />
+      {cfg.label}
+    </span>
+  );
+}
+
+function ActionBtn({
+  label, bg, color, icon: Icon, onClick, title,
+}: {
+  label?: string; bg: string; color: string;
+  icon: React.ElementType; onClick: () => void; title: string;
+}) {
+  const [hov, setHov] = useState(false);
+  return (
+    <button
+      title={title}
+      onClick={e => { e.stopPropagation(); onClick(); }}
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        display: "inline-flex", alignItems: "center", gap: 4,
+        padding: label ? "4px 9px" : "4px 7px",
+        borderRadius: 7, border: "none", cursor: "pointer",
+        background: hov ? bg.replace("0.12", "0.22") : bg,
+        color, fontSize: 10, fontWeight: 700,
+        transition: "background 0.15s",
+      }}
+    >
+      <Icon style={{ width: 11, height: 11 }} />
+      {label}
+    </button>
+  );
+}
+
+// ── Alert Card ─────────────────────────────────────────────────────────────────
+const AlertCard = memo(function AlertCard({
+  alert, onPause, onResume, onDelete, onEdit, triggering,
+}: {
+  alert: AnyAlert;
+  onPause: () => void; onResume: () => void;
+  onDelete: () => void; onEdit: () => void;
+  triggering: boolean;
+}) {
+  const [hov, setHov] = useState(false);
+
+  return (
+    <div
+      onMouseEnter={() => setHov(true)}
+      onMouseLeave={() => setHov(false)}
+      style={{
+        padding: "12px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        background: triggering
+          ? "rgba(183,255,90,0.06)"
+          : hov ? "rgba(255,255,255,0.025)" : "transparent",
+        transition: "background 0.15s",
+        animation: triggering ? "acGlow 0.8s ease-out" : undefined,
+      }}
+    >
+      {/* Top row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+        {/* Symbol */}
+        <span style={{
+          fontSize: 13, fontWeight: 800, color: "#F3FFF3",
+          fontFamily: "monospace",
+        }}>
+          {alert.symbol}
+        </span>
+
+        <TypeBadge type={alert.type} />
+        <StatusBadge status={alert.status} />
+
+        <span style={{ marginLeft: "auto", fontSize: 10, color: "rgba(167,184,169,0.4)", flexShrink: 0 }}>
+          <Clock style={{ width: 10, height: 10, display: "inline", marginRight: 3, verticalAlign: "middle" }} />
+          {fmtTime(alert.createdAt)}
+        </span>
+      </div>
+
+      {/* Detail row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 10 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+            <span style={{ fontSize: 10.5, color: "rgba(167,184,169,0.55)", fontWeight: 600 }}>
+              {getConditionLabel(alert)}
+            </span>
+            <span style={{ fontSize: 11, color: "#D3DEDA", fontWeight: 700, fontFamily: "monospace" }}>
+              {fmtAlertDesc(alert)}
+            </span>
+            {getTimeframe(alert) !== "—" && (
+              <span style={{
+                fontSize: 9, fontWeight: 700, color: "rgba(167,184,169,0.4)",
+                background: "rgba(57,91,67,0.2)", borderRadius: 4, padding: "1px 5px",
+              }}>
+                {getTimeframe(alert)}
+              </span>
+            )}
+          </div>
+          {alert.notes && (
+            <p style={{
+              margin: 0, fontSize: 10, color: "rgba(167,184,169,0.45)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
+              {alert.notes}
+            </p>
+          )}
+          {alert.status === "triggered" && alert.triggeredAt && (
+            <p style={{ margin: "3px 0 0", fontSize: 9.5, color: "#B7FF5A", fontWeight: 700 }}>
+              <CheckCircle2 style={{ width: 10, height: 10, display: "inline", marginRight: 3, verticalAlign: "middle" }} />
+              Triggered {fmtTime(alert.triggeredAt)}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        {alert.status === "paused" && (
+          <ActionBtn
+            title="Resume alert"
+            icon={Play}
+            label="Resume"
+            bg="rgba(183,255,90,0.12)"
+            color="#B7FF5A"
+            onClick={onResume}
+          />
+        )}
+        {(alert.status === "active" || alert.status === "triggered") && (
+          <ActionBtn
+            title="Pause alert"
+            icon={Pause}
+            label="Pause"
+            bg="rgba(255,200,0,0.12)"
+            color="#FFC857"
+            onClick={onPause}
+          />
+        )}
+        <ActionBtn
+          title="Edit alert"
+          icon={Edit2}
+          label="Edit"
+          bg="rgba(171,185,182,0.10)"
+          color="#D3DEDA"
+          onClick={onEdit}
+        />
+        <ActionBtn
+          title="Delete alert"
+          icon={Trash2}
+          label="Delete"
+          bg="rgba(255,80,80,0.12)"
+          color="#FF5C5C"
+          onClick={onDelete}
+        />
+      </div>
+    </div>
+  );
+});
+
+// ── Edit Modal (inline sub-modal) ──────────────────────────────────────────────
+function EditAlertModal({
+  alert, onClose, onSave,
+}: { alert: AnyAlert; onClose: () => void; onSave: (updated: AnyAlert) => void }) {
+  const [notes, setNotes] = useState(alert.notes);
+  const [status, setStatus] = useState<AlertStatus>(alert.status);
+
+  const handleSave = () => {
+    onSave({ ...alert, notes, status });
+    onClose();
+  };
+
+  return (
+    <div
+      onClick={e => e.stopPropagation()}
+      style={{
+        position: "fixed", inset: 0, zIndex: 1100,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
+      }}
+    >
+      <div style={{
+        width: 380, borderRadius: 16,
+        background: "#0F1618",
+        border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
+        padding: 20,
+        animation: "acFadeScale 0.18s ease-out",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 9,
+            background: "rgba(183,255,90,0.1)", boxShadow: "0 0 0 1px rgba(183,255,90,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center", marginRight: 10,
+          }}>
+            <Edit2 style={{ width: 14, height: 14, color: "#B7FF5A" }} />
+          </div>
+          <div>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#F3FFF3" }}>Edit Alert</p>
+            <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.45)" }}>
+              {alert.symbol} · {TYPE_CFG[alert.type].label}
+            </p>
+          </div>
+          <button onClick={onClose} style={{
+            marginLeft: "auto", width: 28, height: 28, borderRadius: 8,
+            border: "none", background: "transparent", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <X style={{ width: 14, height: 14, color: "rgba(167,184,169,0.4)" }} />
+          </button>
+        </div>
+
+        {/* Status */}
+        <div style={{ marginBottom: 14 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 700, color: "rgba(167,184,169,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Status</p>
+          <div style={{ display: "flex", gap: 6 }}>
+            {(["active", "paused", "expired"] as AlertStatus[]).map(s => {
+              const cfg = STATUS_CFG[s];
+              const active = status === s;
+              return (
+                <button key={s} onClick={() => setStatus(s)} style={{
+                  flex: 1, padding: "6px 4px", borderRadius: 8, cursor: "pointer",
+                  border: `1px solid ${active ? cfg.text + "50" : "rgba(255,255,255,0.06)"}`,
+                  background: active ? cfg.bg : "transparent",
+                  color: active ? cfg.text : "rgba(167,184,169,0.5)",
+                  fontSize: 10, fontWeight: 700, transition: "all 0.12s",
+                }}>
+                  {cfg.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Notes */}
+        <div style={{ marginBottom: 18 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 700, color: "rgba(167,184,169,0.5)", textTransform: "uppercase", letterSpacing: "0.08em" }}>Notes</p>
+          <textarea
+            value={notes}
+            onChange={e => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Alert notes..."
+            style={{
+              width: "100%", padding: "8px 10px", boxSizing: "border-box",
+              borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)",
+              background: "rgba(255,255,255,0.04)", color: "#F3FFF3",
+              fontSize: 11, resize: "none", outline: "none",
+              fontFamily: "inherit",
+            }}
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={onClose} style={{
+            flex: 1, padding: "8px 0", borderRadius: 9, cursor: "pointer",
+            border: "1px solid rgba(255,255,255,0.08)",
+            background: "transparent", color: "rgba(167,184,169,0.55)",
+            fontSize: 11, fontWeight: 700,
+          }}>Cancel</button>
+          <button onClick={handleSave} style={{
+            flex: 2, padding: "8px 0", borderRadius: 9, cursor: "pointer",
+            border: "none",
+            background: "rgba(183,255,90,0.15)", color: "#B7FF5A",
+            fontSize: 11, fontWeight: 700,
+          }}>Save Changes</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Create Alert sub-modal ─────────────────────────────────────────────────────
+function QuickCreateModal({
+  onClose, onSave,
+}: { onClose: () => void; onSave: (a: AnyAlert) => void }) {
+  const [step, setStep] = useState<"pick" | "price" | "zone" | "trendline">("pick");
+  const [form, setForm] = useState({
+    symbol: "NAS100", condition: "above" as string,
+    targetPrice: "", notes: "", timeframe: "1H",
+    upperPrice: "", lowerPrice: "", zoneType: "supply",
+    p1Price: "", p2Price: "",
+  });
+
+  const handleCreate = () => {
+    if (step === "price") {
+      if (!form.targetPrice) return;
+      onSave({
+        id: `pa${Date.now()}`, type: "price",
+        symbol: form.symbol, condition: form.condition as PriceAlert["condition"],
+        targetPrice: parseFloat(form.targetPrice), currentPrice: 0,
+        notes: form.notes, status: "active",
+        expiry: null, createdAt: new Date().toISOString(), triggeredAt: null,
+      });
+    } else if (step === "zone") {
+      if (!form.upperPrice || !form.lowerPrice) return;
+      onSave({
+        id: `za${Date.now()}`, type: "zone",
+        symbol: form.symbol, zoneType: form.zoneType as ZoneAlert["zoneType"],
+        upperPrice: parseFloat(form.upperPrice), lowerPrice: parseFloat(form.lowerPrice),
+        timeframe: form.timeframe, condition: "touch",
+        notes: form.notes, status: "active",
+        createdAt: new Date().toISOString(), triggeredAt: null,
+      });
+    } else if (step === "trendline") {
+      if (!form.p1Price || !form.p2Price) return;
+      onSave({
+        id: `ta${Date.now()}`, type: "trendline",
+        symbol: form.symbol, timeframe: form.timeframe,
+        point1Price: parseFloat(form.p1Price), point1Time: new Date().toISOString(),
+        point2Price: parseFloat(form.p2Price), point2Time: new Date().toISOString(),
+        condition: "touch",
+        notes: form.notes, status: "active",
+        createdAt: new Date().toISOString(), triggeredAt: null,
+      });
+    }
+    onClose();
+  };
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%", height: 34, padding: "0 10px", boxSizing: "border-box",
+    borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)",
+    background: "rgba(255,255,255,0.04)", color: "#F3FFF3",
+    fontSize: 11, outline: "none", fontFamily: "inherit",
+  };
+
+  const labelStyle: React.CSSProperties = {
+    margin: "0 0 5px", fontSize: 10, fontWeight: 700,
+    color: "rgba(167,184,169,0.5)", textTransform: "uppercase",
+    letterSpacing: "0.08em",
+  };
+
+  return (
+    <div onClick={e => e.stopPropagation()} style={{
+      position: "fixed", inset: 0, zIndex: 1100,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      background: "rgba(0,0,0,0.55)", backdropFilter: "blur(6px)",
+    }}>
+      <div style={{
+        width: 400, borderRadius: 16,
+        background: "#0F1618", border: "1px solid rgba(255,255,255,0.08)",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.6)", padding: 20,
+        animation: "acFadeScale 0.18s ease-out",
+      }}>
+        {/* Header */}
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+          <div style={{
+            width: 30, height: 30, borderRadius: 9,
+            background: "rgba(183,255,90,0.1)",
+            boxShadow: "0 0 0 1px rgba(183,255,90,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center", marginRight: 10,
+          }}>
+            <Plus style={{ width: 14, height: 14, color: "#B7FF5A" }} />
+          </div>
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: "#F3FFF3" }}>
+            {step === "pick" ? "Create Alert" : `New ${step.charAt(0).toUpperCase() + step.slice(1)} Alert`}
+          </p>
+          <button onClick={onClose} style={{
+            marginLeft: "auto", width: 28, height: 28, borderRadius: 8,
+            border: "none", background: "transparent", cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <X style={{ width: 14, height: 14, color: "rgba(167,184,169,0.4)" }} />
+          </button>
+        </div>
+
+        {step === "pick" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <p style={{ margin: "0 0 8px", fontSize: 11, color: "rgba(167,184,169,0.5)" }}>Choose alert type:</p>
+            {([
+              { key: "price",     label: "Price Alert",     Icon: Target,    color: "#60a5fa", desc: "Trigger when price hits a level" },
+              { key: "zone",      label: "Zone Alert",      Icon: Layers,    color: "#fb923c", desc: "Trigger when price enters a zone" },
+              { key: "trendline", label: "Trendline Alert", Icon: GitBranch, color: "#B7FF5A", desc: "Trigger on trendline interaction" },
+            ] as const).map(({ key, label, Icon, color, desc }) => (
+              <button key={key} onClick={() => setStep(key)} style={{
+                display: "flex", alignItems: "center", gap: 12,
+                padding: "10px 12px", borderRadius: 10, cursor: "pointer",
+                border: "1px solid rgba(255,255,255,0.06)",
+                background: "rgba(255,255,255,0.02)",
+                transition: "all 0.12s", textAlign: "left",
+              }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.05)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.02)"; }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                  background: `${color}18`, display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Icon style={{ width: 15, height: 15, color }} />
+                </div>
+                <div>
+                  <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: "#F3FFF3" }}>{label}</p>
+                  <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.45)" }}>{desc}</p>
+                </div>
+                <ChevronDown style={{ width: 14, height: 14, color: "rgba(167,184,169,0.3)", marginLeft: "auto", transform: "rotate(-90deg)" }} />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {step !== "pick" && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Symbol + TF */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <p style={labelStyle}>Symbol</p>
+                <select value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))} style={{ ...inputStyle }}>
+                  {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              {step !== "price" && (
+                <div>
+                  <p style={labelStyle}>Timeframe</p>
+                  <select value={form.timeframe} onChange={e => setForm(f => ({ ...f, timeframe: e.target.value }))} style={{ ...inputStyle }}>
+                    {TIMEFRAMES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {step === "price" && (
+              <>
+                <div>
+                  <p style={labelStyle}>Condition</p>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {(["above", "below", "touch"] as const).map(c => (
+                      <button key={c} onClick={() => setForm(f => ({ ...f, condition: c }))} style={{
+                        flex: 1, padding: "6px 0", borderRadius: 8, cursor: "pointer",
+                        border: `1px solid ${form.condition === c ? "rgba(96,165,250,0.4)" : "rgba(255,255,255,0.06)"}`,
+                        background: form.condition === c ? "rgba(96,165,250,0.15)" : "transparent",
+                        color: form.condition === c ? "#60a5fa" : "rgba(167,184,169,0.5)",
+                        fontSize: 10, fontWeight: 700, textTransform: "capitalize",
+                      }}>{c}</button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p style={labelStyle}>Target Price</p>
+                  <input type="number" placeholder="e.g. 18750" value={form.targetPrice}
+                    onChange={e => setForm(f => ({ ...f, targetPrice: e.target.value }))}
+                    style={inputStyle} />
+                </div>
+              </>
+            )}
+
+            {step === "zone" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <p style={labelStyle}>Upper Price</p>
+                  <input type="number" placeholder="Upper" value={form.upperPrice}
+                    onChange={e => setForm(f => ({ ...f, upperPrice: e.target.value }))}
+                    style={inputStyle} />
+                </div>
+                <div>
+                  <p style={labelStyle}>Lower Price</p>
+                  <input type="number" placeholder="Lower" value={form.lowerPrice}
+                    onChange={e => setForm(f => ({ ...f, lowerPrice: e.target.value }))}
+                    style={inputStyle} />
+                </div>
+              </div>
+            )}
+
+            {step === "trendline" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <p style={labelStyle}>Point 1 Price</p>
+                  <input type="number" placeholder="e.g. 18100" value={form.p1Price}
+                    onChange={e => setForm(f => ({ ...f, p1Price: e.target.value }))}
+                    style={inputStyle} />
+                </div>
+                <div>
+                  <p style={labelStyle}>Point 2 Price</p>
+                  <input type="number" placeholder="e.g. 18500" value={form.p2Price}
+                    onChange={e => setForm(f => ({ ...f, p2Price: e.target.value }))}
+                    style={inputStyle} />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <p style={labelStyle}>Notes (optional)</p>
+              <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+                rows={2} placeholder="Alert notes..."
+                style={{ ...inputStyle, height: "auto", padding: "8px 10px", resize: "none" }} />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 2 }}>
+              <button onClick={() => setStep("pick")} style={{
+                flex: 1, padding: "8px 0", borderRadius: 9, cursor: "pointer",
+                border: "1px solid rgba(255,255,255,0.08)", background: "transparent",
+                color: "rgba(167,184,169,0.55)", fontSize: 11, fontWeight: 700,
+              }}>Back</button>
+              <button onClick={handleCreate} style={{
+                flex: 2, padding: "8px 0", borderRadius: 9, cursor: "pointer",
+                border: "none", background: "rgba(183,255,90,0.15)",
+                color: "#B7FF5A", fontSize: 11, fontWeight: 700,
+              }}>Create Alert</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Main AlertCenterModal ──────────────────────────────────────────────────────
+export interface AlertCenterModalProps {
+  onClose: () => void;
+}
+
+const FILTER_OPTIONS = [
+  { label: "All",       value: "all"       },
+  { label: "Active",    value: "active"    },
+  { label: "Triggered", value: "triggered" },
+  { label: "Paused",    value: "paused"    },
+  { label: "Expired",   value: "expired"   },
+] as const;
+
+type FilterValue = typeof FILTER_OPTIONS[number]["value"];
+
+export default function AlertCenterModal({ onClose }: AlertCenterModalProps) {
+  const { alerts, addAlert, updateAlert, deleteAlert: storeDelete } = useAlertStore();
+  const [filter, setFilter] = useState<FilterValue>("all");
+  const [query, setQuery] = useState("");
+  const [editTarget, setEditTarget] = useState<AnyAlert | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+  const [visible, setVisible] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  // Animate in
+  useEffect(() => { requestAnimationFrame(() => setVisible(true)); }, []);
+
+  // Filter + search
+  const filtered = alerts.filter(a => {
+    if (filter !== "all" && a.status !== filter) return false;
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      a.symbol.toLowerCase().includes(q) ||
+      a.type.includes(q) ||
+      a.condition.includes(q) ||
+      (a.notes || "").toLowerCase().includes(q)
+    );
+  });
+
+  const handlePause = useCallback((id: string) => {
+    updateAlert(id, { status: "paused" as AlertStatus });
+    toast.info("Alert paused", { description: "Alert will no longer trigger until resumed." });
+  }, [updateAlert]);
+
+  const handleResume = useCallback((id: string) => {
+    updateAlert(id, { status: "active" as AlertStatus });
+    toast.success("Alert resumed", { description: "Alert engine restarted." });
+  }, [updateAlert]);
+
+  const handleDelete = useCallback((id: string, symbol: string) => {
+    storeDelete(id);
+    toast.error(`Alert deleted`, { description: `${symbol} alert removed.` });
+  }, [storeDelete]);
+
+  const handleSaveEdit = useCallback((updated: AnyAlert) => {
+    updateAlert(updated.id, updated);
+    toast.success("Alert updated");
+  }, [updateAlert]);
+
+  const handleCreate = useCallback((a: AnyAlert) => {
+    addAlert(a);
+    setTriggeringId(a.id);
+    setTimeout(() => setTriggeringId(null), 1200);
+    toast.success("Alert created", { description: `${a.symbol} ${a.type} alert is now active.` });
+  }, [addAlert]);
+
+  const handleClose = () => {
+    setVisible(false);
+    setTimeout(onClose, 200);
+  };
+
+  // Click-outside: close only if clicking the backdrop directly
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) handleClose();
+  };
+
+  const counts = {
+    all: alerts.length,
+    active: alerts.filter(a => a.status === "active").length,
+    triggered: alerts.filter(a => a.status === "triggered").length,
+    paused: alerts.filter(a => a.status === "paused").length,
+    expired: alerts.filter(a => a.status === "expired").length,
+  };
+
+  const modal = (
+    <>
+      {/* Keyframes */}
+      <style>{`
+        @keyframes acFadeScale {
+          from { opacity: 0; transform: scale(0.94) translateY(8px); }
+          to   { opacity: 1; transform: scale(1) translateY(0); }
+        }
+        @keyframes acFadeOut {
+          from { opacity: 1; transform: scale(1); }
+          to   { opacity: 0; transform: scale(0.96); }
+        }
+        @keyframes acPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
+        }
+        @keyframes acGlow {
+          0%   { background: rgba(183,255,90,0.18); }
+          100% { background: transparent; }
+        }
+      `}</style>
+
+      {/* Backdrop */}
+      <div
+        onClick={handleBackdropClick}
+        style={{
+          position: "fixed", inset: 0, zIndex: 1000,
+          background: "rgba(0,0,0,0.6)",
+          backdropFilter: "blur(16px)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          opacity: visible ? 1 : 0,
+          transition: "opacity 0.2s",
+        }}
+      >
+        {/* Modal window */}
+        <div
+          ref={modalRef}
+          onClick={e => e.stopPropagation()}
+          style={{
+            width: "min(720px, 95vw)",
+            height: "80vh",
+            maxHeight: "80vh",
+            borderRadius: 20,
+            background: "#0F1618",
+            border: "1px solid rgba(255,255,255,0.06)",
+            boxShadow: "0 20px 60px rgba(0,0,0,0.55)",
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            animation: visible ? "acFadeScale 0.22s cubic-bezier(0.22,1,0.36,1) forwards" : "acFadeOut 0.18s ease-in forwards",
+          }}
+        >
+          {/* ── Header ── */}
+          <div style={{
+            display: "flex", alignItems: "center", gap: 10,
+            padding: "16px 20px",
+            borderBottom: "1px solid rgba(255,255,255,0.05)",
+            flexShrink: 0,
+          }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10,
+              background: "rgba(183,255,90,0.1)",
+              boxShadow: "0 0 0 1px rgba(183,255,90,0.22)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <Bell style={{ width: 16, height: 16, color: "#B7FF5A" }} />
+            </div>
+            <div>
+              <p style={{ margin: 0, fontSize: 15, fontWeight: 800, color: "#F3FFF3" }}>Alerts Center</p>
+              <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.4)" }}>
+                {counts.active} active · {counts.triggered} triggered · {counts.paused} paused
+              </p>
+            </div>
+
+            <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+              <button
+                onClick={() => setShowCreate(true)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  padding: "7px 14px", borderRadius: 9, cursor: "pointer",
+                  border: "1px solid rgba(183,255,90,0.28)",
+                  background: "rgba(183,255,90,0.1)", color: "#B7FF5A",
+                  fontSize: 11, fontWeight: 700,
+                  transition: "all 0.15s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.2)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.1)"; }}
+              >
+                <Plus style={{ width: 13, height: 13 }} />
+                Create Alert
+              </button>
+
+              <button
+                onClick={handleClose}
+                style={{
+                  width: 32, height: 32, borderRadius: 9, cursor: "pointer",
+                  border: "1px solid rgba(255,255,255,0.06)",
+                  background: "transparent",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "background 0.12s",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+              >
+                <X style={{ width: 14, height: 14, color: "rgba(167,184,169,0.5)" }} />
+              </button>
+            </div>
+          </div>
+
+          {/* ── Search + Filters ── */}
+          <div style={{
+            padding: "12px 20px 10px",
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            flexShrink: 0,
+          }}>
+            {/* Search */}
+            <div style={{ position: "relative", marginBottom: 10 }}>
+              <Search style={{
+                position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)",
+                width: 13, height: 13, color: "rgba(167,184,169,0.3)", pointerEvents: "none",
+              }} />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search alerts..."
+                style={{
+                  width: "100%", height: 36, paddingLeft: 33, paddingRight: 12,
+                  borderRadius: 10, boxSizing: "border-box",
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.07)",
+                  color: "#F3FFF3", fontSize: 11.5, outline: "none",
+                }}
+              />
+            </div>
+
+            {/* Filter pills */}
+            <div style={{ display: "flex", gap: 6 }}>
+              {FILTER_OPTIONS.map(opt => {
+                const active = filter === opt.value;
+                const count = counts[opt.value];
+                return (
+                  <button
+                    key={opt.value}
+                    onClick={() => setFilter(opt.value)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 4,
+                      padding: "4px 10px", borderRadius: 20, cursor: "pointer",
+                      border: `1px solid ${active ? "rgba(183,255,90,0.35)" : "rgba(255,255,255,0.06)"}`,
+                      background: active ? "rgba(183,255,90,0.12)" : "transparent",
+                      color: active ? "#B7FF5A" : "rgba(167,184,169,0.5)",
+                      fontSize: 10.5, fontWeight: 700,
+                      transition: "all 0.12s",
+                    }}
+                  >
+                    {opt.label}
+                    {count > 0 && (
+                      <span style={{
+                        minWidth: 16, height: 16, borderRadius: 8, padding: "0 4px",
+                        background: active ? "rgba(183,255,90,0.2)" : "rgba(255,255,255,0.07)",
+                        fontSize: 9, fontWeight: 900,
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Alert List ── */}
+          <div style={{ flex: 1, overflowY: "auto", scrollbarWidth: "thin", scrollbarColor: "rgba(57,91,67,0.3) transparent" }}>
+            {filtered.length === 0 ? (
+              <div style={{
+                display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center",
+                height: "100%", gap: 12, padding: 40,
+              }}>
+                <div style={{
+                  width: 60, height: 60, borderRadius: 18,
+                  background: "rgba(57,91,67,0.1)",
+                  boxShadow: "0 0 0 1px rgba(57,91,67,0.2)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}>
+                  <Bell style={{ width: 26, height: 26, color: "rgba(167,184,169,0.25)" }} />
+                </div>
+                <div style={{ textAlign: "center" }}>
+                  <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: "rgba(167,184,169,0.5)" }}>
+                    {query || filter !== "all" ? "No matching alerts" : "No Active Alerts"}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: "rgba(167,184,169,0.28)" }}>
+                    {query || filter !== "all"
+                      ? "Try adjusting your search or filter"
+                      : "Create your first alert to get started"}
+                  </p>
+                </div>
+                {!query && filter === "all" && (
+                  <button
+                    onClick={() => setShowCreate(true)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 6,
+                      padding: "8px 18px", borderRadius: 10, cursor: "pointer",
+                      border: "1px solid rgba(183,255,90,0.28)",
+                      background: "rgba(183,255,90,0.08)", color: "#B7FF5A",
+                      fontSize: 11, fontWeight: 700, marginTop: 4,
+                    }}
+                  >
+                    <Plus style={{ width: 13, height: 13 }} />
+                    Create First Alert
+                  </button>
+                )}
+              </div>
+            ) : (
+              filtered.map(alert => (
+                <AlertCard
+                  key={alert.id}
+                  alert={alert}
+                  triggering={triggeringId === alert.id}
+                  onPause={() => handlePause(alert.id)}
+                  onResume={() => handleResume(alert.id)}
+                  onDelete={() => handleDelete(alert.id, alert.symbol)}
+                  onEdit={() => setEditTarget(alert)}
+                />
+              ))
+            )}
+          </div>
+
+          {/* ── Footer ── */}
+          <div style={{
+            padding: "8px 20px",
+            borderTop: "1px solid rgba(255,255,255,0.04)",
+            flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+          }}>
+            <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.28)" }}>
+              {filtered.length} of {alerts.length} alert{alerts.length !== 1 ? "s" : ""}
+            </p>
+            <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.2)" }}>
+              Alerts persist across sessions
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-modals (rendered outside the backdrop to stack correctly) */}
+      {editTarget && (
+        <EditAlertModal
+          alert={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+      {showCreate && (
+        <QuickCreateModal
+          onClose={() => setShowCreate(false)}
+          onSave={handleCreate}
+        />
+      )}
+    </>
+  );
+
+  return createPortal(modal, document.body);
+}

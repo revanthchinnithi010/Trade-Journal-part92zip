@@ -1,0 +1,499 @@
+Build the complete backend architecture and realtime alert engine for the TradeVault Alerts Center.
+
+Frontend UI already exists.
+
+Now implement full production-grade backend infrastructure including:
+
+- Realtime websocket feeds
+- Finnhub integration
+- Delta Exchange integration
+- Live market state engine
+- Alerts engine
+- Zone alerts
+- Trendline alerts
+- Telegram delivery system
+- Dynamic symbol management
+- Watchlist management
+- Feed health monitoring
+- Frontend websocket broadcasting
+
+==================================================
+TECH STACK
+==================================================
+
+Use:
+
+- Node.js
+- Express
+- TypeScript
+- PostgreSQL
+- Drizzle ORM
+- Native WebSocket
+- Modular architecture
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Create modular services:
+
+/services
+  /finnhub
+  /delta
+  /alerts
+  /zones
+  /trendlines
+  /telegram
+  /watchlist
+  /feed-health
+  /market-state
+  /websocket-gateway
+
+==================================================
+SUPPORTED DATA PROVIDERS
+==================================================
+
+ONLY use:
+
+1. OANDA symbols via Finnhub
+2. Delta Exchange crypto feed
+
+No Binance.
+No TradingView feed.
+No other providers.
+
+==================================================
+FINNHUB FEED
+==================================================
+
+Provider:
+Finnhub WebSocket
+
+Endpoint:
+wss://ws.finnhub.io
+
+Environment variable:
+FINNHUB_API_KEY
+
+Used for:
+- Forex
+- Indices
+- Commodities
+
+==================================================
+SUPPORTED OANDA SYMBOLS
+==================================================
+
+Default symbols:
+
+- NAS100
+- US30
+- XAUUSD
+- USOIL
+- UKOIL
+- EURUSD
+- GBPJPY
+
+==================================================
+DELTA EXCHANGE FEED
+==================================================
+
+Used for crypto only.
+
+Default symbols:
+
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+Use realtime Delta Exchange websocket feed.
+
+==================================================
+LIVE FEED REQUIREMENTS
+==================================================
+
+1. Both feeds must run simultaneously.
+2. Tick-by-tick realtime updates.
+3. Auto reconnect on disconnect.
+4. Heartbeat monitoring.
+5. Feed health monitoring.
+6. Stale feed detection.
+7. Restore subscriptions automatically.
+8. Broadcast realtime prices to frontend.
+
+==================================================
+CENTRAL MARKET STATE ENGINE
+==================================================
+
+Create centralized live memory store.
+
+Example:
+
+marketState = {
+  BTCUSD: {
+    price: 68432.4,
+    provider: "delta",
+    timestamp: 1716632020
+  },
+  NAS100: {
+    price: 18752.2,
+    provider: "finnhub",
+    timestamp: 1716632021
+  }
+}
+
+Use lightweight in-memory architecture for maximum speed.
+
+==================================================
+DYNAMIC SYMBOL MANAGEMENT
+==================================================
+
+IMPORTANT FEATURE:
+
+User must be able to manually add/remove symbols dynamically.
+
+==================================================
+ALERTS CENTER
+==================================================
+
+Add:
+"+ Add Symbol" button
+
+User can:
+- search symbol
+- select provider
+- subscribe live
+
+==================================================
+WATCHLIST PANEL
+==================================================
+
+Charts section watchlist must also include:
+
+- Add Symbol button
+- Remove Symbol button
+- Favorite/star support
+- Drag sorting
+
+==================================================
+SYMBOL RULES
+==================================================
+
+ONLY allow:
+
+1. OANDA symbols
+2. Delta Exchange symbols
+
+Reject unsupported symbols.
+
+==================================================
+EXAMPLES
+==================================================
+
+Allowed:
+
+Crypto:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+Forex:
+- EURUSD
+- GBPJPY
+- USDJPY
+
+Indices:
+- NAS100
+- US30
+
+Commodities:
+- XAUUSD
+- USOIL
+- UKOIL
+
+==================================================
+DYNAMIC SUBSCRIPTION ENGINE
+==================================================
+
+When user adds symbol:
+
+1. subscribe websocket feed instantly
+2. begin realtime updates
+3. store in database
+4. reflect in watchlist
+5. reflect in alerts center
+
+When removed:
+- unsubscribe feed
+- cleanup memory
+
+==================================================
+DATABASE TABLES
+==================================================
+
+Create tables:
+
+alerts
+alert_events
+zones
+trendlines
+watchlists
+symbols
+feed_status
+
+==================================================
+ALERT TYPES
+==================================================
+
+Implement:
+
+1. Price Alerts
+2. Alert Zones
+3. Trendline Alerts
+
+==================================================
+1. PRICE ALERTS
+==================================================
+
+Conditions:
+
+- ABOVE
+- BELOW
+- TOUCH
+
+Example:
+BTCUSD ABOVE 70000
+
+Trigger immediately when passed.
+
+==================================================
+2. ALERT ZONES
+==================================================
+
+Example:
+
+XAUUSD
+Zone:
+2340 → 2350
+
+Trigger when:
+- enters zone
+- breakout
+- rejection
+
+==================================================
+3. TRENDLINE ALERTS
+==================================================
+
+Frontend sends:
+
+- symbol
+- x1 y1
+- x2 y2
+- timeframe
+
+Backend calculates projected trendline equation dynamically.
+
+Trigger on:
+- breakout
+- touch
+- rejection
+
+==================================================
+ALERT ENGINE
+==================================================
+
+Realtime tick processing:
+
+Every incoming tick:
+
+1. update market state
+2. check alerts
+3. check zones
+4. check trendlines
+
+Must trigger instantly.
+
+==================================================
+COOLDOWN SYSTEM
+==================================================
+
+Prevent duplicate spam.
+
+Default cooldown:
+120 seconds
+
+==================================================
+TELEGRAM DELIVERY
+==================================================
+
+Use Telegram Bot API.
+
+Environment variables:
+
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+
+==================================================
+MESSAGE FORMATS
+==================================================
+
+🚨 TradeVault Alert
+
+Symbol: BTCUSD
+Type: PRICE ALERT
+Condition: ABOVE
+Target: 70000
+Current Price: 70021
+
+Time: 2026-05-24 08:45:12 UTC
+
+==================================================
+
+🟢 Zone Entry
+
+Symbol: XAUUSD
+Entered Zone:
+2340 → 2350
+
+Current Price: 2344.5
+
+==================================================
+
+📈 Trendline Breakout
+
+Symbol: NAS100
+Direction: Bullish Breakout
+
+==================================================
+REPEAT ALERT LOGIC
+==================================================
+
+IMPORTANT:
+
+If condition remains active:
+- resend Telegram alert every 2 minutes.
+
+Example:
+
+BTCUSD still above 70000:
+send reminder every 120 seconds.
+
+Stop reminders once invalidated.
+
+==================================================
+LIVE FRONTEND WEBSOCKET
+==================================================
+
+Frontend must receive realtime:
+
+- prices
+- alerts
+- feed status
+- stale warnings
+- subscriptions
+
+==================================================
+FEED STATUS PANEL
+==================================================
+
+Must power current frontend cards:
+
+- Connected
+- Live
+- Latency
+- Tick count
+- Symbols subscribed
+- Last tick
+- Feed provider
+
+==================================================
+STALE FEED DETECTION
+==================================================
+
+If no tick received for:
+60 seconds
+
+Then:
+- mark stale
+- notify frontend
+- send Telegram warning ONCE
+
+==================================================
+TRADINGVIEW INTEGRATION COMPATIBILITY
+==================================================
+
+Watchlist symbols must sync with:
+
+- TradingView chart
+- Alerts engine
+- Live feeds
+
+Changing symbol in watchlist:
+- instantly updates TradingView chart
+- updates live feed subscription
+
+==================================================
+PERFORMANCE OPTIMIZATION
+==================================================
+
+1. Prevent React lag
+2. Prevent websocket flooding
+3. No memory leaks
+4. Lightweight updates
+5. Efficient symbol maps
+6. Avoid excessive rerenders
+7. Optimize for Android tablets
+8. Smooth 60fps UI updates
+
+==================================================
+BACKGROUND SERVICES
+==================================================
+
+Create:
+
+- FeedHealthMonitor
+- AlertProcessor
+- TelegramQueue
+- WebSocketBroadcaster
+- SubscriptionManager
+- MarketStateManager
+
+==================================================
+RECONNECT LOGIC
+==================================================
+
+On websocket disconnect:
+
+1. exponential reconnect
+2. restore subscriptions
+3. preserve alert state
+4. continue without reload
+
+==================================================
+FINAL GOAL
+==================================================
+
+Build a professional institutional-grade realtime alert engine similar to:
+
+- TradingView
+- Binance
+- Professional trading terminals
+
+Everything must run fully live:
+
+- Finnhub OANDA feed
+- Delta Exchange crypto feed
+- Dynamic symbols
+- Watchlists
+- Alerts
+- Zones
+- Trendlines
+- Telegram alerts
+- Frontend live websocket updates
+
+Must be smooth, stable, scalable, and optimized for tablet-first usage.

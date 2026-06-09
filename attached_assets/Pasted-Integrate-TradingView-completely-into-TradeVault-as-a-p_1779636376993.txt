@@ -1,0 +1,161 @@
+Integrate TradingView completely into TradeVault as a professional full-screen charting workspace.
+
+IMPORTANT:
+At this stage, DO NOT add Buy/Sell execution panels yet.
+DO NOT add broker execution controls yet.
+Focus ONLY on premium TradingView integration.
+
+--------------------------------------------------
+
+GOAL
+
+Transform the Charts section into a full professional TradingView-powered workspace optimized for Android tablets in 16:9 landscape mode.
+
+--------------------------------------------------
+
+TRADINGVIEW INTEGRATION REQUIREMENTS
+
+1. Integrate full TradingView Advanced Chart widget.
+2. Make chart the primary focus of the interface.
+3. Support fullscreen immersive chart mode.
+4. Use dark green glossy TradeVault theme.
+5. Ensure smooth performance on Android tablets.
+6. Optimize for touch interactions.
+
+--------------------------------------------------
+
+FEATURES TO ENABLE
+
+Enable:
+- Symbol search
+- Timeframe switching
+- Drawing tools
+- Indicators
+- Crosshair
+- Watchlist
+- Fullscreen mode
+- Multi-chart layouts
+- Theme sync
+- Responsive resizing
+- Mobile/tablet gestures
+
+Supported symbols:
+CRYPTO:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+FOREX:
+- EURUSD
+- GBPJPY
+
+INDICES:
+- NAS100
+- US30
+
+COMMODITIES:
+- XAUUSD
+- USOIL
+- UKOIL
+
+--------------------------------------------------
+
+LAYOUT DESIGN
+
+Desktop/Tablet Layout:
+
+┌────────────────────────────────────┐
+│ Top Toolbar                        │
+├──────────────┬─────────────────────┤
+│ Watchlist    │ TradingView Chart   │
+│              │                     │
+│              │                     │
+│              │                     │
+├──────────────┴─────────────────────┤
+│ Bottom Tabs                       │
+│ Positions | Orders | Alerts       │
+└────────────────────────────────────┘
+
+For now:
+- Positions tab placeholder only
+- Orders tab placeholder only
+- Alerts tab placeholder only
+
+No trading execution yet.
+
+--------------------------------------------------
+
+UI DESIGN
+
+Use:
+- premium glossy fintech design
+- dark green futuristic theme
+- soft glassmorphism
+- minimal neon accents
+- smooth rounded panels
+- elegant typography
+- clean spacing
+
+Use colors:
+#07110D
+#0D1C16
+#10251C
+#B7FF5A
+#7CBF4B
+
+--------------------------------------------------
+
+PERFORMANCE OPTIMIZATION
+
+Very important:
+
+1. Prevent UI lag.
+2. Lazy load TradingView components.
+3. Prevent unnecessary React re-renders.
+4. Optimize for Android tablet GPUs.
+5. Keep 60fps smooth interactions.
+6. Ensure charts resize correctly.
+7. Use efficient layout rendering.
+8. Prevent memory leaks from chart reinitialization.
+
+--------------------------------------------------
+
+ADVANCED REQUIREMENTS
+
+1. Persist selected symbol.
+2. Persist timeframe.
+3. Persist chart layout locally.
+4. Add custom top toolbar.
+5. Add market type tabs:
+   - Crypto
+   - Forex
+   - Indices
+   - Commodities
+
+6. Add realtime live symbol badges.
+7. Add connection status indicator.
+8. Add chart loading skeleton.
+9. Add fullscreen toggle.
+10. Add clean transitions.
+
+--------------------------------------------------
+
+FINAL GOAL
+
+Create a professional institutional-grade TradingView workspace inside TradeVault that feels like a premium standalone trading terminal app.
+
+The experience should feel:
+- smooth
+- immersive
+- premium
+- tablet-native
+- modern fintech quality
+
+After implementation:
+- verify all charts load
+- verify symbols switch correctly
+- verify tablet responsiveness
+- verify smooth performance
+- provide screenshots of final chart workspace

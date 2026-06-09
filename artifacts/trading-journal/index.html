@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>TradeVault</title>
+    <meta name="description" content="TradeVault — Premium Trading Journal. Track trades, analyze performance, and grow as a trader." />
+    <meta name="robots" content="index, follow" />
+    <meta property="og:title" content="TradeVault" />
+    <meta property="og:description" content="Premium Trading Journal" />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TradeVault" />
+    <meta name="twitter:description" content="Premium Trading Journal" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300..800;1,14..32,300..800&family=Dancing+Script:wght@700&display=swap" rel="stylesheet">
+    <!-- Anti-FOUC: apply stored theme before first paint -->
+    <script>
+      (function() {
+        try {
+          var t = localStorage.getItem('tj-theme');
+          var html = document.documentElement;
+          if (t === 'light') {
+            html.classList.remove('dark');
+            html.classList.add('light');
+          } else {
+            html.classList.add('dark');
+            html.classList.remove('light');
+          }
+        } catch(e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

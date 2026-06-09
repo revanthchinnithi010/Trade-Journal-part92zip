@@ -1,0 +1,218 @@
+FIX ALERTS SYSTEM — USE ONE SHARED GLOBAL ALERT DATABASE
+
+====================================================
+CURRENT PROBLEM
+====================================================
+
+Right now there are TWO separate alert systems:
+
+1.
+Alerts Center page
+(shows different alerts)
+
+2.
+Right sidebar bell popup
+(shows empty / different alerts)
+
+This is WRONG.
+
+====================================================
+MAIN REQUIREMENT
+====================================================
+
+ALL alerts in the entire app must use ONE shared global alert store.
+
+Meaning:
+
+✅ Drawing alerts
+✅ Trendline alerts
+✅ Rectangle alerts
+✅ Horizontal line alerts
+✅ Manual alerts
+
+ALL must sync everywhere.
+
+====================================================
+GLOBAL ALERT STORE
+====================================================
+
+Create ONE centralized alert manager.
+
+Example:
+----------------------------------------------------
+
+alertStore.ts
+
+or
+
+useAlertStore()
+
+or Zustand global store.
+
+====================================================
+EVERY ALERT MUST SAVE TO SAME DATABASE
+====================================================
+
+When alert created from drawing toolbar bell icon:
+
+SAVE INTO:
+----------------------------------------------------
+globalAlerts[]
+
+NOT local popup state.
+
+====================================================
+SHARED BETWEEN
+====================================================
+
+The SAME alerts must appear in:
+
+✅ Alerts Center page
+✅ Right sidebar popup
+✅ Chart overlay
+✅ Active alert counters
+✅ Notification system
+
+====================================================
+REQUIRED FIX
+====================================================
+
+Currently:
+drawing-tool alerts are NOT synced.
+
+Fix:
+----------------------------------------------------
+
+When user creates drawing alert:
+----------------------------------------------------
+1. generate unique alert id
+2. save alert to global store
+3. persist to localStorage
+4. instantly update:
+   - alerts page
+   - right popup
+   - counters
+   - chart state
+
+====================================================
+ALERT OBJECT STRUCTURE
+====================================================
+
+Every alert should store:
+
+----------------------------------------------------
+
+{
+  id,
+  symbol,
+  timeframe,
+  type,
+  drawingType,
+  drawingId,
+  condition,
+  status,
+  message,
+  createdAt,
+  triggeredAt,
+  paused,
+  enabled,
+  chartId
+}
+
+====================================================
+RIGHT SIDEBAR POPUP FIX
+====================================================
+
+Currently popup shows:
+"No Active Alerts"
+
+Even though alerts exist.
+
+Fix:
+----------------------------------------------------
+
+Right popup must read from:
+globalAlerts[]
+
+NOT local component state.
+
+====================================================
+LIVE SYNC
+====================================================
+
+If alert added/deleted/paused anywhere:
+
+instantly sync everywhere.
+
+====================================================
+EXAMPLES
+====================================================
+
+If user:
+----------------------------------------------------
+creates trendline alert from chart
+
+THEN:
+----------------------------------------------------
+
+✅ alert instantly appears in Alerts Center
+✅ alert instantly appears in Bell popup
+✅ counter updates
+✅ chart marker appears
+
+====================================================
+DELETE FIX
+====================================================
+
+If deleted from:
+----------------------------------------------------
+- Alerts page
+OR
+- Bell popup
+OR
+- chart
+
+Then remove globally everywhere.
+
+====================================================
+PAUSE / RESUME FIX
+====================================================
+
+Pause from popup:
+----------------------------------------------------
+must instantly reflect in:
+- Alerts Center
+- chart overlay
+- counters
+
+====================================================
+TRIGGERED ALERTS
+====================================================
+
+When alert triggers:
+----------------------------------------------------
+
+status:
+"Triggered"
+
+Show everywhere instantly.
+
+====================================================
+ALERT COUNTER FIX
+====================================================
+
+Right sidebar alert badge count must use:
+----------------------------------------------------
+global active alerts count.
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+✅ ONE unified alert system
+✅ no duplicate alert databases
+✅ drawing alerts sync everywhere
+✅ popup + alerts page identical
+✅ real-time updates everywhere
+✅ professional TradingView-style architecture

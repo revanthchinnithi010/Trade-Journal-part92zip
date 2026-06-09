@@ -1,0 +1,131 @@
+Enhance the Right Sidebar Screenshot button in TradeVault.
+
+==================================================
+FEATURE
+==================================================
+
+When user clicks the Screenshot button in the right sidebar,
+open a professional floating dropdown menu with 2 options:
+
+1. Snapshot
+2. Copy Live Chart Link
+
+==================================================
+OPTION 1 — SNAPSHOT
+==================================================
+
+When Snapshot is clicked:
+
+Capture FULL chart area including:
+- candles
+- indicators
+- drawings
+- trendlines
+- long/short positions
+- symbol
+- timeframe
+- floating elements
+- chart overlays
+- price scale
+- toolbar overlays if visible
+
+==================================================
+IMAGE QUALITY
+==================================================
+
+Generate:
+- Full HD 1080p image
+- High sharpness
+- Crisp text rendering
+- No blurry scaling
+- GPU optimized rendering
+
+Resolution:
+1920x1080
+
+Support:
+- PNG export
+- tablet landscape optimized
+
+==================================================
+SNAPSHOT UI
+==================================================
+
+After capture:
+show mini popup:
+
+- Preview thumbnail
+- Download button
+- Copy image button
+- Share button
+
+==================================================
+OPTION 2 — COPY LIVE CHART LINK
+==================================================
+
+Generate a shareable live chart URL including:
+
+- current symbol
+- timeframe
+- chart type
+- indicators
+- drawings
+- zoom state
+- price scale position
+- theme mode
+
+Example:
+tradevault.app/chart/BTCUSDT?tf=1H&theme=dark...
+
+==================================================
+COPY ACTION
+==================================================
+
+When clicked:
+- copy URL directly to clipboard
+- show toast:
+"Live chart link copied"
+
+==================================================
+TECHNICAL REQUIREMENTS
+==================================================
+
+Use:
+- html2canvas OR modern canvas capture
+- high DPI rendering
+- preserve chart quality
+- preserve drawing layers
+- preserve indicator overlays
+
+==================================================
+PERFORMANCE
+==================================================
+
+1. Do not freeze UI during capture.
+2. Use async rendering.
+3. Optimize memory usage.
+4. Prevent lag on tablets.
+
+==================================================
+DROPDOWN MENU DESIGN
+==================================================
+
+Professional floating menu:
+- glassmorphism
+- rounded corners
+- subtle blur
+- hover glow
+- dark/light theme compatible
+
+Menu Items:
+- camera icon for Snapshot
+- link/share icon for Live Link
+
+==================================================
+FINAL RESULT
+==================================================
+
+TradeVault screenshot system should feel similar to:
+- TradingView snapshot feature
+- Binance share chart feature
+- professional trading terminal exports

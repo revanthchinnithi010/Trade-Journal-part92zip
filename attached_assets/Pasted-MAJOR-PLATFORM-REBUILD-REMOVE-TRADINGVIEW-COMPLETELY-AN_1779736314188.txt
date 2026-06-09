@@ -1,0 +1,383 @@
+MAJOR PLATFORM REBUILD — REMOVE TRADINGVIEW COMPLETELY AND BUILD FULL CUSTOM PROFESSIONAL CHART TERMINAL
+
+IMPORTANT:
+Completely REMOVE the embedded TradingView panel and all iframe/widget dependencies.
+
+I want a FULLY CUSTOM professional trading terminal built from scratch using modern chart rendering architecture.
+
+GOAL:
+TradeVault should feel like a hybrid of:
+
+- TradingView Desktop
+- Exocharts
+- Bookmap
+- MetaTrader
+- TradeZella
+
+Optimized for:
+
+- Android tablets
+- touch gestures
+- desktop-grade smoothness
+- realtime professional trading workflows
+
+==================================================
+CORE ARCHITECTURE
+
+TECH STACK:
+
+- React
+- TypeScript
+- lightweight-charts
+- Canvas rendering
+- TailwindCSS
+- Framer Motion
+- Zustand state management
+- Supabase PostgreSQL
+- WebSocket engine
+
+DO NOT USE:
+
+- TradingView iframe
+- TradingView widgets
+- Embedded chart panels
+
+Everything must be fully custom.
+
+==================================================
+LIVE MARKET DATA ENGINE
+
+CRYPTO:
+Use:
+
+- Binance WebSocket
+- Bybit WebSocket optional
+
+FOREX / INDICES / COMMODITIES:
+For now:
+
+- Development mock websocket feeds
+- Future-ready cTrader API architecture
+
+Supported symbols:
+
+- BTCUSDT
+- ETHUSDT
+- SOLUSDT
+- DOGEUSDT
+- PEPEUSDT
+- EURUSD
+- GBPUSD
+- XAUUSD
+- NAS100
+- US30
+- USOIL
+
+==================================================
+REALTIME ENGINE
+
+Build centralized websocket manager.
+
+Features:
+
+- realtime tick streaming
+- candle aggregation
+- reconnect logic
+- heartbeat ping/pong
+- latency monitoring
+- duplicate subscription prevention
+- symbol subscription manager
+
+Generate:
+
+- 1m
+- 5m
+- 15m
+- 1H
+- 4H
+- 1D candles
+
+==================================================
+CUSTOM CHART ENGINE
+
+Build professional chart panel using lightweight-charts.
+
+Features:
+
+- ultra smooth zoom
+- free hand drag movement
+- inertial scrolling
+- pinch zoom
+- crosshair
+- live price line
+- smooth candle rendering
+- realtime updates
+- high FPS rendering
+- fullscreen mode
+
+Need exact TradingView-like smoothness.
+
+==================================================
+GLASSMORPHISM UI
+
+Design language:
+
+- premium glossy glassmorphism
+- institutional trading terminal
+- neon green fintech glow
+- dark transparent panels
+- blur backgrounds
+- smooth shadows
+- animated transitions
+
+==================================================
+FULL DRAWING TOOL SYSTEM
+
+Build complete custom drawing engine.
+
+TOOLS:
+
+- Trendline
+- Ray
+- Horizontal Line
+- Vertical Line
+- Rectangle Zone
+- Channel
+- Fib Retracement
+- Text Tool
+- Brush Tool
+- Arrow Tool
+- Support/Resistance
+- Risk Reward Tool
+
+Each drawing must support:
+
+- drag
+- resize
+- edit
+- lock
+- hide
+- duplicate
+- delete
+- color customization
+- line thickness
+- transparency
+
+==================================================
+AUTO COORDINATE SYSTEM
+
+When user draws:
+Automatically capture:
+
+- exact timestamps
+- exact prices
+- exact chart coordinates
+
+NO manual coordinate input.
+
+==================================================
+DRAWING PERSISTENCE
+
+Drawings must NEVER disappear.
+
+Persist permanently in Supabase.
+
+Save:
+
+- symbol
+- timeframe
+- coordinates
+- styles
+- visibility
+- lock state
+- alerts
+
+Drawings must survive:
+
+- refresh
+- restart
+- page switch
+- logout/login
+- redeploy
+
+==================================================
+ADVANCED ALERT ENGINE
+
+Create professional alert engine.
+
+ALERT TYPES:
+
+- trendline touch
+- trendline cross
+- breakout
+- candle close confirmation
+- zone entry
+- zone exit
+- rejection
+- support/resistance break
+
+Features:
+
+- realtime trigger detection
+- cooldown logic
+- duplicate prevention
+- active alerts
+- alert history
+- Telegram integration
+
+==================================================
+WATCHLIST PANEL
+
+Create TradingView-style watchlist.
+
+Features:
+
+- add/remove symbols
+- search symbols
+- realtime price updates
+- percent change
+- favorite symbols
+- drag sorting
+- persistent watchlist
+
+Watchlist symbols must sync with:
+
+- dashboard
+- alerts center
+- chart panel
+
+==================================================
+TOP CONTROL BAR
+
+Create professional top toolbar.
+
+Features:
+
+- symbol selector
+- timeframe selector
+- indicator manager
+- drawing tools
+- fullscreen toggle
+- save layout
+- load layout
+- screenshot tool
+- chart style selector
+
+==================================================
+TRADING PANEL
+
+Build TradingView-style bottom trading panel.
+
+Tabs:
+
+- Positions
+- Orders
+- Trade History
+- Alerts
+- Drawings
+- Journal
+- Notifications
+
+==================================================
+POSITIONS SYSTEM
+
+Create draggable SL/TP system.
+
+Features:
+
+- drag SL lines
+- drag TP lines
+- realtime PnL calculation
+- risk reward display
+- editable orders
+- position visualization on chart
+
+==================================================
+ZOOM + MOVEMENT
+
+Must support:
+
+- smooth zoom in/out
+- mouse wheel zoom
+- touch pinch zoom
+- drag movement
+- momentum scrolling
+- kinetic movement
+
+==================================================
+FULL CUSTOMIZATION
+
+Allow:
+
+- theme customization
+- panel resizing
+- floating panels
+- detachable panels
+- indicator customization
+- chart colors
+- grid visibility
+- candle styles
+
+==================================================
+PERFORMANCE OPTIMIZATION
+
+Current chart is laggy.
+
+Optimize:
+
+- websocket rendering
+- React rerenders
+- drawing layers
+- canvas performance
+- memory usage
+
+Need:
+
+- ultra smooth 60fps feel
+- no flickering
+- no freezes
+- no redraw lag
+
+==================================================
+TABLET OPTIMIZATION
+
+IMPORTANT:
+Optimize heavily for Android tablets.
+
+Need:
+
+- large touch targets
+- gesture support
+- responsive scaling
+- fullscreen workspace
+- landscape optimization
+- smooth touch drawing
+
+==================================================
+DATABASE
+
+Use Supabase for:
+
+- drawings
+- alerts
+- layouts
+- watchlists
+- positions
+- journals
+- notifications
+- user settings
+
+==================================================
+FINAL GOAL
+
+TradeVault should become a fully custom professional trading terminal platform with:
+
+- no TradingView dependency
+- own chart engine
+- own drawing system
+- own alert system
+- own workspace management
+- institutional-grade smoothness
+- premium glossy UI
+- realtime professional experience
+- mobile/tablet optimized architecture

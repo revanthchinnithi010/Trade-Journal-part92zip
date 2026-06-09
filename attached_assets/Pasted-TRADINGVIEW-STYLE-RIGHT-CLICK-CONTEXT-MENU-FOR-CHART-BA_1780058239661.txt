@@ -1,0 +1,160 @@
+TRADINGVIEW-STYLE RIGHT CLICK CONTEXT MENU FOR CHART BACKGROUND
+
+Need a professional context menu when user:
+✅ mouse right-clicks
+✅ long-presses on touch devices
+
+on empty chart background.
+
+==================================================
+RECOMMENDED OPTIONS
+==================================================
+
+SECTION 1 — CHART ACTIONS
+--------------------------------------------------
+
+📌 Add Alert Here
+📌 Reset Chart View
+📌 Auto Scale
+📌 Toggle Crosshair
+📌 Hide Drawings
+📌 Remove All Drawings
+📌 Lock Drawings
+📌 Screenshot Chart
+
+==================================================
+SECTION 2 — DRAWING TOOLS
+--------------------------------------------------
+
+📈 Trend Line
+📈 Horizontal Line
+📈 Ray
+📈 Rectangle
+📈 Fibonacci Retracement
+📈 Brush Tool
+📈 Text Label
+
+(Quick access tools)
+
+==================================================
+SECTION 3 — INDICATORS
+--------------------------------------------------
+
+📊 Add Indicator
+📊 Remove All Indicators
+📊 Favorite Indicators
+
+==================================================
+SECTION 4 — CHART STYLE
+--------------------------------------------------
+
+🕯 Candlestick
+📉 Line Chart
+📊 Heikin Ashi
+
+==================================================
+SECTION 5 — TIMEFRAMES
+--------------------------------------------------
+
+⚡ 1m
+⚡ 5m
+⚡ 15m
+⚡ 1H
+⚡ 4H
+⚡ 1D
+⚡ 1W
+
+==================================================
+SECTION 6 — SETTINGS
+--------------------------------------------------
+
+⚙ Chart Settings
+⚙ Drawing Settings
+⚙ Theme Settings
+
+==================================================
+SECTION 7 — PROFESSIONAL FEATURES
+--------------------------------------------------
+
+⭐ Add To Watchlist
+⭐ Replay From Here
+⭐ Measure Tool
+⭐ Copy Price
+⭐ Jump To Date
+
+==================================================
+MOBILE TOUCH SUPPORT
+==================================================
+
+Desktop:
+✅ Right click opens menu
+
+Tablet/Mobile:
+✅ Long press (500ms) opens menu
+
+==================================================
+UI DESIGN
+==================================================
+
+Style:
+✅ floating glass panel
+✅ smooth fade animation
+✅ dark transparent background
+✅ neon green hover
+✅ rounded corners
+✅ blur effect
+✅ ultra fast
+
+==================================================
+IMPORTANT UX RULES
+==================================================
+
+1. Menu should open near cursor/touch point
+2. Auto reposition near screen edges
+3. Click outside = close
+4. ESC key closes menu
+5. NO lag
+6. Do not rerender full chart
+
+==================================================
+HIGH PRIORITY OPTIONS
+==================================================
+
+Most useful options users actually use frequently:
+
+✅ Add Alert Here
+✅ Trend Line
+✅ Horizontal Line
+✅ Reset Chart
+✅ Remove Drawings
+✅ Auto Scale
+✅ Add Indicator
+✅ Chart Settings
+
+These should appear at TOP.
+
+==================================================
+BONUS FEATURES
+==================================================
+
+If drawing selected:
+Show different menu:
+
+✏ Edit Style
+🎨 Change Color
+📌 Lock
+👁 Hide
+🗑 Delete
+📋 Duplicate
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need TradingView-level professional context menu:
+✅ desktop right click
+✅ mobile long press
+✅ ultra smooth
+✅ touch optimized
+✅ floating modern UI
+✅ zero lag

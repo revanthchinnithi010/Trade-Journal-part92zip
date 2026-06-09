@@ -1,0 +1,100 @@
+Fix the Right Sidebar Screenshot button in TradeVault.
+
+Current issue:
+The Screenshot button highlights green when clicked but nothing opens.
+
+==================================================
+FIX REQUIRED
+==================================================
+
+When clicking the Screenshot button in the right sidebar:
+
+Immediately open a floating dropdown menu beside the button.
+
+==================================================
+MENU OPTIONS
+==================================================
+
+1. Snapshot
+2. Copy Live Chart Link
+
+==================================================
+BUG FIXES
+==================================================
+
+1. Ensure onClick event is properly connected.
+2. Ensure dropdown state updates correctly.
+3. Prevent event propagation issues.
+4. Prevent z-index overlap issues.
+5. Ensure menu is not hidden behind chart canvas.
+6. Ensure menu appears above all layers.
+7. Fix tablet touch interaction.
+8. Ensure menu works with:
+   - mouse click
+   - touch tap
+
+==================================================
+DROPDOWN POSITION
+==================================================
+
+Position:
+left side of the screenshot button.
+
+Style:
+- floating glassmorphism popup
+- smooth fade animation
+- rounded corners
+- dark/light theme support
+- subtle shadow
+
+==================================================
+SNAPSHOT ACTION
+==================================================
+
+When Snapshot is clicked:
+- capture full chart
+- include indicators
+- include drawings
+- include overlays
+- export high quality PNG
+
+==================================================
+COPY LIVE LINK ACTION
+==================================================
+
+When clicked:
+- generate current chart state URL
+- copy to clipboard
+- show toast:
+  "Live chart link copied"
+
+==================================================
+DEBUGGING
+==================================================
+
+Check:
+- click handler
+- dropdown render condition
+- portal rendering
+- overflow hidden parent containers
+- pointer-events issues
+- touch-action conflicts
+
+==================================================
+IMPORTANT
+==================================================
+
+The dropdown must:
+- open instantly
+- never lag
+- never render behind chart
+- close when clicking outside
+- work smoothly on Android tablets
+
+==================================================
+FINAL RESULT
+==================================================
+
+Clicking the Screenshot button should instantly open a professional floating menu with:
+- Snapshot
+- Copy Live Chart Link

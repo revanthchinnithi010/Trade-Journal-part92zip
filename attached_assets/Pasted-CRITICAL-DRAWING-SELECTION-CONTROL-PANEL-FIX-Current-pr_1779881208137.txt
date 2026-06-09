@@ -1,0 +1,202 @@
+CRITICAL DRAWING SELECTION + CONTROL PANEL FIX
+
+Current problems:
+
+❌ Trendline selected but floating control panel not showing
+❌ Clicking chart background does NOT unselect drawing
+❌ Selection state stuck
+❌ Multiple drawings remain active
+❌ Drawing focus system broken
+
+Need EXACT TradingView-style selection behavior.
+
+==================================================
+1. DRAWING SELECTION SYSTEM REBUILD
+==================================================
+
+ONLY ONE drawing can be selected at a time.
+
+When user clicks:
+- trendline
+- ray
+- rectangle
+- fib
+- long position
+- short position
+
+THEN:
+✅ mark drawing as selected
+✅ show blue anchor points
+✅ show floating control toolbar
+✅ bring drawing to front
+
+All other drawings:
+automatically deselect.
+
+==================================================
+2. CONTROL PANEL SHOW FIX
+==================================================
+
+Currently selected drawing not triggering toolbar.
+
+Fix:
+
+selectedDrawingId state
+must update correctly.
+
+WHEN:
+selectedDrawingId !== null
+
+THEN:
+show floating toolbar immediately.
+
+Toolbar position:
+above selected drawing center.
+
+==================================================
+3. CHART BACKGROUND UNSELECT FIX
+==================================================
+
+When clicking EMPTY chart area:
+
+✅ unselect drawing
+✅ hide anchors
+✅ hide toolbar
+✅ clear selectedDrawingId
+
+Behavior must EXACTLY match TradingView.
+
+==================================================
+4. OUTSIDE CLICK DETECTION
+==================================================
+
+Detect if click target is:
+
+❌ NOT drawing
+❌ NOT anchor
+❌ NOT toolbar
+❌ NOT popup
+
+THEN:
+deselect current drawing.
+
+==================================================
+5. POINTER EVENT FIX
+==================================================
+
+Use:
+pointerdown
+
+NOT:
+click
+
+for:
+- drawing selection
+- deselection
+- toolbar activation
+
+==================================================
+6. TOOLBAR AUTO SHOW FIX
+==================================================
+
+When drawing selected:
+
+Toolbar must:
+✅ appear instantly
+✅ no delay
+✅ no flicker
+✅ no rerender loop
+
+Use:
+requestAnimationFrame()
+
+==================================================
+7. DRAWING HITBOX FIX
+==================================================
+
+Trendline hit detection currently weak.
+
+Need:
+larger invisible hit area.
+
+Example:
+actual visible line = 2px
+interaction hitbox = 16px
+
+Makes tablet touch easier.
+
+==================================================
+8. ACTIVE DRAWING VISUALS
+==================================================
+
+Selected drawing:
+✅ glow effect
+✅ anchor circles
+✅ toolbar visible
+
+Unselected drawing:
+✅ normal style
+✅ no anchors
+✅ no toolbar
+
+==================================================
+9. TOOLBAR HIDE RULES
+==================================================
+
+Hide toolbar when:
+
+✅ chart background clicked
+✅ another drawing selected
+✅ ESC pressed
+✅ drawing deleted
+
+==================================================
+10. MULTI-SELECTION BUG FIX
+==================================================
+
+Prevent:
+multiple selected drawings.
+
+Before selecting new drawing:
+clear previous selection first.
+
+==================================================
+11. STATE MANAGEMENT FIX
+==================================================
+
+Use centralized state:
+
+selectedDrawingId
+activeToolbar
+selectedAnchors
+
+NOT multiple local states.
+
+==================================================
+12. PERFORMANCE FIX
+==================================================
+
+Selection changes must:
+✅ not rerender full chart
+✅ not rerender all drawings
+✅ update only selected object
+
+Use:
+React.memo
+useRef
+useCallback
+
+==================================================
+13. FINAL TARGET
+==================================================
+
+Need EXACT TradingView behavior:
+
+✅ click drawing → selected
+✅ toolbar instantly appears
+✅ click background → unselect
+✅ toolbar disappears
+✅ smooth touch selection
+✅ stable anchors
+✅ no stuck state
+✅ premium UX

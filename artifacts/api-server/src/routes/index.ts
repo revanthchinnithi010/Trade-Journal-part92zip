@@ -1,0 +1,88 @@
+import { Router, type IRouter } from "express";
+import { createHealthRouter } from "./health.js";
+import { createWatchlistRouter } from "./watchlist.js";
+import alertEventsRouter from "./alert_events.js";
+import { createAlertsRouter } from "./alerts.js";
+import { createZonesRouter } from "./zones.js";
+import { createTrendlinesRouter } from "./trendlines.js";
+import { createTelegramRouter } from "./telegram.js";
+import { createFinnhubRouter } from "./finnhub.js";
+import { createDeltaRouter } from "./delta.js";
+import { createCTraderRouter } from "./ctrader.js";
+import { createDeltaOAuthRouter } from "./delta_oauth.js";
+import { createMarketRouter } from "./market.js";
+import { createAnalyticsRouter } from "./analytics.js";
+import { configRouter } from "./config.js";
+import { createCandlesRouter } from "./candles.js";
+import { drawingsRouter } from "./drawings.js";
+import tradesRouter from "./trades.js";
+import statsRouter from "./stats.js";
+import notesRouter from "./notes.js";
+import calendarEventsRouter from "./calendar_events.js";
+import chartLayoutsRouter from "./chart_layouts.js";
+import { brokerAccountsRouter } from "./broker_accounts.js";
+import { brokerDeltaRouter } from "./broker_delta.js";
+import { brokerBybitRouter } from "./broker_bybit.js";
+import { brokerCTraderRouter } from "./broker_ctrader.js";
+import { brokerMT5Router } from "./broker_mt5.js";
+import { myIpRouter } from "./my_ip.js";
+import { createSymbolsRouter } from "./symbols.js";
+import type { AlertEngine } from "../services/AlertEngine.js";
+import type { MarketDataService } from "../services/MarketDataService.js";
+import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
+import type { TelegramService } from "../services/TelegramService.js";
+import type { FinnhubService } from "../services/FinnhubService.js";
+import type { DeltaService } from "../services/DeltaService.js";
+import type { CTraderService } from "../services/CTraderService.js";
+import type { WSManager } from "../ws/WSManager.js";
+import type { CandleAggregator } from "../services/CandleAggregator.js";
+
+export function createRouter(deps: {
+  alertEngine: AlertEngine;
+  marketData: MarketDataService;
+  healthMonitor: FeedHealthMonitor;
+  telegram: TelegramService;
+  finnhub: FinnhubService;
+  delta: DeltaService;
+  ctrader: CTraderService;
+  wsManager: WSManager;
+  candleAggregator: CandleAggregator;
+}): IRouter {
+  const router: IRouter = Router();
+
+  router.use(createHealthRouter({
+    finnhub: deps.finnhub,
+    delta: deps.delta,
+    telegram: deps.telegram,
+    wsManager: deps.wsManager,
+  }));
+  router.use(tradesRouter);
+  router.use(statsRouter);
+  router.use(notesRouter);
+  router.use(createWatchlistRouter(deps.marketData));
+  router.use(alertEventsRouter);
+  router.use(createAlertsRouter(deps.alertEngine));
+  router.use(createZonesRouter(deps.alertEngine));
+  router.use(createTrendlinesRouter(deps.alertEngine));
+  router.use(createTelegramRouter(deps.telegram));
+  router.use(createFinnhubRouter(deps.finnhub));
+  router.use(createDeltaRouter(deps.delta));
+  router.use(createCTraderRouter(deps.ctrader));
+  router.use(createDeltaOAuthRouter());
+  router.use(createMarketRouter(deps.marketData, deps.healthMonitor));
+  router.use(createCandlesRouter(deps.candleAggregator, deps.marketData));
+  router.use(createAnalyticsRouter());
+  router.use(configRouter);
+  router.use(calendarEventsRouter);
+  router.use(chartLayoutsRouter);
+  router.use(drawingsRouter);
+  router.use(brokerAccountsRouter);
+  router.use(brokerDeltaRouter);
+  router.use(brokerBybitRouter);
+  router.use(brokerCTraderRouter);
+  router.use(brokerMT5Router);
+  router.use(myIpRouter);
+  router.use(createSymbolsRouter(deps.marketData));
+
+  return router;
+}

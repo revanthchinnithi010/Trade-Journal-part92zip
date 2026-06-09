@@ -1,0 +1,186 @@
+REPLIT UI REDESIGN PROMPT — MAKE LEFT DRAWING TOOLBAR EXACTLY LIKE RIGHT SIDEBAR STYLE
+
+IMPORTANT:
+Convert LEFT drawing toolbar UI into SAME visual style as RIGHT action sidebar shown in screenshot.
+
+ONLY redesign visual container/layout.
+Do NOT break drawing functionality.
+
+====================================================
+
+1. MATCH RIGHT SIDEBAR DESIGN EXACTLY
+
+LEFT DRAWING TOOLBAR must visually match:
+
+- bookmark button
+- bell button
+- list button
+- grid button
+
+same:
+- size
+- spacing
+- padding
+- glow
+- rounded corners
+- transparency
+- shadows
+- border opacity
+
+====================================================
+
+2. LEFT TOOLBAR BUTTON STYLE
+
+Use EXACT button system:
+
+BUTTON SIZE:
+72px width
+72px height
+
+BUTTON GAP:
+12px
+
+BORDER RADIUS:
+24px
+
+BACKGROUND:
+rgba(5, 12, 10, 0.92)
+
+BORDER:
+1px solid rgba(120,255,120,0.05)
+
+BOX SHADOW:
+0 0 18px rgba(0,255,120,0.06)
+
+BACKDROP:
+blur(18px)
+
+====================================================
+
+3. ICON STYLE
+
+ICONS MUST:
+- use same icon thickness
+- same white opacity
+- same center alignment
+- same scale
+- same spacing
+
+ICON COLOR:
+rgba(255,255,255,0.72)
+
+ACTIVE TOOL:
+lime green glow
+
+ACTIVE BACKGROUND:
+rgba(140,255,80,0.12)
+
+ACTIVE BORDER:
+rgba(140,255,80,0.28)
+
+====================================================
+
+4. TOOLBAR CONTAINER
+
+CURRENT:
+single long rectangle bar
+
+REMOVE THAT.
+
+NEW:
+floating stacked button system like right sidebar.
+
+Each button should appear independent.
+
+Example:
+
+[ + ]
+[ / ]
+[ = ]
+[ fib ]
+[ T ]
+[ □ ]
+
+====================================================
+
+5. LEFT SIDEBAR STRUCTURE
+
+Create:
+
+<div class="left-tools-wrapper">
+   <button class="tool-btn"></button>
+   <button class="tool-btn active"></button>
+</div>
+
+====================================================
+
+6. TOOLBAR POSITION
+
+LEFT TOOLBAR:
+- fixed left side
+- vertically centered
+- dedicated sidebar area
+- not overlaying candles
+
+Use:
+left: 12px;
+top: 50%;
+transform: translateY(-50%);
+
+====================================================
+
+7. HOVER EFFECTS
+
+On hover:
+- slightly brighter
+- soft glow
+- smooth scale
+
+Use:
+
+transition:
+all 0.22s ease;
+
+Hover:
+transform: scale(1.03);
+
+====================================================
+
+8. TABLET OPTIMIZATION
+
+Buttons must:
+- easy to tap
+- minimum 60px touch area
+- no accidental multi-touch
+
+====================================================
+
+9. REMOVE OLD STYLING
+
+REMOVE:
+- old rectangular dark strip
+- flat toolbar design
+- old borders
+- old shadows
+- compressed spacing
+
+====================================================
+
+10. FINAL RESULT
+
+LEFT DRAWING TOOLBAR SHOULD LOOK:
+almost identical to RIGHT floating sidebar style.
+
+Professional premium trading terminal look.
+
+NO:
+- flat sidebar
+- long black strip
+- mismatched buttons
+- uneven spacing
+
+YES:
+- floating premium buttons
+- glassmorphism
+- clean rounded UI
+- identical style language

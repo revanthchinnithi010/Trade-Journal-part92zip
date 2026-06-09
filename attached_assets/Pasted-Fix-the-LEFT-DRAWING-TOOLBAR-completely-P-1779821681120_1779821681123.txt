@@ -1,0 +1,186 @@
+Fix the LEFT DRAWING TOOLBAR completely.
+
+========================================================
+PROBLEM 1 — MULTIPLE TOOL SELECTION BUG
+========================================================
+
+Current issue:
+When selecting Trendline or other tools,
+multiple tools become active together.
+
+This is WRONG.
+
+Need:
+ONLY ONE drawing tool active at a time.
+
+Example:
+- if Trendline selected
+→ Ray must deactivate
+→ Brush deactivate
+→ Fib deactivate
+→ all others deactivate
+
+========================================================
+ACTIVE TOOL LOGIC
+========================================================
+
+Implement proper:
+activeDrawingTool state
+
+Rules:
+✅ only one active tool
+✅ clicking new tool replaces old tool
+✅ active tool glow only for selected tool
+✅ all others inactive
+
+When drawing finished:
+- auto switch back to cursor tool
+(unless stay-in-drawing-mode enabled)
+
+========================================================
+PROBLEM 2 — ICONS LOOK BAD
+========================================================
+
+Current toolbar icons:
+❌ cheap
+❌ inconsistent
+❌ random
+❌ not TradingView style
+
+Need EXACT TradingView-inspired icon style.
+
+========================================================
+IMPORTANT ICON STYLE
+========================================================
+
+Use:
+✅ clean SVG icons
+✅ thin white strokes
+✅ minimal outline style
+✅ same visual language
+✅ same alignment
+✅ same spacing
+✅ same proportions
+
+Icons should resemble:
+TradingView mobile/web drawing toolbar.
+
+========================================================
+ICON REPLACEMENT
+========================================================
+
+Replace ALL current drawing toolbar icons.
+
+Need proper icons for:
+
+CURSOR
+- crosshair/select icon
+
+LINES
+- trendline
+- ray
+- horizontal line
+- vertical line
+
+FIB
+- fib retracement icon
+
+FORECAST
+- long/short position icon
+
+BRUSH
+- brush/highlighter icon
+
+TEXT
+- text icon
+
+SHAPES
+- rectangle/circle/path icons
+
+MEASURE
+- ruler icon
+
+ZOOM
+- magnifier icon
+
+MAGNET
+- magnet icon
+
+LOCK
+- lock icon
+
+HIDE
+- eye icon
+
+DELETE
+- trash icon
+
+========================================================
+POPUP MENU STYLE
+========================================================
+
+Popup menu should look EXACTLY like TradingView.
+
+Need:
+✅ black background
+✅ white icons
+✅ white text
+✅ category labels gray
+✅ proper spacing
+✅ clean separators
+✅ favorite stars right aligned
+
+========================================================
+ICON ALIGNMENT
+========================================================
+
+Need:
+- all icons centered
+- same stroke width
+- same size
+- equal padding
+
+Toolbar width:
+52px
+
+Icon size:
+20px–22px
+
+========================================================
+VISUAL QUALITY
+========================================================
+
+Need:
+✅ premium
+✅ professional
+✅ TradingView inspired
+✅ no random neon icons
+✅ no bulky icons
+✅ no inconsistent icon sizes
+
+========================================================
+ACTIVE BUTTON STYLE
+========================================================
+
+Active tool button:
+- subtle neon green glow
+- soft green background
+- clean border
+
+NOT overly bright.
+
+========================================================
+IMPORTANT
+========================================================
+
+Do NOT create placeholder icons.
+
+Use REAL professional SVG icon system.
+
+Need final result to feel:
+✅ identical visual quality to TradingView
+✅ clean
+✅ stable
+✅ modern
+✅ professional
+✅ production-ready

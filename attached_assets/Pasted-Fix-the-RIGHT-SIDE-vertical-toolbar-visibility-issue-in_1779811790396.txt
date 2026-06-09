@@ -1,0 +1,97 @@
+Fix the RIGHT SIDE vertical toolbar visibility issue inside the charts section.
+
+Current issue:
+- Layout icon
+- Alerts icon
+- Object Tree icon
+
+are NOT clearly visible because the right sidebar container is partially outside the viewport and overlapping the chart price scale.
+
+====================================================
+FIX RIGHT TOOLBAR POSITIONING
+====================================================
+
+Move the entire right vertical toolbar INSIDE the chart viewport.
+
+Requirements:
+- fixed position: right: 12px
+- vertically centered
+- z-index above chart
+- must NOT overlap price scale labels
+- responsive on tablet/mobile
+- always fully visible
+
+Add:
+- smooth hover glow
+- active neon green background
+- inactive glass dark buttons
+- proper spacing between icons
+- touch-friendly size
+
+Icon size:
+- 22px icons
+- 48px button size minimum
+
+====================================================
+RIGHT TOOLBAR LAYOUT
+====================================================
+
+Top to bottom:
+
+1. Watchlist
+2. Alerts
+3. Object Tree
+4. Layout Manager
+
+Need:
+- tooltips on hover
+- click animations
+- visible active state
+- smooth transitions
+
+====================================================
+PRICE SCALE PROTECTION
+====================================================
+
+Currently toolbar overlaps price sidebar.
+
+Fix by:
+- adding extra right chart padding
+OR
+- shifting price scale slightly left
+OR
+- reserving dedicated sidebar width
+
+Need:
+- price labels always readable
+- toolbar never cover prices
+
+====================================================
+RESPONSIVE BEHAVIOR
+====================================================
+
+Tablet:
+- toolbar compact mode
+- still fully visible
+
+Mobile:
+- auto-collapse to floating expandable FAB menu
+
+Desktop:
+- full vertical toolbar
+
+====================================================
+VISUAL STYLE
+====================================================
+
+Use:
+- TradingView-inspired premium UI
+- dark glassmorphism
+- neon green active highlight
+- subtle borders
+- smooth animations
+- professional trading terminal look
+
+IMPORTANT:
+Do NOT break existing chart rendering or drawing tools.
+Only fix visibility, spacing, responsiveness, and positioning of the right vertical toolbar.

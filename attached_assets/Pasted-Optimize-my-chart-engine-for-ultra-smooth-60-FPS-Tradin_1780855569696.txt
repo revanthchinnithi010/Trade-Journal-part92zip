@@ -1,0 +1,117 @@
+Optimize my chart engine for ultra-smooth 60 FPS TradingView/MT5-level performance.
+
+Current issues:
+- chart lag
+- zoom lag
+- drag lag
+- stuttering
+- delayed rendering
+- low FPS
+
+STACK:
+- React
+- TypeScript
+- Zustand
+- Lightweight Charts
+- WebSocket
+- Delta Exchange India
+
+GOAL:
+Achieve ultra-smooth 60 FPS realtime chart experience like:
+- TradingView
+- MT5
+- Binance
+
+IMPORTANT:
+Completely optimize rendering architecture.
+
+FIX ALL PERFORMANCE BOTTLENECKS:
+
+1. Prevent full React rerenders.
+
+2. Prevent chart recreation.
+
+3. Use direct chart refs:
+- chartRef
+- seriesRef
+
+4. Use:
+series.update()
+
+ONLY for realtime candle updates.
+
+DO NOT:
+series.setData()
+on every tick.
+
+5. Store realtime candle data in:
+- mutable refs
+- in-memory buffers
+
+NOT React state.
+
+6. Optimize Zustand:
+- avoid huge array updates
+- avoid rerender storms
+- update only minimal realtime values
+
+7. Build high-performance realtime renderer:
+- requestAnimationFrame batching
+- frame scheduler
+- tick queue
+- render queue
+
+8. Prevent:
+- zoom lag
+- pan lag
+- chart flickering
+- memory leaks
+- garbage collection spikes
+
+9. Use lightweight incremental updates.
+
+10. Build optimized:
+- ultraFastChartEngine.ts
+- renderScheduler.ts
+- realtimeRenderer.ts
+- chartPerformanceManager.ts
+
+11. Optimize watchlist:
+- virtualization
+- memoization
+- isolated rerenders
+
+12. Prevent:
+- expensive useEffects
+- repeated subscriptions
+- duplicate websocket listeners
+
+13. Optimize mobile rendering:
+- Android tablets
+- touch gestures
+- GPU acceleration
+- low memory usage
+
+14. Add performance monitor:
+- FPS counter
+- render latency
+- websocket latency
+- memory usage
+
+15. Keep chart at:
+60 FPS ultra smooth.
+
+16. TradingView-style interaction:
+- buttery smooth zoom
+- instant pan
+- instant crosshair
+- smooth candle rendering
+
+17. Preserve realtime tick-by-tick updates while maintaining FPS.
+
+18. Use production-grade architecture only.
+
+NO MOCK CODE.
+NO FULL REACT RERENDERS.
+NO SLOW STATE-DRIVEN CHARTS.
+REAL HIGH-PERFORMANCE ENGINE ONLY.

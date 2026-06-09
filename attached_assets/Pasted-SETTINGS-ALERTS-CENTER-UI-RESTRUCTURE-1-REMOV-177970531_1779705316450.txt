@@ -1,0 +1,148 @@
+SETTINGS + ALERTS CENTER UI RESTRUCTURE
+
+==================================================
+1. REMOVE MANUAL CONNECT CARDS FROM ALERTS CENTER
+==================================================
+
+Inside Alerts Center:
+
+Completely remove these sections/cards:
+- Finnhub Feed manual connect card
+- Telegram Bot manual connect card
+
+Delete:
+- UI components
+- duplicate connection logic
+- duplicate state handling
+
+Alerts Center should ONLY focus on:
+- alerts
+- live triggers
+- zones
+- trendlines
+- recent trigger history
+- alert activity
+
+==================================================
+2. MOVE TELEGRAM BOT CONFIG TO SETTINGS
+==================================================
+
+Inside:
+Settings → Notifications & Integrations
+
+Create premium glossy card:
+
+-----------------------------------
+TELEGRAM BOT SETTINGS
+-----------------------------------
+
+Fields:
+- Bot Token
+- Chat ID
+
+Buttons:
+- Connect
+- Send Test Message
+- Disconnect
+
+Status:
+- Connected
+- Connecting
+- Invalid Token
+- Message Failed
+- Ready
+- Reconnecting
+
+==================================================
+3. TELEGRAM FEATURES
+==================================================
+
+When user clicks Connect:
+
+STEP 1:
+Validate bot token
+
+STEP 2:
+Validate chat ID
+
+STEP 3:
+Send connection success message
+
+Example:
+✅ TradeVault Connected!
+Your Telegram bot is now configured and ready to receive alerts.
+
+STEP 4:
+Save config securely
+
+==================================================
+AUTO FEATURES
+==================================================
+
+- Auto reconnect after refresh
+- Restore saved config
+- Persistent connection state
+- Alerts automatically routed to Telegram
+
+==================================================
+4. SETTINGS PAGE STRUCTURE
+==================================================
+
+Settings should now contain ONLY:
+
+1. Market Data Providers
+   - Finnhub/OANDA
+   - Delta Exchange
+
+2. Notifications & Integrations
+   - Telegram Bot
+
+3. Appearance / Theme
+
+4. Trading Preferences
+
+==================================================
+5. ALERTS CENTER CLEANUP
+==================================================
+
+Alerts Center should become cleaner and trading-focused.
+
+Keep only:
+- Active Alerts
+- Triggered Alerts
+- Alert Zones
+- Trendline Alerts
+- Live Trigger Feed
+- Recent Trigger History
+- Alert Statistics
+
+Remove:
+- provider setup cards
+- Telegram setup cards
+- API configuration inputs
+
+==================================================
+6. GLOBAL CONNECTION MANAGEMENT
+==================================================
+
+All connections must now be managed ONLY from Settings page.
+
+Alerts Center should READ connection status from global store.
+
+Example:
+- Finnhub Connected
+- Delta Connected
+- Telegram Connected
+
+Display tiny badges only — no manual inputs.
+
+==================================================
+FINAL RESULT
+==================================================
+
+Settings page becomes the centralized control panel for:
+- Finnhub
+- Delta Exchange
+- Telegram
+
+Alerts Center becomes a clean professional trading alerts dashboard only.

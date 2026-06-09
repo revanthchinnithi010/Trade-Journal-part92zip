@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/tablet/"
+title = "Trading Journal Tablet"
+version = "1.0.0"
+id = "artifacts/trading-journal-tablet"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/tablet/" ]
+localPort = 23996
+
+[services.development]
+run = "pnpm --filter @workspace/trading-journal-tablet run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/trading-journal-tablet", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/trading-journal-tablet", "run", "serve" ]
+
+[services.env]
+PORT = "23996"
+BASE_PATH = "/tablet/"

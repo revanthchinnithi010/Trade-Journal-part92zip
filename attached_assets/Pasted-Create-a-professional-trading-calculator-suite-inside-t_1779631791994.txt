@@ -1,0 +1,123 @@
+Create a professional trading calculator suite inside the Tools section of TradeVault.
+
+Requirements:
+
+Add a new sidebar section:
+TOOLS
+- Crypto Calculator
+- Forex Calculator
+- Position Size Calculator
+- Margin Calculator
+- Risk Calculator
+
+--------------------------------------------------
+
+1. CRYPTO CALCULATOR
+
+Inputs:
+- Capital USD
+- Risk %
+- Leverage
+- Coin Select
+- Entry Price
+- Stop Loss
+- Contract Size
+- Lot Size
+
+Outputs:
+- Trade Value
+- Margin Used
+- Position Size
+- Estimated Loss
+- Estimated Profit
+- Risk Amount
+- Liquidation Estimate
+
+Supported coins:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+Use Delta Exchange style calculations.
+
+--------------------------------------------------
+
+2. FOREX / INDICES / COMMODITIES CALCULATOR
+
+Inputs:
+- Capital USD
+- Risk %
+- Leverage
+- Pair Select
+- Entry Price
+- Stop Loss Pips
+- Per Pip Value
+- Lot Size
+
+Outputs:
+- Trade Value
+- Margin Required
+- Pip Cost
+- Risk Amount
+- Estimated Loss
+- Estimated Profit
+- RR Ratio
+
+Supported pairs:
+- EURUSD
+- GBPJPY
+- XAUUSD
+- NAS100
+- US30
+- USOIL
+- UKOIL
+
+Use dynamic pip values depending on pair.
+
+--------------------------------------------------
+
+3. UI DESIGN
+
+Design:
+- premium glossy fintech UI
+- dark green futuristic theme
+- soft glassmorphism
+- tablet-first 16:9 layout
+- responsive split layout
+- smooth real-time calculation updates
+
+Requirements:
+- instant live calculations
+- no page reloads
+- optimized performance
+- large touch-friendly inputs
+- beautiful result cards
+- animated number transitions
+
+--------------------------------------------------
+
+4. ADVANCED FEATURES
+
+Add:
+- Risk presets
+- Broker presets
+- Save calculator templates
+- Auto calculate RR
+- Margin usage warnings
+- Over leverage warnings
+- Recommended lot size suggestions
+
+--------------------------------------------------
+
+5. PERFORMANCE
+
+Ensure:
+- lightweight rendering
+- no UI lag
+- optimized React state updates
+- tablet smoothness
+
+Goal:
+Create a professional institutional-grade trading calculator system similar to premium trading terminals.

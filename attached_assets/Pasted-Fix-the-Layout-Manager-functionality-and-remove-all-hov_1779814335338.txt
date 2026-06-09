@@ -1,0 +1,118 @@
+Fix the Layout Manager functionality and remove all hover tooltips from the charts section.
+
+====================================================
+FIX LAYOUT MANAGER
+====================================================
+
+Current issue:
+- Layout Manager popup opens correctly
+- BUT clicking:
+  • 2 Chart Layout
+  • 3 Chart Layout
+  • 4 Chart Layout
+
+does NOT actually apply layouts.
+
+====================================================
+REQUIRED FUNCTIONALITY
+====================================================
+
+When layout icon clicked:
+open layout manager panel.
+
+When selecting:
+
+1. Single
+→ show 1 chart full width
+
+2. Side by Side
+→ split into 2 synchronized charts
+
+3. Large + 2
+→ 1 large chart + 2 stacked small charts
+
+4. 4 Charts
+→ proper 2x2 grid layout
+
+====================================================
+IMPLEMENT REAL MULTI-CHART SYSTEM
+====================================================
+
+Need actual working layout engine.
+
+Each chart panel must:
+- render independent lightweight-charts instance
+- support own symbol
+- support own timeframe
+- support own drawings
+- resize properly
+- maintain smooth FPS
+
+Need:
+- responsive CSS grid system
+- draggable resizing support
+- synchronized optional crosshair
+- synchronized optional timeframe
+- synchronized optional symbol
+
+====================================================
+LAYOUT STATE MANAGEMENT
+====================================================
+
+Need:
+- active layout highlight
+- save selected layout in localStorage
+- restore layout after refresh
+- smooth animated transitions
+
+====================================================
+REMOVE ALL TOOLTIPS
+====================================================
+
+Current issue:
+Mouse hover on icons shows labels/tooltips.
+
+Remove ALL hover tooltips completely.
+
+Remove tooltip popups from:
+- right toolbar
+- left drawing toolbar
+- top toolbar
+- layout icons
+- watchlist icons
+- object tree icons
+- alerts icons
+
+Need:
+- clean professional UI
+- no floating labels on hover
+- no browser title popups
+- no tooltip animations
+
+====================================================
+UI REQUIREMENTS
+====================================================
+
+Need:
+- TradingView-inspired premium experience
+- smooth animations
+- zero layout flicker
+- proper chart resizing
+- no overlapping panels
+- no stretched charts
+
+====================================================
+IMPORTANT
+====================================================
+
+Do NOT create fake layouts using duplicated screenshots.
+
+Need REAL working multiple chart instances using lightweight-charts.
+
+Do NOT break:
+- existing drawings
+- object tree
+- watchlist
+- websocket feeds
+- chart tools
+- settings system

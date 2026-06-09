@@ -1,0 +1,148 @@
+REMOVE EXTRA OUTER SPACING + FIX TOOLBAR SIZES + PERFECT PANEL FIT
+
+====================================================
+REMOVE RED-CIRCLED EMPTY SPACES
+====================================================
+
+Delete all unnecessary outer padding/margins around chart.
+
+Current issue:
+- empty top spacing
+- empty left spacing
+- empty right spacing
+- chart not fully fitted inside terminal
+
+I want:
+✅ chart panel tightly fitted
+✅ no floating layout feeling
+✅ no oversized empty margins
+✅ chart must feel edge-to-edge professional
+
+====================================================
+CHART LAYOUT FIX
+====================================================
+
+Make layout structure:
+
+TOPBAR
+LEFT TOOLBAR | CHART PANEL | RIGHT TOOLBAR
+
+Everything must align perfectly.
+
+Chart panel should automatically occupy remaining width and height.
+
+====================================================
+REMOVE EXTRA TOP GAP
+====================================================
+
+Current toolbar bottom and chart top have large empty area.
+
+Fix:
+- chart should start immediately below toolbar
+- reduce top internal padding to near zero
+
+====================================================
+LEFT & RIGHT TOOLBAR SIZE FIX
+====================================================
+
+Current sidebars are TOO BIG.
+
+Reduce to TradingView-like compact size.
+
+NEW SIZES:
+----------------------------------------------------
+
+Sidebar width:
+64px
+
+Button size:
+48px × 48px
+
+Gap between buttons:
+10px
+
+Border radius:
+14px
+
+Icon size:
+20px
+
+====================================================
+SIDEBAR BACKGROUND FIX
+====================================================
+
+Current issue:
+background and icons blend together.
+
+Need better contrast.
+
+====================================================
+NEW TOOLBAR COLORS
+====================================================
+
+SIDEBAR BACKGROUND:
+rgba(15,22,24,0.92)
+
+BUTTON BACKGROUND:
+rgba(20,28,30,0.96)
+
+BUTTON BORDER:
+1px solid rgba(255,255,255,0.06)
+
+ICON COLOR:
+#D3DEDA
+
+ACTIVE BUTTON:
+background:
+rgba(183,255,90,0.12)
+
+ACTIVE ICON:
+#B7FF5A
+
+====================================================
+HOVER EFFECT
+====================================================
+
+hover background:
+rgba(255,255,255,0.05)
+
+hover icon:
+#FFFFFF
+
+====================================================
+CHART PANEL FIT FIX
+====================================================
+
+Chart panel must perfectly connect with:
+✅ topbar
+✅ left toolbar
+✅ right toolbar
+
+No disconnected floating look.
+
+====================================================
+BORDER ALIGNMENT
+====================================================
+
+Add subtle terminal borders:
+
+topbar bottom border:
+1px solid rgba(255,255,255,0.05)
+
+left toolbar right border:
+1px solid rgba(255,255,255,0.04)
+
+right toolbar left border:
+1px solid rgba(255,255,255,0.04)
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+✅ tighter professional layout
+✅ no wasted screen space
+✅ compact TradingView-style sidebars
+✅ icons clearly visible
+✅ chart fully fitted
+✅ premium institutional trading terminal appearance

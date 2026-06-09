@@ -1,0 +1,128 @@
+Improve the EXISTING TradeVault chart settings UI and chart scale behavior. Do NOT create a new app. Only upgrade the current charts module.
+
+====================================================
+1. COLOR PICKER POPUP FIX
+====================================================
+
+Current issue:
+The color selection popup is getting clipped/cut off inside the settings modal.
+
+Need:
+- color picker popup must render FULLY ABOVE all containers
+- no clipping
+- no overflow hidden
+- no cropped popup
+- popup must float correctly like TradingView
+
+Fix:
+- use portal rendering
+- render popup to document.body
+- z-index extremely high
+- prevent parent overflow clipping
+
+Required behavior:
+- popup fully visible
+- popup can extend outside modal
+- smooth open animation
+- outside click closes popup
+
+====================================================
+2. PROFESSIONAL COLOR PICKER UI
+====================================================
+
+Current color picker still looks basic.
+
+Need TRUE TradingView-style professional picker.
+
+Required:
+- large color palette grid
+- many small color boxes
+- recent colors section
+- opacity slider
+- HEX input field
+- plus (+) custom color button
+- full HSV/RGB color spectrum picker
+- live preview
+- smooth hover animations
+
+Need:
+- professional desktop trading terminal feel
+- dark glassmorphism style
+- neon green accents matching chart theme
+
+====================================================
+3. RIGHT PRICE SCALE MOVEMENT
+====================================================
+
+Current issue:
+Right-side price scale is static.
+
+Need:
+- user can drag/move price scale vertically
+- smooth up/down movement
+- TradingView-like scale interaction
+
+Required behavior:
+- drag price scale up/down
+- chart zoom adjusts dynamically
+- mouse wheel over scale zooms prices only
+- pinch zoom support on tablet/mobile
+- inertial smooth movement
+- no lag
+
+Implement:
+- separate Y-axis scaling engine
+- independent scale transform
+- smooth interpolation animation
+- proper min/max recalculation
+
+====================================================
+4. SCALE INTERACTION IMPROVEMENTS
+====================================================
+
+Need:
+- double tap resets scale
+- auto scale toggle
+- locked scale option
+- percentage mode option
+- logarithmic scale option
+- smooth animated transitions
+
+====================================================
+5. SETTINGS PANEL UI POLISH
+====================================================
+
+Improve entire settings modal.
+
+Need:
+- cleaner spacing
+- sharper typography
+- professional dropdowns
+- hover glow effects
+- proper section separators
+- smoother animations
+- responsive tablet layout
+
+====================================================
+6. PERFORMANCE REQUIREMENTS
+====================================================
+
+Need:
+- zero lag
+- 60fps interactions
+- optimized rendering
+- no unnecessary rerenders
+- memoized color components
+- hardware accelerated transforms
+
+====================================================
+FINAL RESULT
+====================================================
+
+After upgrade:
+- color picker fully visible
+- no clipped popup
+- professional TradingView-style color tools
+- draggable right-side price scale
+- buttery smooth scaling
+- polished premium chart UX

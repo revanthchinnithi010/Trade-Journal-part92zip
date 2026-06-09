@@ -1,0 +1,249 @@
+Update the entire TradeVault architecture and UI structure with these changes:
+
+1. DASHBOARD CLEANUP
+Remove these top widgets/cards completely:
+- Crypto
+- Forex
+- Indices
+- Commodities
+
+These cards are unnecessary and make the dashboard cluttered.
+
+Replace them with a professional "Quick Stats Row" containing:
+- Connected Brokers
+- Live Symbols
+- Active Alerts
+- WebSocket Latency
+
+Example:
+BROKERS → 3 Connected
+LIVE FEEDS → 12 Symbols
+ALERTS → 28 Active
+LATENCY → 14ms
+
+Keep the dashboard focused on analytics only:
+- Net PNL
+- Win Rate
+- Profit Factor
+- Equity Curve
+- Weekly PNL
+- Avg RR
+- Total Trades
+- Calendar Heatmap
+- Recent Trades
+- Broker PNL
+- Asset Distribution
+
+Use a premium institutional trading dashboard design similar to TradeZella + modern glassmorphism.
+
+--------------------------------------------------
+
+2. BROKER CONNECTIONS PAGE RESTRUCTURE
+
+Finnhub is NOT a broker.
+
+Remove Finnhub completely from Broker Connections page.
+
+Broker Connections page should ONLY contain actual brokers:
+- Delta Exchange
+- FusionMarkets
+- Groww
+- Future brokers later
+
+Each broker card should include:
+- Connected/Disconnected status
+- Synced trades count
+- Last sync time
+- Connect button
+- Manage button
+- Disconnect button
+- Secure connection badge
+
+--------------------------------------------------
+
+3. ALERTS CENTER MAJOR REWORK
+
+Move all Finnhub/API/WebSocket functionality into Alerts Center.
+
+Create a new section:
+
+### LIVE MARKET DATA FEED
+
+Purpose:
+Use Finnhub API key to subscribe to OANDA Forex, Indices, and Commodities tick-by-tick live data.
+
+This section should contain:
+
+- Finnhub API Key input
+- Connect Feed button
+- Disconnect Feed button
+- Connection status
+- WebSocket status
+- Tick latency
+- Last tick received time
+- Subscribed symbols list
+- Auto reconnect system
+- Live feed badge
+
+Supported symbols examples:
+- NAS100
+- US30
+- XAUUSD
+- EURUSD
+- GBPJPY
+- BTCUSDT
+
+--------------------------------------------------
+
+4. SYMBOL SUBSCRIPTION PANEL
+
+Inside Alerts Center create:
+
+### Symbol Subscription Manager
+
+Features:
+- Add Symbol button
+- Search symbol input
+- Subscribe toggle
+- Unsubscribe toggle
+- Live badge
+- Tick speed
+- Market type label
+
+Market types:
+- Forex
+- Indices
+- Commodities
+- Crypto
+
+Display table example:
+
+| Symbol | Market | Status | Source |
+| NAS100 | Index  | Live   | OANDA |
+| XAUUSD | Gold   | Live   | OANDA |
+| EURUSD | Forex  | Live   | OANDA |
+
+--------------------------------------------------
+
+5. ALERT ENGINE SECTION
+
+Create advanced alert management system.
+
+Support:
+- Price alerts
+- Trendline alerts
+- Zone alerts
+- Order Block alerts
+- Order Block mitigation alerts
+- Fair Value Gap alerts
+- BOS alerts
+- CHoCH alerts
+- EMA confluence alerts
+- Support/Resistance alerts
+
+Each alert should include:
+- Symbol
+- Timeframe
+- Trigger price
+- Alert type
+- Status
+- Telegram delivery status
+- Created time
+
+--------------------------------------------------
+
+6. TELEGRAM ALERTS PANEL UPGRADE
+
+Improve Telegram integration UI.
+
+Features:
+- Bot token input
+- Chat ID input
+- Connect Bot button
+- Disconnect Bot button
+- Test notification button
+- Connected badge
+- Last alert sent
+- Delivery success status
+- Alert preview card
+
+Use modern neon cyberpunk dark UI.
+
+--------------------------------------------------
+
+7. BACKEND ARCHITECTURE UPDATE
+
+Refactor backend architecture:
+
+Finnhub/OANDA WebSocket
+        ↓
+Live Tick Engine
+        ↓
+Alert Engine
+        ↓
+Telegram Notification Service
+        ↓
+Dashboard Analytics
+
+Separate:
+- Broker trade syncing
+- Live market data feeds
+- Alert engine
+
+Do not mix broker system with market data feed system.
+
+--------------------------------------------------
+
+8. UI/UX IMPROVEMENTS
+
+Use:
+- Premium dark glassmorphism UI
+- Purple/blue neon glow
+- Smooth animations
+- Responsive tablet layout
+- Professional trading terminal design
+- Clean spacing
+- Better typography
+- Realtime animated live badges
+
+--------------------------------------------------
+
+9. IMPORTANT REFACTOR
+
+Completely separate these concepts:
+
+BROKERS:
+- Delta Exchange
+- FusionMarkets
+- Groww
+
+MARKET DATA PROVIDERS:
+- Finnhub
+- OANDA WebSocket feed
+
+Finnhub should never appear inside broker connection cards.
+
+--------------------------------------------------
+
+10. ADDITIONAL FEATURES
+
+Add:
+- WebSocket reconnect logic
+- Feed health monitoring
+- Live ping indicator
+- Tick counter
+- Market open/closed indicator
+- Subscription counter
+- Notification center integration
+
+--------------------------------------------------
+
+11. FINAL GOAL
+
+Transform the app into a professional TradeZella-style trading journal and alert platform with:
+- Real-time live market feeds
+- Institutional dashboard design
+- Advanced SMC alert engine
+- Telegram automation
+- Clean architecture separation
+- Professional analytics system

@@ -1,0 +1,143 @@
+WebSocket providers now show CONNECTED, but I need FULL real-time live market streaming across the entire app.
+
+Implement complete tick-by-tick live price updates for ALL subscribed symbols.
+
+==================================================
+LIVE REAL-TIME STREAMING REQUIREMENTS
+==================================================
+
+ALL subscribed symbols must continuously update in real-time across:
+
+1. Dashboard
+2. Charts page
+3. Watchlist
+4. Alerts Center
+5. Live Symbols card
+6. Calculator live prices
+7. TradingView sync panel
+
+==================================================
+PROVIDERS
+==================================================
+
+FOREX / INDICES / COMMODITIES:
+Provider = Finnhub OANDA Feed
+
+Supported symbols:
+- NAS100
+- US30
+- XAUUSD
+- EURUSD
+- GBPJPY
+- USOIL
+- UKOIL
+
+CRYPTO:
+Provider = Delta Exchange WebSocket
+
+Supported symbols:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+==================================================
+LIVE PRICE UPDATE REQUIREMENTS
+==================================================
+
+1. Tick-by-tick prices must update instantly
+2. Price text must animate smoothly
+3. Green flash when price increases
+4. Red flash when price decreases
+5. Last price timestamp update continuously
+6. Tick counters must increase live
+7. Last tick age must show:
+   - just now
+   - 1s ago
+   - 2s ago
+
+8. WebSocket latency must update live
+9. Watchlist prices must stream continuously
+10. Dashboard cards must refresh without reload
+
+==================================================
+LIVE SYMBOLS CARD
+==================================================
+
+When clicking "Live Symbols" card:
+
+Open a detailed modal/panel showing:
+
+- Symbol
+- Live Price
+- Provider
+- Spread
+- Tick count
+- Last update time
+- Connection status
+- Mini sparkline chart
+- Green/red price movement indicator
+
+All values must update in real-time WITHOUT page refresh.
+
+==================================================
+WEBSOCKET ENGINE
+==================================================
+
+Implement production-grade websocket engine:
+
+1. Auto reconnect
+2. Heartbeat ping/pong
+3. Exponential reconnect backoff
+4. Auto resubscribe after reconnect
+5. Symbol subscription manager
+6. Tick deduplication
+7. Stale feed detection
+8. Multi-provider aggregation
+9. Shared websocket state store
+10. Background reconnection handling
+
+==================================================
+PERFORMANCE
+==================================================
+
+Optimize for Android tablet performance:
+
+1. No UI freezing
+2. No excessive rerenders
+3. Virtualize large watchlists
+4. Debounce UI updates
+5. Use requestAnimationFrame for tick rendering
+6. Efficient Zustand store updates
+7. Prevent websocket memory leaks
+8. Maintain smooth 60fps scrolling
+
+==================================================
+DEBUG LOGGING
+==================================================
+
+Add console logs:
+
+- websocket connected
+- websocket disconnected
+- reconnecting
+- symbol subscribed
+- tick received
+- price updated
+- dashboard updated
+
+==================================================
+FINAL GOAL
+==================================================
+
+The app should behave like a professional trading terminal:
+
+- Continuous live streaming
+- Tick-by-tick updates
+- Real-time dashboard
+- Real-time watchlists
+- Real-time alerts
+- Real-time charts
+- Zero manual refresh
+- Smooth tablet experience

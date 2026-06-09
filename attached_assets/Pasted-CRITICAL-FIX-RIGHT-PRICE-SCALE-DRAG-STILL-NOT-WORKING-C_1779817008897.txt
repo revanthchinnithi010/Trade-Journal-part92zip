@@ -1,0 +1,155 @@
+CRITICAL FIX — RIGHT PRICE SCALE DRAG STILL NOT WORKING
+
+Current issue:
+The RIGHT SIDE price strip/price scale is still STATIC.
+Dragging up/down on the prices area does NOTHING.
+
+Need REAL TradingView-style draggable price scale behavior.
+
+====================================================
+ROOT CAUSE
+====================================================
+
+The current implementation likely:
+- disabled scale interaction
+- overlay div blocking pointer events
+- toolbar intercepting gestures
+- lightweight-charts handleScale not enabled
+- wrong event target
+- priceScale mode locked
+- chart container CSS blocking drag
+- pointer events disabled
+
+Need FULL FIX.
+
+====================================================
+FORCE ENABLE PRICE SCALE INTERACTION
+====================================================
+
+Enable ALL required lightweight-charts interactions:
+
+handleScale: {
+  axisPressedMouseMove: {
+    price: true,
+    time: true
+  },
+  mouseWheel: true,
+  pinch: true
+}
+
+handleScroll: {
+  mouseWheel: true,
+  pressedMouseMove: true,
+  horzTouchDrag: true,
+  vertTouchDrag: true
+}
+
+rightPriceScale: {
+  visible: true,
+  autoScale: false,
+  scaleMargins: {
+    top: 0.1,
+    bottom: 0.1
+  },
+  borderVisible: false,
+  entireTextOnly: true
+}
+
+====================================================
+REQUIRED USER INTERACTION
+====================================================
+
+When user DRAGS vertically on:
+- right price labels
+- right price strip
+- right price scale area
+
+Then:
+- chart MUST scale/stretch vertically
+- candles MUST resize dynamically
+- visible price range MUST move smoothly
+
+This MUST feel exactly like:
+- TradingView
+- Binance
+- Bybit
+- cTrader
+
+====================================================
+IMPORTANT FIXES
+====================================================
+
+1. REMOVE POINTER BLOCKING
+Check for overlays blocking interaction:
+
+Possible blockers:
+- floating toolbar
+- invisible divs
+- z-index overlays
+- absolute containers
+
+Set:
+pointer-events: none
+
+ONLY on decorative layers.
+
+====================================================
+2. PRICE SCALE HIT AREA
+Increase draggable interaction area.
+
+Need:
+- minimum 60px width draggable zone
+- easy tablet touch interaction
+- smooth drag recognition
+
+====================================================
+3. CUSTOM DRAG FALLBACK
+If lightweight-charts native scaling still fails:
+
+Implement custom vertical drag handler.
+
+Behavior:
+- capture pointerdown on price scale
+- calculate drag delta
+- dynamically update visible price range
+- apply chart.timeScale() + priceScale adjustments
+
+Need:
+- requestAnimationFrame updates
+- momentum smoothing
+- no jitter
+
+====================================================
+4. TABLET TOUCH SUPPORT
+Must work on:
+- Android tablets
+- touch devices
+- mouse
+- trackpad
+
+Need:
+- touchmove scaling
+- pinch zoom
+- vertical drag scaling
+
+====================================================
+5. DEBUG & VERIFY
+After implementation verify:
+✅ mouse drag works
+✅ touch drag works
+✅ wheel zoom works
+✅ pinch zoom works
+✅ double click resets scale
+✅ no overlay blocking
+✅ no lag
+✅ candles resize live
+
+====================================================
+IMPORTANT
+====================================================
+
+Do NOT fake movement using CSS translate.
+
+Need REAL chart scale manipulation tied to the chart engine.
+
+The RIGHT PRICE SCALE must become FULLY INTERACTIVE and DRAGGABLE exactly like TradingView.

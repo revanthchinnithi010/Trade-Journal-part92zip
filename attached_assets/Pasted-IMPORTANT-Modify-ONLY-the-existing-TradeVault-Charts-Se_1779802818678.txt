@@ -1,0 +1,304 @@
+IMPORTANT:
+Modify ONLY the existing:
+TradeVault → Charts Section
+
+Do NOT create a new app.
+Do NOT create another website.
+Do NOT create another artifact/project.
+Upgrade ONLY the current chart terminal.
+
+====================================================
+CRITICAL BUG FIXES
+====================================================
+
+1. DRAWINGS REAPPEAR AFTER REFRESH
+Current issue:
+Deleted drawings come back after refresh.
+
+FIX:
+- When user deletes a drawing:
+  - permanently remove from local state
+  - permanently remove from storage
+  - permanently remove from persistence layer
+- Deleted drawings must NEVER reappear after page reload.
+- Sync delete operation immediately.
+
+Implement:
+- drawing UUID system
+- persistent indexedDB/localStorage cleanup
+- drawing state reconciliation
+- autosave debounce
+- proper serialization/deserialization
+
+====================================================
+RIGHT PRICE SCALE DRAGGING
+====================================================
+
+Add professional price scale interaction like TradingView.
+
+Need:
+- User can drag price scale UP/DOWN
+- Scale spacing changes dynamically
+- Smooth scaling
+- Momentum feeling
+- Mouse wheel zoom on price axis
+- Touch drag support
+- Pinch scaling support
+
+Behavior:
+- Only vertical scale moves
+- Chart candles resize accordingly
+- Smooth animation
+
+====================================================
+SETTINGS UI COMPLETE REBUILD
+====================================================
+
+Current settings panel still looks beginner-level.
+
+REMOVE current cheap settings modal completely.
+
+Build a PROFESSIONAL TradingView-style settings system.
+
+Style:
+- dark premium modal
+- glassmorphism
+- soft borders
+- smooth animations
+- proper spacing
+- professional typography
+- desktop-grade UI
+- responsive for tablets/mobile
+
+====================================================
+SETTINGS PANEL STRUCTURE
+====================================================
+
+When user clicks SETTINGS icon:
+
+LEFT SIDEBAR MUST SHOW:
+- Symbol
+- Canvas
+
+ONLY these sections for now.
+
+====================================================
+SYMBOL SETTINGS
+====================================================
+
+When clicking:
+SETTINGS → Symbol
+
+Show these sections:
+
+----------------------------------
+CANDLES
+----------------------------------
+
+1. Body
+- bullish color box
+- bearish color box
+
+2. Borders
+- bullish border color box
+- bearish border color box
+
+3. Wick
+- bullish wick color box
+- bearish wick color box
+
+4. Timezone
+Dropdown with:
+- UTC
+- IST
+- Exchange
+- Local
+
+====================================================
+PROFESSIONAL COLOR PICKER
+====================================================
+
+Current color picker is terrible.
+
+REMOVE:
+- giant Android popup
+- large ugly color squares
+- cheap modal picker
+
+REPLACE WITH:
+TradingView/Figma-style color system.
+
+When clicking ANY color box:
+
+SHOW:
+- compact floating color panel
+- hundreds of tiny professional color boxes
+- categorized color grid
+- smooth hover states
+- selected outline
+- neon dark styling
+
+Must include:
+- opacity slider
+- HEX input
+- RGB input
+- recent colors
+- saved colors
+
+Also:
+ADD “+” button.
+
+When user clicks PLUS:
+Open advanced color wheel.
+
+====================================================
+ADVANCED COLOR WHEEL
+====================================================
+
+Need:
+- circular color spectrum
+- saturation square
+- brightness control
+- opacity slider
+- HEX field
+- live preview
+
+Professional design only.
+
+====================================================
+CANVAS SETTINGS
+====================================================
+
+When clicking:
+SETTINGS → Canvas
+
+Show these options:
+
+----------------------------------
+BACKGROUND
+----------------------------------
+
+Dropdown:
+- Solid
+- Gradient
+
+Then:
+- color box selector
+
+----------------------------------
+GRID LINES
+----------------------------------
+
+Dropdown options:
+- Vertical + Horizontal
+- Vertical Only
+- Horizontal Only
+- None
+
+----------------------------------
+PANE SEPARATORS
+----------------------------------
+
+- color box selector
+
+----------------------------------
+CROSSHAIR
+----------------------------------
+
+Need:
+- color box
+- thickness selector
+- line width selector
+- line style selector
+
+Line styles:
+- Solid
+- Dashed
+- Dotted
+
+----------------------------------
+TEXT
+----------------------------------
+
+Need:
+- color box
+- font size dropdown
+
+----------------------------------
+LINES
+----------------------------------
+
+Need:
+- color box selector
+
+====================================================
+SETTINGS PANEL QUALITY
+====================================================
+
+Need:
+- smooth transitions
+- animated tabs
+- floating panels
+- proper scroll behavior
+- touch optimized
+- desktop optimized
+- tablet optimized
+
+No oversized UI.
+No beginner styling.
+No Android-style dialogs.
+
+====================================================
+PRICE SCALE VISUAL IMPROVEMENTS
+====================================================
+
+Current right price labels look weak.
+
+Improve:
+- sharper font rendering
+- better spacing
+- anti-blur rendering
+- professional label boxes
+- better alignment
+- cleaner scaling
+
+Make price scale look like:
+- Binance Futures
+- TradingView
+- Bybit
+
+====================================================
+DRAWING SYSTEM STABILITY
+====================================================
+
+Current drawings still unstable.
+
+Need:
+- precise anchor points
+- smoother dragging
+- proper touch handling
+- no accidental movement
+- snap support
+- selection box
+- locking support
+- visibility toggle
+- delete permanently
+- undo/redo
+
+====================================================
+FINAL TARGET
+====================================================
+
+The final result must feel:
+- institutional grade
+- ultra polished
+- stable
+- smooth
+- premium
+- production-ready
+
+NOT:
+“custom React project”
+
+YES:
+“real trading terminal”

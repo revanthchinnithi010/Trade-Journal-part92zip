@@ -1,0 +1,229 @@
+GLOBAL TEXT CLARITY + SHARPNESS FIX FOR ENTIRE APPLICATION
+
+Current problem:
+❌ text looks blurry
+❌ low sharpness
+❌ faded UI
+❌ poor readability on tablet
+❌ glow overpowering text
+❌ low contrast
+
+Need:
+✅ ultra sharp text
+✅ TradingView-level clarity
+✅ crisp icons
+✅ professional typography
+✅ tablet optimized readability
+
+==================================================
+1. USE PROPER FONT RENDERING
+==================================================
+
+Apply globally:
+
+html, body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+IMPORTANT:
+This significantly improves tablet/browser text sharpness.
+
+==================================================
+2. REMOVE EXCESSIVE BLUR EFFECTS
+==================================================
+
+Current issue:
+Too much:
+❌ backdrop blur
+❌ glow
+❌ opacity
+❌ transparent overlays
+
+These make text muddy.
+
+Reduce:
+✅ backdrop blur intensity
+✅ shadow blur radius
+✅ glass opacity
+
+==================================================
+3. IMPROVE FONT WEIGHTS
+==================================================
+
+Current fonts too thin.
+
+Use:
+
+Regular text:
+font-weight: 500;
+
+Buttons:
+font-weight: 600;
+
+Titles:
+font-weight: 700;
+
+==================================================
+4. USE BETTER TEXT COLORS
+==================================================
+
+Current:
+❌ gray washed-out text
+
+Need:
+✅ brighter whites
+✅ stronger contrast
+
+Recommended:
+
+Primary text:
+#F5F7FA
+
+Secondary:
+#B8C1CC
+
+Muted:
+#8B95A7
+
+==================================================
+5. FIX ICON CLARITY
+==================================================
+
+Icons appear soft/blurry.
+
+Requirements:
+✅ SVG icons only
+✅ no PNG icons
+✅ stroke width 2px
+✅ vector rendering
+✅ no CSS scaling blur
+
+==================================================
+6. FONT SIZE OPTIMIZATION
+==================================================
+
+Tablet readability improvements:
+
+Toolbar:
+14px–15px
+
+Buttons:
+15px
+
+Floating labels:
+14px
+
+Price scale:
+15px
+
+Menu text:
+15px
+
+==================================================
+7. REMOVE TEXT OPACITY
+==================================================
+
+Current issue:
+Many texts use:
+opacity: 0.6
+opacity: 0.7
+
+REMOVE.
+
+Use solid colors instead.
+
+==================================================
+8. FIX GLOW EFFECTS
+==================================================
+
+Current neon glow too aggressive.
+
+Reduce:
+❌ large blur shadows
+❌ overexposed green glow
+
+Need subtle glow only.
+
+==================================================
+9. HIGH DPI TABLET OPTIMIZATION
+==================================================
+
+Apply:
+
+transform: translateZ(0);
+
+to:
+✅ floating panels
+✅ toolbar
+✅ labels
+
+Enables GPU crisp rendering.
+
+==================================================
+10. CHART TEXT IMPROVEMENTS
+==================================================
+
+Improve:
+✅ price scale clarity
+✅ timeframe labels
+✅ indicator labels
+✅ floating symbol card
+✅ drawing measurements
+
+Need:
+✅ sharper anti-aliasing
+✅ higher contrast
+✅ cleaner edges
+
+==================================================
+11. AVOID CSS SCALE BLUR
+==================================================
+
+Do NOT use:
+transform: scale()
+
+on:
+❌ text
+❌ toolbar
+❌ labels
+
+This causes blur.
+
+==================================================
+12. FONT FAMILY
+==================================================
+
+Use modern UI fonts:
+
+font-family:
+'Inter',
+'Segoe UI',
+'Roboto',
+sans-serif;
+
+Inter recommended for TradingView-like clarity.
+
+==================================================
+13. PERFORMANCE SAFE
+==================================================
+
+Need:
+✅ crisp rendering
+✅ no FPS drop
+✅ GPU acceleration
+✅ lightweight shadows
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need:
+✅ ultra sharp text
+✅ crystal clear UI
+✅ professional TradingView-style typography
+✅ crisp tablet rendering
+✅ no blurry labels
+✅ readable floating panels
+✅ premium appearance

@@ -1,0 +1,109 @@
+REMOVE DRAWING ALERT BELL ICONS FROM CHART
+
+====================================================
+CURRENT PROBLEM
+====================================================
+
+After creating drawing-based alerts:
+----------------------------------------------------
+
+small bell icons are rendering on chart canvas.
+
+Example:
+----------------------------------------------------
+
+❌ bell icon above rectangle
+❌ bell icon near trendline
+❌ floating alert markers
+
+This looks messy and non-professional.
+
+====================================================
+REQUIRED FIX
+====================================================
+
+REMOVE ALL SMALL ALERT BELL SYMBOLS
+FROM CHART AREA COMPLETELY.
+
+====================================================
+IMPORTANT
+====================================================
+
+Alerts must STILL WORK internally.
+
+Only hide/remove:
+----------------------------------------------------
+
+❌ visual bell markers on chart
+
+DO NOT remove:
+----------------------------------------------------
+
+✅ alert logic
+✅ alert triggering
+✅ alert popup system
+✅ alerts center data
+✅ right-side alert panel
+
+====================================================
+EXPECTED BEHAVIOR
+====================================================
+
+When user creates alert from:
+----------------------------------------------------
+
+✅ trendline
+✅ ray
+✅ rectangle
+✅ horizontal line
+
+Then:
+----------------------------------------------------
+
+alert saves silently in background
+
+WITHOUT placing bell icons on chart.
+
+====================================================
+TRADINGVIEW STYLE
+====================================================
+
+Keep chart clean:
+----------------------------------------------------
+
+✅ only drawing visible
+✅ no alert markers clutter
+✅ no floating icons
+
+====================================================
+IMPLEMENTATION
+====================================================
+
+Disable:
+----------------------------------------------------
+
+alert marker rendering layer
+
+OR
+
+set:
+----------------------------------------------------
+
+showAlertMarkers = false
+
+OR
+
+prevent creation of chart annotation icons.
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+----------------------------------------------------
+
+✅ alerts still function
+✅ alerts still trigger
+✅ alerts visible inside alerts center
+✅ NO bell symbols on chart canvas
+✅ clean professional TradingView-style UI

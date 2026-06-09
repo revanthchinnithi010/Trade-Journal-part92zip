@@ -1,0 +1,212 @@
+Fix all TradingView chart stability, drawing persistence, and alert engine problems.
+
+==================================================
+CRITICAL BUGS TO FIX
+
+1. FALSE ALERT TRIGGERS
+2. DRAWINGS AUTO-DELETING
+3. TRADINGVIEW PANEL RESETTING
+4. ALERTS DISAPPEARING AFTER TRIGGER
+5. CHART LAG / NON-SMOOTH UI
+6. REALTIME COORDINATE MISMATCH
+
+==================================================
+
+1. FALSE ALERT ENGINE FIX
+   ==================================================
+
+Currently alerts trigger even when price does NOT touch the trendline or rectangle zone.
+
+Fix the alert engine logic.
+
+For rectangles/zones:
+Trigger ONLY IF:
+currentPrice >= zoneLow
+AND
+currentPrice <= zoneHigh
+
+For trendlines:
+Calculate the REAL projected Y-coordinate based on:
+
+- line start point
+- line end point
+- current timestamp
+
+Then compare:
+ABS(currentPrice - projectedPrice)
+
+Only trigger if inside tolerance threshold.
+
+==================================================
+2. PREVENT DUPLICATE ALERTS
+
+After an alert triggers:
+
+- do NOT retrigger repeatedly every tick
+- add cooldown system
+- add "already triggered" state
+
+Allow retrigger only if:
+
+- price leaves area
+  AND re-enters later
+
+==================================================
+3. DRAWINGS AUTO-DELETING FIX
+
+Currently drawings disappear when:
+
+- changing sections
+- rerender
+- refresh
+- symbol change
+
+Fix by implementing:
+
+A. Persistent drawing storage in Supabase
+
+B. Local cache backup using localStorage
+
+C. Stable React refs
+
+D. Prevent TradingView widget recreation
+
+==================================================
+4. DO NOT RECREATE CHART INSTANCE
+
+The TradingView chart instance must initialize ONLY ONCE.
+
+Use:
+
+- useRef()
+- memoization
+- stable container refs
+
+Do NOT destroy/recreate widget during:
+
+- route changes
+- state updates
+- alerts updates
+- sidebar actions
+
+==================================================
+5. SAVE DRAWINGS PROPERLY
+
+Auto-save every drawing immediately after:
+
+- create
+- modify
+- move
+- resize
+- delete
+
+Save:
+
+- coordinates
+- symbol
+- timeframe
+- style
+- visibility
+- lock state
+- alert settings
+
+==================================================
+6. ALERT HISTORY SYSTEM
+
+Currently alerts disappear after triggering.
+
+Instead:
+
+Triggered alerts should move into:
+
+- Active
+- Triggered
+- History tabs
+
+Keep full history permanently in database.
+
+Store:
+
+- symbol
+- trigger time
+- projected price
+- actual price
+- alert type
+- screenshot reference
+
+==================================================
+7. SMOOTHNESS + PERFORMANCE FIX
+
+Optimize:
+
+- websocket rendering
+- React rerenders
+- drawing updates
+
+Use:
+
+- requestAnimationFrame
+- throttling
+- memoized components
+- debounced saves
+
+Target:
+
+- ultra smooth 60fps chart experience
+
+==================================================
+8. STABLE TRADINGVIEW LAYOUT
+
+Prevent chart flicker/reset.
+
+Do NOT reload TradingView iframe/widget unless:
+
+- user manually reloads
+- full app refresh happens
+
+==================================================
+9. AUTO RECOVERY SYSTEM
+
+If websocket disconnects:
+
+- auto reconnect
+- preserve drawings
+- preserve alerts
+- preserve chart state
+
+==================================================
+10. PROFESSIONAL EXPERIENCE
+
+Make the chart behave like:
+
+- TradingView
+- TrendSpider
+- Bookmap
+- MetaTrader terminal
+
+with:
+
+- persistent workspace
+- stable realtime rendering
+- non-destructive state updates
+- reliable alert automation
+
+==================================================
+FINAL RESULT
+
+The user must be able to:
+
+- draw trendlines/zones
+- switch pages
+- return later
+- refresh browser
+- reopen app
+
+WITHOUT losing:
+
+- drawings
+- alerts
+- layouts
+- chart state
+
+And alerts must trigger ONLY on REAL touches/breakouts.

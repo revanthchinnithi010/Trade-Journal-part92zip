@@ -1,0 +1,123 @@
+Refactor and upgrade the trading journal into a professional scalable React trading dashboard application.
+
+Core Stack:
+- React
+- Tailwind CSS
+- React Router
+- Framer Motion
+- Recharts
+
+Requirements:
+
+1. Create separate pages:
+- Dashboard
+- Trades
+- Reports
+- Calendar
+- Notebook
+- Settings
+
+2. Use React Router for navigation between pages.
+
+3. Create reusable components:
+- Sidebar
+- Navbar
+- StatCard
+- ChartCard
+- TradeTable
+- CalendarHeatmap
+- TradeModal
+- TradingViewCard
+
+4. Create proper scalable folder structure:
+- components
+- pages
+- layouts
+- data
+- utils
+- hooks
+- services
+
+5. Keep the existing dark modern UI and improve it further.
+
+Design Requirements:
+- Deep navy/black background
+- Purple accent theme
+- Glassmorphism cards
+- Rounded corners
+- Soft borders
+- Smooth hover effects
+- TradingView inspired aesthetics
+- Clean spacing
+- Modern typography
+- Fully responsive for tablet and mobile
+
+6. Add smooth page transitions and stagger animations using Framer Motion.
+
+7. Add realistic sample trading data using these assets:
+- US30
+- US500
+- NAS100
+- EURUSD
+- XAUUSD
+- Crude Oil
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+8. Add a professional top navbar with:
+- Search bar
+- Notifications icon
+- User profile section
+- Quick action buttons
+
+9. Improve sidebar:
+- Active page highlight
+- Animated hover effects
+- Mobile collapsible sidebar
+- Icons using lucide-react
+
+10. Dashboard Features:
+- Net PNL card
+- Win Rate card
+- Profit Factor card
+- Average RR card
+- Total Trades card
+- Equity Curve chart
+- Weekly PNL chart
+- Win vs Loss chart
+- Recent trades table
+- Calendar heatmap section
+
+11. Add TradingView Integration UI:
+
+In Add Trade form include:
+- TradingView Chart Link input
+- Screenshot upload field
+- Notes textarea
+- Setup tags
+- Mistake tags
+
+In Trade Detail page show:
+- Clickable TradingView button
+- “Open Chart” button opening link in new tab
+- Screenshot preview gallery
+- Trade notes section
+- Trade metrics section
+
+12. Add sample TradingView links for:
+- NAS100
+- XAUUSD
+- BTCUSD
+
+13. Add upload preview UI for screenshots.
+
+14. Add modern Add Trade modal popup.
+
+15. Add sample analytics and fake realistic data.
+
+16. Optimize responsiveness and spacing professionally.
+
+17. Use clean reusable code and modern React best practices.

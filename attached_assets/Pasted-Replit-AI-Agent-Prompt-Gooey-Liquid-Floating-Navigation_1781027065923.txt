@@ -1,0 +1,325 @@
+Replit AI Agent Prompt — Gooey Liquid Floating Navigation Bar
+
+OBJECTIVE
+
+Create a premium floating bottom navigation bar with an advanced liquid “water bubble” active indicator.
+
+The animation must feel:
+
+- fluid
+- organic
+- stretchy
+- magnetic
+- iOS-quality
+- fintech-grade
+
+Use:
+
+- React
+- Tailwind CSS
+- Framer Motion
+- SVG Gooey Filter
+
+DO NOT use basic sliders or standard tab animations.
+
+The active indicator must behave like a real liquid blob moving underneath the icons.
+
+---
+
+CORE DESIGN
+
+Navigation Container
+
+Create a floating capsule navigation bar.
+
+Specifications
+
+height: 64px;
+border-radius: 9999px;
+background: rgba(13,13,13,0.94);
+backdrop-filter: blur(24px);
+border: 1px solid rgba(255,255,255,0.06);
+
+The navbar must:
+
+- float above the screen
+- have cinematic depth
+- use soft shadows
+- feel ultra premium
+
+---
+
+LAYOUT
+
+Navigation contains 4 tabs:
+
+1. Home
+2. Card
+3. Send
+4. Assets
+
+Use equal spacing.
+
+Icons must remain perfectly crisp.
+
+---
+
+CRUCIAL ARCHITECTURE
+
+Use TWO separate rendering layers.
+
+Layer 1 → Gooey Animation Layer
+
+Contains ONLY:
+
+- animated liquid bubble
+- SVG filter effects
+
+This layer uses the gooey SVG filter.
+
+---
+
+Layer 2 → Icon Layer
+
+Contains:
+
+- icons
+- labels
+- click interactions
+
+IMPORTANT:
+Icons and text MUST NOT receive the gooey filter.
+
+Otherwise:
+
+- text becomes blurry
+- icons smear
+- UI looks low quality
+
+Set:
+
+position: relative;
+z-index: 10;
+
+for the icon layer.
+
+---
+
+GOOEY SVG FILTER
+
+Create hidden SVG filter definition:
+
+<svg className="absolute w-0 h-0">
+  <filter id="goo">
+    <feGaussianBlur
+      in="SourceGraphic"
+      stdDeviation="10"
+      result="blur"
+    />
+
+    <feColorMatrix
+      in="blur"
+      mode="matrix"
+      values="
+        1 0 0 0 0
+        0 1 0 0 0
+        0 0 1 0 0
+        0 0 0 20 -10
+      "
+      result="goo"
+    />
+
+    <feComposite
+      in="SourceGraphic"
+      in2="goo"
+      operator="atop"
+    />
+  </filter>
+</svg>
+
+---
+
+WHY THESE VALUES MATTER
+
+The magic liquid effect comes from:
+
+20 -10
+
+inside the feColorMatrix.
+
+These values:
+
+- sharpen the blurred blob
+- create surface tension
+- generate the liquid morphing effect
+- simulate water physics
+
+Without these values, the animation looks like normal blur instead of liquid.
+
+---
+
+ACTIVE LIQUID BUBBLE
+
+Create an absolutely positioned animated div.
+
+Bubble Style
+
+background: #FFFFFF;
+height: 44px;
+width: 88px;
+border-radius: 9999px;
+position: absolute;
+
+Apply gooey filter ONLY to this layer.
+
+---
+
+ANIMATION SYSTEM
+
+Use Framer Motion.
+
+The bubble must:
+
+- stretch while moving
+- slightly overshoot
+- compress naturally
+- feel elastic
+
+---
+
+FRAMER MOTION SETTINGS
+
+transition={{
+  type: "spring",
+  stiffness: 150,
+  damping: 20,
+  mass: 0.8
+}}
+
+Movement should feel:
+
+- fluid
+- alive
+- responsive
+
+NOT robotic.
+
+---
+
+BUBBLE POSITIONING
+
+Animate bubble using X-axis calculations.
+
+Example:
+
+animate={{
+  x: activeIndex * tabWidth
+}}
+
+This ensures:
+
+- perfect alignment
+- responsive accuracy
+- no hardcoded pixel guessing
+
+---
+
+LIQUID MORPH EFFECT
+
+During movement:
+
+- slightly increase width
+- slightly reduce height
+- restore shape after landing
+
+Example:
+
+whileInMotion={{
+  scaleX: 1.15,
+  scaleY: 0.92
+}}
+
+This creates realistic liquid stretching.
+
+---
+
+ICON INTERACTIONS
+
+Each icon button should:
+
+whileTap={{
+  scale: 0.94
+}}
+
+Add:
+
+- smooth opacity transitions
+- soft color interpolation
+- tactile feel
+
+---
+
+ACTIVE TAB STATE
+
+Active tab:
+
+- dark icon
+- dark text
+- positioned above white liquid bubble
+
+Inactive tabs:
+
+- muted gray
+- lower opacity
+
+Use smooth color interpolation.
+
+---
+
+PERFORMANCE REQUIREMENTS
+
+CRITICAL:
+Animations must run at:
+
+- 60FPS
+- GPU accelerated
+- zero lag
+
+Use:
+
+transform: translate3d(0,0,0);
+will-change: transform;
+
+Avoid:
+
+- layout thrashing
+- expensive re-renders
+
+---
+
+SHADOW SYSTEM
+
+Navigation shadow:
+
+box-shadow:
+0 10px 40px rgba(0,0,0,0.55),
+0 2px 10px rgba(255,255,255,0.02);
+
+---
+
+FINAL DESIGN GOAL
+
+The final result should feel like:
+
+- Apple liquid UI
+- modern fintech dashboard
+- premium crypto banking app
+- flagship mobile OS interaction
+
+The bubble should look like:
+
+- liquid mercury
+- floating water
+- morphing gel capsule
+
+NOT like a normal moving tab indicator.

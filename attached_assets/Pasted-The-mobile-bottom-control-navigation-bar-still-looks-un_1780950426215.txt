@@ -1,0 +1,119 @@
+The mobile bottom control/navigation bar still looks unpolished.
+
+Problems:
+- icons are not fitting properly
+- spacing/alignment feels uneven
+- sizing is inconsistent
+- bubble animation looks broken/glitchy
+- active bubble is too large
+- transition animation is not smooth
+- colors do not match the trading UI theme
+- overall navbar does not feel premium
+
+Fix the ENTIRE bottom navigation bar professionally.
+
+Requirements:
+
+1. PERFECT SCREEN FITTING
+- navbar must fit perfectly within screen width
+- equal spacing between tabs
+- no oversized bubble
+- no clipping
+- no overlapping icons/text
+- responsive scaling for all screen sizes
+
+2. ICON & TEXT ALIGNMENT
+- vertically center everything properly
+- consistent icon sizing
+- consistent text spacing
+- balanced padding/margins
+- professional fintech alignment
+
+3. PREMIUM ACTIVE BUBBLE
+Current bubble looks too big and broken.
+
+Fix:
+- smaller controlled size
+- smooth rounded pill shape
+- clean glow edges
+- subtle glass effect
+- properly centered under active tab
+
+4. SMOOTH ANIMATION
+Current transition feels glitchy.
+
+Implement:
+- buttery smooth sliding animation
+- liquid movement
+- spring easing
+- no jitter
+- no snapping
+- no distortion
+
+Use:
+- translateX
+- scale
+- opacity
+- shared values
+- Reanimated spring physics
+
+5. COLOR SYSTEM
+Remove the current pink/red theme.
+
+Use colors matching my trading UI:
+- emerald green
+- teal
+- cyan glow
+- dark glassmorphism
+
+Active state:
+- neon teal/green glow
+- soft gradient
+- premium fintech style
+
+Inactive state:
+- dimmed grey/white
+- subtle opacity
+
+6. NAVBAR STYLE
+Make navbar:
+- thinner and cleaner
+- more premium
+- modern crypto exchange style
+- futuristic trading terminal feel
+
+7. TABLET & MOBILE RESPONSIVE
+Navbar must adapt properly for:
+- phone portrait
+- phone landscape
+- tablet portrait
+- tablet landscape
+
+8. PERFORMANCE
+Animations must remain:
+- stable 60fps
+- GPU accelerated
+- smooth on Android tablets
+
+Avoid:
+- layout thrashing
+- rerenders
+- expensive blur effects
+
+9. FINAL FEEL
+I want the navbar to feel similar to:
+- Bybit mobile
+- Binance mobile
+- TradingView mobile
+- premium fintech apps
+
+10. IMPORTANT
+Do NOT redesign the overall navbar layout.
+Only refine and perfect:
+- fitting
+- proportions
+- sizing
+- spacing
+- colors
+- animations
+- transitions

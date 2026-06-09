@@ -1,0 +1,89 @@
+To create the exact animation layout for the modern Replit AI Prompt Bar (the
+floating control bar with the rotating gradient border), you need to combine
+specific hex codes with a CSS mask technique.
+
+The "vibe" of this control bar is defined by a deep dark background, a sharp 1px
+gradient border, and a subtle "shadow glow."
+
+1. Exact Color Palette
+
+For the most accurate Replit/Vercel-style "AI" aesthetic, use these hex codes:
+
+| Element                     | Hex Code  | Purpose                                      |
+| :-------------------------- | :-------- | :------------------------------------------- |
+| **Main Background**         | `#0A0A0A` | The core container (nearly pure black)       |
+| **Secondary Background**    | `#1A1A1A` | Hover state or input focus background        |
+| **Primary Accent (Purple)** | `#9266E6` | The lead color in the border gradient        |
+| **Cyan Accent**             | `#00D4FF` | The trailing "spark" in the border animation |
+| **Muted Text**              | `#8F9A96` | For placeholders and inactive icons          |
+| **Active Text**             | `#FFFFFF` | Primary input text color                     |
+
+2. Animation Layout Specifications
+
+To replicate the "below" animation (likely the Rotating Border Gradient), apply
+these layout rules in your Replit prompt or CSS:
+
+  - Corner Radius: 12px (Pill-shaped or rounded-rect).
+  - Border Width: 1.5px (This ensures the gradient "line" looks sharp but
+    visible).
+  - Masking: Use background-clip: padding-box, border-box to ensure the gradient
+    only shows on the border.
+
+3. Replit Prompt / CSS Snippet
+
+Copy this into your Replit global CSS or provide it to the Replit Agent to
+generate the component:
+
+/* The Container */
+.control-bar {
+  position: relative;
+  width: 100%;
+  max-width: 600px;
+  background: #0A0A0A;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  color: #FFFFFF;
+}
+
+/* The Animated Gradient Border */
+.control-bar::before {
+  content: "";
+  position: absolute;
+  inset: -1.5px; /* Adjust thickness */
+  z-index: -1;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0%,
+    #9266E6 25%,
+    #00D4FF 50%,
+    transparent 75%
+  );
+  border-radius: 13.5px;
+  animation: rotate-border 4s linear infinite;
+}
+
+/* Inner Shadow Glow */
+.control-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-shadow: inset 0 0 15px rgba(146, 102, 230, 0.1);
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+@keyframes rotate-border {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+Summary of the "Look":
+
+  - The Shadow: A very faint purple glow (rgba(146, 102, 230, 0.2)) should
+    appear behind the bar when the user focuses on it.
+  - The Speed: The border should rotate slowly (3–5 seconds per loop) to remain
+    professional and not distracting.
+  - The Mask: The background-clip property is essential to keep the center of
+    the bar solid black while the border "sweeps" colors around the edge.

@@ -1,0 +1,269 @@
+I want a COMPLETE PREMIUM UI REDESIGN for my trading app using the exact visual style of:
+
+- Apple iOS premium interfaces
+- Proton apps
+- luxury NeoMorph UI
+- soft glassmorphism
+- modern fintech/trading terminals
+
+IMPORTANT:
+Do NOT redesign the app layout.
+Do NOT move components.
+Do NOT change navigation structure.
+
+Only redesign:
+- colors
+- surfaces
+- gradients
+- shadows
+- glow
+- depth
+- animations
+- visual polish
+
+==================================================
+1. TARGET STYLE
+==================================================
+
+The app should feel like:
+
+TradingView
++
+Apple iOS
++
+Proton
++
+Luxury NeoMorph
++
+Soft Glassmorphism
+
+Style goals:
+- elegant
+- futuristic
+- soft
+- luxurious
+- minimal
+- professional
+- extremely polished
+
+NOT:
+- generic Tailwind dashboard
+- gaming RGB UI
+- harsh neon crypto app
+- cheap flat design
+
+==================================================
+2. DARK MODE THEME
+==================================================
+
+Create a premium dark trading terminal theme.
+
+Background colors:
+#05070B
+#0B1020
+#111827
+
+Surface colors:
+#161B26
+#1A2233
+
+Accent colors:
+#00D9A6
+#00C2FF
+#7EE7FF
+
+Text:
+#F5F7FA
+#AAB4C5
+
+Style:
+- layered dark gradients
+- soft floating panels
+- elegant glow
+- subtle reflections
+- low-contrast depth
+- premium glass surfaces
+
+==================================================
+3. LIGHT MODE THEME
+==================================================
+
+Create a luxury light fintech theme.
+
+Background:
+#F4F4F4
+#ECECEC
+#E6E6E6
+
+Surface:
+#FFFFFF
+#F1F1F1
+
+Accent:
+#7CCFC4
+#93B3AE
+#5E8E87
+
+Text:
+#1A1A1A
+#5B5B5B
+
+Style:
+- Apple-level minimalism
+- soft NeoMorph depth
+- floating pill controls
+- elegant shadows
+- premium spacing
+- subtle gradients
+
+==================================================
+4. COMPONENT STYLE
+==================================================
+
+Apply the redesign consistently to:
+
+- navbar
+- chart controls
+- sidebars
+- floating buttons
+- cards
+- tabs
+- segmented controls
+- modals
+- watchlists
+- dropdowns
+- alerts
+- settings panels
+- trading panels
+
+Everything must feel:
+- unified
+- premium
+- calm
+- expensive
+- modern
+
+==================================================
+5. SEGMENTED / PILL CONTROLS
+==================================================
+
+Use:
+- rounded capsule controls
+- floating segmented tabs
+- soft shadows
+- subtle glow edges
+- smooth animated selection movement
+
+Like:
+- iOS segmented controls
+- Proton UI
+- luxury fintech apps
+
+==================================================
+6. GLASSMORPHISM
+==================================================
+
+Use SOFT glassmorphism only.
+
+Requirements:
+- subtle transparency
+- soft blur
+- layered depth
+- elegant reflections
+- premium edge lighting
+
+Avoid:
+- excessive blur
+- overdone transparency
+- noisy effects
+
+==================================================
+7. ANIMATION SYSTEM
+==================================================
+
+Use:
+- React Native Reanimated
+- GPU accelerated transforms
+- smooth spring physics
+
+Add:
+- liquid tab movement
+- smooth fade transitions
+- soft scaling
+- premium hover/press feedback
+- elegant glow animations
+
+Animations must feel:
+- Apple-quality
+- fluid
+- smooth
+- natural
+- luxurious
+
+==================================================
+8. DEPTH & SHADOWS
+==================================================
+
+Use:
+- layered shadows
+- soft inner shadows
+- subtle outer glow
+- floating card depth
+- premium elevation hierarchy
+
+The UI should feel:
+- dimensional
+- breathable
+- soft
+- modern
+
+==================================================
+9. CHART AREA
+==================================================
+
+Keep chart area:
+- ultra clean
+- minimal
+- professional
+
+Improve:
+- subtle grid contrast
+- premium price labels
+- elegant overlays
+- floating toolbars
+- smooth control styling
+
+==================================================
+10. PERFORMANCE
+==================================================
+
+Effects must remain:
+- optimized
+- GPU-friendly
+- smooth on tablets
+- stable 60fps
+
+Avoid:
+- heavy blur abuse
+- excessive glow
+- laggy shadows
+
+==================================================
+11. TABLET EXPERIENCE
+==================================================
+
+Optimize specifically for:
+- Lenovo tablet landscape mode
+- desktop-style trading layout
+- large-screen spacing
+- professional trading workflow
+
+==================================================
+12. FINAL FEEL
+==================================================
+
+The final app should feel like:
+- a next-generation institutional trading platform
+- luxury fintech software
+- Apple-quality trading terminal
+- extremely polished and premium

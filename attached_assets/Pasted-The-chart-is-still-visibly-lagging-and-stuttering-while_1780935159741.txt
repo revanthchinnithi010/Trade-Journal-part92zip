@@ -1,0 +1,140 @@
+The chart is still visibly lagging and stuttering while dragging/panning even after the previous optimizations.
+
+This means the core architecture is still blocking the main thread.
+
+I do NOT want more superficial memo/useMemo optimizations.
+
+Do a DEEP rendering architecture refactor focused specifically on eliminating drag/pan lag.
+
+MAIN PROBLEM:
+Dragging the chart causes visible frame drops and sticky movement.
+The chart does not feel GPU-smooth like TradingView.
+
+ROOT CAUSES TO FIX:
+
+1. REMOVE REACT FROM PAN/DRAG PIPELINE
+- During drag/pan/zoom, React must NOT participate at all
+- No setState
+- No renderTick
+- No React subscriptions
+- No component rerenders
+- All interactions must be imperative refs only
+
+2. DRAWING OVERLAY MUST BE DECOUPLED
+Current overlay architecture is still blocking chart movement.
+
+Required:
+- Move all drawings to a completely separate canvas layer
+- Use absolute-positioned GPU layer
+- Apply:
+  will-change: transform;
+  transform: translate3d(0,0,0);
+  contain: strict;
+  backface-visibility: hidden;
+
+- Drawing layer must NEVER trigger React rerenders while chart moves
+- Drawing positions should update using direct canvas transforms only
+
+3. REMOVE SVG DRAWING RENDERING
+SVG is too heavy during realtime pan/zoom.
+
+Convert:
+- trendlines
+- rays
+- fibs
+- rectangles
+- brush paths
+
+to pure Canvas2D rendering.
+
+NO SVG elements during interaction.
+
+4. IMPLEMENT TRUE RAF RENDER LOOP
+Create one centralized rendering engine:
+
+- One RAF loop only
+- No multiple RAF loops
+- No React render scheduling
+- No setInterval rendering
+- Frame-coalesced updates
+
+The render loop should:
+- read latest visible range
+- render drawings
+- render overlays
+- sync crosshair
+- batch all updates into one frame
+
+5. PAN PERFORMANCE MODE
+While user is dragging:
+- Disable shadows
+- Disable expensive glow effects
+- Disable drawing hit-testing
+- Disable indicator recalculation
+- Disable autoscale recalculation
+- Disable magnetic snapping
+
+Re-enable after drag ends.
+
+6. REMOVE LAYOUT THRASHING
+Audit ALL:
+- getBoundingClientRect()
+- offsetWidth
+- offsetHeight
+- computedStyle reads
+
+These must NOT happen during move events.
+
+Cache dimensions.
+
+7. USE PASSIVE POINTER EVENTS
+Use:
+{ passive: true }
+
+for touch/pointer listeners wherever possible.
+
+8. MOVE CROSSHAIR TO IMPERATIVE LAYER
+Crosshair updates must not touch React.
+
+Use direct DOM transform updates:
+translate3d()
+
+9. LIGHTWEIGHT CHARTS CONFIG
+Optimize specifically for mobile smoothness:
+
+autoSize: false
+handleScroll:
+handleScale:
+kineticScroll:
+trackingMode:
+crosshair:
+grid:
+layout invalidation reduction
+
+Disable unnecessary internal animations.
+
+10. DEVICE PIXEL RATIO OPTIMIZATION
+High DPR devices are over-rendering.
+
+Clamp rendering DPR:
+Math.min(window.devicePixelRatio, 2)
+
+11. HISTORICAL DATA WINDOWING
+Do NOT render entire candle history.
+
+Render only:
+- visible candles
+- small buffer around viewport
+
+12. FINAL TARGET
+The chart must feel:
+- identical to TradingView mobile
+- buttery smooth
+- zero sticky drag
+- no frame skipping
+- no delayed touch response
+
+IMPORTANT:
+Do not explain theory only.
+Actually refactor the rendering pipeline and interaction engine.
+Profile and identify remaining frame-time bottlenecks.

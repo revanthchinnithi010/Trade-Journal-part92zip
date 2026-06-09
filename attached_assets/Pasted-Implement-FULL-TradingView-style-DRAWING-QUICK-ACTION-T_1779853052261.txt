@@ -1,0 +1,281 @@
+Implement FULL TradingView-style DRAWING QUICK ACTION TOOLBAR.
+
+Current issue:
+Custom control bar does NOT match TradingView.
+
+Need:
+✅ SAME floating toolbar style
+✅ SAME icon placement
+✅ SAME icon size
+✅ SAME hover behavior
+✅ SAME spacing
+✅ SAME dark theme
+✅ SAME rounded widget style
+✅ SAME functionality
+
+Reference:
+Use attached TradingView screenshot as exact UI behavior reference.
+
+==================================================
+1. AUTO OPEN TOOLBAR
+==================================================
+
+When:
+✅ trendline placed
+✅ ray placed
+✅ rectangle placed
+✅ fib placed
+✅ position tool placed
+
+Immediately show floating quick-action toolbar.
+
+NO delay.
+NO flickering.
+
+==================================================
+2. TOOLBAR POSITION
+==================================================
+
+Toolbar should appear:
+slightly ABOVE selected drawing center.
+
+Auto reposition:
+- avoid screen edges
+- avoid price scale overlap
+- avoid toolbar clipping
+
+==================================================
+3. TOOLBAR DESIGN
+==================================================
+
+Need exact TradingView floating widget feel.
+
+Use:
+
+background:
+rgba(28,30,34,0.96);
+
+border:
+1px solid rgba(255,255,255,0.06);
+
+border-radius:
+14px;
+
+height:
+46px;
+
+padding:
+0 10px;
+
+backdrop-filter:
+blur(14px);
+
+box-shadow:
+0 8px 30px rgba(0,0,0,0.45);
+
+==================================================
+4. ICON ORDER
+==================================================
+
+Use SAME order as TradingView.
+
+FROM LEFT TO RIGHT:
+
+① Add to favorites
+② Brush/Style icon
+③ Text icon
+④ Line thickness
+⑤ Line style
+⑥ Object visibility/settings
+⑦ Alerts
+⑧ Lock
+⑨ Extend line
+⑩ Delete
+⑪ More menu
+
+==================================================
+5. ICON STYLE
+==================================================
+
+Icons MUST:
+✅ match TradingView thin-line style
+✅ same proportions
+✅ same visual weight
+✅ monochrome gray/white
+✅ soft hover glow
+
+DO NOT use:
+❌ chunky icons
+❌ colorful icons
+❌ random lucide mismatches
+
+Use:
+custom SVG icons
+OR Tabler icons matching TradingView.
+
+==================================================
+6. ICON SIZE
+==================================================
+
+Icons:
+18px
+
+Toolbar buttons:
+32x32
+
+Gap:
+8px
+
+==================================================
+7. ACTIVE STATES
+==================================================
+
+Hover:
+background:
+rgba(255,255,255,0.06);
+
+border-radius:
+8px;
+
+Active:
+soft white highlight.
+
+==================================================
+8. THICKNESS CONTROL
+==================================================
+
+When thickness clicked:
+small popup opens.
+
+Options:
+1px
+2px
+3px
+4px
+5px
+
+Current selected thickness visible.
+
+==================================================
+9. LINE STYLE CONTROL
+==================================================
+
+When line-style clicked:
+popup opens.
+
+Options:
+- solid
+- dashed
+- dotted
+
+Live preview lines required.
+
+==================================================
+10. STYLE SETTINGS PANEL
+==================================================
+
+When brush icon clicked:
+open floating settings card.
+
+Need:
+✅ color picker
+✅ opacity slider
+✅ thickness
+✅ line style
+
+==================================================
+11. ALERT ICON
+==================================================
+
+Alert icon visible always.
+
+Click:
+placeholder action for now.
+
+==================================================
+12. LOCK FEATURE
+==================================================
+
+Lock icon:
+locks drawing movement.
+
+When locked:
+drawing cannot drag/edit.
+
+==================================================
+13. EXTEND LINE FEATURE
+==================================================
+
+Trendline can:
+✅ extend right
+✅ extend left
+✅ extend both
+✅ disable extend
+
+Same as TradingView.
+
+==================================================
+14. DELETE FEATURE
+==================================================
+
+Delete icon:
+instantly remove drawing.
+
+Also remove from:
+✅ object tree
+✅ saved layout
+✅ local storage
+
+==================================================
+15. MORE MENU
+==================================================
+
+Three-dot menu opens extra options.
+
+==================================================
+16. DATE/TIME HIGHLIGHT
+==================================================
+
+When drawing selected:
+show BOTH anchor timestamps on bottom scale.
+
+Need:
+✅ blue TradingView-style labels
+✅ exact anchor position mapping
+✅ smooth updates during drag
+
+==================================================
+17. ANCHOR POINTS
+==================================================
+
+Selected drawing:
+show blue circular handles.
+
+Same TradingView style.
+
+==================================================
+18. PERFORMANCE FIX
+==================================================
+
+Toolbar MUST:
+✅ never flicker
+✅ never rerender continuously
+✅ stay smooth during drag
+✅ work on tablets
+
+Use:
+memoization + stable refs.
+
+==================================================
+FINAL RESULT
+==================================================
+
+Need near-identical TradingView object editing UX:
+
+✅ same toolbar
+✅ same controls
+✅ same spacing
+✅ same behavior
+✅ same dark style
+✅ same floating widget feel
+✅ same interaction flow

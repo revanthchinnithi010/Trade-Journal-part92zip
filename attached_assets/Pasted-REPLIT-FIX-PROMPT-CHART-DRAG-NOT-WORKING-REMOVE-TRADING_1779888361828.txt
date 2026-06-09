@@ -1,0 +1,160 @@
+REPLIT FIX PROMPT — CHART DRAG NOT WORKING + REMOVE TRADINGVIEW LOGO
+
+CRITICAL FIX REQUIRED
+
+====================================================
+
+1. CHART STILL NOT MOVING
+
+CURRENT ISSUE:
+Candlestick chart is frozen.
+Cannot drag/pan left or right.
+
+ROOT CAUSE:
+Some UI layer is still intercepting pointer/touch events.
+
+====================================================
+
+2. FIX ALL POINTER EVENT BLOCKING
+
+Find ALL floating UI wrappers:
+
+- left toolbar wrapper
+- favorite toolbar wrapper
+- overlay containers
+- chart decorations
+- glass backgrounds
+- control widgets
+
+SET:
+
+pointer-events: none;
+
+ONLY on NON-INTERACTIVE wrappers.
+
+====================================================
+
+3. BUTTONS ONLY SHOULD BE CLICKABLE
+
+Set:
+
+.tool-btn,
+.favorite-btn,
+.control-btn {
+   pointer-events: auto;
+}
+
+====================================================
+
+4. CHART CONTAINER MUST RECEIVE EVENTS
+
+MAIN CHART WRAPPER MUST HANDLE:
+
+mousedown
+mousemove
+mouseup
+touchstart
+touchmove
+touchend
+wheel
+
+DO NOT PREVENT DEFAULT unless absolutely necessary.
+
+====================================================
+
+5. REMOVE TOUCH BLOCKERS
+
+Search project for:
+
+touch-action: none;
+
+REMOVE it from:
+- chart wrapper
+- chart layout
+- fullscreen containers
+
+USE THIS INSTEAD:
+
+.chart-container {
+   touch-action: pan-x pan-y pinch-zoom;
+}
+
+====================================================
+
+6. FIX Z-INDEX LAYERS
+
+Current overlays likely covering chart.
+
+SET:
+
+.chart-container {
+   position: relative;
+   z-index: 1;
+}
+
+.left-toolbar {
+   z-index: 5;
+}
+
+.favorite-toolbar {
+   z-index: 6;
+}
+
+NO fullscreen overlay should sit above chart.
+
+====================================================
+
+7. REMOVE TRADINGVIEW LOGO
+
+CURRENT ISSUE:
+TradingView watermark/logo visible bottom left.
+
+REMOVE COMPLETELY:
+
+- TV logo
+- watermark
+- branding element
+- bottom-left floating icon
+
+Search for:
+TradingView
+tv-logo
+watermark
+branding
+logo
+
+Hide/remove component.
+
+====================================================
+
+8. REMOVE WATERMARK SPACE
+
+After removing logo:
+- no empty padding
+- no reserved corner space
+- candles should use full chart width
+
+====================================================
+
+9. FINAL EXPECTED RESULT
+
+✅ Chart drags smoothly
+✅ Horizontal scrolling works
+✅ Pinch zoom works
+✅ Candles move naturally
+✅ Tablet gestures work
+✅ No frozen chart
+✅ No invisible overlay blocking
+✅ No TradingView watermark/logo
+✅ Clean professional chart UI
+
+VERY IMPORTANT:
+Do NOT break:
+- drawing tools
+- object selection
+- favorite toolbar
+- chart scaling
+- right sidebar
+- toolbar buttons
+
+ONLY fix gesture blocking + remove watermark/logo.

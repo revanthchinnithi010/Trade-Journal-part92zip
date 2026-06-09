@@ -1,0 +1,96 @@
+The chart is still extremely laggy while dragging, zooming, panning, and receiving live websocket updates.
+
+Do a COMPLETE performance optimization pass focused on achieving TradingView-level smoothness (target: stable 60fps on mobile and desktop).
+
+Current problems:
+- Chart stutters while dragging
+- Zooming is not smooth
+- Candles rerender too often
+- FPS drops during websocket ticks
+- Touch interactions feel delayed
+- Crosshair movement is heavy
+- Entire chart rerenders on every tick
+- Large candle history causes lag
+- Mobile performance is poor
+
+Required optimizations:
+
+1. ELIMINATE UNNECESSARY REACT RERENDERS
+- Use refs instead of state for realtime data
+- Prevent component rerenders during websocket ticks
+- Memoize heavy functions
+- Memoize toolbar/components
+- Use React.memo where needed
+
+2. OPTIMIZE LIGHTWEIGHT CHARTS USAGE
+- Never recreate chart instance
+- Never recreate series instance
+- Use series.update() instead of setData() for live candles
+- Only call setData() once during initial load
+- Batch updates with requestAnimationFrame
+- Disable unnecessary animations
+- Avoid expensive fitContent() calls
+- Avoid repeated timeScale operations
+
+3. WEBSOCKET PERFORMANCE
+- Buffer incoming ticks
+- Process updates inside requestAnimationFrame
+- Prevent multiple updates per frame
+- Avoid JSON parsing overhead where possible
+- Do not trigger React state updates from websocket stream
+
+4. LARGE DATASET OPTIMIZATION
+- Load only visible candles initially
+- Virtualize historical data
+- Limit maximum candles in memory
+- Use incremental history loading
+- Remove unnecessary candle transformations
+
+5. TOUCH + MOBILE OPTIMIZATION
+- Passive event listeners
+- GPU acceleration using translate3d
+- Optimize drag handlers
+- Reduce layout thrashing
+- Prevent forced reflows
+- Ensure smooth pinch zoom
+
+6. CROSSHAIR + DRAWING OPTIMIZATION
+- Throttle crosshair updates
+- Avoid expensive mousemove handlers
+- Render drawings on separate lightweight layer/canvas
+- Prevent redraw of all drawings every frame
+
+7. CHART CONFIG OPTIMIZATION
+Apply optimized Lightweight Charts settings:
+- handleScroll
+- handleScale
+- kineticScroll
+- trackingMode
+- localization
+- autoSize
+- layout invalidations
+- pixelRatio handling
+
+8. MEMORY + CLEANUP
+- Cleanup websocket subscriptions correctly
+- Cleanup event listeners
+- Prevent memory leaks
+- Avoid accumulating old candle arrays
+
+9. RENDERING PIPELINE
+- Use requestAnimationFrame rendering loop
+- Avoid synchronous layout calculations
+- Move heavy calculations outside render cycle
+
+10. FINAL TARGET
+The chart must feel:
+- As smooth as TradingView
+- Zero visible lag
+- Ultra responsive on touch devices
+- Stable during fast live price movement
+- Smooth while dragging and zooming simultaneously
+
+IMPORTANT:
+Do not rewrite the app unnecessarily.
+Do a targeted professional-grade optimization pass on the existing chart architecture.
+Explain exactly which bottlenecks were fixed and why they caused lag before.

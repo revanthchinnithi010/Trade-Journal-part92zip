@@ -1,0 +1,436 @@
+ADD COMPLETE TRADINGVIEW-STYLE INDICATOR SYSTEM
+
+====================================================
+TOPBAR INDICATORS BUTTON
+====================================================
+
+Top bar lo:
+----------------------------------------------------
+
+Indicators ▼
+
+button add cheyyi.
+
+same TradingView style:
+----------------------------------------------------
+
+icon + text + dropdown arrow
+
+====================================================
+ON CLICK
+====================================================
+
+Indicators panel:
+----------------------------------------------------
+
+TOP BAR nundi DOWN ki slide open avvali
+
+NOT center modal.
+
+Animation:
+----------------------------------------------------
+
+smooth dropdown slide
+fade in
+
+====================================================
+INDICATOR DROPDOWN DESIGN
+====================================================
+
+Exact TradingView style.
+
+Background:
+----------------------------------------------------
+#131722
+
+Border:
+----------------------------------------------------
+1px solid rgba(255,255,255,0.06)
+
+Radius:
+----------------------------------------------------
+14px
+
+Shadow:
+----------------------------------------------------
+0 12px 40px rgba(0,0,0,0.45)
+
+Width:
+----------------------------------------------------
+340px
+
+Max Height:
+----------------------------------------------------
+75vh
+
+Scrollable:
+----------------------------------------------------
+YES
+
+====================================================
+TOP SECTION
+====================================================
+
+Search input:
+----------------------------------------------------
+
+placeholder:
+"Search indicators..."
+
+live filtering support undaali.
+
+====================================================
+INDICATOR CATEGORIES
+====================================================
+
+Sections:
+----------------------------------------------------
+
+⭐ Favorite Indicators
+📈 Trend
+📊 Volume
+🧠 Smart Money Concepts
+📉 Oscillators
+⚡ Volatility
+🧮 Moving Averages
+🔥 Custom Indicators
+
+====================================================
+DEFAULT INDICATORS
+====================================================
+
+Include:
+----------------------------------------------------
+
+EMA
+SMA
+VWAP
+RSI
+MACD
+Bollinger Bands
+Volume
+SuperTrend
+ATR
+Stochastic RSI
+
+SMC Indicators:
+----------------------------------------------------
+
+Order Blocks
+Liquidity Sweeps
+FVG
+Market Structure
+Sessions
+Volume Profile
+Trendlines with Breaks
+
+====================================================
+INDICATOR ROW UI
+====================================================
+
+Each row must have:
+----------------------------------------------------
+
+indicator name
+favorite star
+hover effect
+
+tap indicator:
+----------------------------------------------------
+
+apply to chart instantly
+
+====================================================
+AFTER APPLYING
+====================================================
+
+Applied indicators must appear:
+----------------------------------------------------
+
+Chart TOP LEFT area
+
+same TradingView style.
+
+====================================================
+INDICATOR TAG UI
+====================================================
+
+Each applied indicator tag:
+----------------------------------------------------
+
+dark rounded rectangle
+thin blue outline on selected
+small compact layout
+
+====================================================
+INSIDE INDICATOR TAG
+====================================================
+
+show:
+----------------------------------------------------
+
+Indicator Name
+
+icons:
+----------------------------------------------------
+
+👁 Hide
+⚙ Settings
+🗑 Delete
+⋯ More
+
+====================================================
+HIDE BUTTON
+====================================================
+
+Eye icon click:
+----------------------------------------------------
+
+indicator chart lo hide/show avvali
+
+line remove kaakunda visibility toggle matrame.
+
+====================================================
+SETTINGS BUTTON
+====================================================
+
+Settings icon click:
+----------------------------------------------------
+
+TradingView-style settings popup open avvali.
+
+====================================================
+SETTINGS POPUP
+====================================================
+
+Tabs:
+----------------------------------------------------
+
+Inputs
+Style
+Visibility
+
+====================================================
+INPUTS TAB
+====================================================
+
+Examples:
+----------------------------------------------------
+
+Length
+Source
+Offset
+Smoothing
+Timeframe
+
+editable inputs.
+
+====================================================
+STYLE TAB
+====================================================
+
+Allow:
+----------------------------------------------------
+
+line color
+line thickness
+line opacity
+line style
+
+====================================================
+VISIBILITY TAB
+====================================================
+
+Allow:
+----------------------------------------------------
+
+which timeframes indicator visible avvalo select cheyyadam.
+
+====================================================
+DELETE BUTTON
+====================================================
+
+Bin icon click:
+----------------------------------------------------
+
+indicator complete remove avvali
+
+chart nundi + list nundi.
+
+====================================================
+THREE DOT MENU
+====================================================
+
+⋯ click chesthey dropdown open avvali.
+
+Options:
+----------------------------------------------------
+
+Add Alert on Indicator
+Object Tree
+Show Pine Script
+Duplicate Indicator
+Move To Pane
+Pin To Scale
+Hide
+Remove
+
+====================================================
+ADD ALERT ON INDICATOR
+====================================================
+
+Click:
+----------------------------------------------------
+
+alert popup open avvali
+
+indicator conditions:
+----------------------------------------------------
+
+Crossing
+Greater Than
+Less Than
+Cross Up
+Cross Down
+
+====================================================
+OBJECT TREE
+====================================================
+
+Open floating panel:
+----------------------------------------------------
+
+all drawings
+all indicators
+all alerts
+
+show/hide support undaali.
+
+====================================================
+SHOW PINESCRIPT
+====================================================
+
+Open code viewer modal:
+----------------------------------------------------
+
+readonly Pine Script code display.
+
+====================================================
+CUSTOM INDICATORS SECTION
+====================================================
+
+Bottom lo:
+----------------------------------------------------
+
++ Add Custom Indicator
+
+button undaali.
+
+====================================================
+ON CLICK
+====================================================
+
+Open Pine Script editor popup.
+
+====================================================
+PINE SCRIPT EDITOR
+====================================================
+
+Features:
+----------------------------------------------------
+
+dark editor
+syntax highlighting
+line numbers
+copy/paste support
+scroll support
+
+====================================================
+SUPPORTED CODE
+====================================================
+
+Support:
+----------------------------------------------------
+
+TradingView Pine Script v5 basic syntax
+
+Examples:
+----------------------------------------------------
+
+indicator()
+plot()
+ta.ema()
+ta.rsi()
+ta.sma()
+ta.vwap()
+
+====================================================
+BUTTONS
+====================================================
+
+Bottom:
+----------------------------------------------------
+
+Cancel
+Compile
+Apply To Chart
+
+====================================================
+ON APPLY
+====================================================
+
+Custom indicator:
+----------------------------------------------------
+
+chart lo render avvali
+
+indicator tag create avvali
+
+settings editable avvali.
+
+====================================================
+PERSISTENCE
+====================================================
+
+Save:
+----------------------------------------------------
+
+favorite indicators
+custom indicators
+indicator settings
+visibility state
+
+using:
+----------------------------------------------------
+
+localStorage / Firebase
+
+====================================================
+TABLET + MOBILE FIX
+====================================================
+
+Must support:
+----------------------------------------------------
+
+touch scrolling
+responsive popup width
+smooth animations
+no overflow outside screen
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+----------------------------------------------------
+
+✅ TradingView-like indicators dropdown
+✅ Indicator search + favorites
+✅ Apply indicators to chart
+✅ Indicator tags on top left
+✅ Hide/settings/delete support
+✅ Full indicator settings popup
+✅ Pine Script custom indicators
+✅ Object tree support
+✅ Add alert on indicators
+✅ Professional TradingView behavior

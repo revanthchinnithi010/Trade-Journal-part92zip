@@ -1,0 +1,254 @@
+ADD FULL RIGHT-SIDEBAR ALERT CENTER PANEL (TRADINGVIEW STYLE)
+
+====================================================
+MAIN REQUIREMENT
+====================================================
+
+When user clicks ALERT ICON
+from RIGHT SIDE MINI CONTROL BAR,
+
+open:
+✅ centered popup window
+✅ large professional alert manager
+✅ show all active alerts
+✅ allow managing alerts
+
+This should work exactly like TradingView alert manager.
+
+====================================================
+POPUP WINDOW DESIGN
+====================================================
+
+STYLE:
+----------------------------------------------------
+
+Background:
+#0F1618
+
+Border:
+1px solid rgba(255,255,255,0.06)
+
+Radius:
+20px
+
+Shadow:
+0 20px 60px rgba(0,0,0,0.55)
+
+Backdrop blur:
+16px
+
+Width:
+desktop:
+720px
+
+tablet:
+90vw
+
+Height:
+80vh
+
+====================================================
+HEADER
+====================================================
+
+LEFT:
+----------------------------------------------------
+🔔 Alerts Center
+
+RIGHT:
+----------------------------------------------------
+[ + Create Alert ]
+[ Close X ]
+
+Bottom border:
+1px solid rgba(255,255,255,0.05)
+
+====================================================
+SEARCH + FILTER BAR
+====================================================
+
+Top section:
+----------------------------------------------------
+
+Search input:
+"Search alerts..."
+
+Dropdown filters:
+✅ All
+✅ Active
+✅ Triggered
+✅ Paused
+✅ Expired
+
+====================================================
+ACTIVE ALERTS LIST
+====================================================
+
+Scrollable list.
+
+Each alert card should show:
+
+----------------------------------------------------
+SYMBOL:
+BTCUSDT
+
+TYPE:
+Trendline / Rectangle / Horizontal Line
+
+CONDITION:
+Touch / Cross / Breakout
+
+STATUS:
+🟢 Active
+🟡 Paused
+🔴 Triggered
+
+TIMEFRAME:
+1H
+
+CREATED TIME:
+12:45 PM
+
+MESSAGE:
+Trendline touch detected
+
+====================================================
+ALERT CARD ACTION BUTTONS
+====================================================
+
+Every alert row must contain:
+
+✅ Resume
+✅ Pause
+✅ Edit
+✅ Delete
+
+====================================================
+BUTTON STYLES
+====================================================
+
+Resume:
+----------------------------------------------------
+background:
+rgba(183,255,90,0.12)
+
+text:
+#B7FF5A
+
+Pause:
+----------------------------------------------------
+background:
+rgba(255,200,0,0.12)
+
+text:
+#FFC857
+
+Delete:
+----------------------------------------------------
+background:
+rgba(255,80,80,0.12)
+
+text:
+#FF5C5C
+
+Edit:
+----------------------------------------------------
+background:
+rgba(171,185,182,0.10)
+
+text:
+#D3DEDA
+
+====================================================
+ALERT STATE MANAGEMENT
+====================================================
+
+Pause:
+----------------------------------------------------
+temporarily stop checking alert.
+
+Resume:
+----------------------------------------------------
+restart alert engine.
+
+Delete:
+----------------------------------------------------
+remove from:
+- chart
+- localStorage
+- active watcher
+
+Edit:
+----------------------------------------------------
+reopen alert settings popup.
+
+====================================================
+REAL-TIME STATUS
+====================================================
+
+If alert triggers:
+----------------------------------------------------
+
+✅ status becomes Triggered
+✅ row glows briefly
+✅ show timestamp
+✅ play sound
+✅ show top-right toast notification
+
+====================================================
+EMPTY STATE
+====================================================
+
+If no alerts:
+
+Show centered icon + text:
+----------------------------------------------------
+
+🔔
+"No Active Alerts"
+
+Button:
+[ Create First Alert ]
+
+====================================================
+ANIMATIONS
+====================================================
+
+Popup open:
+----------------------------------------------------
+fade + scale animation
+
+Alert row hover:
+----------------------------------------------------
+subtle glow
+
+Triggered alert:
+----------------------------------------------------
+pulse animation
+
+====================================================
+IMPORTANT FIX
+====================================================
+
+Currently:
+toolbar/popups sometimes disappear randomly.
+
+Fix:
+----------------------------------------------------
+✅ popup must never close unexpectedly
+✅ clicking inside popup should not deselect chart
+✅ chart state must remain stable
+✅ no flickering
+✅ no invisible bug
+
+====================================================
+FINAL RESULT
+====================================================
+
+After implementation:
+✅ full TradingView-style alerts manager
+✅ professional centered popup
+✅ real active alert management
+✅ pause/resume/edit/delete
+✅ persistent alerts
+✅ institutional trading terminal experience

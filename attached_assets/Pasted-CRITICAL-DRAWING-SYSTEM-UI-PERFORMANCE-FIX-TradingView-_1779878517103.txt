@@ -1,0 +1,256 @@
+CRITICAL DRAWING SYSTEM + UI + PERFORMANCE FIX
+TradingView-level smoothness and functionality required.
+
+==================================================
+MAIN ISSUES TO FIX
+==================================================
+
+1. Color picker, drawing tools, and settings panels are lagging/stuck.
+2. Blue dashed guide lines appear after drawing trendline.
+3. Bottom time scale only shows month/date.
+4. Need exact DD-MM-YYYY HH:MM display.
+5. Drawing control panel UI is poor.
+6. Control bar functionality is weak.
+7. Drawing interactions feel unprofessional.
+8. Popup panels flicker and rerender continuously.
+
+==================================================
+1. REMOVE BLUE DASHED GUIDE LINES
+==================================================
+
+After placing:
+- trendline
+- ray
+- rectangle
+- long position
+- short position
+
+REMOVE all temporary blue dashed vertical guide lines.
+
+ONLY show:
+✅ selected anchor points
+✅ selected drawing glow
+✅ control toolbar
+
+Do NOT render:
+- helper vertical dashed lines
+- projection lines
+- debug guides
+
+==================================================
+2. FIX DATE/TIME SCALE FORMAT
+==================================================
+
+Bottom scale must show:
+
+DD-MM-YYYY HH:MM
+
+Examples:
+27-05-2026 15:30
+27-05-2026 16:45
+
+NOT:
+May 27
+May 11
+
+Use:
+UTC internally
+Local timezone visually.
+
+==================================================
+3. TRADINGVIEW-LIKE DRAWING CONTROL BAR
+==================================================
+
+Current floating control bar is ugly and unstable.
+
+Need EXACT TradingView-style:
+
+✅ matte dark background
+✅ rounded corners
+✅ horizontal compact toolbar
+✅ centered above drawing
+✅ smooth fade animation
+✅ NO flickering
+✅ NO jumping
+✅ fixed height
+✅ icon spacing same as TradingView
+
+==================================================
+4. CONTROL BAR ICONS
+==================================================
+
+Add SAME ORDER like TradingView:
+
+⭐ Favorite
+✏️ Style
+🎨 Color
+📏 Thickness
+👁 Visibility
+🔔 Alert
+🔒 Lock
+➡ Extend
+🗑 Delete
+⋯ More
+
+Use:
+Lucide React OR TradingView-like vector icons.
+
+NO emoji icons.
+NO cheap icons.
+
+==================================================
+5. CONTROL BAR STABILITY FIX
+==================================================
+
+Currently flickering because:
+toolbar rerenders on every mousemove.
+
+FIX:
+
+- memoize toolbar state
+- useRef for selected drawing
+- prevent rerender during drag
+- render toolbar in portal layer
+- use requestAnimationFrame
+- disable unnecessary React state updates
+
+Toolbar must remain:
+stable
+smooth
+non-flickering
+
+==================================================
+6. COLOR PICKER PERFORMANCE FIX
+==================================================
+
+Current picker freezes.
+
+Need:
+
+✅ GPU accelerated
+✅ instant response
+✅ no lag
+✅ no rerender storm
+✅ opacity slider smooth
+✅ hue slider smooth
+
+IMPLEMENT:
+
+- debounce updates
+- update preview locally first
+- commit final color on pointerup
+- use transform instead of top/left
+- use will-change: transform
+
+==================================================
+7. DRAWING SETTINGS PANEL
+==================================================
+
+When settings icon clicked:
+
+Open medium floating card.
+
+STYLE:
+- dark matte card
+- rounded 18px
+- soft glow border
+- same TradingView spacing
+
+OPTIONS:
+✅ color
+✅ opacity
+✅ line style
+✅ thickness
+✅ extend left/right
+✅ lock
+✅ visibility
+✅ delete
+
+==================================================
+8. DRAWING INTERACTION FIX
+==================================================
+
+After placing drawing:
+
+ONLY selected drawing editable.
+
+NO multi-selection bug.
+
+Dragging anchors must be:
+✅ ultra smooth
+✅ realtime
+✅ no lag
+✅ no jitter
+
+==================================================
+9. DRAWING SELECTION VISUALS
+==================================================
+
+Selected drawing:
+✅ subtle glow
+✅ clean anchor circles
+✅ no oversized handles
+✅ no blue debug lines
+
+Anchor circles:
+- TradingView size
+- clean blue outline
+- transparent fill
+
+==================================================
+10. FAVORITE TOOLBAR FIX
+==================================================
+
+Favorite toolbar above date scale must:
+
+✅ auto center
+✅ compact
+✅ draggable
+✅ TradingView style
+✅ no overflow
+✅ icons same size
+✅ no stretching
+
+==================================================
+11. TOOL POPUP FIX
+==================================================
+
+Tool category popup:
+- smooth scroll
+- no cutoff
+- no hidden icons
+- no overflow clipping
+- no blur bug
+
+Must open instantly.
+
+==================================================
+12. PERFORMANCE OPTIMIZATION
+==================================================
+
+Use:
+React.memo
+useCallback
+useMemo
+
+Prevent:
+full chart rerender during drawing updates.
+
+Canvas redraw ONLY selected object.
+
+==================================================
+13. FINAL TARGET
+==================================================
+
+Need TradingView-quality UX:
+
+✅ smooth drawing
+✅ smooth dragging
+✅ stable toolbar
+✅ no flicker
+✅ exact time display
+✅ professional control panel
+✅ smooth color picker
+✅ clean selection visuals
+✅ no dashed helper lines
+✅ premium chart interaction

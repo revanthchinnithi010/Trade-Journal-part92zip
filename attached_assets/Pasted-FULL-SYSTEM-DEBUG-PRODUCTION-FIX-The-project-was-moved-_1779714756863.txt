@@ -1,0 +1,280 @@
+FULL SYSTEM DEBUG + PRODUCTION FIX
+
+The project was moved to another Replit account and now:
+- Finnhub shows Network Error
+- Delta Exchange shows Network Error
+- websocket feeds reconnect endlessly
+- live prices stop updating
+- backend may not be fully connected
+
+I need a COMPLETE production-grade fix for the entire app.
+
+==================================================
+STEP 1 — INSTALL + VERIFY DEPENDENCIES
+==================================================
+
+Run full dependency reinstall:
+
+rm -rf node_modules package-lock.json
+npm install
+
+Ensure these packages exist and work:
+- express
+- ws
+- socket.io
+- axios
+- dotenv
+- drizzle-orm
+- postgres
+- @supabase/supabase-js
+- react
+- vite
+
+==================================================
+STEP 2 — DATABASE CONNECTION
+==================================================
+
+Use DATABASE_URL from Replit Secrets.
+
+Verify Supabase connection on startup.
+
+If DB connects:
+show:
+"Database Connected"
+
+If DB fails:
+show exact error in console.
+
+Automatically reconnect database if disconnected.
+
+==================================================
+STEP 3 — WEBSOCKET SYSTEM FIX
+==================================================
+
+Fix all websocket feeds:
+- Finnhub
+- Delta Exchange
+- Binance
+- OANDA
+
+Requirements:
+- auto reconnect
+- heartbeat ping/pong
+- exponential reconnect backoff
+- no stale feed freezing
+- no duplicate websocket instances
+
+==================================================
+STEP 4 — REMOVE HARDCODED REPLIT URLS
+==================================================
+
+Search the entire project for:
+- old replit domains
+- hardcoded localhost
+- fixed websocket URLs
+
+Replace with dynamic current-origin URLs.
+
+Frontend must automatically work after:
+- Replit account transfer
+- redeploy
+- GitHub clone
+
+==================================================
+STEP 5 — API + BACKEND HEALTH
+==================================================
+
+Create endpoints:
+
+/api/health
+/api/ws-status
+/api/db-status
+
+Return:
+- websocket status
+- DB status
+- reconnect count
+- latency
+- uptime
+
+==================================================
+STEP 6 — REALTIME MARKET DATA
+==================================================
+
+IMPORTANT:
+DO NOT STORE tick-by-tick market data in Supabase.
+
+Realtime websocket ticks must:
+- stay in frontend memory
+- update React state only
+- NOT write every tick into database
+
+ONLY store:
+- trades
+- watchlists
+- alerts
+- trendlines
+- chart drawings
+- Telegram settings
+- Finnhub keys
+- reports
+- notebook entries
+
+Optimize for Supabase free plan.
+
+==================================================
+STEP 7 — CHARTS + TRADINGVIEW ALERTS
+==================================================
+
+Implement FULL TradingView-style alert system.
+
+Users must:
+- draw trendlines
+- draw rays
+- draw zones
+- draw horizontal price lines
+
+When drawing clicked:
+show:
+- Create Alert
+- Edit Alert
+- Delete Alert
+
+==================================================
+SUPPORTED ALERTS
+==================================================
+
+Trendline/Ray:
+- Cross Above
+- Cross Below
+- Touch
+- Breakout
+
+Zones:
+- Enter Zone
+- Exit Zone
+- Breakout
+- Rejection
+
+Price:
+- Above
+- Below
+- Touch
+
+==================================================
+DRAWING DATA EXTRACTION
+==================================================
+
+Save:
+- symbol
+- timeframe
+- x1 y1
+- x2 y2
+- slope
+- projected future values
+- timestamps
+
+Persist permanently in Supabase.
+
+==================================================
+REALTIME ALERT ENGINE
+==================================================
+
+On every websocket tick:
+- calculate projected line price
+- compare with live price
+- detect touch/cross
+- trigger alerts instantly
+
+==================================================
+TRIGGER ACTIONS
+==================================================
+
+When triggered:
+- show toast notification
+- add to Alerts Center
+- send Telegram alert
+- store event history
+
+==================================================
+STEP 8 — WATCHLIST SYNCHRONIZATION
+==================================================
+
+When symbol added to watchlist:
+- automatically appear in Dashboard
+- automatically appear in Alerts Center
+- automatically subscribe websocket feed
+- automatically display live prices
+
+==================================================
+STEP 9 — SETTINGS PAGE
+==================================================
+
+Settings page must support:
+
+Manual Finnhub API Key input
+Manual Telegram Bot Token input
+Manual Telegram Chat ID input
+
+Save securely in Supabase.
+
+Connect button must:
+- validate credentials
+- show success/failure
+- auto reconnect feeds
+
+==================================================
+STEP 10 — REMOVE UNUSED UI
+==================================================
+
+Remove:
+- Account & Billing card
+- fake/manual feed cards from Alerts Center
+- unused placeholder panels
+
+==================================================
+STEP 11 — TELEGRAM ALERTS
+==================================================
+
+Telegram alerts must support:
+- trendline alerts
+- zone alerts
+- price alerts
+- websocket feed failures
+
+Example:
+
+📈 Trendline Alert
+Symbol: EURUSD
+Condition: Cross Above
+Projected Price: 1.16384
+Current Price: 1.16402
+Timeframe: 5M
+
+==================================================
+STEP 12 — PRODUCTION STABILITY
+==================================================
+
+Requirements:
+- no websocket memory leaks
+- no duplicate subscriptions
+- no stale feeds
+- no frontend freezes
+- no infinite reconnect loops
+- no duplicate alerts
+
+==================================================
+STEP 13 — FINAL VERIFICATION
+==================================================
+
+After all fixes:
+1. restart backend
+2. restart Vite frontend
+3. verify live prices update
+4. verify websocket feeds stable
+5. verify Supabase persistence
+6. verify TradingView alerts work
+7. verify Telegram alerts work
+8. verify app survives restart/redeploy/account transfer
+
+Make the entire app production-ready like a professional trading platform.

@@ -1,0 +1,206 @@
+Upgrade ONLY the EXISTING TradeVault charts section. Do NOT create a new app. Do NOT replace the existing dashboard/sidebar system. Only improve the current chart module.
+
+====================================================
+ADD RIGHT SIDE VERTICAL TOOLBAR
+====================================================
+
+Add a TradingView-style RIGHT SIDE vertical floating toolbar inside the charts section.
+
+Position:
+- fixed on right edge of chart area
+- vertically centered
+- glassmorphism dark UI
+- rounded corners
+- neon green active state
+- smooth hover animations
+
+Toolbar icons:
+1. Watchlist
+2. Alerts
+3. Object Tree
+4. Layout Manager
+
+Toolbar must:
+- collapse properly on small screens
+- tablet responsive
+- smooth transitions
+- no lag
+
+====================================================
+1. WATCHLIST PANEL
+====================================================
+
+When Watchlist icon clicked:
+- slide popup panel from RIGHT side
+- smooth animation
+- professional TradingView-style watchlist
+
+Panel contents:
+- only Symbol Name
+- Current Price
+- % Change
+
+Need:
+- clean compact rows
+- real-time updating prices
+- click symbol = instantly switch chart symbol
+
+Top section:
+- search bar
+- + Add Symbol button
+
+====================================================
+ADD SYMBOL SYSTEM
+====================================================
+
+When + button clicked:
+open FULL professional symbol browser popup.
+
+Data sources:
+- Bybit WebSocket
+- FusionMarkets cTrader API
+
+Need ALL supported symbols grouped folder-wise:
+
+Folders:
+- Forex
+- Indices
+- Commodities
+- Crypto
+
+Features:
+- expandable folders
+- instant search
+- symbol filtering
+- broker badges
+- favorites/star option
+- add/remove watchlist
+
+Need:
+- virtualized rendering for performance
+- smooth scrolling
+- fast searching
+- websocket live updates
+
+====================================================
+2. LAYOUT MANAGER PANEL
+====================================================
+
+When Layout icon clicked:
+open RIGHT slide popup.
+
+Inside:
+- icon based layout selector
+
+Layouts:
+- 1 Chart
+- 2 Charts
+- 3 Charts
+- 4 Charts
+
+Behavior:
+- instantly rearrange charts
+- responsive grid layout
+- synchronized crosshair optional
+- synchronized timeframe optional
+- synchronized symbol optional
+
+Need:
+- draggable resizable panels
+- smooth resize animation
+- save layout locally
+- restore previous layout on refresh
+
+====================================================
+3. ALERTS ICON
+====================================================
+
+Add Alerts icon only for now.
+
+Need:
+- notification badge support
+- hover tooltip
+- future expandable architecture
+
+No popup needed currently.
+
+====================================================
+4. OBJECT TREE PANEL
+====================================================
+
+When Object Tree icon clicked:
+open RIGHT slide popup.
+
+Need TradingView-style object manager.
+
+Sections:
+- Trendlines
+- Rays
+- Rectangles
+- Text
+- Indicators
+- Fibonacci tools
+
+Each object row must support:
+- visibility toggle
+- lock/unlock
+- rename
+- delete
+- multi-select
+- object count
+
+Need:
+- grouped by object type
+- collapsible sections
+- live selection sync with chart
+- clicking object focuses chart object
+- deleting removes permanently
+- refresh should NOT restore deleted objects
+
+====================================================
+DRAWING PERSISTENCE FIX
+====================================================
+
+Current issue:
+Deleted drawings return after refresh.
+
+Fix permanently.
+
+Need:
+- persistent object storage
+- proper object IDs
+- delete means fully remove from storage
+- autosave drawing state
+- local storage or indexedDB sync
+- no ghost redraws
+
+====================================================
+PERFORMANCE REQUIREMENTS
+====================================================
+
+Need:
+- 60fps interactions
+- lightweight rendering
+- optimized websocket updates
+- debounced search
+- memoized components
+- lazy loaded side panels
+- zero UI freezing
+
+====================================================
+UI STYLE
+====================================================
+
+Use:
+- TradingView-inspired professional UI
+- dark black background
+- subtle gradients
+- neon green highlights
+- glassmorphism panels
+- soft shadows
+- clean typography
+- premium trading terminal feel
+
+IMPORTANT:
+Do NOT break existing chart functionality.
+Only enhance the current charts system professionally.

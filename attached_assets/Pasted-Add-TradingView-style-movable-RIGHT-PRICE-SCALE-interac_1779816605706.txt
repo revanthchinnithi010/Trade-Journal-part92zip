@@ -1,0 +1,109 @@
+Add TradingView-style movable RIGHT PRICE SCALE interaction to the charts section.
+
+====================================================
+FEATURE REQUIRED
+====================================================
+
+User must be able to DRAG/MOVE the right-side price scale vertically (up/down interaction).
+
+Current issue:
+- price scale is static/fixed
+- cannot reposition or scroll smoothly like professional trading platforms
+
+Need:
+- TradingView-style movable price scale behavior
+
+====================================================
+REQUIRED BEHAVIOR
+====================================================
+
+When user:
+- touches
+OR
+- clicks + drags vertically
+on the RIGHT PRICE SCALE area
+
+Then:
+- chart price range should smoothly scale/move
+- candles resize dynamically
+- visible price range changes interactively
+
+Need:
+- buttery smooth movement
+- inertia feeling
+- no lag
+- real-time re-render
+
+====================================================
+INTERACTIONS
+====================================================
+
+1. DRAG PRICE SCALE
+- vertical drag changes visible price range
+- smooth zoom/stretch effect
+
+2. MOUSE WHEEL / TOUCHPAD
+- zoom chart vertically from price scale
+
+3. DOUBLE CLICK PRICE SCALE
+- auto fit content
+- reset scale
+
+4. PINCH GESTURE (tablet/mobile)
+- vertical pinch zoom support
+
+====================================================
+LIGHTWEIGHT-CHARTS CONFIG
+====================================================
+
+Enable proper:
+- priceScale interaction
+- scaleMargins
+- autoScale
+- handleScale
+- kinetic scroll behavior
+
+Need custom handling if lightweight-charts default behavior is limited.
+
+====================================================
+PRICE SCALE UI IMPROVEMENTS
+====================================================
+
+Need:
+- smoother font rendering
+- clean TradingView-style labels
+- responsive scaling
+- no overlap with right toolbar
+- proper padding
+
+Price scale must:
+- remain fully visible
+- resize dynamically
+- support high precision values
+
+====================================================
+PERFORMANCE
+====================================================
+
+Need:
+- 60fps interaction
+- no flicker
+- no candle distortion
+- optimized rerendering
+- requestAnimationFrame usage if needed
+
+====================================================
+IMPORTANT
+====================================================
+
+Do NOT fake movement using CSS transforms.
+
+Need REAL interactive chart scaling behavior tied to the chart engine itself.
+
+Do NOT break:
+- candlestick rendering
+- drawings
+- crosshair
+- object tree
+- layouts
+- websocket updates

@@ -1,0 +1,107 @@
+The chart is STILL lagging during drag/pan on mobile.
+
+At this point I need REAL frame-time profiling and low-level rendering optimization.
+
+Do NOT do more React memoization.
+Do NOT explain theory.
+Actually measure and eliminate frame drops.
+
+MANDATORY TASKS:
+
+1. ADD REAL PERFORMANCE PROFILING
+Instrument:
+- FPS meter
+- frame time
+- long task detection
+- RAF duration
+- paint duration
+- scripting duration
+
+Log:
+- worst frame spikes
+- average frame time during drag
+- what function blocks the main thread
+
+2. IDENTIFY EXACT BOTTLENECK
+Use Chrome Performance profiling logic and locate:
+- expensive event handlers
+- expensive redraws
+- expensive canvas paints
+- expensive layout recalculations
+- expensive React commits
+- expensive hit-testing
+- expensive coordinate transforms
+
+3. DISABLE ALL NONESSENTIAL FEATURES TEMPORARILY
+Create a PURE PAN TEST MODE.
+
+Disable:
+- drawings
+- indicators
+- shadows
+- gradients
+- glow
+- hit testing
+- snapping
+- crosshair labels
+- autoscale
+- volume
+- animations
+
+Then test drag smoothness.
+
+4. IF PURE MODE IS SMOOTH:
+Gradually re-enable systems one-by-one and identify the exact lag source.
+
+5. CANVAS OPTIMIZATION
+Use:
+- OffscreenCanvas if supported
+- layered canvases
+- dirty rectangle rendering
+- partial redraws only
+- avoid full-screen clears
+
+6. NO FULL REDRAWS
+During pan:
+- transform existing bitmap layer
+- redraw only newly exposed candle regions
+
+Like TradingView.
+
+7. CANDLE RENDERING OPTIMIZATION
+- batch candle drawing
+- avoid per-candle save/restore
+- avoid repeated path creation
+- reduce stroke operations
+- reduce alpha blending
+- avoid shadowBlur
+
+8. MOBILE GPU FIXES
+Apply:
+transform: translateZ(0);
+will-change: transform;
+contain: strict;
+touch-action: none;
+overscroll-behavior: none;
+
+9. REMOVE ALL MAIN-THREAD BLOCKERS
+Audit:
+- JSON parsing
+- websocket parsing
+- Zustand subscriptions
+- array cloning
+- object spreading
+- deep equality checks
+- map/filter during drag
+
+10. TARGET
+Dragging must remain:
+- stable 60fps
+- no sticky movement
+- no delayed response
+- no jitter
+- no frame hitching
+
+IMPORTANT:
+I want REAL measured bottlenecks and REAL rendering fixes.
+Not theoretical React cleanup.

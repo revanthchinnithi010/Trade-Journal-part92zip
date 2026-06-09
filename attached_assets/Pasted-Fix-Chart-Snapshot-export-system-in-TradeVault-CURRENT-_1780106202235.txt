@@ -1,0 +1,154 @@
+Fix Chart Snapshot export system in TradeVault.
+
+CURRENT PROBLEM:
+Downloaded snapshot image only contains candles/chart.
+
+Missing:
+- drawings
+- indicators
+- symbol floating card
+- price scale
+- time scale
+- overlays
+- watermark
+- UI chart layers
+
+==================================================
+GOAL
+==================================================
+
+Export EXACT visible chart area like TradingView snapshot.
+
+The downloaded image must include:
+
+✅ Candles
+✅ Grid
+✅ Drawings
+✅ Trendlines
+✅ Long/Short positions
+✅ Indicators
+✅ Symbol floating card
+✅ Price scale
+✅ Date/time scale
+✅ Current price label
+✅ Crosshair (if visible)
+✅ Watermark/logo
+✅ Drawing anchors
+✅ Indicator overlays
+
+==================================================
+ROOT ISSUE
+==================================================
+
+Current export captures only chart canvas layer.
+
+Need to capture COMPLETE chart container instead.
+
+==================================================
+FIX IMPLEMENTATION
+==================================================
+
+1. Wrap complete chart UI inside single export container:
+
+Example:
+<div id="chart-export-container">
+
+Include:
+- TradingView chart canvas
+- overlays
+- drawings layer
+- indicator layer
+- floating symbol widget
+- price scale
+- time scale
+- right sidebar overlays if needed
+
+2. Use:
+html2canvas()
+
+OR
+
+dom-to-image-more
+
+to capture FULL DOM.
+
+==================================================
+IMPORTANT SETTINGS
+==================================================
+
+html2canvas settings:
+
+{
+  backgroundColor: null,
+  useCORS: true,
+  allowTaint: true,
+  scale: 2,
+  logging: false
+}
+
+==================================================
+EXPORT QUALITY
+==================================================
+
+Export:
+- Full HD
+- 1080p minimum
+- Retina quality
+- No blur
+- High sharpness text
+
+==================================================
+DO NOT HIDE
+==================================================
+
+Do NOT hide during snapshot:
+- scales
+- floating symbol
+- drawings
+- indicators
+- overlays
+
+==================================================
+CAPTURE TARGET
+==================================================
+
+Capture ONLY:
+main chart viewport
+
+Do NOT capture:
+- browser UI
+- app sidebar
+- popup dialogs
+- outside blur overlay
+
+==================================================
+EXPECTED RESULT
+==================================================
+
+Downloaded image should look EXACTLY SAME as visible chart screen.
+
+What user sees =
+What exported PNG contains.
+
+Like TradingView professional snapshot system.
+
+==================================================
+BONUS
+==================================================
+
+Add:
+- "Copied to clipboard"
+- "Downloaded successfully"
+
+toast notifications.
+
+==================================================
+PERFORMANCE
+==================================================
+
+Snapshot generation must:
+- work instantly
+- not freeze app
+- support Android tablets
+- support touch devices
+- support large drawings

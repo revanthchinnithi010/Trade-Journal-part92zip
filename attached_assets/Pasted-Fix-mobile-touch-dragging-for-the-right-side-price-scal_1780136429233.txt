@@ -1,0 +1,103 @@
+Fix mobile touch dragging for the right-side price scale exactly like TradingView mobile/web.
+
+CURRENT ISSUE:
+- Mouse drag on price scale works
+- Finger touch drag does NOT work
+- Chart container intercepts touch events
+- Touch scrolling conflicts with scale dragging
+
+IMPLEMENT THESE FIXES:
+
+1. PRICE SCALE TOUCH SUPPORT
+- Enable vertical touch drag on right price scale
+- User should be able to:
+  - touch price scale
+  - drag up/down
+  - scale chart vertically smoothly
+
+2. POINTER EVENTS
+Use unified pointer event system:
+- pointerdown
+- pointermove
+- pointerup
+
+Remove separate mouse/touch logic.
+
+3. DISABLE PASSIVE TOUCH FOR SCALE
+Use:
+{ passive: false }
+
+for:
+- touchstart
+- touchmove
+
+so preventDefault works properly.
+
+4. PREVENT CHART INTERCEPTION
+When touching inside price scale:
+- stop chart pan
+- stop chart scroll
+- stop crosshair move
+
+Price scale must take full control.
+
+5. PRICE SCALE HITBOX
+Increase touch area:
+- visual width can stay same
+- actual touch hitbox = 48px minimum
+
+Add invisible touch padding.
+
+6. TOUCH ACTION
+For price scale:
+touch-action: none;
+
+For chart:
+touch-action: pan-x pan-y;
+
+7. SCALE ENGINE
+While dragging:
+- update visible price range dynamically
+- maintain center anchor
+- ultra smooth rendering
+
+Use requestAnimationFrame updates.
+
+8. PERFORMANCE
+- no React rerenders during drag
+- use refs instead of state
+- use translate3d where possible
+- throttle to animation frame
+
+9. MOBILE OPTIMIZATION
+Android tablet optimized:
+- no lag
+- no accidental scrolling
+- no touch delay
+- instant response
+
+10. FIX OVERLAY BLOCKING
+All floating overlays:
+- symbol box
+- toolbar
+- drawings
+- indicators
+
+must NOT block price scale touches.
+
+Use:
+pointer-events: none;
+
+where needed.
+
+11. TRADINGVIEW-LIKE BEHAVIOR
+Exact expected behavior:
+- touch and drag price scale vertically
+- candles resize live
+- drawings move with chart scale
+- no jitter
+- no snapping
+
+12. DEBUG
+Log which element captures touch events on scale drag.
+Remove any conflicting event listeners.

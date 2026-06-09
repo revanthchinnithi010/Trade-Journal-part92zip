@@ -1,0 +1,111 @@
+Add GLOBAL DRAWING STYLE MEMORY system like TradingView.
+
+CURRENT ISSUE:
+If user changes first trendline color to blue,
+next newly created trendline still uses default green.
+
+I want:
+✅ every new drawing automatically use last used style
+✅ exactly like TradingView
+✅ persistent after refresh
+✅ works for ALL drawing tools
+
+==================================================
+REQUIRED BEHAVIOR
+==================================================
+
+Example:
+
+1. User draws trendline
+2. User changes:
+   - color = blue
+   - width = 3
+   - style = solid
+
+3. Save automatically as LAST USED STYLE
+
+4. When user creates NEW trendline:
+   ✅ auto apply blue
+   ✅ auto apply width 3
+   ✅ auto apply solid style
+
+NO manual recoloring again.
+
+==================================================
+SAVE SETTINGS FOR EACH TOOL TYPE
+==================================================
+
+Store separately:
+
+trendline
+ray
+horizontal line
+rectangle
+fib
+brush
+text
+arrow
+circle
+path
+parallel channel
+etc
+
+Each tool remembers:
+- color
+- width
+- opacity
+- line style
+- text size
+- font
+- fill color
+
+==================================================
+LOCAL STORAGE
+==================================================
+
+Use persistent storage:
+
+localStorage.setItem(
+  "drawingStyle_trendline",
+  JSON.stringify(style)
+)
+
+Load automatically when creating new drawing.
+
+==================================================
+FUNCTION LOGIC
+==================================================
+
+When drawing modified:
+
+saveDrawingStyle(toolType, style)
+
+When creating new drawing:
+
+const savedStyle = loadDrawingStyle(toolType)
+
+if(savedStyle){
+   applyStyle(savedStyle)
+}
+
+==================================================
+IMPORTANT
+==================================================
+
+DO NOT:
+❌ reset styles after refresh
+❌ apply one tool style to all tools
+❌ lose styles after reopen
+❌ override manually edited drawing
+
+==================================================
+FINAL RESULT
+==================================================
+
+Exactly TradingView behavior:
+
+✅ First trendline changed to blue
+✅ Every next trendline automatically blue
+✅ Saved permanently
+✅ Professional UX
+✅ Fast workflow

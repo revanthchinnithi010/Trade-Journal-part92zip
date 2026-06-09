@@ -1,0 +1,213 @@
+CRITICAL ARCHITECTURE REBUILD REQUIRED
+
+Current popup system is fundamentally broken.
+Small fixes are NOT enough.
+
+Need complete TradingView-style popup/modal architecture rebuild.
+
+==================================================
+MAIN PROBLEM
+==================================================
+
+Current issues:
+
+❌ color picker closes randomly
+❌ settings popup goes back
+❌ state resets
+❌ rerender storms
+❌ outside click conflicts
+❌ nested modal instability
+❌ toolbar flickering
+❌ popup layering broken
+❌ repeated regressions after fixes
+
+Need FULL stable popup framework.
+
+==================================================
+1. SINGLE GLOBAL POPUP MANAGER
+==================================================
+
+Create ONE centralized popup manager.
+
+Example:
+
+PopupManagerContext
+
+Manage ALL:
+- color picker
+- drawing settings
+- floating toolbar
+- watchlist
+- alerts
+- object tree
+- layouts
+
+from ONE source.
+
+NO local popup states scattered everywhere.
+
+==================================================
+2. PORTAL-BASED RENDERING
+==================================================
+
+Render ALL popups using:
+
+ReactDOM.createPortal()
+
+Mount into:
+
+document.body
+
+NOT inside chart containers.
+
+==================================================
+3. Z-INDEX SYSTEM
+==================================================
+
+Create strict layering:
+
+Chart = z-index 1
+Toolbar = 100
+Floating widgets = 200
+Settings panels = 500
+Color picker = 1000
+Modal overlay = 2000
+
+Prevent stacking conflicts.
+
+==================================================
+4. OUTSIDE CLICK SYSTEM REBUILD
+==================================================
+
+Current outside click logic broken.
+
+Implement ONE global outside click handler.
+
+RULE:
+Close ONLY if click target is outside ALL active popup refs.
+
+Use:
+popupRefs registry system.
+
+==================================================
+5. PREVENT RERENDER STORMS
+==================================================
+
+Current React rerenders destroy popup state.
+
+Need:
+
+✅ React.memo
+✅ useMemo
+✅ useCallback
+✅ stable refs
+✅ isolated popup rendering
+
+Chart redraw must NEVER rerender popups.
+
+==================================================
+6. KEEP POPUPS MOUNTED
+==================================================
+
+DO NOT:
+mount/unmount repeatedly.
+
+BAD:
+{open && <Popup />}
+
+Use:
+visibility + opacity toggles.
+
+Keep components mounted permanently.
+
+==================================================
+7. COLOR PICKER REBUILD
+==================================================
+
+Need TradingView-level stable picker.
+
+Features:
+✅ no auto close
+✅ no revert
+✅ no background popup
+✅ no flicker
+✅ no state reset
+✅ smooth touch support
+
+Use:
+temporary preview state
+final commit on OK.
+
+==================================================
+8. DRAWING TOOLBAR STABILITY
+==================================================
+
+Floating toolbar must:
+
+✅ stay fixed
+✅ draggable
+✅ no flicker
+✅ no rerender
+✅ no jumping
+
+Render in isolated layer.
+
+==================================================
+9. TABLET TOUCH FIX
+==================================================
+
+Current touch system conflicting.
+
+Need:
+pointer events only.
+
+Use:
+pointerdown
+pointermove
+pointerup
+
+Remove mixed:
+touchstart + click chaos.
+
+==================================================
+10. GLOBAL EVENT CLEANUP
+==================================================
+
+Remove duplicate:
+document listeners.
+
+Centralize:
+- escape key
+- outside click
+- blur handling
+
+==================================================
+11. STATE MANAGEMENT
+==================================================
+
+Use Zustand OR Context store.
+
+Separate:
+
+UI state
+drawing state
+popup state
+chart state
+
+Avoid prop drilling.
+
+==================================================
+12. FINAL TARGET
+==================================================
+
+Need FULL TradingView-style stability.
+
+FINAL RESULT:
+✅ no popup regressions
+✅ no auto close
+✅ no random back navigation
+✅ no flickering
+✅ stable modals
+✅ stable floating widgets
+✅ smooth tablet UX
+✅ production-grade architecture

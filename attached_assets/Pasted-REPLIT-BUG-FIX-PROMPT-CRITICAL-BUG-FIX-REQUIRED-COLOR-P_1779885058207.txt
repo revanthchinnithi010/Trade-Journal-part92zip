@@ -1,0 +1,107 @@
+REPLIT BUG FIX PROMPT
+
+CRITICAL BUG FIX REQUIRED — COLOR PICKER / PALETTE CLICK ISSUE
+
+Problem:
+Whenever user clicks inside the color palette popup (palette colors, hue slider, opacity slider, hex input, OK button, or color area), the popup instantly closes and goes back/unselects.
+
+This happens because:
+- outside click handler
+- pointerdown listener
+- blur event
+- chart background click event
+- selection cleanup logic
+are incorrectly firing while interacting inside the popup.
+
+Fix this permanently.
+
+====================================================
+
+REQUIRED FIXES:
+
+1. NEVER CLOSE POPUP WHEN CLICKING INSIDE IT
+- Clicking ANYTHING inside color popup must NOT close it.
+- Keep popup open while:
+  - selecting palette colors
+  - dragging hue slider
+  - dragging opacity slider
+  - typing hex
+  - clicking OK
+  - clicking color preview
+  - moving mouse/finger inside popup
+
+2. STOP EVENT PROPAGATION
+Add:
+
+e.stopPropagation()
+e.preventDefault()
+
+for:
+- pointerdown
+- mousedown
+- touchstart
+- click
+
+inside:
+- color popup container
+- hue slider
+- opacity slider
+- palette area
+- input fields
+- buttons
+
+3. IGNORE OUTSIDE CLICK DETECTION FOR POPUP CHILDREN
+
+Use:
+popupRef.current.contains(event.target)
+
+If click is inside popup:
+RETURN immediately.
+
+Do NOT run:
+- deselect drawing
+- close popup
+- clear selection
+- hide toolbar
+
+4. FIX MOBILE TOUCH EVENTS
+Tablet touch events are triggering chart background clicks.
+
+Use:
+pointer-events: auto;
+
+for popup.
+
+Prevent touch bubbling.
+
+5. REMOVE AUTO BLUR CLOSE
+Do NOT close popup on:
+- input blur
+- focus loss
+- slider drag
+- touchmove
+
+Close ONLY when:
+- user presses X button
+OR
+- user clicks fully outside popup and outside toolbar
+
+6. DRAGGING SLIDERS MUST BE SMOOTH
+While dragging:
+- popup must stay stable
+- no flicker
+- no rerender
+- no unmount/remount
+
+Use:
+requestAnimationFrame()
+
+for color updates.
+
+7. KEEP DRAWING SELECTED
+While popup open:
+- drawing tool must remain selected
+- toolbar must remain visible
+- control panel must remain visible
+
+8. FIX REACT RE-RENDER ISSUE

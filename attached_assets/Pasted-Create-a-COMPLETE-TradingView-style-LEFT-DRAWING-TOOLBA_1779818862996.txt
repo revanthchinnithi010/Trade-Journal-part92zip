@@ -1,0 +1,300 @@
+Create a COMPLETE TradingView-style LEFT DRAWING TOOLBAR for the Charts page.
+
+IMPORTANT:
+This must look and behave almost identical to TradingView mobile/web toolbar.
+
+========================================================
+MAIN REQUIREMENT
+========================================================
+
+Build a PROFESSIONAL LEFT VERTICAL DRAWING PANEL.
+
+Need:
+✅ same placement
+✅ same icon structure
+✅ same spacing
+✅ same popup behavior
+✅ same categories
+✅ same interaction style
+✅ dark theme
+✅ smooth animations
+✅ touch optimized
+✅ floating popup menus
+✅ favorites support
+✅ active tool highlighting
+
+Current toolbar is too basic.
+Need professional TradingView-level toolbar system.
+
+========================================================
+LEFT TOOLBAR DESIGN
+========================================================
+
+Position:
+- left side of chart
+- floating vertical toolbar
+- dark glassmorphism background
+- rounded corners
+- blur effect
+- neon green active state
+
+Toolbar width:
+~52px
+
+Toolbar height:
+dynamic
+
+Need:
+- icon buttons vertically stacked
+- separators between sections
+- hover effect
+- active effect
+- touch ripple
+
+========================================================
+TOOLS ORDER
+========================================================
+
+Use SAME ORDER as TradingView:
+
+1. Crosshair / Cursor
+2. Trend Line tools
+3. Fib tools
+4. Forecasting tools
+5. Brush tools
+6. Text tools
+7. Emoji/Icon tools
+8. Measure tools
+9. Zoom tools
+10. Magnet
+11. Stay in drawing mode
+12. Lock drawings
+13. Hide drawings
+14. Remove drawings
+
+========================================================
+POPUP MENU SYSTEM
+========================================================
+
+When user clicks an icon category:
+- open floating popup menu beside toolbar
+- dark TradingView-style panel
+- smooth slide animation
+- auto close on outside click
+- touch friendly
+
+Popup style:
+- background: #111111
+- border: subtle gray
+- rounded: 14px
+- shadow: strong blur shadow
+- scrollable
+- max height: 80vh
+
+========================================================
+TREND LINE TOOLS MENU
+========================================================
+
+Add EXACT category structure:
+
+LINES
+- Trendline
+- Ray
+- Info line
+- Extended line
+- Trend angle
+- Horizontal line
+- Horizontal ray
+- Vertical line
+- Cross line
+
+CHANNELS
+- Parallel channel
+- Regression trend
+- Flat top/bottom
+- Disjoint channel
+
+PITCHFORKS
+- Pitchfork
+
+Need:
+- icons
+- names
+- favorite star button
+- active tool highlight
+
+========================================================
+TEXT TOOLS MENU
+========================================================
+
+TEXT AND NOTES
+- Text
+- Note
+- Price note
+- Pin
+- Table
+- Callout
+- Comment
+- Price label
+- Signpost
+- Flag mark
+
+CONTENT
+- Image
+- Post
+- Idea
+
+========================================================
+BRUSH / SHAPES MENU
+========================================================
+
+BRUSHES
+- Brush
+- Highlighter
+
+ARROWS
+- Arrow marker
+- Arrow
+- Arrow mark up
+- Arrow mark down
+
+SHAPES
+- Rectangle
+- Rotated rectangle
+- Path
+- Circle
+- Ellipse
+- Polyline
+- Triangle
+- Arc
+
+========================================================
+FORECASTING MENU
+========================================================
+
+FORECASTING
+- Long position
+- Short position
+- Position forecast
+- Bar pattern
+- Ghost feed
+- Sector
+
+VOLUME BASED
+- Anchored VWAP
+- Fixed range volume profile
+- Anchored volume profile
+
+MEASURERS
+- Price range
+- Date range
+- Date and price range
+
+========================================================
+FIBONACCI MENU
+========================================================
+
+FIBONACCI
+- Fib retracement
+- Trend-based fib extension
+- Fib channel
+- Fib time zone
+- Fib speed resistance fan
+- Trend-based fib time
+- Fib circles
+- Fib spiral
+- Fib speed resistance arcs
+- Fib wedge
+- Pitchfan
+
+GANN
+- Gann box
+- Gann square fixed
+- Gann square
+- Gann fan
+
+========================================================
+INTERACTION SYSTEM
+========================================================
+
+Need:
+✅ click tool → activate drawing mode
+✅ active tool glow
+✅ cursor changes
+✅ drawing stays active if "lock mode" enabled
+✅ ESC cancels drawing
+✅ mobile touch support
+✅ drag smoothness
+✅ object creation on chart
+
+========================================================
+DRAWING ENGINE
+========================================================
+
+Implement:
+- Trendline
+- Ray
+- Horizontal line
+- Rectangle
+- Text
+- Brush
+- Fib retracement
+
+Need:
+- draggable anchors
+- editable points
+- delete support
+- lock support
+- object tree support
+
+========================================================
+FAVORITES SYSTEM
+========================================================
+
+Star icon beside each tool.
+
+When starred:
+- save in localStorage
+- show in quick access mini toolbar
+
+========================================================
+TOUCH OPTIMIZATION
+========================================================
+
+Need:
+- tablet optimized
+- large touch targets
+- no accidental clicks
+- smooth scrolling popup
+- responsive menus
+
+========================================================
+ANIMATIONS
+========================================================
+
+Need:
+- smooth popup open animation
+- fade + slide
+- no lag
+- GPU accelerated transforms
+
+========================================================
+IMPORTANT
+========================================================
+
+Do NOT create placeholder UI.
+
+Need REAL WORKING:
+- popup menus
+- drawing tools
+- interactions
+- object creation
+- state management
+
+Toolbar should feel:
+✅ professional
+✅ stable
+✅ TradingView inspired
+✅ production quality
+✅ responsive
+✅ smooth

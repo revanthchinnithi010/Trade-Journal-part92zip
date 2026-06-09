@@ -1,0 +1,187 @@
+Build the following major upgrades into TradeVault.
+
+==================================================
+1. TELEGRAM BOT CONFIG UI (NO ENV ONLY)
+==================================================
+
+Right now Telegram works only with environment variables.
+
+I want users to connect Telegram directly from the UI.
+
+In Alerts Center:
+
+Create input fields:
+- Bot Token
+- Chat ID
+
+Add buttons:
+- Connect Telegram
+- Test Message
+- Disconnect
+
+==================================================
+TELEGRAM FEATURES
+==================================================
+
+1. Save token/chatId securely in database/local storage
+2. Auto reconnect after refresh
+3. Show status:
+   - Connected
+   - Invalid token
+   - Message failed
+   - Sending...
+4. Send test message instantly
+5. Alerts must send automatically to Telegram
+6. Repeat alert every 2 mins while condition remains true
+7. Trigger message format:
+
+🚨 ALERT TRIGGERED
+Symbol: BTCUSD
+Type: Trendline Break
+Price: 104532
+Time: 10:42:15 PM
+Provider: Delta Exchange
+
+==================================================
+2. WATCHLIST SYMBOL MANAGEMENT
+==================================================
+
+Inside Charts section watchlist:
+
+Add:
++ Add Symbol button
+
+User must be able to:
+- add symbols
+- remove symbols
+- search symbols
+- pin favorites
+
+==================================================
+SUPPORTED PROVIDERS ONLY
+==================================================
+
+Forex/Indices/Commodities:
+→ OANDA/Finnhub only
+
+Crypto:
+→ Delta Exchange only
+
+==================================================
+SYMBOL EXAMPLES
+==================================================
+
+Forex:
+- EURUSD
+- GBPJPY
+
+Indices:
+- NAS100
+- US30
+
+Commodities:
+- XAUUSD
+- USOIL
+- UKOIL
+
+Crypto:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+==================================================
+3. GLOBAL WATCHLIST SYNC
+==================================================
+
+VERY IMPORTANT:
+
+Any symbol added in Charts Watchlist must automatically appear everywhere:
+
+1. Dashboard Live Symbols
+2. Alerts Center
+3. Calculator dropdowns
+4. TradingView quick switch
+5. Live feed subscriptions
+6. WebSocket subscriptions
+7. Search bar suggestions
+
+Everything must stay synchronized globally.
+
+==================================================
+4. LIVE PRICE STREAMING FOR ALL WATCHLIST SYMBOLS
+==================================================
+
+Every watchlist symbol must show:
+
+- live price
+- percentage change
+- provider badge
+- connection status
+- last tick time
+- sparkline mini chart
+- tick counter
+
+==================================================
+REAL-TIME REQUIREMENTS
+==================================================
+
+1. Tick-by-tick updates
+2. No manual refresh
+3. Shared websocket manager globally
+4. Auto subscribe when symbol added
+5. Auto unsubscribe when removed
+6. Reconnect automatically if disconnected
+7. Real-time updates across all pages instantly
+
+==================================================
+5. DASHBOARD LIVE SYMBOLS PANEL
+==================================================
+
+Dashboard live symbol cards must:
+
+- auto populate from watchlist
+- update continuously
+- animate on price change
+- green flash for up
+- red flash for down
+- show streaming badge
+- show provider source
+
+==================================================
+6. ALERTS CENTER INTEGRATION
+==================================================
+
+Alerts Center must automatically use watchlist symbols.
+
+When symbol added:
+- alerts can be created instantly
+- provider selected automatically
+- websocket starts automatically
+
+==================================================
+7. DATABASE + STATE MANAGEMENT
+==================================================
+
+Create centralized global store for:
+- watchlist
+- live prices
+- websocket state
+- telegram config
+- active subscriptions
+
+Persist all data.
+
+==================================================
+FINAL GOAL
+==================================================
+
+TradeVault should behave like a professional trading terminal:
+
+- one synchronized watchlist
+- real-time live data everywhere
+- Telegram alerts connected from UI
+- automatic websocket subscriptions
+- instant updates across entire app
+- smooth tablet optimized experience

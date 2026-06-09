@@ -1,0 +1,959 @@
+import { useState, useMemo } from "react";
+import {
+  useListTrades,
+  useCreateTrade,
+  useDeleteTrade,
+  getListTradesQueryKey
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { formatCurrency } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Search, Plus, Trash2, Eye, ExternalLink, ImageIcon, TrendingUp,
+  X, ChevronDown, Tag, AlertTriangle, FileText, Link as LinkIcon
+} from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { motion, AnimatePresence, type Variants } from "framer-motion";
+import {
+  BROKER_MAP,
+  ALL_SYMBOLS,
+  SETUP_TAG_OPTIONS,
+  MISTAKE_TAG_OPTIONS,
+  TV_LINKS
+} from "@/data/sampleData";
+
+const tradeSchema = z.object({
+  symbol: z.string().min(1, "Symbol is required"),
+  side: z.enum(["long", "short"]),
+  entryPrice: z.coerce.number().min(0),
+  exitPrice: z.coerce.number().min(0),
+  quantity: z.coerce.number().min(1),
+  stopLoss: z.coerce.number().optional().nullable(),
+  takeProfit: z.coerce.number().optional().nullable(),
+  entryDate: z.string().min(1, "Entry date is required"),
+  exitDate: z.string().min(1, "Exit date is required"),
+  tvLink: z.string().optional().nullable(),
+  screenshot: z.string().optional().nullable(),
+  setupTags: z.string().optional().nullable(),
+  mistakeTags: z.string().optional().nullable(),
+  notes: z.string().optional().nullable(),
+});
+
+type TradeFormValues = z.infer<typeof tradeSchema>;
+
+type ModalTab = "details" | "analysis";
+
+function MultiSelectChips({
+  options,
+  value,
+  onChange,
+  activeClass = "bg-primary/20 text-primary border-primary/35",
+  inactiveClass = "bg-white/[0.04] border-white/[0.08] text-muted-foreground hover:text-white hover:bg-white/[0.08]"
+}: {
+  options: string[];
+  value: string;
+  onChange: (val: string) => void;
+  activeClass?: string;
+  inactiveClass?: string;
+}) {
+  const selected = value ? value.split(",").filter(Boolean) : [];
+  const toggle = (opt: string) => {
+    if (selected.includes(opt)) onChange(selected.filter(s => s !== opt).join(","));
+    else onChange([...selected, opt].join(","));
+  };
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(opt => {
+        const isSelected = selected.includes(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => toggle(opt)}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-all duration-150 ${isSelected ? activeClass : inactiveClass}`}
+          >
+            {opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function FilterPill({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+        active
+          ? "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
+          : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+const modalOverlayVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { duration: 0.2 } },
+  exit: { opacity: 0, transition: { duration: 0.18 } },
+};
+
+const modalContentVariants: Variants = {
+  hidden: { opacity: 0, scale: 0.94, y: 24 },
+  show: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.28, ease: [0.22, 0.8, 0.36, 1] as [number, number, number, number] } },
+  exit: { opacity: 0, scale: 0.96, y: 16, transition: { duration: 0.18, ease: "easeIn" } },
+};
+
+export default function Trades() {
+  const [page, setPage] = useState(1);
+  const [symbolFilter, setSymbolFilter] = useState("");
+  const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
+  const [sideFilter, setSideFilter] = useState<string>("all");
+  const [brokerFilter, setBrokerFilter] = useState<string>("all");
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTab, setModalTab] = useState<ModalTab>("details");
+  const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
+
+  const queryClient = useQueryClient();
+
+  const { data: tradesResponse } = useListTrades({
+    page,
+    limit: 20,
+    symbol: symbolFilter || undefined,
+    outcome: outcomeFilter !== "all" ? (outcomeFilter as "win" | "loss" | "breakeven") : undefined,
+  });
+
+  const createTrade = useCreateTrade({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTradesQueryKey() });
+        setIsModalOpen(false);
+        setModalTab("details");
+        form.reset();
+      }
+    }
+  });
+
+  const deleteTrade = useDeleteTrade({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTradesQueryKey() });
+        setSelectedTradeId(null);
+      }
+    }
+  });
+
+  const form = useForm<TradeFormValues>({
+    resolver: zodResolver(tradeSchema),
+    defaultValues: {
+      symbol: "NAS100",
+      side: "long",
+      entryPrice: 0,
+      exitPrice: 0,
+      quantity: 1,
+      entryDate: new Date().toISOString().slice(0, 16),
+      exitDate: new Date().toISOString().slice(0, 16),
+      tvLink: "",
+      screenshot: "",
+      setupTags: "",
+      mistakeTags: "",
+      notes: "",
+    }
+  });
+
+  const watchedSymbol = form.watch("symbol");
+  const watchedSide = form.watch("side");
+  const screenshotUrl = form.watch("screenshot");
+  const setupTagsVal = form.watch("setupTags") ?? "";
+  const mistakeTagsVal = form.watch("mistakeTags") ?? "";
+
+  const onSubmit = (data: TradeFormValues) => {
+    createTrade.mutate({ data });
+  };
+
+  const openModal = () => {
+    setModalTab("details");
+    setIsModalOpen(true);
+  };
+
+  const selectedTrade = tradesResponse?.trades.find(t => t.id === selectedTradeId);
+
+  const filteredTrades = useMemo(() => {
+    if (!tradesResponse) return [];
+    return tradesResponse.trades.filter(t => {
+      const broker = BROKER_MAP[t.symbol] || "";
+      return (sideFilter === "all" || t.side === sideFilter) &&
+             (brokerFilter === "all" || broker === brokerFilter);
+    });
+  }, [tradesResponse, sideFilter, brokerFilter]);
+
+  const inputCls = "bg-white/[0.04] border-white/[0.09] rounded-xl h-10 text-[13px] focus:border-primary/50 focus:ring-0 placeholder:text-muted-foreground/50 transition-colors";
+  const labelCls = "text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider";
+
+  return (
+    <div className="space-y-5 pb-12">
+
+      {/* ── Filter Bar ── */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 flex-1">
+          {/* Symbol search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
+            <Input
+              placeholder="Symbol search..."
+              className="pl-8.5 w-44 bg-white/[0.04] border-white/[0.08] rounded-xl h-9 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
+              value={symbolFilter}
+              onChange={(e) => { setSymbolFilter(e.target.value); setPage(1); }}
+            />
+          </div>
+
+          {/* Outcome pills */}
+          <div className="flex items-center gap-1.5">
+            {["all", "win", "loss", "breakeven"].map(v => (
+              <FilterPill
+                key={v}
+                label={v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+                active={outcomeFilter === v}
+                onClick={() => { setOutcomeFilter(v); setPage(1); }}
+              />
+            ))}
+          </div>
+
+          {/* Side pills */}
+          <div className="flex items-center gap-1.5 ml-1">
+            {["all", "long", "short"].map(v => (
+              <FilterPill
+                key={v}
+                label={v === "all" ? "All Sides" : v.charAt(0).toUpperCase() + v.slice(1)}
+                active={sideFilter === v}
+                onClick={() => setSideFilter(v)}
+              />
+            ))}
+          </div>
+
+          {/* Broker pills */}
+          <div className="flex items-center gap-1.5 ml-1">
+            <span className="text-[10px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Broker:</span>
+            {[
+              { value: "all", label: "All" },
+              { value: "Delta Exchange", label: "Delta" },
+              { value: "FusionMarkets", label: "Fusion" },
+              { value: "Groww", label: "Groww" },
+            ].map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setBrokerFilter(value)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+                  brokerFilter === value
+                    ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                    : value === "FusionMarkets" ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                    : value === "Groww" ? "bg-teal-500/15 text-teal-400 border-teal-500/30"
+                    : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
+                    : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={openModal}
+          className="flex items-center gap-2 px-4 h-9 rounded-xl bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-primary/25 shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Log Trade
+        </button>
+      </div>
+
+      {/* ── Table ── */}
+      <div className="glass-card overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead>
+              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
+                {[
+                  { label: "Date", align: "" },
+                  { label: "Symbol", align: "" },
+                  { label: "Broker", align: "" },
+                  { label: "Direction", align: "" },
+                  { label: "Entry", align: "text-right" },
+                  { label: "Exit", align: "text-right" },
+                  { label: "PNL", align: "text-right" },
+                  { label: "RR", align: "" },
+                  { label: "Tags", align: "" },
+                  { label: "", align: "text-right" },
+                ].map((col) => (
+                  <th key={col.label} className={`px-5 py-3.5 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest ${col.align}`}>
+                    {col.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {!tradesResponse ? (
+                <tr>
+                  <td colSpan={10} className="px-5 py-12 text-center">
+                    <div className="space-y-3">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="h-10 rounded-xl shimmer-loading mx-4" />
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredTrades.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-5 py-16 text-center text-muted-foreground text-sm">
+                    No trades match your filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredTrades.map((trade) => {
+                  const broker = BROKER_MAP[trade.symbol] || "—";
+                  const rr = trade.riskRewardRatio || 0;
+                  const setupTags = trade.setupTags ? trade.setupTags.split(",").filter(Boolean) : [];
+
+                  return (
+                    <tr
+                      key={trade.id}
+                      className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group cursor-pointer"
+                      onClick={() => setSelectedTradeId(trade.id)}
+                    >
+                      <td className="px-5 py-3.5 text-[12px] text-muted-foreground whitespace-nowrap">
+                        {new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="font-black text-[13px] text-white tracking-tight">{trade.symbol}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-[12px] text-muted-foreground">{broker}</td>
+                      <td className="px-5 py-3.5">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
+                          trade.side === "long" ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
+                        }`}>
+                          {trade.side.toUpperCase()}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
+                        {trade.entryPrice < 1 ? trade.entryPrice.toFixed(5) : formatCurrency(trade.entryPrice)}
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
+                        {trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : formatCurrency(trade.exitPrice)}
+                      </td>
+                      <td className={`px-5 py-3.5 text-right font-mono font-bold text-[13px] tabular-nums ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {trade.pnl >= 0 ? "+" : ""}{formatCurrency(trade.pnl)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        {rr > 0 ? (
+                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                            rr >= 2 ? "bg-emerald-500/10 text-emerald-400" :
+                            rr >= 1 ? "bg-amber-500/10 text-amber-400" :
+                            "bg-red-500/10 text-red-400"
+                          }`}>
+                            {rr.toFixed(1)}R
+                          </span>
+                        ) : <span className="text-muted-foreground/40 text-sm">—</span>}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex gap-1 flex-wrap">
+                          {setupTags.slice(0, 2).map(tag => (
+                            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">
+                              {tag}
+                            </span>
+                          ))}
+                          {setupTags.length > 2 && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/[0.04] text-muted-foreground border border-white/[0.08]">
+                              +{setupTags.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-white hover:bg-white/[0.07] transition-all"
+                            onClick={() => setSelectedTradeId(trade.id)}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
+                            onClick={() => deleteTrade.mutate({ id: trade.id })}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {tradesResponse && tradesResponse.total > 20 && (
+          <div className="flex items-center justify-between px-5 py-3.5 border-t border-white/[0.05] bg-white/[0.01]">
+            <p className="text-[12px] text-muted-foreground">
+              {(page - 1) * 20 + 1}–{Math.min(page * 20, tradesResponse.total)} of {tradesResponse.total}
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                className="rounded-xl border-white/[0.08] bg-white/[0.03] h-8 text-xs hover:bg-white/[0.07]">
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page * 20 >= tradesResponse.total}
+                className="rounded-xl border-white/[0.08] bg-white/[0.03] h-8 text-xs hover:bg-white/[0.07]">
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Framer Motion Log Trade Modal ── */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            variants={modalOverlayVariants}
+            initial="hidden"
+            animate="show"
+            exit="exit"
+          >
+            {/* Backdrop */}
+            <motion.div
+              className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+              onClick={() => setIsModalOpen(false)}
+            />
+
+            {/* Modal Content */}
+            <motion.div
+              className="glass-modal relative w-full max-w-[680px] max-h-[90vh] flex flex-col z-10"
+              variants={modalContentVariants}
+              initial="hidden"
+              animate="show"
+              exit="exit"
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-white/[0.08]">
+                <div>
+                  <h2 className="text-lg font-black text-white tracking-tight">Log New Trade</h2>
+                  <p className="text-[12px] text-muted-foreground mt-0.5">Record your trade details and analysis</p>
+                </div>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white hover:bg-white/[0.07] transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Tabs */}
+              <div className="flex gap-1 px-6 pt-4">
+                {(["details", "analysis"] as ModalTab[]).map((tab) => (
+                  <button
+                    key={tab}
+                    onClick={() => setModalTab(tab)}
+                    className={`relative px-4 py-2 rounded-xl text-[12px] font-semibold transition-all ${
+                      modalTab === tab
+                        ? "bg-primary/15 text-primary"
+                        : "text-muted-foreground hover:text-white hover:bg-white/[0.05]"
+                    }`}
+                  >
+                    {tab === "details" ? "Trade Details" : "Analysis & Tags"}
+                    {modalTab === tab && (
+                      <motion.div layoutId="modalTabIndicator" className="absolute inset-0 rounded-xl border border-primary/25" style={{ zIndex: -1 }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto px-6 py-5">
+                <Form {...form}>
+                  <form id="tradeForm" onSubmit={form.handleSubmit(onSubmit)}>
+                    <AnimatePresence mode="wait">
+                      {modalTab === "details" && (
+                        <motion.div
+                          key="details"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          transition={{ duration: 0.18 }}
+                          className="space-y-4"
+                        >
+                          {/* Symbol + Side + Broker preview */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <FormField control={form.control} name="symbol" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Asset</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger className={inputCls}>
+                                      <SelectValue placeholder="Select asset" />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent className="border-0 rounded-xl" style={{ background: "hsl(var(--card))", border: "1px solid var(--surface-btn-border)" }}>
+                                    {ALL_SYMBOLS.map(sym => (
+                                      <SelectItem key={sym} value={sym} className="text-[13px]">{sym}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="side" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Direction</FormLabel>
+                                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                  <FormControl>
+                                    <SelectTrigger className={inputCls}>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent className="border-0 rounded-xl" style={{ background: "hsl(var(--card))", border: "1px solid var(--surface-btn-border)" }}>
+                                    <SelectItem value="long" className="text-[13px]">Long (Buy)</SelectItem>
+                                    <SelectItem value="short" className="text-[13px]">Short (Sell)</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <div>
+                              <p className={`${labelCls} mb-1.5`}>Broker</p>
+                              <div className={`${inputCls} flex items-center gap-2 px-3 border`}>
+                                <span className={`w-2 h-2 rounded-full shrink-0 ${
+                                  BROKER_MAP[watchedSymbol] === "Delta Exchange" ? "bg-orange-400" :
+                                  BROKER_MAP[watchedSymbol] === "FusionMarkets" ? "bg-blue-400" :
+                                  BROKER_MAP[watchedSymbol] === "Groww" ? "bg-teal-400" :
+                                  "bg-muted-foreground/40"
+                                }`} />
+                                <span className="text-[13px] text-muted-foreground truncate">
+                                  {BROKER_MAP[watchedSymbol] || "Auto-detected"}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Source Badge */}
+                          <div className="flex items-center gap-2 py-2 px-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                            <span className="text-[11px] text-muted-foreground font-medium">Source:</span>
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.06] border border-white/[0.09] text-[11px] font-bold text-white/80">
+                              <FileText className="w-3 h-3 text-muted-foreground" />
+                              Manual Entry
+                            </span>
+                            <span className="ml-auto text-[10px] text-muted-foreground/60">Sync source: Manual</span>
+                          </div>
+
+                          {/* Entry / Exit / Qty */}
+                          <div className="grid grid-cols-3 gap-3">
+                            <FormField control={form.control} name="entryPrice" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Entry Price</FormLabel>
+                                <FormControl><Input type="number" step="0.0001" {...field} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="exitPrice" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Exit Price</FormLabel>
+                                <FormControl><Input type="number" step="0.0001" {...field} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="quantity" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Qty / Lots</FormLabel>
+                                <FormControl><Input type="number" step="0.01" {...field} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          </div>
+
+                          {/* SL / TP */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField control={form.control} name="stopLoss" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Stop Loss</FormLabel>
+                                <FormControl><Input type="number" step="0.0001" placeholder="Optional" {...field} value={field.value ?? ""} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="takeProfit" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Take Profit</FormLabel>
+                                <FormControl><Input type="number" step="0.0001" placeholder="Optional" {...field} value={field.value ?? ""} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          </div>
+
+                          {/* Dates */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <FormField control={form.control} name="entryDate" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Entry Date & Time</FormLabel>
+                                <FormControl><Input type="datetime-local" {...field} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                            <FormField control={form.control} name="exitDate" render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className={labelCls}>Exit Date & Time</FormLabel>
+                                <FormControl><Input type="datetime-local" {...field} className={inputCls} /></FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )} />
+                          </div>
+                        </motion.div>
+                      )}
+
+                      {modalTab === "analysis" && (
+                        <motion.div
+                          key="analysis"
+                          initial={{ opacity: 0, x: 10 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: -10 }}
+                          transition={{ duration: 0.18 }}
+                          className="space-y-5"
+                        >
+                          {/* TradingView Link */}
+                          <FormField control={form.control} name="tvLink" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className={labelCls + " flex items-center gap-1.5"}>
+                                <LinkIcon className="w-3 h-3" /> TradingView Chart Link
+                              </FormLabel>
+                              <div className="relative">
+                                <TrendingUp className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                                <FormControl>
+                                  <Input
+                                    placeholder="https://www.tradingview.com/chart/..."
+                                    {...field}
+                                    value={field.value ?? ""}
+                                    className={`${inputCls} pl-9`}
+                                  />
+                                </FormControl>
+                              </div>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          {/* Screenshot */}
+                          <FormField control={form.control} name="screenshot" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className={labelCls + " flex items-center gap-1.5"}>
+                                <ImageIcon className="w-3 h-3" /> Screenshot URL
+                              </FormLabel>
+                              <div className="relative">
+                                <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+                                <FormControl>
+                                  <Input
+                                    placeholder="https://..."
+                                    {...field}
+                                    value={field.value ?? ""}
+                                    className={`${inputCls} pl-9`}
+                                  />
+                                </FormControl>
+                              </div>
+                              {screenshotUrl && (
+                                <div className="mt-2 rounded-xl overflow-hidden border border-white/[0.08] aspect-video max-h-36">
+                                  <img
+                                    src={screenshotUrl}
+                                    alt="Preview"
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => (e.currentTarget.style.display = "none")}
+                                  />
+                                </div>
+                              )}
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          {/* Setup Tags */}
+                          <FormField control={form.control} name="setupTags" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className={labelCls + " flex items-center gap-1.5"}>
+                                <Tag className="w-3 h-3" /> Setup Tags
+                              </FormLabel>
+                              <FormControl>
+                                <MultiSelectChips
+                                  options={SETUP_TAG_OPTIONS}
+                                  value={setupTagsVal}
+                                  onChange={field.onChange}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          {/* Mistake Tags */}
+                          <FormField control={form.control} name="mistakeTags" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className={labelCls + " flex items-center gap-1.5"}>
+                                <AlertTriangle className="w-3 h-3 text-red-400/70" /> Mistake Tags
+                              </FormLabel>
+                              <FormControl>
+                                <MultiSelectChips
+                                  options={MISTAKE_TAG_OPTIONS}
+                                  value={mistakeTagsVal}
+                                  onChange={field.onChange}
+                                  activeClass="bg-red-500/15 text-red-400 border-red-500/30"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+
+                          {/* Notes */}
+                          <FormField control={form.control} name="notes" render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className={labelCls + " flex items-center gap-1.5"}>
+                                <FileText className="w-3 h-3" /> Journal Notes
+                              </FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="What was your thesis? How did the trade go?"
+                                  {...field}
+                                  value={field.value ?? ""}
+                                  rows={4}
+                                  className="bg-white/[0.04] border-white/[0.09] rounded-xl text-[13px] focus:border-primary/50 focus:ring-0 resize-none placeholder:text-muted-foreground/40"
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )} />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </form>
+                </Form>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-6 pb-5 pt-4 border-t border-white/[0.08] flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                    watchedSide === "long" ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
+                  }`}>
+                    {watchedSide?.toUpperCase()}
+                  </span>
+                  <span className="text-[13px] font-bold text-white">{watchedSymbol}</span>
+                  {modalTab === "analysis" && (setupTagsVal || mistakeTagsVal) && (
+                    <span className="text-[11px] text-muted-foreground">
+                      · {setupTagsVal.split(",").filter(Boolean).length + mistakeTagsVal.split(",").filter(Boolean).length} tag{setupTagsVal.split(",").filter(Boolean).length + mistakeTagsVal.split(",").filter(Boolean).length !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {modalTab === "details" ? (
+                    <button
+                      type="button"
+                      onClick={() => setModalTab("analysis")}
+                      className="px-4 h-9 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[13px] font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all"
+                    >
+                      Next: Analysis
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setModalTab("details")}
+                      className="px-4 h-9 rounded-xl border border-white/[0.1] bg-white/[0.04] text-[13px] font-semibold text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all"
+                    >
+                      Back
+                    </button>
+                  )}
+                  <button
+                    type="submit"
+                    form="tradeForm"
+                    disabled={createTrade.isPending}
+                    className="px-5 h-9 rounded-xl bg-primary text-white text-[13px] font-bold hover:bg-primary/85 active:scale-[0.98] transition-all shadow-md shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {createTrade.isPending ? "Saving..." : "Save Trade"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Trade Detail Drawer ── */}
+      <Sheet open={!!selectedTradeId} onOpenChange={(open) => !open && setSelectedTradeId(null)}>
+        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden" style={{ background: "hsl(var(--card))", borderLeft: "1px solid var(--surface-sidebar-border)" }}>
+          {selectedTrade && (
+            <>
+              {/* Drawer Header */}
+              <div className="relative px-6 pt-6 pb-5 border-b border-white/[0.07]">
+                <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] to-transparent pointer-events-none" />
+                <div className="relative flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
+                      {BROKER_MAP[selectedTrade.symbol] || "Broker"} · {new Date(selectedTrade.entryDate).toLocaleDateString()}
+                    </p>
+                    <h2 className="text-3xl font-black tracking-tight text-white leading-none">{selectedTrade.symbol}</h2>
+                  </div>
+                  <div className="flex flex-col items-end gap-1.5 mt-1">
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                      selectedTrade.side === "long" ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
+                    }`}>
+                      {selectedTrade.side.toUpperCase()}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
+                      selectedTrade.outcome === "win" ? "bg-emerald-500/10 text-emerald-400" :
+                      selectedTrade.outcome === "loss" ? "bg-red-500/10 text-red-400" :
+                      "bg-white/[0.05] text-muted-foreground"
+                    }`}>
+                      {selectedTrade.outcome.toUpperCase()}
+                    </span>
+                  </div>
+                </div>
+                <div className={`text-2xl font-black ${selectedTrade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {selectedTrade.pnl >= 0 ? "+" : ""}{formatCurrency(selectedTrade.pnl)}
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+                {/* Metrics Grid */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[
+                    { label: "Entry", value: formatCurrency(selectedTrade.entryPrice), mono: true },
+                    { label: "Exit", value: formatCurrency(selectedTrade.exitPrice), mono: true },
+                    { label: "Risk / Reward", value: selectedTrade.riskRewardRatio ? `${selectedTrade.riskRewardRatio.toFixed(2)}R` : "—", mono: true },
+                    { label: "Quantity", value: String(selectedTrade.quantity), mono: true },
+                    { label: "Stop Loss", value: selectedTrade.stopLoss ? formatCurrency(selectedTrade.stopLoss) : "—", mono: true },
+                    { label: "Take Profit", value: selectedTrade.takeProfit ? formatCurrency(selectedTrade.takeProfit) : "—", mono: true },
+                  ].map(({ label, value, mono }) => (
+                    <div key={label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                      <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1">{label}</p>
+                      <p className={`text-[14px] font-bold ${mono ? "font-mono" : ""} text-white leading-tight`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* TradingView Link */}
+                <div className="space-y-2.5">
+                  <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">Analysis</p>
+                  {(selectedTrade.tvLink || TV_LINKS[selectedTrade.symbol]) ? (
+                    <button
+                      className="tv-chart-btn w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-[13px] font-semibold"
+                      onClick={() => window.open(selectedTrade.tvLink || TV_LINKS[selectedTrade.symbol], "_blank")}
+                    >
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Open TradingView Chart
+                      </div>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70" />
+                    </button>
+                  ) : (
+                    <div className="px-4 py-2.5 rounded-xl border border-dashed border-white/[0.08] text-[12px] text-muted-foreground/60 italic">
+                      No chart linked for this trade
+                    </div>
+                  )}
+
+                  {/* Screenshot */}
+                  {selectedTrade.screenshot ? (
+                    <div
+                      className="rounded-xl overflow-hidden border border-white/[0.08] cursor-pointer group relative"
+                      onClick={() => window.open(selectedTrade.screenshot!, "_blank")}
+                    >
+                      <img
+                        src={selectedTrade.screenshot}
+                        alt="Trade Screenshot"
+                        className="w-full max-h-44 object-cover group-hover:opacity-90 transition-opacity"
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/30">
+                        <ExternalLink className="w-5 h-5 text-white" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="h-20 rounded-xl border border-dashed border-white/[0.07] flex items-center justify-center gap-2 text-[12px] text-muted-foreground/50 italic">
+                      <ImageIcon className="w-4 h-4 opacity-50" /> No screenshot attached
+                    </div>
+                  )}
+                </div>
+
+                {/* Tags */}
+                <div className="space-y-3">
+                  <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest">Tags</p>
+                  {selectedTrade.setupTags && (
+                    <div>
+                      <p className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <Tag className="w-3 h-3" /> Setup
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedTrade.setupTags.split(",").filter(Boolean).map(tag => (
+                          <span key={tag} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-primary/12 text-primary border border-primary/20">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {selectedTrade.mistakeTags && (
+                    <div>
+                      <p className="text-[11px] text-muted-foreground mb-1.5 flex items-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-red-400/70" /> Mistakes
+                      </p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedTrade.mistakeTags.split(",").filter(Boolean).map(tag => (
+                          <span key={tag} className="px-2.5 py-1 rounded-lg text-[11px] font-medium bg-red-500/10 text-red-400 border border-red-500/20">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!selectedTrade.setupTags && !selectedTrade.mistakeTags && (
+                    <p className="text-[12px] text-muted-foreground/50 italic">No tags recorded</p>
+                  )}
+                </div>
+
+                {/* Notes */}
+                <div className="space-y-2">
+                  <p className="text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest flex items-center gap-1">
+                    <FileText className="w-3 h-3" /> Journal Notes
+                  </p>
+                  {selectedTrade.notes ? (
+                    <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[13px] leading-relaxed text-foreground/80">
+                      {selectedTrade.notes}
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground/50 italic">No notes recorded for this trade.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Drawer Footer */}
+              <div className="px-6 py-4 border-t border-white/[0.07] flex gap-2">
+                <button
+                  onClick={() => deleteTrade.mutate({ id: selectedTrade.id })}
+                  disabled={deleteTrade.isPending}
+                  className="flex-1 h-9 rounded-xl border border-red-500/20 bg-red-500/8 text-red-400 text-[13px] font-semibold hover:bg-red-500/15 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete Trade
+                </button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+    </div>
+  );
+}

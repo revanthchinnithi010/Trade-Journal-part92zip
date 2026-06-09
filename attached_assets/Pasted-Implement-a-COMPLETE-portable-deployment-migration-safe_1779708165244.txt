@@ -1,0 +1,238 @@
+Implement a COMPLETE portable deployment + migration-safe architecture for TradeVault so the app works perfectly even when moved to another Replit account via GitHub.
+
+GOAL:
+No manual fixing every time project shifts accounts.
+
+==================================================
+1. ENVIRONMENT SETUP SYSTEM
+==================================================
+
+Create:
+- .env.example
+- startup validation system
+- missing env checker
+
+Required env vars:
+- DATABASE_URL
+- SESSION_SECRET
+- FINNHUB_API_KEY
+- TELEGRAM_BOT_TOKEN
+- TELEGRAM_CHAT_ID
+
+On app startup:
+- detect missing env vars
+- show clean UI warnings
+- never crash app
+
+==================================================
+2. AUTO DATABASE MIGRATION SYSTEM
+==================================================
+
+On backend startup automatically:
+
+- create missing tables
+- run migrations
+- seed defaults
+
+Required tables:
+- users
+- provider_configs
+- watchlist
+- alerts
+- alert_events
+- drawing_alerts
+- chart_drawings
+- telegram_configs
+- settings
+
+If DB empty:
+- auto initialize schema
+
+If schema outdated:
+- auto migrate safely
+
+==================================================
+3. PROVIDER CONFIG PERSISTENCE
+==================================================
+
+Store provider settings in DB:
+- Finnhub API Key
+- Delta Exchange config
+- Telegram Bot Token
+- Telegram Chat ID
+
+After refresh or redeploy:
+- settings must auto restore
+
+==================================================
+4. SETTINGS PAGE IMPROVEMENTS
+==================================================
+
+Create professional Settings sections:
+
+A. Finnhub / OANDA
+- API key input
+- Connect button
+- Disconnect button
+- Connection status
+- Latency
+- Tick count
+
+B. Delta Exchange
+- Manual connect/disconnect
+- WebSocket status
+- Reconnect attempts
+
+C. Telegram
+- Bot token input
+- Chat ID input
+- Test message button
+- Connected badge
+
+D. Backup & Restore
+- Export Config button
+- Import Config button
+
+==================================================
+5. EXPORT / IMPORT SYSTEM
+==================================================
+
+Export all user configs into JSON:
+- watchlist
+- alerts
+- provider configs
+- telegram settings
+- chart layouts
+- drawings
+- trendline alerts
+
+Import button should:
+- validate JSON
+- restore everything instantly
+
+==================================================
+6. LIVE MARKET DATA RECOVERY
+==================================================
+
+When app reloads:
+- reconnect WebSockets automatically
+- restore watchlist subscriptions
+- restore live symbol cards
+- resume alert monitoring
+
+==================================================
+7. WEBSOCKET STABILITY
+==================================================
+
+Implement:
+- heartbeat ping/pong
+- auto reconnect
+- exponential backoff
+- stale feed detection
+- reconnect banner
+
+Must support:
+- Finnhub/OANDA
+- Delta Exchange
+
+==================================================
+8. WATCHLIST SYNCHRONIZATION
+==================================================
+
+When user adds symbol in Charts watchlist:
+- auto save to DB
+- auto appear in:
+  - Dashboard
+  - Alerts Center
+  - Live Market Symbols
+
+All symbols must receive real-time ticks automatically.
+
+==================================================
+9. REALTIME ALERT ENGINE
+==================================================
+
+Alerts must continue working after:
+- refresh
+- redeploy
+- account migration
+- reconnect
+
+Support:
+- price alerts
+- zone alerts
+- trendline alerts
+- ray alerts
+
+==================================================
+10. TELEGRAM ALERT SYSTEM
+==================================================
+
+Persist Telegram credentials in DB.
+
+Features:
+- test message
+- trigger alerts
+- reconnect after restart
+- retry failed sends
+
+==================================================
+11. PROFESSIONAL ERROR HANDLING
+==================================================
+
+Never show raw crashes.
+
+Show clean UI messages:
+- Invalid API key
+- WebSocket disconnected
+- DB unavailable
+- Rate limit exceeded
+- Reconnecting...
+
+==================================================
+12. PERFORMANCE OPTIMIZATION
+==================================================
+
+Tablet optimized 16:9 layout.
+
+Reduce lag:
+- memoize components
+- virtualize long lists
+- debounce updates
+- requestAnimationFrame batching
+- efficient websocket broadcasting
+
+==================================================
+13. STARTUP HEALTH CHECK
+==================================================
+
+On startup run:
+- DB health check
+- WebSocket health check
+- env validation
+- migration status
+- provider status
+
+Show status panel:
+- Database: Connected
+- Finnhub: Connected
+- Delta: Connected
+- Telegram: Ready
+
+==================================================
+14. IMPORTANT
+==================================================
+
+Do NOT use fake/demo data.
+
+Use:
+- real Finnhub ticks
+- real Delta Exchange websocket
+- real TradingView chart integration
+
+Everything must persist and survive:
+- GitHub clone
+- new Replit account
+- redeploy
+- browser refresh
+- websocket reconnect

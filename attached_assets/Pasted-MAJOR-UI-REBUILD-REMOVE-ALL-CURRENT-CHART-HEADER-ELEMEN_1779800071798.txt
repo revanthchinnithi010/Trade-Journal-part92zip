@@ -1,0 +1,270 @@
+MAJOR UI REBUILD — REMOVE ALL CURRENT CHART HEADER ELEMENTS INSIDE CHARTS SECTION AND REBUILD THE ENTIRE CHART EXPERIENCE.
+
+IMPORTANT:
+- DO NOT create a separate app/artifact/project like “Crypto Trading Platform”.
+- EVERYTHING must be rebuilt ONLY inside the existing TradeVault Charts page/component.
+- Remove all old unstable chart logic completely.
+- Keep existing sidebar navigation of TradeVault.
+- Only redesign and rebuild the actual Charts Section.
+
+REMOVE/HIDE THESE ELEMENTS FROM CHART AREA:
+- Remove the “Charts” title box.
+- Remove the search bar inside chart area.
+- Remove the category pills row (Crypto / Forex / Commodities).
+- Remove the BTCUSDT floating info box on top right.
+- Remove duplicated header rows.
+- Remove unnecessary green containers around chart controls.
+- Remove “Build yours free” floating badge if possible.
+- Remove all unstable chart overlays.
+- Remove current lightweight fake tool system.
+
+TARGET DESIGN:
+The chart area must look like Binance + TradingView professional terminal.
+
+REFERENCE STYLE:
+- Binance Futures mobile/web chart layout
+- TradingView professional terminal layout
+- Dark ultra-clean professional UI
+- Smooth, lightweight, glassmorphism accents
+- Minimal borders
+- Sharp candlestick clarity
+- Responsive tablet-first layout
+
+DO NOT EMBED TRADINGVIEW WEBSITE.
+DO NOT USE TRADINGVIEW IFRAME.
+USE ONLY:
+- tradingview/lightweight-charts library
+- custom canvas overlays
+- custom tool engine
+
+TECH STACK:
+- React
+- TypeScript
+- Tailwind
+- lightweight-charts
+- Zustand or Context API
+- Framer Motion
+- Custom HTML5 canvas overlay for drawing tools
+
+CHART ENGINE REQUIREMENTS:
+- Ultra smooth pan and zoom
+- Pinch zoom support
+- Mouse wheel zoom
+- Drag movement
+- High FPS rendering
+- Stable resize handling
+- Mobile optimized gestures
+- Crosshair tracking
+- Price scale drag movement
+- Time scale drag movement
+- Auto resize
+- Real candlestick rendering
+- Volume bars
+- EMA overlays support
+- Indicators support architecture
+
+LAYOUT STRUCTURE:
+
+TOP TOOLBAR:
+Single compact professional toolbar only.
+
+LEFT:
+- Symbol selector
+- Current symbol name
+- Exchange/broker name
+- Live price
+
+CENTER:
+- Timeframes:
+1m, 5m, 15m, 30m, 1H, 4H, 1D, 1W
+
+- Chart types:
+Candles
+Line
+Area
+Heikin Ashi
+
+RIGHT:
+- Indicators
+- Alert
+- Replay
+- Screenshot
+- Fullscreen
+- Settings
+- Layout save
+
+NO BIG SEARCH BAR.
+NO EXTRA ROWS.
+
+LEFT DRAWING TOOLBAR:
+Rebuild completely.
+
+Current toolbar is ugly and inaccessible.
+Need TradingView-style professional toolbar.
+
+STYLE:
+- Floating dark glass toolbar
+- Bigger accessible icons
+- Equal spacing
+- Rounded buttons
+- Hover glow
+- Tablet optimized touch targets
+- Smooth open animations
+
+TOOLS MUST OPEN SUBMENUS LIKE TRADINGVIEW.
+
+TOOLS GROUPS:
+
+1. Cursor Tools
+- Cursor
+- Crosshair
+- Dot cursor
+
+2. Line Tools
+Popup submenu:
+- Trendline
+- Ray
+- Extended line
+- Horizontal line
+- Vertical line
+- Arrow
+- Info line
+
+3. Brush Tools
+- Brush
+- Highlighter
+- Eraser
+
+4. Shape Tools
+- Rectangle
+- Circle
+- Triangle
+- Path
+
+5. Fibonacci Tools
+- Fib retracement
+- Trend fib
+
+6. Text Tools
+- Text
+- Note
+- Callout
+
+7. Measure Tools
+- Ruler
+- Risk reward
+
+8. Magnet Tools
+- Weak magnet
+- Strong magnet
+
+9. Visibility Tools
+- Hide drawings
+- Lock drawings
+
+10. Delete Tools
+- Remove selected
+- Remove all
+
+DRAWING SYSTEM REQUIREMENTS:
+- REAL drag-and-drop placement
+- NOT touch-to-place instantly
+- Smooth drawing preview while dragging
+- Editable anchors
+- Select/move drawings
+- Resize drawings
+- Delete drawings
+- Drawing persistence
+- Undo/redo
+- Touch optimized
+
+CHART INTERACTION:
+- Long press on mobile opens context menu
+- Drag chart freely
+- Inertia movement
+- Smooth zoom
+- Snapping support
+- Crosshair sync
+
+RIGHT SIDE PANEL:
+Collapsible vertical panel.
+
+Icons:
+- Watchlist
+- Alerts
+- Object tree
+- Drawings
+- Settings
+
+Each opens sliding panel.
+
+BOTTOM PANEL:
+Binance-like tabs:
+- Positions
+- Orders
+- Alerts
+- Drawings
+
+Collapsible.
+Resizable height.
+Smooth animations.
+
+CHART SETTINGS MODAL:
+TradingView-style modal.
+
+Tabs:
+- Symbol
+- Appearance
+- Canvas
+- Scales
+- Trading
+- Alerts
+- Timezone
+
+CUSTOMIZATION:
+- Candle colors
+- Wick colors
+- Background colors
+- Grid visibility
+- Crosshair style
+- Price precision
+- Timezone selection
+
+PERFORMANCE RULES:
+- Must stay lightweight
+- No lag
+- No heavy DOM rendering
+- Use canvas wherever possible
+- Virtualize large lists
+- Debounce resize events
+- Optimize re-renders
+
+DATA ARCHITECTURE:
+Prepare architecture for:
+- cTrader websocket
+- Binance websocket
+- Finnhub
+- Polygon
+- Custom broker APIs
+
+But for now use mock/demo realtime data.
+
+IMPORTANT:
+DO NOT BUILD A NEW APP.
+DO NOT CREATE A SECOND ARTIFACT.
+DO NOT CREATE “Crypto Trading Platform”.
+REBUILD ONLY:
+TradeVault → Charts Section.
+
+Replace old chart implementation completely with this new professional architecture.
+
+FINAL RESULT SHOULD FEEL:
+- Like Binance Futures
+- Like TradingView
+- Ultra smooth
+- Professional
+- Stable
+- Touch friendly
+- Tablet optimized
+- Clean and minimal
+- Real trading terminal quality

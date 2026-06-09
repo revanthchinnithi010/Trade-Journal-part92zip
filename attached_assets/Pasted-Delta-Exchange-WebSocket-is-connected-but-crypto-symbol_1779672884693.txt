@@ -1,0 +1,116 @@
+Delta Exchange WebSocket is connected but crypto symbols are not receiving live tick data.
+
+Current issue:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+show:
+- "No data"
+- no tick updates
+- no live prices
+- no sparkline movement
+
+Meanwhile Finnhub symbols work correctly.
+
+==================================================
+FIX DELTA EXCHANGE WEBSOCKET COMPLETELY
+==================================================
+
+Investigate and fix:
+
+1. Wrong websocket endpoint
+2. Wrong subscription payload
+3. Wrong channel name
+4. Wrong symbol mapping
+5. Message parsing errors
+6. Delta futures symbol formatting issues
+7. Incorrect ticker event handling
+8. Failed reconnect subscriptions
+9. Missing heartbeat handling
+10. Incorrect JSON parsing
+
+==================================================
+VERIFY OFFICIAL DELTA EXCHANGE FORMAT
+==================================================
+
+Use the correct official Delta Exchange websocket format.
+
+Verify:
+- websocket URL
+- subscribe payload
+- channel names
+- symbol names
+- ticker event structure
+
+==================================================
+SUPPORTED CRYPTO SYMBOLS
+==================================================
+
+Must stream live tick-by-tick prices for:
+
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+==================================================
+REAL-TIME REQUIREMENTS
+==================================================
+
+1. Prices must update continuously
+2. Tick counters must increase
+3. Last tick timestamps update live
+4. Sparkline mini charts animate
+5. Green/red flash on price movement
+6. Live percentage change updates
+7. Dashboard updates instantly
+8. Watchlist updates instantly
+9. Alerts engine receives crypto ticks
+10. TradingView sync uses live prices
+
+==================================================
+DEBUG LOGGING
+==================================================
+
+Add detailed logs:
+
+- Delta websocket connected
+- subscription payload sent
+- subscribed symbol confirmed
+- raw websocket message
+- parsed tick data
+- live price updated
+- reconnect triggered
+
+==================================================
+IMPORTANT
+==================================================
+
+If Delta Exchange does not support current symbol format:
+
+Automatically map symbols correctly.
+
+Examples:
+- BTCUSD -> BTCUSDT
+- ETHUSD -> ETHUSDT
+
+or official Delta perpetual contract names.
+
+==================================================
+FINAL GOAL
+==================================================
+
+Crypto section must behave exactly like Finnhub:
+
+- continuous live streaming
+- tick-by-tick updates
+- real-time charts
+- live alerts
+- live watchlist prices
+- live dashboard prices
+
+No "No data" state should remain once websocket connects.

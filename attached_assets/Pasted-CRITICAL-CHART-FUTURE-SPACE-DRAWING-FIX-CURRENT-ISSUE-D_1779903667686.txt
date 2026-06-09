@@ -1,0 +1,136 @@
+CRITICAL CHART FUTURE SPACE DRAWING FIX
+
+CURRENT ISSUE:
+Drawing tools only work where candles exist.
+
+User CANNOT draw into the empty future area on the right side of the chart.
+
+Right-side future space becomes non-interactive.
+
+This is WRONG.
+
+TradingView allows drawing into future time space beyond current candles.
+
+====================================================
+REQUIRED FIX
+====================================================
+
+Enable FULL drawing support in the future chart area.
+
+User must be able to draw:
+✅ trendlines
+✅ rectangles
+✅ rays
+✅ text
+✅ channels
+✅ fibs
+✅ brush
+✅ arrows
+
+inside EMPTY RIGHT SIDE chart space too.
+
+====================================================
+ROOT CAUSE
+====================================================
+
+Current implementation probably:
+❌ clamps drawings to visible candle data
+❌ uses last candle index as chart limit
+❌ stops pointer events after last candle
+❌ no logical future bars exist
+
+====================================================
+FIX REQUIRED
+====================================================
+
+Create FUTURE WHITESPACE / FUTURE BARS area.
+
+Chart must reserve logical empty bars after last candle.
+
+====================================================
+LIGHTWEIGHT CHARTS FIX
+====================================================
+
+Use:
+
+rightOffset
+barSpacing
+fixRightEdge: false
+
+AND extend visible logical range.
+
+Example concept:
+
+timeScale().applyOptions({
+rightOffset: 20,
+fixRightEdge: false,
+lockVisibleTimeRangeOnResize: false,
+})
+
+====================================================
+IMPORTANT
+====================================================
+
+Drawings must use:
+logical coordinates
+NOT only candle indexes.
+
+Allow:
+future logical indexes beyond last candle.
+
+====================================================
+MOUSE + TOUCH FIX
+====================================================
+
+Future area must:
+✅ receive pointer events
+✅ receive touch events
+✅ allow drag
+✅ allow drawing anchors
+
+====================================================
+DRAWING ENGINE FIX
+====================================================
+
+Remove ALL restrictions like:
+
+if(index > lastCandleIndex) return;
+
+OR
+
+clamp(index, 0, lastCandleIndex)
+
+====================================================
+RENDERING FIX
+====================================================
+
+Objects drawn into future space must:
+✅ stay visible
+✅ persist after refresh
+✅ serialize correctly
+✅ load correctly
+✅ move correctly
+✅ resize correctly
+
+====================================================
+CHART PAN FIX
+====================================================
+
+User must also be able to:
+✅ scroll/pan chart further right
+✅ zoom into future area
+✅ place drawings ahead of price
+
+Exactly like TradingView.
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+✅ empty right-side area becomes fully interactive
+✅ drawings work beyond candles
+✅ trendlines can extend into future
+✅ professional TradingView behavior
+✅ smooth mobile/tablet interaction
+✅ no clipping at last candle

@@ -1,0 +1,108 @@
+Fix Replay Mode indicator visibility logic in TradeVault charts.
+
+CURRENT ISSUE:
+When Replay Mode is active:
+- candles correctly hide future candles
+- BUT indicators (EMA, SMA, VWAP etc.) still render future data
+
+This breaks realistic replay simulation.
+
+==================================================
+EXPECTED BEHAVIOR
+==================================================
+
+During replay:
+
+✅ Candles should stop at replay cursor
+✅ Indicators should calculate ONLY until replay cursor
+✅ Future indicator lines must NOT be visible
+✅ EMA/SMA/VWAP lines must progressively build candle-by-candle
+✅ Replay should behave exactly like live historical playback
+
+==================================================
+ROOT PROBLEM
+==================================================
+
+Indicators are still using:
+full candle dataset
+
+instead of:
+replay-sliced dataset
+
+==================================================
+FIX IMPLEMENTATION
+==================================================
+
+Create replayVisibleData:
+
+const replayVisibleData = fullData.slice(0, replayIndex + 1)
+
+Then pass ONLY replayVisibleData into:
+
+- EMA calculations
+- SMA calculations
+- VWAP
+- RSI
+- MACD
+- Bollinger Bands
+- All overlays
+- All indicator renderers
+
+==================================================
+IMPORTANT
+==================================================
+
+DO NOT render indicators using:
+fullData
+
+ONLY use:
+replayVisibleData
+
+==================================================
+VISUAL RESULT
+==================================================
+
+Replay cursor at candle 200:
+
+Indicators should stop EXACTLY at candle 200.
+
+No future EMA curves visible.
+
+==================================================
+ALSO FIX
+==================================================
+
+Indicator lines should animate smoothly while replaying:
+- no flickering
+- no full redraw
+- no lag
+
+Use memoization/cached calculations if needed.
+
+==================================================
+PERFORMANCE
+==================================================
+
+Replay must remain:
+- ultra smooth
+- touch optimized
+- Android tablet optimized
+- no FPS drops
+
+==================================================
+BONUS
+==================================================
+
+If replay paused:
+indicator calculations freeze too.
+
+If replay resumed:
+indicator updates continue candle-by-candle.
+
+==================================================
+EXPECTED FINAL RESULT
+==================================================
+
+Replay mode should feel EXACTLY like TradingView Bar Replay.
+
+Candles + indicators both reveal progressively together.

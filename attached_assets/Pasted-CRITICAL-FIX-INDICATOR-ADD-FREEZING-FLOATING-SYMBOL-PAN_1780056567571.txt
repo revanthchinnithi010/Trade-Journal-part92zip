@@ -1,0 +1,185 @@
+CRITICAL FIX — INDICATOR ADD FREEZING + FLOATING SYMBOL PANEL BUG
+
+==================================================
+ISSUE 1:
+CLICKING "ADD INDICATOR" FREEZES ENTIRE APP
+==================================================
+
+Current problem:
+When user adds EMA or any indicator:
+❌ chart becomes blank
+❌ app freezes/stucks
+❌ rendering stops
+❌ FPS drops
+❌ infinite rerenders likely happening
+
+==================================================
+ROOT CAUSE TO FIX
+==================================================
+
+Most likely problems:
+
+1. Infinite React rerender loop
+2. Indicator recalculating on every mouse move
+3. Massive candle recalculation
+4. Indicator state updating chart state repeatedly
+5. useEffect dependency loop
+6. Canvas redraw full chart every frame
+7. Indicator attached to top floating symbol component accidentally
+
+==================================================
+FIX REQUIRED
+==================================================
+
+INDICATOR ENGINE MUST BE SEPARATE.
+
+Architecture:
+
+Chart Layer
+ ├── Candle Renderer
+ ├── Drawing Renderer
+ ├── Indicator Renderer
+ └── Overlay Renderer
+
+Indicators must render independently WITHOUT rerendering whole app.
+
+==================================================
+2. USE MEMOIZATION
+==================================================
+
+Use:
+
+React.memo()
+useMemo()
+useCallback()
+
+for:
+✅ indicator calculations
+✅ chart rendering
+✅ overlays
+✅ toolbar
+✅ floating symbol
+
+Prevent unnecessary rerenders.
+
+==================================================
+3. CALCULATE INDICATORS ONLY ON NEW CANDLE
+==================================================
+
+DO NOT recalculate EMA on:
+❌ mouse move
+❌ touch drag
+❌ zoom
+❌ scale move
+
+ONLY calculate on:
+✅ timeframe change
+✅ symbol change
+✅ new candle arrival
+
+==================================================
+4. USE LIGHTWEIGHT INDICATOR CACHE
+==================================================
+
+Cache EMA values:
+
+const emaCache = useRef({})
+
+Reuse cached values instead of recalculating.
+
+==================================================
+5. FIX BLANK CHART ISSUE
+==================================================
+
+Currently indicator add probably crashes render pipeline.
+
+Add safe guards:
+
+if (!candles?.length) return;
+
+if (!indicatorData) return;
+
+Wrap indicator render in try/catch.
+
+Prevent app crash if indicator fails.
+
+==================================================
+ISSUE 2:
+INDICATOR SHOWING INSIDE FLOATING SYMBOL PANEL
+==================================================
+
+Current wrong behavior:
+Floating panel shows:
+EMA (9)
+BTC
+
+This is WRONG.
+
+==================================================
+REQUIRED BEHAVIOR
+==================================================
+
+Floating symbol panel should ONLY show:
+
+✅ Symbol
+✅ Price
+✅ % change
+✅ Live dot
+
+NOT indicators.
+
+==================================================
+CREATE SEPARATE INDICATOR PANEL
+==================================================
+
+Indicators should appear separately like TradingView.
+
+Example:
+
+EMA 9
+RSI 14
+MACD
+
+Show:
+✅ top-left under toolbar
+✅ separate floating list
+✅ removable individually
+✅ toggle visibility
+
+DO NOT merge with symbol box.
+
+==================================================
+REQUIRED UI STRUCTURE
+==================================================
+
+TOPBAR
+Floating Symbol Card
+Floating Indicator Stack
+Chart
+Drawings
+
+All separate.
+
+==================================================
+PERFORMANCE TARGET
+==================================================
+
+Need:
+✅ ultra smooth touch
+✅ no freeze
+✅ no blank chart
+✅ stable FPS
+✅ instant indicator loading
+✅ mobile optimized
+✅ TradingView-level rendering
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT rerender entire chart when:
+- indicator added
+- drawing moved
+- toolbar opened
+
+Only update affected layer.

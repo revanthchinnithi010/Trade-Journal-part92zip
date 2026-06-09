@@ -1,0 +1,246 @@
+Build a REAL TradingView-style Custom Indicator Engine for my trading application.
+
+IMPORTANT:
+Current issue:
+Custom PineScript indicators are showing only as EMA overlays instead of rendering actual TradingView-style drawings like BOS, CHoCH, Order Blocks, FVGs, labels, liquidity lines, zones, etc.
+
+I want a FULL FIX.
+
+====================================================
+GOAL
+====================================================
+
+Create a TradingView-like custom indicator system with:
+
+✅ Indicator popup panel
+✅ Add custom indicator button
+✅ PineScript paste modal
+✅ Save/load custom indicators
+✅ Render custom indicators on chart
+✅ TradingView-style indicator controls
+✅ Real drawing rendering support
+✅ Firebase/localStorage persistence
+
+====================================================
+INDICATOR PANEL
+====================================================
+
+Inside topbar "Indicators" button:
+
+Popup window should include:
+
+1. Built-in indicators
+- EMA 9
+- EMA 21
+- EMA 50
+- EMA 100
+- EMA 200
+- RSI
+- VWAP
+- Supertrend
+
+2. Custom Indicators section
+
+Each custom indicator row should show:
+- colored dot
+- indicator name
+- delete icon
+- settings icon
+- eye visibility icon
+
+Bottom:
++ Add Custom Indicator button
+
+====================================================
+ADD CUSTOM INDICATOR MODAL
+====================================================
+
+When clicking:
+"+ Add Custom Indicator"
+
+Open TradingView-style modal popup.
+
+Fields:
+------------------------------------------------
+
+Indicator Name:
+[input]
+
+PineScript Code:
+[large textarea]
+
+Buttons:
+[Cancel] [Add Indicator]
+
+====================================================
+SAVE SYSTEM
+====================================================
+
+When clicking "Add Indicator":
+
+Save indicator as:
+
+{
+ id,
+ name,
+ pineCode,
+ visible: true,
+ color,
+ createdAt
+}
+
+Persist using:
+- localStorage
+OR
+- Firebase Firestore
+
+====================================================
+AUTO LOAD
+====================================================
+
+On app reload:
+Automatically restore all saved custom indicators.
+
+====================================================
+IMPORTANT FIX
+====================================================
+
+DO NOT render custom indicators as EMA only.
+
+Currently app incorrectly converts all PineScript into EMA overlays.
+
+REMOVE THAT BEHAVIOR COMPLETELY.
+
+====================================================
+CREATE A LIGHTWEIGHT PINE PARSER
+====================================================
+
+Support these PineScript functions:
+
+✅ ta.ema
+✅ ta.sma
+✅ ta.rsi
+✅ ta.vwap
+✅ plot()
+✅ bgcolor()
+✅ line.new()
+✅ box.new()
+✅ label.new()
+
+====================================================
+DRAWING SUPPORT
+====================================================
+
+Render actual chart drawings:
+
+line.new()
+→ trendlines
+
+box.new()
+→ supply/demand zones
+
+label.new()
+→ BOS / CHoCH labels
+
+bgcolor()
+→ session highlights
+
+plot()
+→ EMA/RSI/VWAP lines
+
+====================================================
+SMART MONEY CONCEPTS SUPPORT
+====================================================
+
+When PineScript contains:
+- BOS
+- CHoCH
+- OB
+- FVG
+- Liquidity
+
+Render:
+✅ labels
+✅ zones
+✅ horizontal levels
+✅ rectangles
+✅ liquidity lines
+
+====================================================
+INDICATOR CONTROLS
+====================================================
+
+When indicator name shown top-left on chart:
+
+Show controls:
+👁 visibility
+⚙ settings
+🗑 delete
+⋮ more
+
+====================================================
+SETTINGS PANEL
+====================================================
+
+Settings popup should allow:
+- color change
+- line width
+- inputs
+- visibility
+- opacity
+
+====================================================
+MORE MENU
+====================================================
+
+Three dots menu:
+- Add alert on indicator
+- Object tree
+- Show PineScript
+- Duplicate
+- Remove
+
+====================================================
+IMPORTANT
+====================================================
+
+Use lightweight parser architecture.
+
+DO NOT fake-render everything as EMA.
+
+If parser cannot fully execute PineScript:
+Create modular interpreters for:
+
+- EMA
+- SMC
+- FVG
+- OB
+- Liquidity
+- Sessions
+
+====================================================
+UI STYLE
+====================================================
+
+Exact TradingView dark glassmorphism style:
+- neon green active states
+- dark navy popup
+- rounded corners
+- smooth animations
+- mobile optimized
+
+====================================================
+TOUCH SUPPORT
+====================================================
+
+Everything must work with:
+✅ mouse
+✅ touch
+✅ tablet
+✅ mobile gestures
+
+====================================================
+FINAL REQUIREMENT
+====================================================
+
+Make the indicator engine architecture scalable so future PineScript functions can easily be added later.

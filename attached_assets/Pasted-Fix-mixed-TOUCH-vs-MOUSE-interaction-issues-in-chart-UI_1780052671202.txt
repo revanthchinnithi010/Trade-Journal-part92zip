@@ -1,0 +1,137 @@
+Fix mixed TOUCH vs MOUSE interaction issues in chart UI.
+
+==================================================
+CURRENT ISSUES
+==================================================
+
+1. Right side price scale:
+✅ mouse drag works
+❌ finger touch drag does NOT work
+
+2. Top toolbar horizontal scrolling:
+✅ finger swipe works
+❌ mouse wheel horizontal scroll does NOT work
+
+Need TradingView-like behavior.
+
+==================================================
+FIX #1
+PRICE SCALE TOUCH DRAG
+==================================================
+
+Problem:
+Price scale only listens to mouse events.
+
+Fix:
+Use unified POINTER EVENTS.
+
+Replace:
+- mousedown
+- mousemove
+- touchmove
+
+with:
+- pointerdown
+- pointermove
+- pointerup
+
+==================================================
+PRICE SCALE REQUIREMENTS
+==================================================
+
+Finger drag on price scale should:
+✅ move chart vertically
+✅ resize scale
+✅ smoothly zoom price axis
+✅ work exactly like TradingView
+
+==================================================
+IMPORTANT
+==================================================
+
+Add:
+
+touch-action: none;
+
+to:
+- price scale
+- chart interaction layer
+
+Without this browser steals touch gestures.
+
+==================================================
+USE POINTER CAPTURE
+==================================================
+
+On pointerdown:
+
+element.setPointerCapture(e.pointerId)
+
+This keeps drag smooth even if finger moves outside.
+
+==================================================
+FIX #2
+TOPBAR HORIZONTAL SCROLL WITH MOUSE
+==================================================
+
+Currently:
+finger swipe scrolls toolbar,
+mouse wheel does nothing.
+
+Need:
+mouse wheel horizontally scroll toolbar.
+
+==================================================
+IMPLEMENT
+==================================================
+
+When mouse wheel used on top toolbar:
+
+vertical wheel delta
+→ convert into horizontal scroll.
+
+Example:
+
+toolbar.scrollLeft += e.deltaY
+
+==================================================
+SMOOTH SCROLL
+==================================================
+
+Add:
+- smooth inertial scrolling
+- trackpad support
+- mouse wheel support
+- touch swipe support
+
+==================================================
+TOPBAR REQUIREMENTS
+==================================================
+
+Toolbar should:
+✅ swipe with finger
+✅ scroll with mouse wheel
+✅ support trackpads
+✅ no lag
+✅ smooth momentum
+
+==================================================
+DO NOT BREAK
+==================================================
+
+❌ chart zoom
+❌ chart drag
+❌ drawing tools
+❌ mobile gestures
+
+==================================================
+FINAL RESULT
+==================================================
+
+Exactly like TradingView:
+
+✅ price scale movable with finger
+✅ toolbar scrolls with finger
+✅ toolbar scrolls with mouse wheel
+✅ unified desktop + touch interactions
+✅ buttery smooth experience

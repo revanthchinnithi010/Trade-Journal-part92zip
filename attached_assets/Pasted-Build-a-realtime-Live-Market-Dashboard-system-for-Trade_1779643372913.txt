@@ -1,0 +1,242 @@
+Build a realtime Live Market Dashboard system for TradeVault.
+
+Current dashboard cards are static placeholders.
+
+Now convert the dashboard into a professional realtime market monitoring terminal using existing Finnhub + Delta Exchange websocket feeds.
+
+==================================================
+DASHBOARD LIVE MARKET SYSTEM
+==================================================
+
+When user clicks market category cards:
+
+- Crypto
+- Forex
+- Indices
+- Commodities
+
+open a realtime expandable live market panel.
+
+==================================================
+LIVE SYMBOL DISPLAY
+==================================================
+
+Show all currently subscribed symbols dynamically.
+
+==================================================
+CRYPTO
+==================================================
+
+Provider:
+Delta Exchange WebSocket
+
+Symbols:
+- BTCUSD
+- ETHUSD
+- SOLUSD
+- DOGEUSD
+- PEPEUSD
+
+==================================================
+FOREX
+==================================================
+
+Provider:
+Finnhub OANDA feed
+
+Symbols:
+- EURUSD
+- GBPJPY
+
+==================================================
+INDICES
+==================================================
+
+Provider:
+Finnhub OANDA feed
+
+Symbols:
+- NAS100
+- US30
+
+==================================================
+COMMODITIES
+==================================================
+
+Provider:
+Finnhub OANDA feed
+
+Symbols:
+- XAUUSD
+- USOIL
+- UKOIL
+
+==================================================
+LIVE DATA REQUIREMENTS
+==================================================
+
+Every symbol must display:
+
+- live current price
+- live price updates
+- % change
+- net change
+- provider
+- LIVE status indicator
+- last tick time
+- realtime pulse animation
+
+==================================================
+REALTIME WEBSOCKET UPDATES
+==================================================
+
+Prices must update tick-by-tick continuously.
+
+NO page refresh.
+
+Use existing backend websocket broadcaster.
+
+Use existing:
+- marketState
+- Finnhub service
+- Delta service
+
+Do NOT create duplicate feeds.
+
+==================================================
+LIVE PRICE UPDATE EFFECTS
+==================================================
+
+When price updates:
+
+PRICE UP:
+- flash green glow briefly
+
+PRICE DOWN:
+- flash red glow briefly
+
+Animations must feel smooth and premium.
+
+==================================================
+EXPANDABLE MARKET VIEW
+==================================================
+
+Clicking category card opens:
+
+- modal
+OR
+- side panel
+OR
+- expandable dashboard section
+
+showing all live subscribed symbols.
+
+==================================================
+LIVE STATUS DESIGN
+==================================================
+
+Each symbol row must show:
+
+🟢 LIVE
+
+Provider:
+- DELTA
+OR
+- FINNHUB
+
+==================================================
+LIVE MINI SPARKLINE CHARTS
+==================================================
+
+Add tiny realtime sparkline charts beside symbols using recent tick history.
+
+==================================================
+SEARCH FEATURE
+==================================================
+
+Add live search inside dashboard market panel.
+
+==================================================
+WATCHLIST INTEGRATION
+==================================================
+
+When clicking symbol:
+
+1. open TradingView chart
+2. sync active watchlist symbol
+3. update chart instantly
+4. switch active market category automatically
+
+==================================================
+LIVE TICK STREAM
+==================================================
+
+Add optional live ticker strip:
+
+Example:
+
+BTCUSD 68432 ▲
+ETHUSD 2102 ▼
+NAS100 18752 ▲
+XAUUSD 2351 ▼
+
+Continuously moving smoothly.
+
+==================================================
+UI DESIGN REQUIREMENTS
+==================================================
+
+Use premium glossy fintech design.
+
+Theme:
+- dark green glassmorphism
+- neon green highlights
+- glossy cards
+- smooth shadows
+- soft borders
+- premium institutional terminal feel
+
+==================================================
+PERFORMANCE OPTIMIZATION
+==================================================
+
+1. Prevent React rerender lag.
+2. Use memoization.
+3. Update only changed symbol rows.
+4. Optimize websocket rendering.
+5. Smooth on Android tablets.
+6. Maintain near 60fps UI responsiveness.
+7. Prevent memory leaks.
+
+==================================================
+TABLET OPTIMIZATION
+==================================================
+
+Must be fully optimized for:
+16:9 Android tablet landscape mode.
+
+No overflow issues.
+No laggy scrolling.
+No UI freezing.
+
+==================================================
+BACKEND INTEGRATION
+==================================================
+
+Frontend must consume:
+
+- centralized marketState
+- websocket broadcaster
+- live subscriptions
+- feed status service
+
+==================================================
+FINAL GOAL
+==================================================
+
+Transform TradeVault Dashboard into a professional realtime institutional trading terminal with live tick-by-tick market monitoring similar to:
+
+- TradingView
+- Binance
+- Bloomberg terminals
+- professional prop firm dashboards

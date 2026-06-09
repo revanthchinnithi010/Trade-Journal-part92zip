@@ -1,0 +1,222 @@
+FIX DRAWING TOOLBAR POSITION + AUTO ADJUST WITH POSITIONS PANEL
+
+====================================================
+PROBLEM 1
+====================================================
+
+When Positions panel maximize chesthe:
+----------------------------------------------------
+
+Left drawing toolbar overlap avuthondhi
+
+OR
+
+bottom toolbar paina float avuthondhi.
+
+Need:
+----------------------------------------------------
+
+toolbar auto adjust inside chart area.
+
+====================================================
+PROBLEM 2
+====================================================
+
+Drawing toolbar top section:
+----------------------------------------------------
+
+topbar mida overlap avuthondhi
+
+border outside ki velthondhi.
+
+Need:
+----------------------------------------------------
+
+toolbar FULLY inside chart panel borders.
+
+====================================================
+FINAL EXPECTED BEHAVIOR
+====================================================
+
+Toolbar always:
+----------------------------------------------------
+
+✅ chart container loney undaali
+✅ topbar ki kinda start avvali
+✅ bottom panels ki paina stop avvali
+✅ responsive ga resize avvali
+✅ overlap avvakudadhu
+
+====================================================
+MAIN FIX
+====================================================
+
+Create:
+----------------------------------------------------
+
+dynamic chart viewport layout system
+
+====================================================
+CHART SAFE AREA
+====================================================
+
+Calculate:
+----------------------------------------------------
+
+topbar height
+bottom panel height
+right sidebar width
+
+Then:
+----------------------------------------------------
+
+set drawable chart viewport
+
+====================================================
+DRAWING TOOLBAR FIX
+====================================================
+
+Toolbar container:
+----------------------------------------------------
+
+position:absolute;
+
+top:
+----------------------------------------------------
+
+calc(var(--topbar-height) + 10px)
+
+left:
+----------------------------------------------------
+
+8px
+
+bottom:
+----------------------------------------------------
+
+calc(var(--bottom-panel-height) + 12px)
+
+====================================================
+IMPORTANT
+====================================================
+
+DO NOT use:
+----------------------------------------------------
+
+height:100vh
+
+Instead:
+----------------------------------------------------
+
+dynamic available chart height
+
+====================================================
+WHEN POSITIONS PANEL EXPANDS
+====================================================
+
+Automatically:
+----------------------------------------------------
+
+toolbar height reduce avvali
+
+toolbar scrollable avvali if needed.
+
+====================================================
+TOOLBAR INTERNAL SCROLL
+====================================================
+
+If chart height small:
+----------------------------------------------------
+
+toolbar overflow-y:auto
+
+hide scrollbar visually.
+
+====================================================
+TOP OVERLAP FIX
+====================================================
+
+Ensure:
+----------------------------------------------------
+
+toolbar never enters topbar area
+
+Use:
+----------------------------------------------------
+
+z-index hierarchy properly
+
+====================================================
+Z-INDEX
+====================================================
+
+Topbar:
+----------------------------------------------------
+z-index:1000
+
+Drawing toolbar:
+----------------------------------------------------
+z-index:900
+
+Chart:
+----------------------------------------------------
+z-index:1
+
+====================================================
+BOTTOM PANEL FIX
+====================================================
+
+When Positions/Orders panel expand:
+----------------------------------------------------
+
+toolbar bottom automatically move upward
+
+NO overlap.
+
+====================================================
+RESPONSIVE FIX
+====================================================
+
+Tablet mode:
+----------------------------------------------------
+
+toolbar compact spacing reduce
+
+icon size:
+----------------------------------------------------
+44px
+
+gap:
+----------------------------------------------------
+10px
+
+====================================================
+SAFE CONTAINER SYSTEM
+====================================================
+
+Create:
+----------------------------------------------------
+
+.chart-safe-area
+
+that excludes:
+----------------------------------------------------
+
+topbar
+bottom panels
+sidebars
+
+All floating tools must stay inside it.
+
+====================================================
+FINAL RESULT
+====================================================
+
+After fix:
+----------------------------------------------------
+
+✅ Toolbar topbar mida overlap avvadhu
+✅ Toolbar bottom positions panel mida overlap avvadhu
+✅ Toolbar always chart borders loney untundhi
+✅ Auto responsive resizing
+✅ Professional TradingView-style layout
