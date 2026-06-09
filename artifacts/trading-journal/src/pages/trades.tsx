@@ -29,6 +29,7 @@ import {
   MISTAKE_TAG_OPTIONS,
   TV_LINKS
 } from "@/data/sampleData";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const tradeSchema = z.object({
   symbol: z.string().min(1, "Symbol is required"),
@@ -92,9 +93,19 @@ function MultiSelectChips({
 function FilterPill({
   label, active, onClick,
 }: { label: string; active: boolean; onClick: () => void }) {
+  const isMobile = useIsMobile();
+
+  const mobileActiveStyle: React.CSSProperties = {
+    background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+    border: "1.5px solid rgba(255,255,255,0.85)",
+    color: "#0a0a0f",
+    boxShadow: "0 2px 12px rgba(255,255,255,0.22), inset 0 1px 0 rgba(255,255,255,1), inset 0 -1px 0 rgba(190,205,255,0.35)",
+  };
+
   return (
     <button
       onClick={onClick}
+      style={active && isMobile ? mobileActiveStyle : undefined}
       className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
         active
           ? "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
@@ -118,6 +129,13 @@ const modalContentVariants: Variants = {
   exit: { opacity: 0, scale: 0.96, y: 16, transition: { duration: 0.18, ease: "easeIn" } },
 };
 
+const glossyWhiteStyle: React.CSSProperties = {
+  background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+  border: "1.5px solid rgba(255,255,255,0.85)",
+  color: "#0a0a0f",
+  boxShadow: "0 2px 12px rgba(255,255,255,0.22), inset 0 1px 0 rgba(255,255,255,1), inset 0 -1px 0 rgba(190,205,255,0.35)",
+};
+
 export default function Trades() {
   const [page, setPage] = useState(1);
   const [symbolFilter, setSymbolFilter] = useState("");
@@ -127,6 +145,7 @@ export default function Trades() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<ModalTab>("details");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
+  const isMobile = useIsMobile();
 
   const queryClient = useQueryClient();
 
@@ -257,6 +276,7 @@ export default function Trades() {
               <button
                 key={value}
                 onClick={() => setBrokerFilter(value)}
+                style={brokerFilter === value && isMobile ? glossyWhiteStyle : undefined}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
                   brokerFilter === value
                     ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
