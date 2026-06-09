@@ -10,19 +10,14 @@ import { formatCurrency } from "@/lib/utils";
 import {
   ArrowUpRight, ArrowDownRight, TrendingUp, Percent, Layers,
   BarChart2, Activity, Target, Flame, ChevronRight,
-  Radio, Bell, Zap, ServerCog, X,
+  TrendingDown, Briefcase, DollarSign,
 } from "lucide-react";
-import { ProviderStatusCards } from "@/components/ProviderStatusCards";
 import {
   Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
 } from "recharts";
 import { Link } from "wouter";
 import { BROKER_MAP, BROKER_INFO } from "@/data/sampleData";
-import {
-  useLiveMarketContext, fmtPrice, fmtTickAge, SYMBOL_PROVIDERS,
-  type TickState,
-} from "@/contexts/LiveMarketContext";
 import { useTickStore } from "@/store/tickStore";
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
@@ -152,208 +147,6 @@ function MiniSparkline({ data, positive, width = 72, height = 28 }: {
   );
 }
 
-// ── All tracked symbols ───────────────────────────────────────────────────────
-const ALL_LIVE_SYMBOLS = [
-  { key: "BTCUSD",  label: "BTC/USD",  badge: "BTC"  },
-  { key: "ETHUSD",  label: "ETH/USD",  badge: "ETH"  },
-  { key: "SOLUSD",  label: "SOL/USD",  badge: "SOL"  },
-  { key: "DOGEUSD", label: "DOGE/USD", badge: "DOGE" },
-  { key: "PEPEUSD", label: "PEPE/USD", badge: "PEPE" },
-  { key: "EURUSD",  label: "EUR/USD",  badge: "EUR"  },
-  { key: "GBPJPY",  label: "GBP/JPY",  badge: "GBP"  },
-  { key: "XAUUSD",  label: "XAU/USD",  badge: "GOLD" },
-  { key: "NAS100",  label: "NAS100",   badge: "NAS"  },
-  { key: "US30",    label: "US30",     badge: "DJI"  },
-  { key: "USOIL",   label: "US Oil",   badge: "OIL"  },
-  { key: "UKOIL",   label: "UK Oil",   badge: "UKOIL"},
-];
-
-// ── Live Symbol Card (inside modal) ──────────────────────────────────────────
-const LiveSymbolCard = memo(function LiveSymbolCard({
-  sym, tick, now,
-}: {
-  sym: typeof ALL_LIVE_SYMBOLS[number];
-  tick: TickState | null;
-  now: number;
-}) {
-  const hasPrice   = tick !== null && tick.price > 0;
-  const isPositive = (tick?.changePct ?? 0) >= 0;
-  const provider   = SYMBOL_PROVIDERS[sym.key] ?? "—";
-
-  return (
-    <div
-      className="rounded-xl p-3 border transition-all"
-      style={{ background: "#0D1C16", borderColor: "rgba(57,91,67,0.35)" }}
-    >
-      {/* Header row */}
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <div
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[9px] font-black"
-            style={{ background: "rgba(183,255,90,0.1)", color: "#B7FF5A", border: "1px solid rgba(183,255,90,0.2)" }}
-          >
-            {sym.badge.slice(0, 3)}
-          </div>
-          <div>
-            <p className="text-[12px] font-bold text-[#F3FFF3] leading-none">{sym.badge}</p>
-            <p className="text-[9px] text-[#A7B8A9]/60 leading-none mt-0.5">{sym.label}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span
-            className="w-1.5 h-1.5 rounded-full"
-            style={{
-              background: hasPrice ? "#34d399" : "#6b7280",
-              boxShadow:  hasPrice ? "0 0 5px #34d399" : "none",
-            }}
-          />
-          <span
-            className="text-[8.5px] font-bold px-1.5 py-0.5 rounded"
-            style={{
-              background: provider === "Finnhub" ? "rgba(59,130,246,0.12)" : "rgba(183,255,90,0.1)",
-              color:      provider === "Finnhub" ? "#60a5fa" : "#B7FF5A",
-              border:     `1px solid ${provider === "Finnhub" ? "rgba(59,130,246,0.25)" : "rgba(183,255,90,0.2)"}`,
-            }}
-          >
-            {provider}
-          </span>
-        </div>
-      </div>
-
-      {/* Price + sparkline */}
-      <div className="flex items-end justify-between">
-        <div>
-          {hasPrice ? (
-            <>
-              <p
-                key={tick!.flashKey}
-                className={`font-mono font-black leading-none ${
-                  tick!.flashDir === "up"   ? "tick-flash-up"   :
-                  tick!.flashDir === "down" ? "tick-flash-down" : ""
-                }`}
-                style={{ fontSize: 15, color: "#F3FFF3" }}
-              >
-                {fmtPrice(tick!.price, sym.key)}
-              </p>
-              <p
-                className="text-[10px] font-bold mt-1 leading-none"
-                style={{ color: isPositive ? "#B7FF5A" : "#ef4444" }}
-              >
-                {isPositive ? "▲ +" : "▼ "}{tick!.changePct.toFixed(3)}%
-              </p>
-            </>
-          ) : (
-            <p className="text-[12px] text-[#A7B8A9]/40 font-mono">No data</p>
-          )}
-        </div>
-        {hasPrice && tick!.history.length >= 2 && (
-          <MiniSparkline data={tick!.history} positive={isPositive} width={72} height={28} />
-        )}
-      </div>
-
-      {/* Footer */}
-      {hasPrice && (
-        <div className="flex items-center justify-between mt-2 pt-1.5" style={{ borderTop: "1px solid rgba(57,91,67,0.18)" }}>
-          <span className="text-[8.5px] text-[#A7B8A9]/50">
-            {tick!.tickCount} ticks
-          </span>
-          <span className="text-[8.5px] text-[#A7B8A9]/50">
-            {fmtTickAge(tick!.lastTick)}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-});
-
-// ── Live Symbols Modal ────────────────────────────────────────────────────────
-function LiveSymbolsModal({ ticks, onClose }: {
-  ticks: Record<string, TickState>;
-  onClose: () => void;
-}) {
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
-  const liveCount = ALL_LIVE_SYMBOLS.filter(s => ticks[s.key]?.price > 0).length;
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-start justify-center pt-12 pb-4 px-4"
-      style={{ background: "rgba(7,17,13,0.88)", backdropFilter: "blur(8px)" }}
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-4xl rounded-2xl border overflow-hidden"
-        style={{
-          background:   "#0A1610",
-          borderColor:  "rgba(57,91,67,0.4)",
-          boxShadow:    "0 24px 80px rgba(0,0,0,0.7)",
-          maxHeight:    "calc(100vh - 64px)",
-          overflowY:    "auto",
-        }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div
-          className="flex items-center justify-between px-5 py-4 sticky top-0 z-10"
-          style={{ background: "#0A1610", borderBottom: "1px solid rgba(57,91,67,0.25)" }}
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center">
-              <Radio className="w-4 h-4 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-[14px] font-black text-[#F3FFF3]">Live Market Symbols</p>
-              <p className="text-[10px] text-[#A7B8A9]/60">{liveCount} of {ALL_LIVE_SYMBOLS.length} streaming</p>
-            </div>
-            <span className="relative flex h-2.5 w-2.5 ml-1">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-400" />
-            </span>
-          </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-xl flex items-center justify-center transition-colors"
-            style={{ background: "rgba(57,91,67,0.15)", border: "1px solid rgba(57,91,67,0.3)" }}
-          >
-            <X className="w-4 h-4" style={{ color: "#A7B8A9" }} />
-          </button>
-        </div>
-
-        {/* Symbol grid */}
-        <div className="p-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-          {ALL_LIVE_SYMBOLS.map(sym => (
-            <LiveSymbolCard
-              key={sym.key}
-              sym={sym}
-              tick={ticks[sym.key] ?? null}
-              now={now}
-            />
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div
-          className="px-5 py-3 flex items-center gap-2 text-[10px] text-[#A7B8A9]/50"
-          style={{ borderTop: "1px solid rgba(57,91,67,0.18)" }}
-        >
-          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
-          Prices update tick-by-tick via Finnhub OANDA feed + Delta Exchange WebSocket
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Calendar Heatmap ──────────────────────────────────────────────────────────
 const CalendarHeatmap = memo(function CalendarHeatmap({
@@ -432,71 +225,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 export default function Dashboard() {
   const mountTimeRef = useRef(performance.now());
   const [timedOut,          setTimedOut]          = useState(false);
-  const [showLiveSymbols,   setShowLiveSymbols]   = useState(false);
-  const [activeAlertCount,  setActiveAlertCount]  = useState<number | null>(null);
-  const { wsStatus, latencyMs }                   = useLiveMarketContext();
   const ticks = useTickStore(s => s.ticks);
-  const liveSymbolCount = Object.values(ticks).filter(t => t.price > 0).length;
-
-  useEffect(() => {
-    const fetchAlertCount = () => {
-      Promise.all([
-        fetch("/api/alerts").then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch("/api/zones").then(r => r.ok ? r.json() : []).catch(() => []),
-        fetch("/api/trendlines").then(r => r.ok ? r.json() : []).catch(() => []),
-      ]).then(([pa, za, ta]) => {
-        setActiveAlertCount(
-          (pa as unknown[]).length + (za as unknown[]).length + (ta as unknown[]).length
-        );
-      }).catch(() => {});
-    };
-    fetchAlertCount();
-    const t = setInterval(fetchAlertCount, 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  const wsStatusValue = wsStatus === "connected" ? "Live" : wsStatus === "connecting" ? "···" : "Off";
-  const wsStatusColor = wsStatus === "connected" ? "text-emerald-400" : wsStatus === "connecting" ? "text-yellow-400" : "text-red-400";
-  const wsStatusDot   = wsStatus === "connected" ? "bg-emerald-400" : wsStatus === "connecting" ? "bg-yellow-400" : "bg-red-400";
-
-  const quickStats = [
-    {
-      label: "Feed Status",
-      value: wsStatusValue,
-      sub: wsStatus === "connected" ? "Streaming live" : wsStatus === "connecting" ? "Reconnecting…" : "No feed active",
-      icon: Radio,
-      color: wsStatusColor,
-      dot: wsStatusDot,
-      pulse: wsStatus === "connected",
-    },
-    {
-      label: "Live Symbols",
-      value: String(liveSymbolCount),
-      sub: liveSymbolCount > 0 ? "Tick data streaming" : "Waiting for feed",
-      icon: Activity,
-      color: "text-blue-400",
-      dot: "bg-blue-400",
-      pulse: liveSymbolCount > 0,
-    },
-    {
-      label: "Active Alerts",
-      value: activeAlertCount !== null ? String(activeAlertCount) : "—",
-      sub: activeAlertCount !== null ? `${activeAlertCount} configured` : "Loading…",
-      icon: Bell,
-      color: "text-primary",
-      dot: "bg-primary",
-      pulse: false,
-    },
-    {
-      label: "WS Latency",
-      value: wsStatus === "connected" && latencyMs !== null ? `${latencyMs}ms` : "—",
-      sub: wsStatus === "connected" ? "WebSocket ping ●" : "Not connected",
-      icon: Zap,
-      color: "text-teal-400",
-      dot: "bg-teal-400",
-      pulse: false,
-    },
-  ];
 
   useEffect(() => {
     console.log("[Dashboard] mount");
@@ -550,9 +279,24 @@ export default function Dashboard() {
     ].filter((d) => d.value > 0);
   }, [resolvedStats]);
 
+  const openTrades = useMemo(() => {
+    return resolvedTrades.trades.filter((t) => (t as { exitPrice?: number | null }).exitPrice == null);
+  }, [resolvedTrades.trades]);
+
+  const totalValue = useMemo(() => {
+    return openTrades.reduce((sum, t) => {
+      const ep = (t as { entryPrice?: number }).entryPrice ?? 0;
+      const qty = (t as { quantity?: number; size?: number }).quantity
+        ?? (t as { quantity?: number; size?: number }).size
+        ?? 1;
+      return sum + ep * qty;
+    }, 0);
+  }, [openTrades]);
+
   if (isStillLoading) {
     return (
       <div className="space-y-5 pb-12">
+        <div className="glass-card h-36 shimmer-loading rounded-2xl" />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
             <div key={i} className="h-28 rounded-2xl shimmer-loading" />
@@ -571,13 +315,6 @@ export default function Dashboard() {
   return (
     <div className="space-y-4 pb-12">
 
-      {showLiveSymbols && (
-        <LiveSymbolsModal
-          ticks={ticks}
-          onClose={() => setShowLiveSymbols(false)}
-        />
-      )}
-
       {apiOffline && (
         <div className="glass-card px-5 py-3 flex items-center gap-3 border-amber-500/20 bg-amber-500/[0.04]">
           <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
@@ -587,56 +324,135 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Quick Stats Row ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {quickStats.map((w) => {
-          const Icon    = w.icon;
-          const isLive  = w.label === "Live Symbols";
-          return (
-            <div
-              key={w.label}
-              onClick={isLive ? () => setShowLiveSymbols(true) : undefined}
-              className={`glass-card px-4 py-3.5 flex items-center gap-3 group transition-colors duration-200 relative overflow-hidden ${isLive ? "cursor-pointer active:scale-[0.98]" : ""}`}
-              style={isLive ? { borderColor: "rgba(59,130,246,0.25)" } : {}}
-            >
-              <div className="w-9 h-9 rounded-xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center flex-shrink-0 group-hover:bg-primary/10 group-hover:border-primary/20 transition-colors duration-200">
-                <Icon className={`w-4 h-4 ${w.color}`} />
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-[9px] font-semibold text-muted-foreground/55 uppercase tracking-widest truncate">{w.label}</p>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className={`text-[17px] font-black leading-none ${w.color}`}>{w.value}</p>
-                  {w.pulse && (
-                    <span className="relative flex h-2 w-2 flex-shrink-0">
-                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${w.dot} opacity-60`} />
-                      <span className={`relative inline-flex rounded-full h-2 w-2 ${w.dot}`} />
-                    </span>
-                  )}
-                </div>
-                <p className="text-[10px] text-muted-foreground/45 truncate mt-0.5">{w.sub}</p>
-              </div>
-              {isLive && (
-                <div className="text-[9px] text-blue-400/60 font-semibold shrink-0">tap ↗</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* ── Provider Status Cards ── */}
-      <div className="glass-card">
+      {/* ── Active Trade Positions Panel ── */}
+      <div className="glass-card overflow-hidden">
+        {/* Header row */}
         <div className="px-5 pt-4 pb-3 flex items-center gap-2 border-b border-white/[0.05]">
           <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-            <ServerCog className="w-3.5 h-3.5 text-primary" />
+            <Briefcase className="w-3.5 h-3.5 text-primary" />
           </div>
-          <span className="text-[13px] font-semibold text-white">Live Market Feeds</span>
-          <span className="text-[10px] text-muted-foreground bg-white/[0.04] rounded-full px-2 py-0.5 border border-white/[0.06] ml-auto">
-            Multi-Provider
-          </span>
+          <span className="text-[13px] font-semibold text-white">Active Positions</span>
+          {openTrades.length > 0 && (
+            <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 rounded-full px-2 py-0.5 ml-1">
+              {openTrades.length} open
+            </span>
+          )}
+          <Link href="/trades" className="ml-auto">
+            <span className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer">
+              All trades <ChevronRight className="w-3 h-3" />
+            </span>
+          </Link>
         </div>
-        <div className="p-4">
-          <ProviderStatusCards />
+
+        {/* Total Value widget */}
+        <div className="px-5 py-4 border-b border-white/[0.05]">
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Total Position Value</p>
+              <p className="text-[28px] font-black tracking-tight leading-none text-white">
+                {openTrades.length === 0 ? "—" : formatCurrency(totalValue)}
+              </p>
+              <p className="text-[11px] text-muted-foreground/60 mt-1">
+                {openTrades.length === 0 ? "No active positions" : `Across ${openTrades.length} open trade${openTrades.length !== 1 ? "s" : ""}`}
+              </p>
+            </div>
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center flex-shrink-0">
+              <DollarSign className="w-5 h-5 text-primary" />
+            </div>
+          </div>
         </div>
+
+        {/* Position list */}
+        {openTrades.length === 0 ? (
+          <div className="px-5 py-8 flex flex-col items-center gap-2 text-center">
+            <div className="w-10 h-10 rounded-2xl bg-white/[0.04] border border-white/[0.06] flex items-center justify-center mb-1">
+              <Briefcase className="w-5 h-5 text-muted-foreground/40" />
+            </div>
+            <p className="text-[13px] font-semibold text-foreground/50">No active positions</p>
+            <p className="text-[11px] text-muted-foreground/40">Open trades will appear here</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/[0.04]">
+            {openTrades.map((trade) => {
+              const symbol     = (trade as { symbol?: string }).symbol ?? "—";
+              const side       = (trade as { side?: string }).side ?? "";
+              const entryPrice = (trade as { entryPrice?: number }).entryPrice ?? 0;
+              const entryTime  = (trade as { entryTime?: string }).entryTime ?? "";
+              const id         = (trade as { id?: number }).id ?? 0;
+              const liveTick   = ticks[symbol.toUpperCase()];
+              const livePrice  = liveTick?.price ?? null;
+              const isLong     = side === "long";
+              const unrealized = livePrice != null && entryPrice > 0
+                ? (isLong ? livePrice - entryPrice : entryPrice - livePrice)
+                : null;
+              const broker = BROKER_MAP[(trade as { symbol?: string }).symbol ?? ""]
+                ? BROKER_INFO[BROKER_MAP[(trade as { symbol?: string }).symbol ?? ""]]
+                : undefined;
+
+              return (
+                <div key={id} className="px-5 py-3.5 flex items-center gap-3 group hover:bg-white/[0.015] transition-colors">
+                  {/* Side indicator */}
+                  <div className={`w-1 h-10 rounded-full flex-shrink-0 ${isLong ? "bg-emerald-400" : "bg-red-400"}`} />
+
+                  {/* Symbol + meta */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[14px] font-black text-white">{symbol}</span>
+                      <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md ${
+                        isLong
+                          ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
+                          : "text-red-400 bg-red-500/10 border border-red-500/20"
+                      }`}>
+                        {isLong ? "▲ LONG" : "▼ SHORT"}
+                      </span>
+                      {broker && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
+                          style={{ background: `${broker.color}18`, color: broker.color, border: `1px solid ${broker.color}30` }}>
+                          {broker.short}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
+                      <span>Entry: <span className="text-foreground/80 font-mono">{entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}</span></span>
+                      {entryTime && (
+                        <span>{new Date(entryTime).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Live price + unrealized */}
+                  <div className="text-right flex-shrink-0">
+                    {livePrice != null ? (
+                      <>
+                        <p className="text-[14px] font-bold font-mono text-white leading-none">
+                          {livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                        </p>
+                        {unrealized != null && (
+                          <p className={`text-[11px] font-bold mt-0.5 ${unrealized >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                            {unrealized >= 0 ? "+" : ""}{unrealized.toFixed(5)}
+                          </p>
+                        )}
+                        <div className="flex items-center justify-end gap-1 mt-0.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                          <span className="text-[9px] text-emerald-400/70 font-semibold">LIVE</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        {isLong ? (
+                          <TrendingUp className="w-3.5 h-3.5 text-emerald-400/50" />
+                        ) : (
+                          <TrendingDown className="w-3.5 h-3.5 text-red-400/50" />
+                        )}
+                        <span className="text-[11px] text-amber-400 font-semibold">Open</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Stat Cards ── */}
