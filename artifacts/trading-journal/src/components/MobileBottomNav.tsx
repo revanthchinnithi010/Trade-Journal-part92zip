@@ -166,10 +166,12 @@ export function MobileBottomNav() {
       <div
         style={{
           borderRadius: 9999,
-          padding:      "1.5px",
-          background:   "linear-gradient(135deg, rgba(255,255,255,0.30) 0%, rgba(255,255,255,0.10) 30%, rgba(255,255,255,0.04) 58%, rgba(255,255,255,0.22) 100%)",
+          padding:      "1px",
+          background:   "linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.14) 30%, rgba(255,255,255,0.06) 58%, rgba(255,255,255,0.28) 100%)",
           boxShadow: [
-            "0 10px 40px rgba(0,0,0,0.62)",
+            "0 0 0 1px rgba(0,229,176,0.06)",
+            "0 12px 40px rgba(0,0,0,0.65)",
+            "0 0 20px rgba(0,229,176,0.07)",
             "0 2px 10px rgba(0,0,0,0.40)",
           ].join(","),
         }}
@@ -179,10 +181,10 @@ export function MobileBottomNav() {
         style={{
           height:               BAR_H,
           borderRadius:         9999,
-          background:           "rgba(10,10,15,0.96)",
+          background:           "rgba(12,14,19,0.97)",
           backdropFilter:       "blur(28px) saturate(190%)",
           WebkitBackdropFilter: "blur(28px) saturate(190%)",
-          boxShadow:            "inset 0 0.5px 0 rgba(255,255,255,0.07)",
+          boxShadow:            "inset 0 1px 0 rgba(255,255,255,0.09), inset 0 -1px 0 rgba(0,0,0,0.3)",
           position:             "relative",
           overflow:             "hidden",
           display:              "flex",
@@ -306,9 +308,9 @@ export function MobileBottomNav() {
                       width:      22,
                       height:     22,
                       flexShrink: 0,
-                      color:      active ? "#ffffff" : "rgba(148,163,184,0.48)",
+                      color:      active ? "#ffffff" : "rgba(148,163,184,0.44)",
                       filter:     active
-                        ? "drop-shadow(0 0 6px rgba(165,180,252,0.75)) drop-shadow(0 0 12px rgba(99,102,241,0.50))"
+                        ? "drop-shadow(0 0 5px rgba(200,215,255,0.90)) drop-shadow(0 0 11px rgba(165,180,252,0.55)) drop-shadow(0 0 20px rgba(99,102,241,0.32))"
                         : "none",
                       transition: "color 0.22s ease, filter 0.22s ease",
                       display:    "block",
