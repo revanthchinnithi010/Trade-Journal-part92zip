@@ -271,7 +271,6 @@ export default function Trades() {
               { value: "all", label: "All" },
               { value: "Delta Exchange", label: "Delta" },
               { value: "FusionMarkets", label: "Fusion" },
-              { value: "Groww", label: "Groww" },
             ].map(({ value, label }) => (
               <button
                 key={value}
@@ -281,7 +280,6 @@ export default function Trades() {
                   brokerFilter === value
                     ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
                     : value === "FusionMarkets" ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                    : value === "Groww" ? "bg-teal-500/15 text-teal-400 border-teal-500/30"
                     : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
                     : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
                 }`}
