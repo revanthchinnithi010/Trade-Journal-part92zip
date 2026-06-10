@@ -12,6 +12,7 @@ import {
   BarChart2, Activity, Target, Flame, ChevronRight,
   TrendingDown, Briefcase, DollarSign,
 } from "lucide-react";
+import AccountValueWidget from "@/components/AccountValueWidget";
 import {
   Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
@@ -329,6 +330,13 @@ export default function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* ── Account Value Widget ── */}
+      <AccountValueWidget
+        accountValueUSD={resolvedEquity.length > 0 ? resolvedEquity[resolvedEquity.length - 1].equity : Math.max(resolvedStats.netPnl, 0)}
+        netPnlUSD={resolvedStats.netPnl}
+        totalTrades={resolvedStats.totalTrades}
+      />
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
