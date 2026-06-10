@@ -1,0 +1,98 @@
+Fix severe lag when opening the “New Price Alert” popup in mobile mode.
+
+Current issue:
+- Popup opens with heavy lag/jank.
+- UI freezes for a moment before modal appears.
+- Animations are not smooth.
+- Even after fixes, lag still exists.
+
+I want TradingView-level instant popup performance.
+
+Find and fix ROOT CAUSE instead of applying cosmetic fixes.
+
+Things to inspect and optimize:
+
+1. Prevent unnecessary React re-renders
+- Use React.memo()
+- Use useCallback()
+- Use useMemo()
+- Avoid parent state updates triggering whole alerts page rerender
+
+2. Lazy mount popup
+- Do NOT render modal permanently hidden in DOM
+- Mount only when open=true
+
+Wrong:
+{modal always mounted}
+
+Correct:
+{open && <AlertModal />}
+
+3. Remove heavy blur lag
+- backdrop-filter blur causes GPU lag on mobile
+- reduce blur strength
+- use layered transparent background instead
+- avoid nested blurs
+
+4. Avoid expensive animations
+- remove width/height animations
+- animate only:
+  opacity
+  transform
+- use:
+  transform: translateY()
+  scale()
+  opacity
+
+5. Use GPU acceleration
+- will-change: transform, opacity
+- transform: translateZ(0)
+
+6. Remove layout thrashing
+- avoid reading offsetHeight/getBoundingClientRect repeatedly
+- avoid forced reflow during modal open
+
+7. Portal render modal
+- render popup using React Portal
+- mount outside chart container
+- avoid chart repaint/recalculate
+
+8. Freeze chart interactions while popup opens
+- temporarily disable chart mouse/touch events
+- prevent chart rerender during modal animation
+
+9. Check for chart subscriptions leak
+- alerts modal opening should NOT recreate:
+  websocket listeners
+  chart subscriptions
+  interval timers
+  crosshair listeners
+
+10. Optimize state architecture
+- move popup state local
+- avoid global context rerender
+
+11. Mobile performance mode
+When mobile mode:
+- reduce shadow blur
+- reduce glow
+- disable expensive filters
+- use simpler compositing
+
+12. Use requestAnimationFrame for opening animation
+- avoid synchronous heavy work before first paint
+
+13. Debug and identify exact bottleneck
+Use:
+- React Profiler
+- Chrome Performance
+- FPS meter
+- repaint analysis
+
+I want:
+- instant popup open
+- 60fps smooth animation
+- no frame drops
+- no UI freeze
+- no chart lag
+- premium TradingView-like responsiveness

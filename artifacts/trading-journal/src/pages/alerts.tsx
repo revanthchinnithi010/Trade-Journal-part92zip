@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, memo } from "react";
 import { createPortal } from "react-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
@@ -19,7 +19,7 @@ import {
   type AnyAlert, type AlertStatus, type AlertType,
 } from "@/data/alertsData";
 import { useAlertStore } from "@/store/alertStore";
-import { useRealtimeFeed } from "@/hooks/useRealtimeFeed";
+import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useLocation } from "wouter";
 
 // ─── Small helpers ─────────────────────────────────────────────────────────────
@@ -233,7 +233,7 @@ function UTCDateTimePicker({
 }
 
 // ─── Create Price Alert Modal ──────────────────────────────────────────────────
-function CreatePriceAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: PriceAlert) => void }) {
+const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: PriceAlert) => void }) {
   const [form, setForm] = useState({
     symbol: "NAS100", condition: "above" as "above" | "below" | "touch",
     targetPrice: "", notes: "", expiry: "",
@@ -295,10 +295,10 @@ function CreatePriceAlertModal({ onClose, onSave }: { onClose: () => void; onSav
       </div>
     </ModalWrapper>
   );
-}
+});
 
 // ─── Create Zone Alert Modal ───────────────────────────────────────────────────
-function CreateZoneAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: ZoneAlert) => void }) {
+const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: ZoneAlert) => void }) {
   const [form, setForm] = useState({
     symbol: "NAS100", zoneType: "supply" as ZoneAlert["zoneType"],
     upperPrice: "", lowerPrice: "", timeframe: "1H",
@@ -388,10 +388,10 @@ function CreateZoneAlertModal({ onClose, onSave }: { onClose: () => void; onSave
       </div>
     </ModalWrapper>
   );
-}
+});
 
 // ─── Create Trendline Alert Modal ──────────────────────────────────────────────
-function CreateTrendlineAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: TrendlineAlert) => void }) {
+const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onClose, onSave }: { onClose: () => void; onSave: (a: TrendlineAlert) => void }) {
   const [form, setForm] = useState({
     symbol: "NAS100", timeframe: "1H",
     p1Price: "", p1Time: "", p2Price: "", p2Time: "",
@@ -521,7 +521,7 @@ function CreateTrendlineAlertModal({ onClose, onSave }: { onClose: () => void; o
       </div>
     </ModalWrapper>
   );
-}
+});
 
 // ─── Shared modal helpers ──────────────────────────────────────────────────────
 function ModalWrapper({ title, icon, onClose, children }: {
@@ -555,10 +555,8 @@ function ModalWrapper({ title, icon, onClose, children }: {
     >
       {isMobile ? (
         /* ── Mobile: bottom sheet ── */
-        <motion.div
-          initial={{ y: "100%" }}
-          animate={{ y: 0 }}
-          transition={{ type: "spring", stiffness: 420, damping: 40, mass: 0.6 }}
+        <div
+          className="alert-sheet-in"
           style={{
             width: "100%",
             maxHeight: "90dvh",
@@ -571,8 +569,6 @@ function ModalWrapper({ title, icon, onClose, children }: {
             borderTopLeftRadius:  24,
             borderTopRightRadius: 24,
             boxShadow: "0 -8px 48px rgba(0,0,0,0.65)",
-            willChange: "transform",
-            transform: "translateZ(0)",
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -597,13 +593,11 @@ function ModalWrapper({ title, icon, onClose, children }: {
           </div>
           {/* Safe-area bottom */}
           <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 12px)", flexShrink: 0 }} />
-        </motion.div>
+        </div>
       ) : (
         /* ── Desktop: scrollable centered dialog ── */
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.18, ease: "easeOut" }}
+        <div
+          className="alert-dialog-in"
           style={{
             width: "calc(100% - 32px)",
             maxWidth: 480,
@@ -633,7 +627,7 @@ function ModalWrapper({ title, icon, onClose, children }: {
           <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
             {children}
           </div>
-        </motion.div>
+        </div>
       )}
     </div>
   );
@@ -1076,7 +1070,7 @@ export default function Alerts() {
   const zoneAlerts      = alerts.filter((a): a is ZoneAlert      => a.type === "zone");
   const trendlineAlerts = alerts.filter((a): a is TrendlineAlert => a.type === "trendline");
 
-  const { prices, status: feedStatus, alertEvents: wsAlertEvents } = useRealtimeFeed();
+  const { alertEvents: wsAlertEvents } = useLiveMarketContext();
 
   const allAlerts: AnyAlert[] = alerts;
   const totalActive    = allAlerts.filter(a => a.status === "active").length;
@@ -1102,6 +1096,59 @@ export default function Alerts() {
     const endpoint = type === "price" ? "/api/alerts" : type === "zone" ? "/api/zones" : "/api/trendlines";
     fetch(`${endpoint}/${numId}`, { method: "DELETE" }).catch(() => {});
   }, [storeDeleteAlert]);
+
+  const handleCloseModal = useCallback(() => setCreateModal(null), []);
+
+  const handleSavePriceAlert = useCallback(async (a: PriceAlert) => {
+    setCreateModal(null);
+    try {
+      const res = await fetch("/api/alerts", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: a.symbol,
+          condition: a.condition === "above" ? "price_above" : a.condition === "below" ? "price_below" : "price_above",
+          targetPrice: a.targetPrice,
+          message: a.notes || undefined,
+          telegramEnabled: true,
+        }),
+      });
+      if (res.ok) { const saved = await res.json(); addAlert(apiAlertToPriceAlert(saved as Record<string, unknown>)); }
+      else addAlert(a);
+    } catch { addAlert(a); }
+  }, [addAlert]);
+
+  const handleSaveZoneAlert = useCallback(async (a: ZoneAlert) => {
+    setCreateModal(null);
+    try {
+      const res = await fetch("/api/zones", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: a.symbol, upperPrice: a.upperPrice, lowerPrice: a.lowerPrice,
+          zoneType: a.zoneType, timeframe: a.timeframe, condition: a.condition,
+          notes: a.notes || undefined, telegramEnabled: true,
+        }),
+      });
+      if (res.ok) { const saved = await res.json(); addAlert(apiZoneToZoneAlert(saved as Record<string, unknown>)); }
+      else addAlert(a);
+    } catch { addAlert(a); }
+  }, [addAlert]);
+
+  const handleSaveTrendlineAlert = useCallback(async (a: TrendlineAlert) => {
+    setCreateModal(null);
+    try {
+      const res = await fetch("/api/trendlines", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          symbol: a.symbol, timeframe: a.timeframe,
+          point1Price: a.point1Price, point1Time: a.point1Time,
+          point2Price: a.point2Price, point2Time: a.point2Time,
+          condition: a.condition, notes: a.notes || undefined, telegramEnabled: true,
+        }),
+      });
+      if (res.ok) { const saved = await res.json(); addAlert(apiTrendlineToTrendlineAlert(saved as Record<string, unknown>)); }
+      else addAlert(a);
+    } catch { addAlert(a); }
+  }, [addAlert]);
 
   const filteredTable = filterStatus === "all" ? allAlerts : allAlerts.filter(a => a.status === filterStatus);
 
@@ -1368,65 +1415,15 @@ export default function Alerts() {
       </div>
 
       {/* ── Create Modals ────────────────────────────────────────────────────── */}
-      <AnimatePresence>
-        {createModal === "price" && (
-          <CreatePriceAlertModal onClose={() => setCreateModal(null)}
-            onSave={async a => {
-              setCreateModal(null);
-              try {
-                const res = await fetch("/api/alerts", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    symbol: a.symbol,
-                    condition: a.condition === "above" ? "price_above" : a.condition === "below" ? "price_below" : "price_above",
-                    targetPrice: a.targetPrice,
-                    message: a.notes || undefined,
-                    telegramEnabled: true,
-                  }),
-                });
-                if (res.ok) { const saved = await res.json(); addAlert(apiAlertToPriceAlert(saved as Record<string, unknown>)); }
-                else addAlert(a);
-              } catch { addAlert(a); }
-            }} />
-        )}
-        {createModal === "zone" && (
-          <CreateZoneAlertModal onClose={() => setCreateModal(null)}
-            onSave={async a => {
-              setCreateModal(null);
-              try {
-                const res = await fetch("/api/zones", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    symbol: a.symbol, upperPrice: a.upperPrice, lowerPrice: a.lowerPrice,
-                    zoneType: a.zoneType, timeframe: a.timeframe, condition: a.condition,
-                    notes: a.notes || undefined, telegramEnabled: true,
-                  }),
-                });
-                if (res.ok) { const saved = await res.json(); addAlert(apiZoneToZoneAlert(saved as Record<string, unknown>)); }
-                else addAlert(a);
-              } catch { addAlert(a); }
-            }} />
-        )}
-        {createModal === "trendline" && (
-          <CreateTrendlineAlertModal onClose={() => setCreateModal(null)}
-            onSave={async a => {
-              setCreateModal(null);
-              try {
-                const res = await fetch("/api/trendlines", {
-                  method: "POST", headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    symbol: a.symbol, timeframe: a.timeframe,
-                    point1Price: a.point1Price, point1Time: a.point1Time,
-                    point2Price: a.point2Price, point2Time: a.point2Time,
-                    condition: a.condition, notes: a.notes || undefined, telegramEnabled: true,
-                  }),
-                });
-                if (res.ok) { const saved = await res.json(); addAlert(apiTrendlineToTrendlineAlert(saved as Record<string, unknown>)); }
-                else addAlert(a);
-              } catch { addAlert(a); }
-            }} />
-        )}
-      </AnimatePresence>
+      {createModal === "price" && (
+        <CreatePriceAlertModal onClose={handleCloseModal} onSave={handleSavePriceAlert} />
+      )}
+      {createModal === "zone" && (
+        <CreateZoneAlertModal onClose={handleCloseModal} onSave={handleSaveZoneAlert} />
+      )}
+      {createModal === "trendline" && (
+        <CreateTrendlineAlertModal onClose={handleCloseModal} onSave={handleSaveTrendlineAlert} />
+      )}
     </div>
   );
 }
