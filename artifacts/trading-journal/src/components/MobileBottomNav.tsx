@@ -38,8 +38,8 @@ const BUBBLE_R   = 16;
 const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;
 const CIRCLE_D   = BUBBLE_W;
 
-// How much the bubble expands while in transit (subtle — premium feel)
-const TRAVEL_SCALE = 1.12;
+// How much the bubble expands while in transit — noticeable liquid-glass stretch
+const TRAVEL_SCALE = 1.42;
 
 const CSS_ID = "tj-circle-nav-v1";
 function ensureCSS() {
@@ -157,22 +157,22 @@ export function MobileBottomNav() {
     prevCircleX.current = circleX;
 
     // Single keyframe call — no .then() race condition possible.
-    // scale peaks at TRAVEL_SCALE mid-journey then returns to 1,
-    // all within one GPU-composited transform animation.
+    // Bubble pops to TRAVEL_SCALE immediately, holds it throughout the slide,
+    // then snaps back to 1 only once it has arrived — liquid-glass stretch feel.
     controls.start({
       x:     circleX,
-      scale: [1, TRAVEL_SCALE, 1],
+      scale: [1, TRAVEL_SCALE, TRAVEL_SCALE, 1],
       transition: {
         x: {
           type:     "tween",
-          duration: 0.20,
-          ease:     [0.25, 1, 0.35, 1],   // easeOutExpo — instant start, smooth decel
+          duration: 0.22,
+          ease:     [0.25, 1, 0.35, 1],   // easeOutExpo — instant start, crisp landing
         },
         scale: {
           type:     "tween",
-          duration: 0.28,
-          times:    [0, 0.38, 1],          // peak at 38% of journey
-          ease:     "easeInOut",
+          duration: 0.32,
+          times:    [0, 0.12, 0.78, 1],   // expand fast → hold → collapse fast at end
+          ease:     ["easeOut", "linear", "easeIn"],
         },
       },
     });
