@@ -715,10 +715,10 @@ function PriceAlertCard({ alert, onTogglePause, onDelete }: {
   return (
     <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
       className={cn(
-        "rounded-xl border p-4 transition-all group",
-        alert.status === "triggered" ? "border-primary/30 bg-primary/[0.06] shadow-sm shadow-primary/10"
-        : alert.status === "paused"   ? "border-yellow-500/20 bg-yellow-500/[0.04]"
-        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1]"
+        "p-4 transition-all group",
+        alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
+        : alert.status === "paused"   ? "glass-card border-yellow-500/20 !bg-yellow-500/[0.04]"
+        : "glass-card"
       )}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
@@ -769,10 +769,10 @@ function ZoneAlertCard({ alert, onTogglePause, onDelete }: {
   return (
     <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
       className={cn(
-        "rounded-xl border p-4 transition-all group",
-        alert.status === "triggered" ? "border-primary/30 bg-primary/[0.06] shadow-sm shadow-primary/10"
-        : alert.status === "paused"   ? "border-yellow-500/20 bg-yellow-500/[0.04]"
-        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1]"
+        "p-4 transition-all group",
+        alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
+        : alert.status === "paused"   ? "glass-card border-yellow-500/20 !bg-yellow-500/[0.04]"
+        : "glass-card"
       )}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2 flex-wrap">
@@ -822,10 +822,10 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
   return (
     <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
       className={cn(
-        "rounded-xl border p-4 transition-all group",
-        alert.status === "triggered" ? "border-primary/30 bg-primary/[0.06] shadow-sm shadow-primary/10"
-        : alert.status === "paused"   ? "border-yellow-500/20 bg-yellow-500/[0.04]"
-        : "border-white/[0.06] bg-white/[0.02] hover:border-white/[0.1]"
+        "p-4 transition-all group",
+        alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
+        : alert.status === "paused"   ? "glass-card border-yellow-500/20 !bg-yellow-500/[0.04]"
+        : "glass-card"
       )}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2">
@@ -908,7 +908,7 @@ function ConnectionStatusWidget() {
   ];
 
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 space-y-3">
+    <div className="glass-card p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radio className="w-3.5 h-3.5 text-primary" />
@@ -1132,7 +1132,7 @@ export default function Alerts() {
           { label: "Paused Alerts",   value: totalPaused,    icon: Pause,    color: "text-yellow-400",  bg: "bg-yellow-400/10",  dot: "bg-yellow-400",  animated: false },
           { label: "Total Alerts",    value: allAlerts.length, icon: Bell,   color: "text-blue-400",    bg: "bg-blue-400/10",    dot: "bg-blue-400",    animated: false },
         ].map(w => (
-          <div key={w.label} className="rounded-2xl border border-white/[0.06] bg-white/[0.02] p-4 flex items-center gap-3">
+          <div key={w.label} className="glass-card p-4 flex items-center gap-3">
             <div className={`w-9 h-9 rounded-xl ${w.bg} flex items-center justify-center flex-shrink-0`}>
               <w.icon className={`w-4 h-4 ${w.color}`} />
             </div>
