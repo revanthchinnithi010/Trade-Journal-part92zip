@@ -39,7 +39,7 @@ const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;
 const CIRCLE_D   = BUBBLE_W;
 
 // How much the bubble grows while in transit (1 = no change)
-const TRAVEL_SCALE = 1.28;
+const TRAVEL_SCALE = 1.16;
 
 const CSS_ID = "tj-circle-nav-v1";
 function ensureCSS() {
@@ -155,24 +155,30 @@ export function MobileBottomNav() {
     if (prevCircleX.current === circleX) return;
     prevCircleX.current = circleX;
 
-    // Phase 1: slide to new position while growing
+    // Phase 1: slide to new position while growing — fast, snappy, iOS-style
     controls.start({
-      x: circleX,
+      x:     circleX,
       scale: TRAVEL_SCALE,
       transition: {
-        type:      "spring",
-        stiffness: 380,
-        damping:   28,
-        mass:      0.55,
+        x: {
+          type:      "tween",
+          duration:  0.16,
+          ease:      [0.22, 1, 0.36, 1],   // custom easeOutExpo
+        },
+        scale: {
+          type:      "tween",
+          duration:  0.10,
+          ease:      "easeOut",
+        },
       },
     }).then(() => {
-      // Phase 2: settle back to default size once arrived
+      // Phase 2: snap back to default size immediately after arriving
       controls.start({
         scale: 1,
         transition: {
-          type:      "spring",
-          stiffness: 260,
-          damping:   22,
+          type:      "tween",
+          duration:  0.14,
+          ease:      [0.34, 1.56, 0.64, 1],  // slight overshoot for liveliness
         },
       });
     });
