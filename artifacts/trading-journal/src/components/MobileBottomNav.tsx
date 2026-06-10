@@ -28,7 +28,7 @@ type NavTab =
 
 const TABS: NavTab[] = [
   { kind: "link",   href: "/",       label: "Home",    Icon: LayoutDashboard },
-  { kind: "link",   href: "/trades", label: "Markets", Icon: Globe           },
+  { kind: "link",   href: "/markets", label: "Markets", Icon: Globe           },
   { kind: "link",   href: "/charts", label: "Trade",   Icon: CandlestickChart },
   { kind: "link",   href: "/alerts", label: "Charts",  Icon: BarChart2        },
   { kind: "action", label: "Menu",   Icon: Menu,

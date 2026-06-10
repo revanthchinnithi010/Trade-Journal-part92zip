@@ -11,6 +11,7 @@ import { WatchlistProvider } from "@/contexts/WatchlistContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
 
 const Dashboard   = lazy(() => import("@/pages/dashboard"));
+const Markets     = lazy(() => import("@/pages/markets"));
 const Trades      = lazy(() => import("@/pages/trades"));
 const Reports     = lazy(() => import("@/pages/reports"));
 const Calendar    = lazy(() => import("@/pages/calendar"));
@@ -72,6 +73,7 @@ function Router() {
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/">{() => <Dashboard />}</Route>
+          <Route path="/markets">{() => <Markets />}</Route>
           <Route path="/trades">{() => <Trades />}</Route>
           <Route path="/brokers">{() => <Brokers />}</Route>
           <Route path="/alerts">{() => <Alerts />}</Route>
