@@ -2,6 +2,8 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Star, TrendingUp, RefreshCw, Search, X } from "lucide-react";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
+import { useLocation } from "wouter";
+import { useChartStore } from "@/store/chartStore";
 
 type Tab = "Watchlist" | "Crypto" | "Forex" | "Indices" | "Commodities";
 const TABS: Tab[] = ["Watchlist", "Crypto", "Forex", "Indices", "Commodities"];
@@ -36,10 +38,11 @@ const CONTRACT_LABELS: Record<string, string> = {
 };
 
 function SymbolRow({
-  symbol, name, contractType, isFavorite, inWatchlist, onStarPress,
+  symbol, name, contractType, isFavorite, inWatchlist, onStarPress, onTap,
 }: {
   symbol: string; name: string; contractType: string;
-  isFavorite: boolean; inWatchlist: boolean; onStarPress: () => void;
+  isFavorite: boolean; inWatchlist: boolean;
+  onStarPress: () => void; onTap?: () => void;
 }) {
   const tick      = useSymbolTick(symbol);
   const price     = tick?.price;
@@ -53,7 +56,10 @@ function SymbolRow({
       padding: "11px 16px",
       borderBottom: "1px solid rgba(255,255,255,0.05)",
       gap: 10, minHeight: 62,
-    }}>
+      cursor: onTap ? "pointer" : "default",
+    }}
+      onClick={onTap ? (e) => { if ((e.target as HTMLElement).closest("button")) return; onTap(); } : undefined}
+    >
       {/* Star */}
       <button
         onClick={onStarPress}
@@ -121,6 +127,7 @@ function SymbolRow({
 }
 
 export default function Markets() {
+  const [, navigate]              = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
   const [search,    setSearch]    = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -131,6 +138,12 @@ export default function Markets() {
   const [loadError,      setLoadError]      = useState<string | null>(null);
 
   const { items, addSymbol, toggleFavorite } = useWatchlist();
+
+  const handleSymbolTap = useCallback((symbol: string) => {
+    localStorage.setItem("tv_symbol", symbol);
+    useChartStore.getState().setSymbol(symbol);
+    navigate("/charts");
+  }, [navigate]);
 
   const watchMap = useMemo(() => {
     const m = new Map<string, typeof items[0]>();
@@ -335,6 +348,7 @@ export default function Markets() {
               inWatchlist={inWatchlist}
               isFavorite={isFavorite}
               onStarPress={() => handleStarPress(row.symbol)}
+              onTap={activeTab === "Watchlist" ? () => handleSymbolTap(row.symbol) : undefined}
             />
           );
         })}
