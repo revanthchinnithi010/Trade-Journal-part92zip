@@ -1141,7 +1141,7 @@ export default function Alerts() {
             <Button
               onClick={() => setCreateModal(tab as "price" | "zone" | "trendline")}
               className={
-                isMobile && tab === "trendline"
+                isMobile && (tab === "trendline" || tab === "zone")
                   ? "h-9 bg-white hover:bg-white/90 text-black border-2 border-white text-xs font-semibold gap-2"
                   : "h-9 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/25 text-xs font-semibold gap-2"
               }
