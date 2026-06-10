@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Eye, EyeOff, ChevronRight, Plus } from "lucide-react";
 import { useCurrencyStore } from "@/store/currencyStore";
+import { useLocation } from "wouter";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -41,6 +42,7 @@ interface Props {
 
 export default function AccountValueWidget({ accountValueUSD, upnlUSD, openPositions, openOrders }: Props) {
   const [masked, setMasked] = useState(false);
+  const [, navigate]  = useLocation();
   const exchangeRate = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
 
   const acINR  = accountValueUSD * exchangeRate;
@@ -53,7 +55,7 @@ export default function AccountValueWidget({ accountValueUSD, upnlUSD, openPosit
       <div className="px-4 pt-4 pb-3">
         {/* Header row */}
         <div className="flex items-start justify-between mb-3">
-          <button className="flex items-center gap-0.5 group">
+          <button className="flex items-center gap-0.5 group" onClick={() => navigate("/portfolio")}>
             <span className="text-[13px] font-semibold text-white/70 group-hover:text-white/90 transition-colors">
               Account Value
             </span>
@@ -103,7 +105,7 @@ export default function AccountValueWidget({ accountValueUSD, upnlUSD, openPosit
       >
         {/* Left: UPNL */}
         <div className="px-3.5 py-3 border-r border-white/[0.06]">
-          <button className="flex items-center gap-0.5 mb-1.5 group">
+          <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
               UPNL
             </span>
@@ -124,7 +126,7 @@ export default function AccountValueWidget({ accountValueUSD, upnlUSD, openPosit
 
         {/* Right: Positions / Orders */}
         <div className="px-3.5 py-3">
-          <button className="flex items-center gap-0.5 mb-1.5 group">
+          <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
               Positions / Orders
             </span>
