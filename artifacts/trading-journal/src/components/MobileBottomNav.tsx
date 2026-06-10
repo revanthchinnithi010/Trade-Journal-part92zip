@@ -170,9 +170,9 @@ export function MobileBottomNav() {
         },
         scale: {
           type:     "tween",
-          duration: 0.32,
-          times:    [0, 0.12, 0.78, 1],   // expand fast → hold → collapse fast at end
-          ease:     ["easeOut", "linear", "easeIn"],
+          duration: 0.22,
+          times:    [0, 0.08, 0.60, 1],   // expand instant → hold → collapse sharp
+          ease:     ["easeOut", "linear", "easeOut"],
         },
       },
     });
@@ -209,38 +209,25 @@ export function MobileBottomNav() {
             "0 0 20px rgba(0,229,176,0.07)",
             "0 2px 10px rgba(0,0,0,0.40)",
           ].join(","),
+          position: "relative",   // ← stacking context for the bubble
         }}
       >
-      <div
-        ref={pillRef}
-        style={{
-          height:               BAR_H,
-          borderRadius:         9999,
-          background:           "rgba(12,14,19,0.97)",
-          backdropFilter:       "blur(28px) saturate(190%)",
-          WebkitBackdropFilter: "blur(28px) saturate(190%)",
-          boxShadow:            "inset 0 1px 0 rgba(255,255,255,0.09), inset 0 -1px 0 rgba(0,0,0,0.3)",
-          position:             "relative",
-          overflow:             "hidden",
-          display:              "flex",
-        }}
-      >
-        {/* ── LAYER 1 (z-index 1): Transparent water bubble ──── */}
+        {/* ── BUBBLE lives here — outside overflow:hidden, expands freely ── */}
         {tabW > 0 && (
           <motion.div
             animate={controls}
             style={{
-              position:        "absolute",
-              top:             (BAR_H - BUBBLE_H) / 2,
-              left:            0,
-              width:           BUBBLE_W,
-              height:          BUBBLE_H,
-              borderRadius:    BUBBLE_R,
-              zIndex:          1,
-              pointerEvents:   "none",
-              background:      "rgba(200,210,255,0.06)",
-              willChange:      "transform",
-              border:      "1.5px solid rgba(180,200,255,0.52)",
+              position:      "absolute",
+              top:           1 + (BAR_H - BUBBLE_H) / 2,  // 1px border + centering
+              left:          1,                             // 1px border offset
+              width:         BUBBLE_W,
+              height:        BUBBLE_H,
+              borderRadius:  BUBBLE_R,
+              zIndex:        5,          // above pill bg, below icons (z-index 10)
+              pointerEvents: "none",
+              background:    "rgba(200,210,255,0.06)",
+              willChange:    "transform",
+              border:        "1.5px solid rgba(180,200,255,0.52)",
               boxShadow: [
                 "0 0 0 0.5px rgba(99,102,241,0.28)",
                 "0 0 12px rgba(165,180,252,0.24)",
@@ -249,7 +236,7 @@ export function MobileBottomNav() {
               ].join(","),
             }}
           >
-            {/* Top-left bright crescent — primary water-bubble specular */}
+            {/* Top-left bright crescent */}
             <div style={{
               position:     "absolute",
               top:          "10%",
@@ -260,7 +247,7 @@ export function MobileBottomNav() {
               background:   "radial-gradient(ellipse at 38% 38%, rgba(255,255,255,0.60) 0%, rgba(255,255,255,0.16) 55%, transparent 100%)",
               transform:    "rotate(-24deg)",
             }} />
-            {/* Bottom-right secondary shimmer */}
+            {/* Bottom-right shimmer */}
             <div style={{
               position:     "absolute",
               bottom:       "12%",
@@ -270,7 +257,7 @@ export function MobileBottomNav() {
               borderRadius: "50%",
               background:   "radial-gradient(ellipse, rgba(165,180,252,0.35) 0%, transparent 100%)",
             }} />
-            {/* Top-centre thin rim highlight */}
+            {/* Top-centre rim highlight */}
             <div style={{
               position:     "absolute",
               top:          4,
@@ -293,7 +280,21 @@ export function MobileBottomNav() {
           </motion.div>
         )}
 
-        {/* ── LAYER 2 (z-index 10): Icons + labels ────────────── */}
+      <div
+        ref={pillRef}
+        style={{
+          height:               BAR_H,
+          borderRadius:         9999,
+          background:           "rgba(12,14,19,0.97)",
+          backdropFilter:       "blur(28px) saturate(190%)",
+          WebkitBackdropFilter: "blur(28px) saturate(190%)",
+          boxShadow:            "inset 0 1px 0 rgba(255,255,255,0.09), inset 0 -1px 0 rgba(0,0,0,0.3)",
+          position:             "relative",
+          overflow:             "hidden",
+          display:              "flex",
+        }}
+      >
+        {/* ── Icons + labels (z-index 10 keeps them above bubble) ── */}
         {TABS.map(({ href, label, Icon }) => {
           const active = location === href;
           return (
