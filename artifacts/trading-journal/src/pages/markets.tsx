@@ -146,50 +146,13 @@ export default function Markets() {
       fetch("/api/symbols?broker=ctrader").then(r => r.json()),
     ])
       .then(([d, c]) => {
-        const delta   = (d as { symbols: SymbolInfo[] }).symbols ?? [];
-        const ctrader = (c as { symbols: SymbolInfo[] }).symbols ?? [];
-        setDeltaSymbols(delta);
-        setCtraderSymbols(ctrader);
+        setDeltaSymbols((d as { symbols: SymbolInfo[] }).symbols ?? []);
+        setCtraderSymbols((c as { symbols: SymbolInfo[] }).symbols ?? []);
         setLoadError(null);
-        // Pre-subscribe all cTrader symbols + first 50 delta symbols so prices
-        // are always live regardless of watchlist state
-        const batch = [
-          ...ctrader.map(s => s.symbol),
-          ...delta.slice(0, 50).map(s => s.symbol),
-        ];
-        if (batch.length > 0) {
-          fetch("/api/market/subscribe-batch", {
-            method:  "POST",
-            headers: { "Content-Type": "application/json" },
-            body:    JSON.stringify({ symbols: batch }),
-          }).catch(() => {});
-        }
       })
       .catch(err => setLoadError(String(err)))
       .finally(() => setLoading(false));
   }, []);
-
-  // Re-subscribe visible symbols when tab changes so prices survive watchlist removals
-  useEffect(() => {
-    let symbols: string[] = [];
-    if (activeTab === "Crypto") {
-      symbols = deltaSymbols.slice(0, 100).map(s => s.symbol);
-    } else if (activeTab === "Forex") {
-      symbols = ctraderSymbols.filter(s => s.contractType === "forex" || s.contractType === "metal").map(s => s.symbol);
-    } else if (activeTab === "Indices") {
-      symbols = ctraderSymbols.filter(s => s.contractType === "index").map(s => s.symbol);
-    } else if (activeTab === "Commodities") {
-      symbols = ctraderSymbols.filter(s => s.contractType === "commodity").map(s => s.symbol);
-    } else {
-      symbols = items.map(i => i.symbol);
-    }
-    if (symbols.length === 0) return;
-    fetch("/api/market/subscribe-batch", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ symbols }),
-    }).catch(() => {});
-  }, [activeTab, deltaSymbols, ctraderSymbols, items]);
 
   const handleStarPress = useCallback((symbol: string) => {
     const item = watchMap.get(symbol);
@@ -198,13 +161,6 @@ export default function Markets() {
     } else {
       addSymbol(symbol, true);
     }
-    // Re-subscribe immediately — if the watchlist DELETE just killed the feed,
-    // this brings it back so prices stay live on the Markets page.
-    fetch("/api/market/subscribe-batch", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ symbols: [symbol] }),
-    }).catch(() => {});
   }, [watchMap, addSymbol, toggleFavorite]);
 
   function getRows(): Array<{ symbol: string; name: string; contractType: string }> {

@@ -84,11 +84,7 @@ export function createWatchlistRouter(marketData: MarketDataService): IRouter {
     try {
       const [item] = await db.delete(watchlistTable).where(eq(watchlistTable.id, params.data.id)).returning();
       if (!item) { res.status(404).json({ error: "Not found" }); return; }
-      // NOTE: intentionally NOT unsubscribing here.
-      // Removing from the watchlist is a display/preference action only.
-      // Market data subscriptions are managed independently so the Markets
-      // page continues to show live prices for any symbol regardless of
-      // whether it is in the user's watchlist.
+      marketData.unsubscribe(item.symbol);
       res.sendStatus(204);
     } catch { res.status(500).json({ error: "Failed to remove from watchlist" }); }
   });
