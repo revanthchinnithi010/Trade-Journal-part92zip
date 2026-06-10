@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { Star, Search, Menu, TrendingUp, RefreshCw } from "lucide-react";
+import { Star, TrendingUp, RefreshCw } from "lucide-react";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
 
@@ -18,9 +18,9 @@ interface SymbolInfo {
 
 function formatPrice(price: number | undefined): string {
   if (!price) return "—";
-  if (price >= 10000)  return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  if (price >= 100)    return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1)      return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  if (price >= 10000) return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (price >= 100)   return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1)     return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   return price.toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
 }
 
@@ -41,23 +41,19 @@ function SymbolRow({
   symbol: string; name: string; contractType: string;
   isFavorite: boolean; inWatchlist: boolean; onStarPress: () => void;
 }) {
-  const tick = useSymbolTick(symbol);
+  const tick      = useSymbolTick(symbol);
   const price     = tick?.price;
   const changePct = tick?.changePct ?? 0;
   const isUp      = changePct >= 0;
   const tag       = CONTRACT_LABELS[contractType] ?? contractType;
 
   return (
-    <div
-      style={{
-        display:      "flex",
-        alignItems:   "center",
-        padding:      "11px 16px",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        gap:          10,
-        minHeight:    64,
-      }}
-    >
+    <div style={{
+      display: "flex", alignItems: "center",
+      padding: "11px 16px",
+      borderBottom: "1px solid rgba(255,255,255,0.05)",
+      gap: 10, minHeight: 62,
+    }}>
       {/* Star */}
       <button
         onClick={onStarPress}
@@ -65,7 +61,7 @@ function SymbolRow({
       >
         <Star
           size={17}
-          fill={isFavorite ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.25)" : "none"}
+          fill={isFavorite ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.2)" : "none"}
           color={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.38)"}
           strokeWidth={1.8}
         />
@@ -73,7 +69,7 @@ function SymbolRow({
 
       {/* Symbol + name */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ color: "#fff", fontWeight: 700, fontSize: 13.5, letterSpacing: "0.01em" }}>
             {symbol}
           </span>
@@ -105,15 +101,15 @@ function SymbolRow({
 
       {/* Change badge */}
       <div style={{
-        minWidth:   58, padding: "5px 7px", borderRadius: 6,
-        textAlign:  "center", fontSize: 12, fontWeight: 700,
+        minWidth: 60, padding: "5px 7px", borderRadius: 6,
+        textAlign: "center", fontSize: 12, fontWeight: 700,
         fontVariantNumeric: "tabular-nums", flexShrink: 0,
         background: tick
           ? isUp ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)"
           : "rgba(148,163,184,0.07)",
         color: tick
           ? isUp ? "#10b981" : "#ef4444"
-          : "rgba(148,163,184,0.35)",
+          : "rgba(148,163,184,0.3)",
         border: tick
           ? isUp ? "1px solid rgba(16,185,129,0.22)" : "1px solid rgba(239,68,68,0.22)"
           : "1px solid rgba(148,163,184,0.1)",
@@ -125,9 +121,8 @@ function SymbolRow({
 }
 
 export default function Markets() {
-  const [activeTab,  setActiveTab]  = useState<Tab>("Watchlist");
-  const [search,     setSearch]     = useState("");
-  const [showSearch, setShowSearch] = useState(false);
+  const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
+  const [search,    setSearch]    = useState("");
 
   const [deltaSymbols,   setDeltaSymbols]   = useState<SymbolInfo[]>([]);
   const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
@@ -136,14 +131,12 @@ export default function Markets() {
 
   const { items, addSymbol, toggleFavorite } = useWatchlist();
 
-  // Map symbol → watchlist item
   const watchMap = useMemo(() => {
     const m = new Map<string, typeof items[0]>();
     items.forEach(i => m.set(i.symbol, i));
     return m;
   }, [items]);
 
-  // Load broker symbol catalogs once
   useEffect(() => {
     setLoading(true);
     Promise.all([
@@ -172,11 +165,14 @@ export default function Markets() {
     let rows: Array<{ symbol: string; name: string; contractType: string }>;
 
     if (activeTab === "Watchlist") {
-      rows = items.map(i => ({
-        symbol:       i.symbol,
-        name:         i.label,
-        contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other",
-      }));
+      // Only show explicitly favourited symbols
+      rows = items
+        .filter(i => i.isFavorite)
+        .map(i => ({
+          symbol:       i.symbol,
+          name:         i.label,
+          contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other",
+        }));
     } else if (activeTab === "Crypto") {
       rows = deltaSymbols.map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
     } else if (activeTab === "Forex") {
@@ -188,7 +184,6 @@ export default function Markets() {
         .filter(s => s.contractType === "index")
         .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
     } else {
-      // Commodities
       rows = ctraderSymbols
         .filter(s => s.contractType === "commodity")
         .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
@@ -212,81 +207,27 @@ export default function Markets() {
       height: "100%", background: "rgb(10,12,16)", color: "#fff",
       overflow: "hidden",
     }}>
-      {/* ── Own top bar (Layout header hidden for /markets) ── */}
+      {/* ── Tab bar only — no extra header ── */}
       <div style={{
-        flexShrink: 0, background: "rgba(10,12,16,0.98)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        flexShrink: 0,
+        background: "rgba(10,12,16,0.98)",
+        backdropFilter: "blur(20px)",
+        WebkitBackdropFilter: "blur(20px)",
         borderBottom: "1px solid rgba(255,255,255,0.07)",
         position: "sticky", top: 0, zIndex: 10,
       }}>
-        {/* Title row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 10px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <button
-              onClick={() => window.dispatchEvent(new CustomEvent("tj:open-sidebar"))}
-              style={{
-                background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)",
-                borderRadius: 10, padding: "7px 9px", cursor: "pointer", color: "rgba(148,163,184,0.9)",
-                display: "flex", alignItems: "center", lineHeight: 0,
-              }}
-            >
-              <Menu size={17} />
-            </button>
-            <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Markets</h1>
-          </div>
-          <button
-            onClick={() => { setShowSearch(s => !s); if (showSearch) setSearch(""); }}
-            style={{
-              background:   showSearch ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.07)",
-              border:       showSearch ? "1px solid rgba(99,102,241,0.40)" : "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 10, padding: "7px 9px", cursor: "pointer",
-              color:        showSearch ? "#818cf8" : "rgba(148,163,184,0.8)",
-              display: "flex", alignItems: "center", lineHeight: 0, transition: "all 0.15s",
-            }}
-          >
-            <Search size={17} />
-          </button>
-        </div>
-
-        {/* Search input */}
-        {showSearch && (
-          <div style={{
-            margin: "0 16px 10px",
-            padding: "8px 12px",
-            borderRadius: 10,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            display: "flex", alignItems: "center", gap: 8,
-          }}>
-            <Search size={13} color="rgba(148,163,184,0.4)" />
-            <input
-              autoFocus
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search symbol or name…"
-              style={{
-                flex: 1, background: "none", border: "none", outline: "none",
-                color: "#fff", fontSize: 13.5, caretColor: "#818cf8",
-              }}
-            />
-            {search && (
-              <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.5)", padding: 0, lineHeight: 1 }}>✕</button>
-            )}
-          </div>
-        )}
-
         {/* Tabs */}
-        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" }}>
+        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "4px 6px 0" }}>
           {TABS.map(tab => {
             const active = tab === activeTab;
             return (
               <button
                 key={tab}
-                onClick={() => setActiveTab(tab)}
+                onClick={() => { setActiveTab(tab); setSearch(""); }}
                 style={{
-                  flexShrink: 0, padding: "8px 12px 9px", border: "none",
+                  flexShrink: 0, padding: "9px 13px 10px", border: "none",
                   background: "transparent", cursor: "pointer",
-                  fontSize: 13, fontWeight: active ? 700 : 400,
+                  fontSize: 13.5, fontWeight: active ? 700 : 400,
                   color: active ? "#f59e0b" : "rgba(148,163,184,0.50)",
                   position: "relative", transition: "color 0.15s", whiteSpace: "nowrap",
                 }}
@@ -295,7 +236,7 @@ export default function Markets() {
                 {active && (
                   <div style={{
                     position: "absolute", bottom: 0,
-                    left: "18%", right: "18%",
+                    left: "16%", right: "16%",
                     height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b",
                   }} />
                 )}
@@ -308,41 +249,41 @@ export default function Markets() {
         <div style={{
           display: "flex", alignItems: "center",
           padding: "6px 16px",
-          background: "rgba(255,255,255,0.025)",
+          background: "rgba(255,255,255,0.02)",
           borderTop: "1px solid rgba(255,255,255,0.06)",
         }}>
-          <div style={{ width: 24, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>Contract</div>
-          <div style={{ minWidth: 76, textAlign: "right", fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>Price</div>
-          <div style={{ minWidth: 68, textAlign: "center", marginLeft: 10, fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>24h Chg.</div>
+          <div style={{ width: 26, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: 11, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Contract</div>
+          <div style={{ minWidth: 80, textAlign: "right", fontSize: 11, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Price</div>
+          <div style={{ minWidth: 68, textAlign: "center", marginLeft: 10, fontSize: 11, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>24h Chg.</div>
         </div>
       </div>
 
       {/* ── List ── */}
       <div style={{ flex: 1, overflowY: "auto" }}>
         {loading && (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "40px 0", gap: 8, color: "rgba(148,163,184,0.5)" }}>
-            <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "40px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
+            <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />
             <span style={{ fontSize: 13 }}>Loading…</span>
             <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
           </div>
         )}
 
         {!loading && loadError && activeTab !== "Watchlist" && (
-          <div style={{ padding: "40px 24px", textAlign: "center", color: "rgba(239,68,68,0.7)", fontSize: 13 }}>
-            Failed to load symbols. {loadError}
+          <div style={{ padding: "40px 24px", textAlign: "center", color: "rgba(239,68,68,0.65)", fontSize: 13 }}>
+            Failed to load symbols.
           </div>
         )}
 
         {!loading && rows.length === 0 && (
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", color: "rgba(148,163,184,0.38)", gap: 10 }}>
-            <TrendingUp size={36} strokeWidth={1} />
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
+            <TrendingUp size={34} strokeWidth={1} />
             <p style={{ fontSize: 14, margin: 0 }}>
-              {activeTab === "Watchlist" ? "Your watchlist is empty" : `No ${activeTab} symbols found`}
+              {activeTab === "Watchlist" ? "No favourites yet" : `No ${activeTab} symbols found`}
             </p>
             {activeTab === "Watchlist" && (
-              <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.28)" }}>
-                Tap ★ on any symbol to add it here
+              <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
+                Tap ★ on any symbol in Crypto, Forex,{"\n"}Indices or Commodities to add it here
               </p>
             )}
           </div>
