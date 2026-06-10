@@ -1065,6 +1065,7 @@ type Tab = "price" | "zone" | "trendline" | "table";
 type CreateModal = null | "price" | "zone" | "trendline";
 
 export default function Alerts() {
+  const isMobile = useIsMobile();
   const [tab, setTab]               = useState<Tab>("price");
   const [createModal, setCreateModal] = useState<CreateModal>(null);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -1139,7 +1140,11 @@ export default function Alerts() {
           {createBtnLabel && (
             <Button
               onClick={() => setCreateModal(tab as "price" | "zone" | "trendline")}
-              className="h-9 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/25 text-xs font-semibold gap-2"
+              className={
+                isMobile && tab === "trendline"
+                  ? "h-9 bg-white hover:bg-white/90 text-black border-2 border-white text-xs font-semibold gap-2"
+                  : "h-9 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/25 text-xs font-semibold gap-2"
+              }
             >
               <Plus className="w-3.5 h-3.5" />
               New {createBtnLabel}
