@@ -311,7 +311,7 @@ export default function Portfolio() {
                     PNL Analytics
                   </button>
                 </div>
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3">
                   <DualValue inr={accountValueINR} usd={accountValueUSD} masked={masked} size="lg" />
                   <button
                     onClick={() => setMasked(m => !m)}
@@ -320,65 +320,22 @@ export default function Portfolio() {
                     {masked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                   </button>
                 </div>
-                <div className="flex gap-2.5">
-                  <button
-                    className="flex-1 py-2.5 rounded-xl text-[12px] font-bold transition-all active:scale-[0.97]"
-                    style={{
-                      background: "transparent",
-                      color: "#f97316",
-                      border: "1.5px solid rgba(249,115,22,0.5)",
-                    }}
-                  >
-                    Withdraw
-                  </button>
-                  <button
-                    className="flex-1 flex items-center justify-center gap-1 py-2.5 rounded-xl text-[12px] font-bold transition-all active:scale-[0.97]"
-                    style={{
-                      background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
-                      color: "#fff",
-                      boxShadow: "0 2px 12px rgba(249,115,22,0.3)",
-                    }}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Funds
-                  </button>
-                </div>
               </div>
             </div>
 
             {/* Wallet sections */}
             <div className="glass-card overflow-hidden">
               <WalletRow
-                label="FNO Wallet"
-                inr={walletINR}
-                usd={walletUSD}
-                masked={masked}
-                badge="Primary"
-              />
-              <WalletRow
                 label="Available for Trading"
                 inr={availINR}
                 usd={availUSD}
-                masked={masked}
-              />
-              <WalletRow
-                label="Spot Wallet"
-                inr={0}
-                usd={0}
-                masked={masked}
-                arrow
-              />
-              <WalletRow
-                label="Fee Voucher"
-                inr={0}
-                usd={0}
                 masked={masked}
               />
             </div>
 
             {/* Conversion rate */}
             <p className="text-center text-[12px] text-white/25 py-1">
-              Conversion Rate: &nbsp;1 USD = ₹{xr.toFixed(0)}
+              Conversion Rate: &nbsp;1 USD = ₹85
             </p>
           </>
         )}
