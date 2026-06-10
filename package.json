@@ -4,6 +4,12 @@
   "license": "MIT",
   "scripts": {
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
+    "install-all": "pnpm install",
+    "dev": "pnpm --filter @workspace/trading-journal dev",
+    "dev:api": "pnpm --filter @workspace/api-server dev",
+    "dev:tablet": "pnpm --filter @workspace/trading-journal-tablet dev",
+    "dev:all": "pnpm install --frozen-lockfile 2>/dev/null || pnpm install && pnpm -r --parallel --if-present run dev",
+    "start": "pnpm --filter @workspace/trading-journal dev",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
     "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
