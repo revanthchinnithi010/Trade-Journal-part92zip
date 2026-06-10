@@ -26,6 +26,7 @@ const CalcMargin  = lazy(() => import("@/pages/calc-margin"));
 const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 const Charts      = lazy(() => import("@/pages/charts"));
 const Portfolio   = lazy(() => import("@/pages/portfolio"));
+const Trade       = lazy(() => import("@/pages/trade"));
 const NotFound    = lazy(() => import("@/pages/not-found"));
 
 const FETCH_TIMEOUT_MS = 8_000;
@@ -88,6 +89,7 @@ function Router() {
           <Route path="/calc/risk">{() => <CalcRisk />}</Route>
           <Route path="/charts">{() => <Charts />}</Route>
           <Route path="/portfolio">{() => <Portfolio />}</Route>
+          <Route path="/trade">{() => <Trade />}</Route>
           <Route>{() => <NotFound />}</Route>
         </Switch>
       </Suspense>

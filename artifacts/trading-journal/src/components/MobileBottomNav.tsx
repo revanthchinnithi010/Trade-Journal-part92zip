@@ -29,7 +29,7 @@ type NavTab =
 const TABS: NavTab[] = [
   { kind: "link",   href: "/",       label: "Home",    Icon: LayoutDashboard },
   { kind: "link",   href: "/markets", label: "Markets", Icon: Globe           },
-  { kind: "link",   href: "/alerts", label: "Trade",   Icon: CandlestickChart },
+  { kind: "link",   href: "/trade",  label: "Trade",   Icon: CandlestickChart },
   { kind: "link",   href: "/charts", label: "Charts",  Icon: BarChart2        },
   { kind: "action", label: "Menu",   Icon: Menu,
     onTap: () => window.dispatchEvent(new CustomEvent("tj:open-sidebar")) },
