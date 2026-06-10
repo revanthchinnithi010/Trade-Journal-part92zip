@@ -75,6 +75,26 @@ export function createMarketRouter(
     res.json({ subscribed: symbol, subscriptions: marketData.getSubscriptions() });
   });
 
+  /**
+   * POST /api/market/subscribe-batch
+   * Body: { symbols: string[] }
+   * Subscribes multiple symbols at once without touching the watchlist.
+   * Used by the Markets page to keep prices live regardless of watchlist state.
+   */
+  router.post("/market/subscribe-batch", (req, res): void => {
+    const parsed = z.object({ symbols: z.array(z.string()).min(1).max(200) }).safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: "symbols[] array required" }); return; }
+
+    const subscribed: string[] = [];
+    const skipped:    string[] = [];
+    for (const raw of parsed.data.symbols) {
+      const sym = raw.toUpperCase();
+      const ok  = marketData.subscribe(sym);
+      (ok ? subscribed : skipped).push(sym);
+    }
+    res.json({ subscribed: subscribed.length, skipped: skipped.length });
+  });
+
   router.delete("/market/subscribe/:symbol", (req, res): void => {
     const parsed = SymbolParam.safeParse(req.params);
     if (!parsed.success) { res.status(400).json({ error: "Invalid symbol" }); return; }
