@@ -247,8 +247,8 @@ export default function Markets() {
           })}
         </div>
 
-        {/* Search bar */}
-        <div style={{ padding: "8px 12px 6px" }}>
+        {/* Search bar — hidden on Watchlist tab */}
+        {activeTab !== "Watchlist" && <div style={{ padding: "8px 12px 6px" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
             background: "rgba(255,255,255,0.06)",
@@ -276,7 +276,7 @@ export default function Markets() {
               </button>
             )}
           </div>
-        </div>
+        </div>}
 
         {/* Column headers */}
         <div style={{
