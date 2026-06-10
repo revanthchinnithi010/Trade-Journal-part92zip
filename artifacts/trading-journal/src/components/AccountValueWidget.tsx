@@ -1,5 +1,5 @@
-import { useState, useMemo } from "react";
-import { Eye, EyeOff, TrendingUp, TrendingDown, Plus, ArrowUpRight } from "lucide-react";
+import { useState } from "react";
+import { Eye, EyeOff, TrendingUp, TrendingDown, ArrowUpRight } from "lucide-react";
 import { useCurrencyStore } from "@/store/currencyStore";
 import { Link } from "wouter";
 
@@ -71,40 +71,13 @@ export default function AccountValueWidget({
   const pnlDisplay      = currency === "INR" ? formatINR(pnlINR) : formatUSD(netPnlUSD);
 
   return (
-    <div
-      className="relative overflow-hidden rounded-2xl"
-      style={{
-        background: "linear-gradient(135deg, rgba(18,22,20,0.97) 0%, rgba(22,27,23,0.97) 50%, rgba(16,20,18,0.97) 100%)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        boxShadow: "0 4px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05)",
-      }}
-    >
-      {/* Ambient top-left glow */}
-      <div
-        className="absolute -top-12 -left-12 w-48 h-48 rounded-full pointer-events-none"
-        style={{ background: "radial-gradient(circle, rgba(var(--primary-rgb,87,168,112),0.08) 0%, transparent 70%)" }}
-      />
-      {/* Subtle grid texture */}
-      <div
-        className="absolute inset-0 pointer-events-none opacity-[0.025]"
-        style={{
-          backgroundImage: "linear-gradient(rgba(255,255,255,0.15) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.15) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
-
+    <div className="glass-card relative overflow-hidden">
       <div className="relative px-5 pt-5 pb-5">
         {/* ── Header row ── */}
         <div className="flex items-center justify-between mb-5">
-          <div className="flex items-center gap-2">
-            <div
-              className="w-1.5 h-5 rounded-full"
-              style={{ background: "linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--primary)/0.3) 100%)" }}
-            />
-            <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
-              Account Value
-            </span>
-          </div>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/40">
+            Account Value
+          </span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setMasked(m => !m)}
@@ -156,7 +129,7 @@ export default function AccountValueWidget({
         <div className="mb-4" style={{ height: 1, background: "rgba(255,255,255,0.05)" }} />
 
         {/* ── PnL row ── */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div
               className="w-6 h-6 rounded-lg flex items-center justify-center"
@@ -207,31 +180,6 @@ export default function AccountValueWidget({
               {totalTrades}
             </p>
           </div>
-        </div>
-
-        {/* ── Action buttons ── */}
-        <div className="flex gap-2.5">
-          <button
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[12px] font-bold transition-all active:scale-[0.98]"
-            style={{
-              background: "linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--primary)/0.8) 100%)",
-              color: "rgba(0,0,0,0.85)",
-              boxShadow: "0 2px 12px hsl(var(--primary)/0.25)",
-            }}
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Funds
-          </button>
-          <button
-            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-[12px] font-bold transition-all active:scale-[0.98]"
-            style={{
-              background: "rgba(255,255,255,0.05)",
-              color: "rgba(255,255,255,0.55)",
-              border: "1px solid rgba(255,255,255,0.09)",
-            }}
-          >
-            Withdraw
-          </button>
         </div>
       </div>
     </div>
