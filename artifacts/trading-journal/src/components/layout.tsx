@@ -159,6 +159,13 @@ export const Layout = memo(function Layout({ children }: { children: React.React
     return () => window.removeEventListener("keydown", h);
   }, []);
 
+  // Open sidebar from mobile bottom-nav menu button
+  useEffect(() => {
+    const h = () => setSidebarOpen(true);
+    window.addEventListener("tj:open-sidebar", h);
+    return () => window.removeEventListener("tj:open-sidebar", h);
+  }, []);
+
   const { unreadCount } = useNotifications();
   const { profile, update: updateProfile } = useProfile();
 

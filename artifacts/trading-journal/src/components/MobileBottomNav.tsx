@@ -16,19 +16,24 @@ import { motion, useAnimation } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
-  LineChart,
+  Globe,
   CandlestickChart,
-  BellRing,
-  Settings,
+  BarChart2,
+  Menu,
 } from "lucide-react";
 
-const TABS = [
-  { href: "/",         label: "Home",     Icon: LayoutDashboard  },
-  { href: "/trades",   label: "Trades",   Icon: LineChart         },
-  { href: "/charts",   label: "Charts",   Icon: CandlestickChart  },
-  { href: "/alerts",   label: "Alerts",   Icon: BellRing          },
-  { href: "/settings", label: "Settings", Icon: Settings          },
-] as const;
+type NavTab =
+  | { kind: "link"; href: string; label: string; Icon: React.ElementType }
+  | { kind: "action"; label: string; Icon: React.ElementType; onTap: () => void };
+
+const TABS: NavTab[] = [
+  { kind: "link",   href: "/",       label: "Home",    Icon: LayoutDashboard },
+  { kind: "link",   href: "/trades", label: "Markets", Icon: Globe           },
+  { kind: "link",   href: "/charts", label: "Trade",   Icon: CandlestickChart },
+  { kind: "link",   href: "/alerts", label: "Charts",  Icon: BarChart2        },
+  { kind: "action", label: "Menu",   Icon: Menu,
+    onTap: () => window.dispatchEvent(new CustomEvent("tj:open-sidebar")) },
+];
 
 const N          = TABS.length;
 const BAR_H      = 62;
@@ -124,7 +129,7 @@ export function MobileBottomNav() {
   const prevCircleX = useRef<number | null>(null);
   const isAnimating = useRef(false);
 
-  const activeIdx = TABS.findIndex(t => t.href === location);
+  const activeIdx = TABS.findIndex(t => t.kind === "link" && t.href === location);
 
   useEffect(() => {
     ensureCSS();
@@ -295,12 +300,86 @@ export function MobileBottomNav() {
         }}
       >
         {/* ── Icons + labels (z-index 10 keeps them above bubble) ── */}
-        {TABS.map(({ href, label, Icon }) => {
-          const active = location === href;
+        {TABS.map((tab, idx) => {
+          const active = tab.kind === "link" && location === tab.href;
+          const key    = tab.kind === "link" ? tab.href : `action-${idx}`;
+
+          const inner = (
+            <motion.div
+              className="tj-cnav-tab"
+              onPointerDown={handleTap}
+              whileTap={{ scale: 0.88 }}
+              transition={{ type: "spring", stiffness: 600, damping: 25 }}
+              style={{
+                width:          "100%",
+                height:         "100%",
+                display:        "flex",
+                flexDirection:  "column",
+                alignItems:     "center",
+                justifyContent: "center",
+                gap:            4,
+                cursor:         "pointer",
+                userSelect:     "none",
+              }}
+            >
+              <motion.div
+                animate={{ scale: active ? 1.16 : 1 }}
+                transition={{ type: "spring", stiffness: 550, damping: 28 }}
+              >
+                <tab.Icon
+                  style={{
+                    width:      22,
+                    height:     22,
+                    flexShrink: 0,
+                    color:      active ? "#ffffff" : "rgba(148,163,184,0.44)",
+                    filter:     active
+                      ? "drop-shadow(0 0 5px rgba(200,215,255,0.90)) drop-shadow(0 0 11px rgba(165,180,252,0.55)) drop-shadow(0 0 20px rgba(99,102,241,0.32))"
+                      : "none",
+                    transition: "color 0.22s ease, filter 0.22s ease",
+                    display:    "block",
+                  }}
+                />
+              </motion.div>
+              <span
+                style={{
+                  fontSize:      10,
+                  lineHeight:    1,
+                  fontWeight:    active ? 600 : 400,
+                  color:         active ? "rgba(255,255,255,0.92)" : "rgba(148,163,184,0.40)",
+                  letterSpacing: active ? "0.04em" : "0.01em",
+                  transition:    "color 0.22s ease",
+                  whiteSpace:    "nowrap",
+                }}
+              >
+                {tab.label}
+              </span>
+            </motion.div>
+          );
+
+          if (tab.kind === "action") {
+            return (
+              <div
+                key={key}
+                onClick={tab.onTap}
+                style={{
+                  flex:                    1,
+                  display:                 "flex",
+                  WebkitTapHighlightColor: "transparent",
+                  outline:                 "none",
+                  position:                "relative",
+                  zIndex:                  10,
+                  cursor:                  "pointer",
+                }}
+              >
+                {inner}
+              </div>
+            );
+          }
+
           return (
             <Link
-              key={href}
-              href={href}
+              key={key}
+              href={tab.href}
               style={{
                 flex:                    1,
                 display:                 "flex",
@@ -311,55 +390,7 @@ export function MobileBottomNav() {
                 zIndex:                  10,
               } as React.CSSProperties}
             >
-              <motion.div
-                className="tj-cnav-tab"
-                onPointerDown={handleTap}
-                whileTap={{ scale: 0.88 }}
-                transition={{ type: "spring", stiffness: 600, damping: 25 }}
-                style={{
-                  width:          "100%",
-                  height:         "100%",
-                  display:        "flex",
-                  flexDirection:  "column",
-                  alignItems:     "center",
-                  justifyContent: "center",
-                  gap:            4,
-                  cursor:         "pointer",
-                  userSelect:     "none",
-                }}
-              >
-                <motion.div
-                  animate={{ scale: active ? 1.16 : 1 }}
-                  transition={{ type: "spring", stiffness: 550, damping: 28 }}
-                >
-                  <Icon
-                    style={{
-                      width:      22,
-                      height:     22,
-                      flexShrink: 0,
-                      color:      active ? "#ffffff" : "rgba(148,163,184,0.44)",
-                      filter:     active
-                        ? "drop-shadow(0 0 5px rgba(200,215,255,0.90)) drop-shadow(0 0 11px rgba(165,180,252,0.55)) drop-shadow(0 0 20px rgba(99,102,241,0.32))"
-                        : "none",
-                      transition: "color 0.22s ease, filter 0.22s ease",
-                      display:    "block",
-                    }}
-                  />
-                </motion.div>
-                <span
-                  style={{
-                    fontSize:      10,
-                    lineHeight:    1,
-                    fontWeight:    active ? 600 : 400,
-                    color:         active ? "rgba(255,255,255,0.92)" : "rgba(148,163,184,0.40)",
-                    letterSpacing: active ? "0.04em" : "0.01em",
-                    transition:    "color 0.22s ease",
-                    whiteSpace:    "nowrap",
-                  }}
-                >
-                  {label}
-                </span>
-              </motion.div>
+              {inner}
             </Link>
           );
         })}
