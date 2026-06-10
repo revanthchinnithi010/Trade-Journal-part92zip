@@ -1,4 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -528,89 +529,116 @@ function ModalWrapper({ title, icon, onClose, children }: {
 }) {
   const isMobile = useIsMobile();
 
-  // Lock body scroll while open
+  // Lock scroll + disable glass-card backdrop-filter (prevents GPU thrash)
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    document.body.classList.add("tj-modal-open");
+    return () => {
+      document.body.style.overflow = "";
+      document.body.classList.remove("tj-modal-open");
+    };
   }, []);
 
-  return (
-    <AnimatePresence>
-      {/* Overlay — NO backdrop-blur (too slow on mobile GPU) */}
-      <motion.div
-        key="modal-overlay"
-        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-        transition={{ duration: 0.18 }}
-        className="fixed inset-0 z-50 bg-black/70"
-        style={{ display: "flex", alignItems: isMobile ? "flex-end" : "center", justifyContent: "center" }}
-        onClick={onClose}
-      >
-        {isMobile ? (
-          /* ── Mobile: bottom sheet sliding up ── */
-          <motion.div
-            key="modal-sheet"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 400, damping: 38, mass: 0.65 }}
-            className="w-full flex flex-col"
-            style={{
-              maxHeight: "90dvh",
-              background: "hsl(var(--popover))",
-              borderTop: "1px solid rgba(255,255,255,0.10)",
-              borderLeft: "1px solid rgba(255,255,255,0.07)",
-              borderRight: "1px solid rgba(255,255,255,0.07)",
-              borderTopLeftRadius: 24,
-              borderTopRightRadius: 24,
-              boxShadow: "0 -8px 40px rgba(0,0,0,0.60)",
-              willChange: "transform",
-            }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Drag handle */}
-            <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-              <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.18)" }} />
-            </div>
-            {/* Header */}
-            <div className="flex items-center gap-2.5 px-5 py-3.5 border-b border-white/[0.06] flex-shrink-0">
-              {icon}
-              <h2 className="text-sm font-semibold text-white">{title}</h2>
-              <button onClick={onClose} className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg bg-white/[0.06] text-muted-foreground hover:text-white transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            {/* Scrollable content */}
-            <div className="p-5 overflow-y-auto flex-1" style={{ WebkitOverflowScrolling: "touch" as any }}>
-              {children}
-            </div>
-            {/* Safe-area spacer */}
-            <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 12px)", flexShrink: 0 }} />
-          </motion.div>
-        ) : (
-          /* ── Desktop: centered modal ── */
-          <motion.div
-            key="modal-dialog"
-            initial={{ opacity: 0, scale: 0.94, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.94, y: 20 }}
-            transition={{ duration: 0.2, ease: "easeOut" }}
-            className="w-full max-w-lg rounded-2xl overflow-hidden mx-4"
-            style={{ background: "hsl(var(--popover))", border: "1px solid var(--surface-btn-border)", boxShadow: "0 24px 64px rgba(7,17,13,0.75)" }}
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-2.5 px-5 py-4 border-b border-white/[0.06]">
-              {icon}
-              <h2 className="text-sm font-semibold text-white">{title}</h2>
-              <button onClick={onClose} className="ml-auto w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/[0.06] text-muted-foreground hover:text-white transition-colors">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-5">{children}</div>
-          </motion.div>
-        )}
-      </motion.div>
-    </AnimatePresence>
+  // Rendered via portal into document.body so it is OUTSIDE the Alerts
+  // component tree — live tick re-renders never touch the modal DOM.
+  const modal = (
+    /* Plain div overlay — no blur, no framer on the scrim itself */
+    <div
+      style={{
+        position: "fixed", inset: 0, zIndex: 9999,
+        background: "rgba(0,0,0,0.72)",
+        display: "flex",
+        alignItems: isMobile ? "flex-end" : "center",
+        justifyContent: "center",
+      }}
+      onClick={onClose}
+    >
+      {isMobile ? (
+        /* ── Mobile: bottom sheet ── */
+        <motion.div
+          initial={{ y: "100%" }}
+          animate={{ y: 0 }}
+          transition={{ type: "spring", stiffness: 420, damping: 40, mass: 0.6 }}
+          style={{
+            width: "100%",
+            maxHeight: "90dvh",
+            display: "flex",
+            flexDirection: "column",
+            background: "hsl(var(--popover))",
+            borderTop:   "1px solid rgba(255,255,255,0.12)",
+            borderLeft:  "1px solid rgba(255,255,255,0.07)",
+            borderRight: "1px solid rgba(255,255,255,0.07)",
+            borderTopLeftRadius:  24,
+            borderTopRightRadius: 24,
+            boxShadow: "0 -8px 48px rgba(0,0,0,0.65)",
+            willChange: "transform",
+            transform: "translateZ(0)",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Drag handle */}
+          <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 4, flexShrink: 0 }}>
+            <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.20)" }} />
+          </div>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+            {icon}
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>{title}</h2>
+            <button
+              onClick={onClose}
+              style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+          {/* Scrollable body */}
+          <div style={{ padding: 20, overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
+            {children}
+          </div>
+          {/* Safe-area bottom */}
+          <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 12px)", flexShrink: 0 }} />
+        </motion.div>
+      ) : (
+        /* ── Desktop: scrollable centered dialog ── */
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          style={{
+            width: "calc(100% - 32px)",
+            maxWidth: 480,
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 20,
+            background: "hsl(var(--popover))",
+            border: "1px solid rgba(255,255,255,0.10)",
+            borderTopColor: "rgba(255,255,255,0.18)",
+            boxShadow: "0 24px 64px rgba(7,17,13,0.75), 0 0 0 1px rgba(0,229,176,0.04)",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+            {icon}
+            <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>{title}</h2>
+            <button
+              onClick={onClose}
+              style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}
+            >
+              <X style={{ width: 14, height: 14 }} />
+            </button>
+          </div>
+          {/* Scrollable body */}
+          <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
+            {children}
+          </div>
+        </motion.div>
+      )}
+    </div>
   );
+
+  return createPortal(modal, document.body);
 }
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
