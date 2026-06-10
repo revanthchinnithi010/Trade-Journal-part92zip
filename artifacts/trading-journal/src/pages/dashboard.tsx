@@ -300,6 +300,19 @@ export default function Dashboard() {
     }, 0);
   }, [openTrades]);
 
+  const upnlUSD = useMemo(() => {
+    return openTrades.reduce((sum, t) => {
+      const symbol     = (t as { symbol?: string }).symbol ?? "";
+      const side       = (t as { side?: string }).side ?? "";
+      const entryPrice = (t as { entryPrice?: number }).entryPrice ?? 0;
+      const liveTick   = ticks[symbol.toUpperCase()];
+      const livePrice  = liveTick?.price ?? null;
+      if (livePrice == null || entryPrice === 0) return sum;
+      const isLong = side === "long";
+      return sum + (isLong ? livePrice - entryPrice : entryPrice - livePrice);
+    }, 0);
+  }, [openTrades, ticks]);
+
   if (isStillLoading) {
     return (
       <div className="space-y-5 pb-12">
@@ -334,8 +347,9 @@ export default function Dashboard() {
       {/* ── Account Value Widget ── */}
       <AccountValueWidget
         accountValueUSD={resolvedEquity.length > 0 ? resolvedEquity[resolvedEquity.length - 1].equity : Math.max(resolvedStats.netPnl, 0)}
-        netPnlUSD={resolvedStats.netPnl}
-        totalTrades={resolvedStats.totalTrades}
+        upnlUSD={upnlUSD}
+        openPositions={openTrades.length}
+        openOrders={0}
       />
 
       {/* ── Stat Cards ── */}
