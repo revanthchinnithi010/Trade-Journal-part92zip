@@ -38,8 +38,8 @@ const BUBBLE_R   = 16;
 const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;
 const CIRCLE_D   = BUBBLE_W;
 
-// How much the bubble grows while in transit (1 = no change)
-const TRAVEL_SCALE = 1.16;
+// How much the bubble expands while in transit (subtle — premium feel)
+const TRAVEL_SCALE = 1.12;
 
 const CSS_ID = "tj-circle-nav-v1";
 function ensureCSS() {
@@ -119,9 +119,10 @@ export function MobileBottomNav() {
   const pillRef    = useRef<HTMLDivElement>(null);
   const outerRef   = useRef<HTMLDivElement>(null);
   const [tabW, setTabW] = useState(0);
-  const controls   = useAnimation();
+  const controls    = useAnimation();
   const initialized = useRef(false);
   const prevCircleX = useRef<number | null>(null);
+  const isAnimating = useRef(false);
 
   const activeIdx = TABS.findIndex(t => t.href === location);
 
@@ -155,32 +156,25 @@ export function MobileBottomNav() {
     if (prevCircleX.current === circleX) return;
     prevCircleX.current = circleX;
 
-    // Phase 1: slide to new position while growing — fast, snappy, iOS-style
+    // Single keyframe call — no .then() race condition possible.
+    // scale peaks at TRAVEL_SCALE mid-journey then returns to 1,
+    // all within one GPU-composited transform animation.
     controls.start({
       x:     circleX,
-      scale: TRAVEL_SCALE,
+      scale: [1, TRAVEL_SCALE, 1],
       transition: {
         x: {
-          type:      "tween",
-          duration:  0.16,
-          ease:      [0.22, 1, 0.36, 1],   // custom easeOutExpo
+          type:     "tween",
+          duration: 0.20,
+          ease:     [0.25, 1, 0.35, 1],   // easeOutExpo — instant start, smooth decel
         },
         scale: {
-          type:      "tween",
-          duration:  0.10,
-          ease:      "easeOut",
+          type:     "tween",
+          duration: 0.28,
+          times:    [0, 0.38, 1],          // peak at 38% of journey
+          ease:     "easeInOut",
         },
       },
-    }).then(() => {
-      // Phase 2: snap back to default size immediately after arriving
-      controls.start({
-        scale: 1,
-        transition: {
-          type:      "tween",
-          duration:  0.14,
-          ease:      [0.34, 1.56, 0.64, 1],  // slight overshoot for liveliness
-        },
-      });
     });
   }, [circleX, tabW, controls]);
 
@@ -244,9 +238,7 @@ export function MobileBottomNav() {
               borderRadius:    BUBBLE_R,
               zIndex:          1,
               pointerEvents:   "none",
-              background:      "rgba(200,210,255,0.04)",
-              backdropFilter:  "blur(2px)",
-              WebkitBackdropFilter: "blur(2px)",
+              background:      "rgba(200,210,255,0.06)",
               willChange:      "transform",
               border:      "1.5px solid rgba(180,200,255,0.52)",
               boxShadow: [
