@@ -32,7 +32,7 @@ type FinnhubStatus = "connected" | "connecting" | "disconnected" | "invalid_key"
 type DeltaStatus   = "connected" | "connecting" | "disconnected" | "reconnecting" | "error";
 
 const BADGE: Record<string, { bg: string; border: string; text: string; dot: string }> = {
-  connected:    { bg: "rgba(52,211,153,0.10)",  border: "rgba(52,211,153,0.28)",  text: "#34d399", dot: "#34d399" },
+  connected:    { bg: "rgba(96,165,250,0.10)",   border: "rgba(96,165,250,0.28)",   text: "#60a5fa", dot: "#60a5fa" },
   connecting:   { bg: "rgba(251,191,36,0.10)",   border: "rgba(251,191,36,0.28)",   text: "#fbbf24", dot: "#fbbf24" },
   reconnecting: { bg: "rgba(251,191,36,0.10)",   border: "rgba(251,191,36,0.28)",   text: "#fbbf24", dot: "#fbbf24" },
   testing:      { bg: "rgba(251,191,36,0.10)",   border: "rgba(251,191,36,0.28)",   text: "#fbbf24", dot: "#fbbf24" },
@@ -79,13 +79,13 @@ function MsgBox({ type, children }: { type: "error" | "success"; children: React
   return (
     <div className="flex items-start gap-2 px-3 py-2 rounded-xl text-[12px]"
       style={{
-        background: isError ? "rgba(239,68,68,0.08)"  : "rgba(52,211,153,0.07)",
-        border:     isError ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(52,211,153,0.18)",
+        background: isError ? "rgba(239,68,68,0.08)"  : "rgba(255,255,255,0.04)",
+        border:     isError ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(255,255,255,0.10)",
       }}>
       {isError
         ? <WifiOff className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
-        : <Check   className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />}
-      <span style={{ color: isError ? "#f87171" : "#34d399" }}>{children}</span>
+        : <Check   className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />}
+      <span style={{ color: isError ? "#f87171" : "rgba(148,163,184,0.9)" }}>{children}</span>
     </div>
   );
 }
@@ -163,9 +163,9 @@ function FinnhubPanel() {
 
       {isLive && keyMasked && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[12px]"
-          style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.18)" }}>
-          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="text-emerald-400 font-medium">Active key:</span>
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
+          <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <span className="text-foreground/70 font-medium">Active key:</span>
           <span className="text-muted-foreground font-mono">{keyMasked}</span>
           {source !== "none" && (
             <span className="ml-auto text-muted-foreground/50 uppercase text-[10px] tracking-wider">
@@ -326,14 +326,14 @@ function DeltaPanel() {
 
       {isLive && (
         <div className="flex items-center gap-2 flex-wrap">
-          <StatPill label="Ticks" value={tickCount.toLocaleString()} glow="rgba(52,211,153,0.5)" />
+          <StatPill label="Ticks" value={tickCount.toLocaleString()} glow="rgba(96,165,250,0.5)" />
           <StatPill label="Latency" value={latencyLabel} glow="rgba(59,130,246,0.5)" />
           <StatPill label="Reconnects" value={reconnectCount} />
           {(apiKeyMasked || apiSecretMasked) && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px]"
-              style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.15)" }}>
-              <Check className="w-3 h-3 text-emerald-400" />
-              <span className="text-emerald-400 font-medium">API key active</span>
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
+              <Check className="w-3 h-3 text-blue-400" />
+              <span className="text-foreground/70 font-medium">API key active</span>
             </div>
           )}
         </div>
@@ -499,12 +499,12 @@ function TelegramPanel() {
 
       {isLive && (
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[12px]"
-          style={{ background: "rgba(52,211,153,0.07)", border: "1px solid rgba(52,211,153,0.18)" }}>
-          <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="text-emerald-400 font-medium">Bot:</span>
+          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
+          <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+          <span className="text-foreground/70 font-medium">Bot:</span>
           <span className="text-muted-foreground font-mono">{masked.botToken ?? "—"}</span>
           <span className="text-muted-foreground mx-1">·</span>
-          <span className="text-emerald-400 font-medium">Chat:</span>
+          <span className="text-foreground/70 font-medium">Chat:</span>
           <span className="text-muted-foreground font-mono">{masked.chatId ?? "—"}</span>
         </div>
       )}
@@ -652,13 +652,13 @@ function SystemHealthPanel() {
           {rows.map(row => (
             <div key={row.label} className="flex items-center gap-2.5 px-3 py-2 rounded-xl"
               style={{
-                background: row.ok ? "rgba(52,211,153,0.06)" : "rgba(239,68,68,0.06)",
-                border: `1px solid ${row.ok ? "rgba(52,211,153,0.18)" : "rgba(239,68,68,0.18)"}`,
+                background: row.ok ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.06)",
+                border: `1px solid ${row.ok ? "rgba(255,255,255,0.10)" : "rgba(239,68,68,0.18)"}`,
               }}>
-              <row.icon className={`w-3.5 h-3.5 shrink-0 ${row.ok ? "text-emerald-400" : "text-red-400"}`} />
+              <row.icon className={`w-3.5 h-3.5 shrink-0 ${row.ok ? "text-blue-400" : "text-red-400"}`} />
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-white leading-tight">{row.label}</p>
-                <p className={`text-[10px] capitalize leading-tight ${row.ok ? "text-emerald-400/80" : "text-red-400/80"}`}>
+                <p className={`text-[10px] capitalize leading-tight ${row.ok ? "text-foreground/50" : "text-red-400/80"}`}>
                   {row.detail}
                 </p>
               </div>
@@ -733,14 +733,14 @@ function ServerIpPanel() {
         </div>
         <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider shrink-0"
           style={{
-            background: state.status === "ok" ? "rgba(52,211,153,0.10)" : state.status === "error" ? "rgba(239,68,68,0.10)" : "rgba(251,191,36,0.10)",
-            border: state.status === "ok" ? "1px solid rgba(52,211,153,0.28)" : state.status === "error" ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(251,191,36,0.28)",
-            color: state.status === "ok" ? "#34d399" : state.status === "error" ? "#f87171" : "#fbbf24",
+            background: state.status === "ok" ? "rgba(96,165,250,0.10)" : state.status === "error" ? "rgba(239,68,68,0.10)" : "rgba(251,191,36,0.10)",
+            border: state.status === "ok" ? "1px solid rgba(96,165,250,0.28)" : state.status === "error" ? "1px solid rgba(239,68,68,0.25)" : "1px solid rgba(251,191,36,0.28)",
+            color: state.status === "ok" ? "#60a5fa" : state.status === "error" ? "#f87171" : "#fbbf24",
           }}>
           {state.status === "loading"
             ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
             : <span className="w-2 h-2 rounded-full animate-pulse" style={{
-                background: state.status === "ok" ? "#34d399" : state.status === "error" ? "#f87171" : "#fbbf24"
+                background: state.status === "ok" ? "#60a5fa" : state.status === "error" ? "#f87171" : "#fbbf24"
               }} />}
           {state.status === "ok" ? "Live" : state.status === "loading" ? "Detecting…" : state.status === "error" ? "Error" : "Idle"}
         </span>
@@ -757,9 +757,9 @@ function ServerIpPanel() {
             <Button size="sm" onClick={copy}
               className="rounded-lg h-8 px-3 text-[12px] shrink-0 transition-all"
               style={{
-                background: copied ? "rgba(52,211,153,0.18)" : "rgba(251,191,36,0.14)",
-                border: copied ? "1px solid rgba(52,211,153,0.35)" : "1px solid rgba(251,191,36,0.30)",
-                color: copied ? "#34d399" : "#fbbf24",
+                background: copied ? "rgba(255,255,255,0.08)" : "rgba(251,191,36,0.14)",
+                border: copied ? "1px solid rgba(255,255,255,0.18)" : "1px solid rgba(251,191,36,0.30)",
+                color: copied ? "rgba(148,163,184,0.9)" : "#fbbf24",
               }}>
               {copied
                 ? <><CheckCheck className="w-3.5 h-3.5 mr-1.5" />Copied!</>
@@ -916,13 +916,13 @@ function BackupPanel() {
       {importMsg && (
         <div className="flex items-start gap-2 px-3 py-2 rounded-xl text-[12px]"
           style={{
-            background: importMsg.type === "success" ? "rgba(52,211,153,0.07)" : "rgba(239,68,68,0.08)",
-            border: `1px solid ${importMsg.type === "success" ? "rgba(52,211,153,0.18)" : "rgba(239,68,68,0.22)"}`,
+            background: importMsg.type === "success" ? "rgba(255,255,255,0.04)" : "rgba(239,68,68,0.08)",
+            border: `1px solid ${importMsg.type === "success" ? "rgba(255,255,255,0.10)" : "rgba(239,68,68,0.22)"}`,
           }}>
           {importMsg.type === "success"
-            ? <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+            ? <Check className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
             : <WifiOff className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />}
-          <span style={{ color: importMsg.type === "success" ? "#34d399" : "#f87171" }}>{importMsg.text}</span>
+          <span style={{ color: importMsg.type === "success" ? "rgba(148,163,184,0.9)" : "#f87171" }}>{importMsg.text}</span>
         </div>
       )}
     </div>

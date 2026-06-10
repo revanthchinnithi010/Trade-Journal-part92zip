@@ -204,9 +204,9 @@ export function MobileBottomNav() {
           padding:      "1px",
           background:   "linear-gradient(135deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0.14) 30%, rgba(255,255,255,0.06) 58%, rgba(255,255,255,0.28) 100%)",
           boxShadow: [
-            "0 0 0 1px rgba(0,229,176,0.06)",
+            "0 0 0 1px rgba(255,255,255,0.06)",
             "0 12px 40px rgba(0,0,0,0.65)",
-            "0 0 20px rgba(0,229,176,0.07)",
+            "0 0 20px rgba(0,0,0,0.30)",
             "0 2px 10px rgba(0,0,0,0.40)",
           ].join(","),
           position: "relative",   // ← stacking context for the bubble

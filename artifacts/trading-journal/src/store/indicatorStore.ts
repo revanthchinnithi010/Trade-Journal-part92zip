@@ -29,7 +29,7 @@ export const DEFAULT_COLORS: Record<IndicatorType, string> = {
   EMA:       "#f59e0b",
   SMA:       "#60a5fa",
   RSI:       "#c084fc",
-  VWAP:      "#34d399",
+  VWAP:      "#60a5fa",
   SUPERTREND:"#22c55e",
   CUSTOM:    "#22c55e",
 };

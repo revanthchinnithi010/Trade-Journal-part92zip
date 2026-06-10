@@ -60,9 +60,9 @@ function StatusDot({ connected }: { connected: boolean }) {
   return (
     <span className="relative flex h-2.5 w-2.5">
       {connected && (
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-50" />
+        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-50" />
       )}
-      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${connected ? "bg-emerald-400" : "bg-white/20"}`} />
+      <span className={`relative inline-flex rounded-full h-2.5 w-2.5 ${connected ? "bg-blue-400" : "bg-white/20"}`} />
     </span>
   );
 }
@@ -100,7 +100,7 @@ function BrokerCard({ name, tag, active, connected, lastSync, tradesCount, accen
           </div>
           <div className="flex items-center gap-2">
             <StatusDot connected={connected} />
-            <span className={`text-[11px] font-semibold ${connected ? "text-emerald-400" : "text-muted-foreground"}`}>
+            <span className={`text-[11px] font-semibold ${connected ? "text-blue-400" : "text-muted-foreground"}`}>
               {connected ? "Connected" : "Disconnected"}
             </span>
           </div>
@@ -197,17 +197,17 @@ function DeltaPanel({
   return (
     <motion.div key="delta" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="space-y-5">
       {/* Security notice */}
-      <div className="flex items-center gap-3 p-3.5 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/[0.15]">
-        <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-          <Shield className="w-4 h-4 text-emerald-400" />
+      <div className="flex items-center gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.08]">
+        <div className="w-8 h-8 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0">
+          <Shield className="w-4 h-4 text-foreground/60" />
         </div>
         <div>
-          <p className="text-[12px] font-semibold text-emerald-400">End-to-End Encrypted</p>
+          <p className="text-[12px] font-semibold text-foreground/80">End-to-End Encrypted</p>
           <p className="text-[11px] text-muted-foreground">API keys are stored with AES-256 encryption. We never store plaintext credentials.</p>
         </div>
         <div className="ml-auto flex items-center gap-1.5 shrink-0">
-          <Lock className="w-3 h-3 text-emerald-400/60" />
-          <span className="text-[10px] text-emerald-400/60 font-semibold">TLS 1.3</span>
+          <Lock className="w-3 h-3 text-muted-foreground/60" />
+          <span className="text-[10px] text-muted-foreground/60 font-semibold">TLS 1.3</span>
         </div>
       </div>
 
@@ -300,7 +300,7 @@ function DeltaPanel({
               disabled={syncStatus === "syncing"}
               className="flex items-center gap-2 h-9 px-4 rounded-xl border border-white/[0.08] text-muted-foreground text-[13px] font-semibold hover:text-white hover:bg-white/[0.05] transition-all disabled:opacity-50"
             >
-              {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
+              {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
               {syncStatus === "syncing" ? "Syncing..." : syncStatus === "success" ? "Synced!" : "Manual Sync"}
             </button>
           )}
@@ -328,9 +328,9 @@ function DeltaPanel({
               <p className="text-[13px] text-white font-semibold">Connected Status</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Live connection to Delta Exchange API</p>
             </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <StatusDot connected={true} />
-              <span className="text-[11px] font-bold text-emerald-400">Active</span>
+              <span className="text-[11px] font-bold text-blue-400">Active</span>
             </div>
           </div>
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] flex items-center gap-3">
@@ -340,8 +340,8 @@ function DeltaPanel({
               <p className="text-[10px] text-muted-foreground">Production endpoint · Read-only access</p>
             </div>
             <div className="ml-auto flex items-center gap-1.5">
-              <Lock className="w-3 h-3 text-emerald-400/60" />
-              <span className="text-[10px] text-emerald-400/60 font-medium">Encrypted</span>
+              <Lock className="w-3 h-3 text-muted-foreground/50" />
+              <span className="text-[10px] text-muted-foreground/50 font-medium">Encrypted</span>
             </div>
           </div>
         </div>
@@ -370,8 +370,8 @@ function DeltaPanel({
                 transition={{ delay: i * 0.04 }}
                 className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors"
               >
-                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${entry.status === "success" ? "bg-emerald-500/10" : "bg-red-500/10"}`}>
-                  {entry.status === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
+                <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${entry.status === "success" ? "bg-blue-500/10" : "bg-red-500/10"}`}>
+                  {entry.status === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" /> : <AlertCircle className="w-3.5 h-3.5 text-red-400" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-[12px] text-white font-medium truncate">{entry.message}</p>
@@ -380,7 +380,7 @@ function DeltaPanel({
                   </p>
                 </div>
                 {entry.status === "success" && entry.tradesImported > 0 && (
-                  <span className="text-[11px] font-bold text-emerald-400 shrink-0">+{entry.tradesImported}</span>
+                  <span className="text-[11px] font-bold text-foreground/60 shrink-0">+{entry.tradesImported}</span>
                 )}
               </motion.div>
             ))}
@@ -505,11 +505,11 @@ function ConnectionSteps({ state }: { state: string }) {
         return (
           <div key={s} className="flex items-center gap-2.5">
             <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 text-[9px] font-bold ${
-              done ? "bg-emerald-500/20 text-emerald-400" : active ? "bg-blue-500/20 text-blue-400" : "bg-white/[0.05] text-white/20"
+              done ? "bg-white/[0.08] text-foreground/60" : active ? "bg-blue-500/20 text-blue-400" : "bg-white/[0.05] text-white/20"
             }`}>
               {done ? "✓" : i + 1}
             </div>
-            <p className={`text-[11px] font-semibold ${done ? "text-emerald-400" : active ? "text-blue-300" : "text-white/25"}`}>
+            <p className={`text-[11px] font-semibold ${done ? "text-foreground/55" : active ? "text-blue-300" : "text-white/25"}`}>
               {STATE_LABELS[s] ?? s}
             </p>
             {active && (
@@ -649,9 +649,9 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
       <AnimatePresence>
         {oauthSuccess && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/25">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <p className="text-[12px] font-semibold text-emerald-400">FusionMarkets cTrader connected successfully!</p>
+            className="flex items-center gap-3 px-4 py-3 rounded-xl bg-blue-500/10 border border-blue-500/25">
+            <CheckCircle2 className="w-4 h-4 text-blue-400 shrink-0" />
+            <p className="text-[12px] font-semibold text-blue-400">FusionMarkets cTrader connected successfully!</p>
           </motion.div>
         )}
         {oauthError && (
@@ -678,8 +678,8 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
               <div className="flex items-center gap-2">
                 <p className="text-[14px] font-black text-white">cTrader Live API</p>
                 {isLive && (
-                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-400 border border-emerald-500/25">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-blue-500/15 text-blue-400 border border-blue-500/25">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                     Live
                   </span>
                 )}
@@ -763,7 +763,7 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
             </code>
             <button onClick={copyRedirectUri}
               className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold border border-white/[0.1] text-muted-foreground hover:text-white hover:bg-white/[0.06] transition-colors">
-              {copied ? <CheckCircle2 className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              {copied ? <CheckCircle2 className="w-3 h-3 text-foreground/60" /> : <Copy className="w-3 h-3" />}
               {copied ? "Copied" : "Copy"}
             </button>
           </div>
@@ -774,8 +774,8 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
       {isLive && status?.accounts && status.accounts.length > 0 && (
         <div className="glass-card p-4 space-y-3">
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-emerald-500/15 flex items-center justify-center">
-              <Shield className="w-3 h-3 text-emerald-400" />
+            <div className="w-5 h-5 rounded-md bg-white/[0.06] flex items-center justify-center">
+              <Shield className="w-3 h-3 text-foreground/60" />
             </div>
             <p className="text-[12px] font-bold text-white">Connected Accounts</p>
             <span className="text-[10px] text-muted-foreground bg-white/[0.04] rounded-full px-2 py-0.5 border border-white/[0.06]">
@@ -794,7 +794,7 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
                     {acc.isLive ? "Live Account" : "Demo Account"} · ID {acc.id}
                   </p>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${acc.isLive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${acc.isLive ? "bg-blue-500/10 text-blue-400 border-blue-500/20" : "bg-amber-500/10 text-amber-400 border-amber-500/20"}`}>
                   {acc.isLive ? "LIVE" : "DEMO"}
                 </span>
               </div>
@@ -816,8 +816,8 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
             </span>
           </div>
           {isLive && (
-            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="flex items-center gap-1.5 text-[10px] font-semibold text-blue-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
               Streaming
             </span>
           )}
@@ -840,7 +840,7 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
           {[
             { icon: Globe, title: "live.ctraderapi.com:5036", sub: "TLS encrypted socket · Open API v2", color: "text-blue-400", bg: "bg-blue-500/10" },
             { icon: Lock, title: "OAuth 2.0 Auth", sub: "connect.spotware.com · Secure token exchange", color: "text-primary", bg: "bg-primary/10" },
-            { icon: Shield, title: "Read-Only Mode", sub: "No trade execution · Account sync only", color: "text-emerald-400", bg: "bg-emerald-500/10" },
+            { icon: Shield, title: "Read-Only Mode", sub: "No trade execution · Account sync only", color: "text-foreground/60", bg: "bg-white/[0.05]" },
           ].map(({ icon: Icon, title, sub, color, bg }) => (
             <div key={title} className="flex gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center shrink-0`}>
@@ -880,14 +880,14 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
               <div key={i} className="flex items-start gap-2 text-[10.5px] leading-relaxed">
                 <span className="text-muted-foreground/50 shrink-0 tabular-nums">{log.ts}</span>
                 <span className={
-                  log.kind === "success" ? "text-emerald-400" :
+                  log.kind === "success" ? "text-foreground/60" :
                   log.kind === "error"   ? "text-red-400" :
                   "text-blue-300"
                 }>
                   {log.kind === "success" ? "✓" : log.kind === "error" ? "✗" : "→"}
                 </span>
                 <span className={
-                  log.kind === "success" ? "text-emerald-300" :
+                  log.kind === "success" ? "text-foreground/50" :
                   log.kind === "error"   ? "text-red-300" :
                   "text-slate-300"
                 }>
@@ -989,8 +989,8 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
               </motion.div>
             ) : importStatus === "success" ? (
               <motion.div key="suc" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="flex flex-col items-center gap-2">
-                <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                <p className="text-[13px] font-bold text-emerald-400">Import Successful!</p>
+                <CheckCircle2 className="w-8 h-8 text-blue-400" />
+                <p className="text-[13px] font-bold text-blue-400">Import Successful!</p>
               </motion.div>
             ) : (
               <motion.div key="idle" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-3 text-center">
@@ -1025,8 +1025,8 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
           {GROWW_IMPORT_HISTORY.map((entry, i) => (
             <motion.div key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
               className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-emerald-500/10">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-blue-500/10">
+                <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-[12px] text-white font-medium truncate">{entry.fileName}</p>
@@ -1035,7 +1035,7 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
                   {" · "}{entry.message}
                 </p>
               </div>
-              <span className="text-[11px] font-bold text-emerald-400 shrink-0">+{entry.tradesImported}</span>
+              <span className="text-[11px] font-bold text-foreground/60 shrink-0">+{entry.tradesImported}</span>
             </motion.div>
           ))}
         </div>
@@ -1076,8 +1076,8 @@ export default function Brokers() {
           <p className="text-[13px] text-muted-foreground mt-1">Connect your brokers to automatically sync trades and build your journal.</p>
         </div>
         <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-          <Shield className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-[11px] font-semibold text-emerald-400">Bank-Grade Security</span>
+          <Shield className="w-3.5 h-3.5 text-muted-foreground/60" />
+          <span className="text-[11px] font-semibold text-muted-foreground/60">Bank-Grade Security</span>
           <div className="w-px h-3.5 bg-white/[0.08]" />
           <Lock className="w-3 h-3 text-muted-foreground/60" />
           <span className="text-[10px] text-muted-foreground/60">AES-256 · TLS 1.3</span>
@@ -1269,7 +1269,7 @@ export default function Brokers() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { icon: Shield, title: "AES-256 Encryption", desc: "All credentials are encrypted at rest using military-grade encryption", color: "text-emerald-400", bg: "bg-emerald-500/10" },
+              { icon: Shield, title: "AES-256 Encryption", desc: "All credentials are encrypted at rest using military-grade encryption", color: "text-foreground/60", bg: "bg-white/[0.05]" },
               { icon: Globe, title: "TLS 1.3 Transport", desc: "All API calls use the latest TLS protocol for secure data transmission", color: "text-blue-400", bg: "bg-blue-500/10" },
               { icon: Lock, title: "Read-Only Access", desc: "We only request read-only API permissions. We cannot place or modify trades.", color: "text-primary", bg: "bg-primary/10" },
             ].map(({ icon: Icon, title, desc, color, bg }) => (

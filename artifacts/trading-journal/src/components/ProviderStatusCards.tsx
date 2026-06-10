@@ -36,14 +36,14 @@ function fmtLastTick(lastTickAt: number | null): string {
 }
 
 const StatusIcon = memo(function StatusIcon({ status }: { status: ProviderStatus }) {
-  if (status === "connected")    return <Wifi className="w-3.5 h-3.5 text-emerald-400" />;
+  if (status === "connected")    return <Wifi className="w-3.5 h-3.5 text-blue-400" />;
   if (status === "reconnecting") return <RefreshCw className="w-3.5 h-3.5 text-amber-400 animate-spin" style={{ animationDuration: "1.5s" }} />;
   return <WifiOff className="w-3.5 h-3.5 text-red-400" />;
 });
 
 const StatusPill = memo(function StatusPill({ status }: { status: ProviderStatus }) {
   const cfg = {
-    connected:    { bg: "bg-emerald-500/10 border-emerald-500/20", text: "text-emerald-400", label: "Connected" },
+    connected:    { bg: "bg-blue-500/10 border-blue-500/20", text: "text-blue-400", label: "Connected" },
     reconnecting: { bg: "bg-amber-500/10  border-amber-500/20",   text: "text-amber-400",   label: "Reconnecting" },
     disconnected: { bg: "bg-red-500/10    border-red-500/20",     text: "text-red-400",     label: "Offline" },
     error:        { bg: "bg-red-500/10    border-red-500/20",     text: "text-red-400",     label: "Error" },
@@ -53,8 +53,8 @@ const StatusPill = memo(function StatusPill({ status }: { status: ProviderStatus
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-[10px] font-bold ${cfg.bg} ${cfg.text}`}>
       {status === "connected" && (
         <span className="relative flex h-1.5 w-1.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
-          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400" />
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-60" />
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-blue-400" />
         </span>
       )}
       {cfg.label}

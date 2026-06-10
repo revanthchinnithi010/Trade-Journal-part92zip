@@ -141,7 +141,7 @@ export default function CalcForex() {
                 <button key={s} onClick={() => setSide(s)}
                   className={cn("px-6 py-2.5 text-[12px] font-bold capitalize transition-all flex items-center gap-1.5",
                     s === side
-                      ? s === "long" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                      ? s === "long" ? "bg-blue-500/20 text-blue-400" : "bg-rose-500/20 text-rose-400"
                       : "bg-[#0D1C16] text-[#A7B8A9] hover:bg-[#0D1C16]/60")}>
                   {s === "long" ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                   {s}
@@ -303,10 +303,10 @@ export default function CalcForex() {
 
           {calc && calc.rr > 0 && (
             <div className={cn("rounded-xl px-4 py-3 border flex items-center gap-3",
-              calc.rr >= 2 ? "bg-emerald-500/8 border-emerald-500/25" : "bg-amber-500/8 border-amber-500/25")}>
-              <Zap className={cn("w-4 h-4 shrink-0", calc.rr >= 2 ? "text-emerald-400" : "text-amber-400")} />
+              calc.rr >= 2 ? "bg-blue-500/8 border-blue-500/25" : "bg-amber-500/8 border-amber-500/25")}>
+              <Zap className={cn("w-4 h-4 shrink-0", calc.rr >= 2 ? "text-blue-400" : "text-amber-400")} />
               <div>
-                <p className={cn("text-[12px] font-bold", calc.rr >= 2 ? "text-emerald-300" : "text-amber-300")}>
+                <p className={cn("text-[12px] font-bold", calc.rr >= 2 ? "text-blue-300" : "text-amber-300")}>
                   {calc.rr >= 2 ? "Good RR Ratio" : calc.rr >= 1 ? "Acceptable RR" : "Poor RR — review setup"}
                 </p>
                 <p className="text-[11px] text-[#A7B8A9]">1 : {fmt(calc.rr, 2)} — {calc.rr >= 2 ? "Sustainable long term" : "Consider improving TP target"}</p>

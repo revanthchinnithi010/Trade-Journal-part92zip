@@ -25,23 +25,23 @@ const TYPE_CONFIG: Record<NotifType, { icon: React.ElementType; color: string; g
   price_alert:     { icon: TrendingUp, color: "#60a5fa", glow: "rgba(96,165,250,0.18)"  },
   zone_alert:      { icon: Layers,     color: "#fb923c", glow: "rgba(251,146,60,0.18)"  },
   trendline_alert: { icon: GitBranch,  color: "#a78bfa", glow: "rgba(167,139,250,0.18)" },
-  ws_reconnect:    { icon: Wifi,       color: "#34d399", glow: "rgba(52,211,153,0.18)"  },
+  ws_reconnect:    { icon: Wifi,       color: "#60a5fa", glow: "rgba(96,165,250,0.18)"  },
   ws_error:        { icon: WifiOff,    color: "#f87171", glow: "rgba(248,113,113,0.18)" },
-  broker:          { icon: Link2,      color: "#34d399", glow: "rgba(52,211,153,0.18)"  },
+  broker:          { icon: Link2,      color: "#60a5fa", glow: "rgba(96,165,250,0.18)"  },
   telegram:        { icon: Send,       color: "#38bdf8", glow: "rgba(56,189,248,0.18)"  },
   feed:            { icon: Activity,   color: "#fbbf24", glow: "rgba(251,191,36,0.18)"  },
   system:          { icon: Info,       color: "#94a3b8", glow: "rgba(148,163,184,0.18)" },
 };
 
 const SEVERITY_BG: Record<NotifSeverity, string> = {
-  success: "rgba(52,211,153,0.06)",
+  success: "rgba(255,255,255,0.04)",
   warning: "rgba(251,191,36,0.06)",
   error:   "rgba(248,113,113,0.06)",
   info:    "rgba(96,165,250,0.06)",
 };
 
 const SEVERITY_BORDER: Record<NotifSeverity, string> = {
-  success: "rgba(52,211,153,0.18)",
+  success: "rgba(255,255,255,0.12)",
   warning: "rgba(251,191,36,0.18)",
   error:   "rgba(248,113,113,0.18)",
   info:    "rgba(96,165,250,0.18)",

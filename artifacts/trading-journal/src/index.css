@@ -72,7 +72,7 @@
   --color-sidebar-accent-border:      var(--sidebar-accent-border);
   --color-sidebar-ring:               hsl(var(--sidebar-ring));
 
-  /* ── Remap emerald → premium teal accent (theme-aware) ── */
+  /* ── Emerald stays green — profit/positive value indicator only ── */
   --color-emerald-400: var(--accent-teal-400);
   --color-emerald-500: var(--accent-teal-500);
 
@@ -92,7 +92,7 @@
    Teal (#00D9A6) + cyan (#00C2FF) accent
    ══════════════════════════════════════════════════════════════════ */
 :root {
-  /* ── Accent remap — #00E5B0 mint-cyan primary ────────────────── */
+  /* ── Accent — kept green ONLY for emerald/profit remap ─────── */
   --accent-teal-400: #00E5B0;
   --accent-teal-500: #00CCA0;
 
@@ -108,7 +108,7 @@
   --foreground: 215 25% 96%;         /* rgba(255,255,255,0.94)             */
   --border:     220 20% 14%;         /* subtle dark divider                */
   --input:      220 30% 7%;          /* input field bg                     */
-  --ring:       163 100% 45%;        /* #00E5B0                            */
+  --ring:       220 12% 56%;          /* #858fa0  neutral gray ring         */
 
   /* ── Cards / panels ─────────────────────────────────────────── */
   --card:           220 25% 6%;
@@ -119,20 +119,20 @@
   --sidebar:           220 30% 5%;
   --sidebar-foreground:215 25% 96%;
   --sidebar-border:    220 20% 11%;
-  --sidebar-primary:   163 100% 45%; /* #00E5B0                           */
+  --sidebar-primary:   215 14% 68%; /* #9eaabb  neutral slate             */
   --sidebar-primary-foreground: 220 38% 3%;
   --sidebar-accent:    220 25% 9%;
   --sidebar-accent-foreground: 215 25% 96%;
-  --sidebar-ring:      163 100% 45%;
+  --sidebar-ring:      220 12% 56%;
 
   /* ── Popovers / modals ──────────────────────────────────────── */
   --popover:           220 30% 5%;
   --popover-foreground:215 25% 96%;
   --popover-border:    220 20% 14%;
 
-  /* ── Brand accent — #00E5B0 mint ────────────────────────────── */
-  --primary:           163 100% 45%; /* #00E5B0                           */
-  --primary-foreground:220 38% 3%;
+  /* ── Primary — neutral cool slate (active states, selected icons) ── */
+  --primary:           215 16% 74%; /* #b0bcce  soft blue-gray            */
+  --primary-foreground:220 25% 6%;
 
   /* ── Neutrals ───────────────────────────────────────────────── */
   --secondary:          220 22% 10%;
@@ -173,10 +173,10 @@
   --shadow-xl:  0 24px 64px rgba(0, 0, 0, 0.78), 0 8px 24px rgba(0, 0, 0, 0.56);
   --shadow-2xl: 0 40px 90px rgba(0, 0, 0, 0.82);
 
-  /* ── Mint-cyan glow shadows ──────────────────────────────────── */
-  --glow-teal-sm: 0 0 14px rgba(0, 229, 176, 0.20), 0 0 4px rgba(0, 229, 176, 0.12);
-  --glow-teal-md: 0 0 28px rgba(0, 229, 176, 0.25), 0 0 8px rgba(0, 229, 176, 0.14);
-  --glow-cyan-sm: 0 0 14px rgba(93, 169, 255, 0.20), 0 0 4px rgba(93, 169, 255, 0.10);
+  /* ── Neutral glow shadows ────────────────────────────────────── */
+  --glow-teal-sm: 0 0 16px rgba(255, 255, 255, 0.05), 0 0 4px rgba(255, 255, 255, 0.04);
+  --glow-teal-md: 0 0 28px rgba(255, 255, 255, 0.07), 0 0 8px rgba(255, 255, 255, 0.05);
+  --glow-cyan-sm: 0 0 14px rgba(93, 169, 255, 0.14), 0 0 4px rgba(93, 169, 255, 0.08);
 
   --tracking-normal: 0em;
   --spacing: 0.25rem;
@@ -195,22 +195,22 @@
   --surface-header-border:     rgba(255, 255, 255, 0.05);
   --surface-backdrop:          rgba(0, 0, 0, 0.70);
   --surface-btn-border:        rgba(255, 255, 255, 0.06);
-  --surface-btn-active-border: rgba(0, 229, 176, 0.35);
+  --surface-btn-active-border: rgba(255, 255, 255, 0.16);
   --surface-btn-hover:         rgba(10, 14, 20, 0.80);
-  --surface-btn-active-bg:     rgba(0, 229, 176, 0.08);
+  --surface-btn-active-bg:     rgba(255, 255, 255, 0.06);
   --surface-input-bg:          rgba(8, 10, 16, 0.80);
   --surface-input-border:      rgba(255, 255, 255, 0.06);
-  --surface-input-focus:       rgba(0, 229, 176, 0.40);
+  --surface-input-focus:       rgba(255, 255, 255, 0.20);
   --surface-divider:           rgba(255, 255, 255, 0.06);
-  --surface-avatar-bg:         linear-gradient(135deg, rgba(0, 229, 176, 0.18), rgba(5, 7, 10, 0.65));
-  --surface-avatar-border:     rgba(0, 229, 176, 0.24);
-  --surface-avatar-text:       #00E5B0;
+  --surface-avatar-bg:         linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(5, 7, 10, 0.70));
+  --surface-avatar-border:     rgba(255, 255, 255, 0.12);
+  --surface-avatar-text:       #94a3b8;
   --surface-sidebar-bg:        linear-gradient(175deg, #080C14 0%, #05070A 100%);
   --surface-sidebar-border:    rgba(255, 255, 255, 0.04);
   --surface-sidebar-logo-border:rgba(255, 255, 255, 0.05);
   --body-bg:                   #05070A;
-  --body-grad-1:               rgba(0, 229, 176, 0.045);
-  --body-grad-2:               rgba(93, 169, 255, 0.025);
+  --body-grad-1:               rgba(255, 255, 255, 0.004);
+  --body-grad-2:               rgba(93, 169, 255, 0.018);
   --notification-badge-border: #05070A;
 }
 
@@ -326,23 +326,23 @@
   --foreground: 215 25% 96%;
   --border:     220 20% 14%;
   --input:      220 30% 7%;
-  --ring:       163 100% 45%;
+  --ring:       220 12% 56%;
   --card:           220 25% 6%;
   --card-foreground:215 25% 96%;
   --card-border:    220 20% 14%;
   --sidebar:           220 30% 5%;
   --sidebar-foreground:215 25% 96%;
   --sidebar-border:    220 20% 11%;
-  --sidebar-primary:   163 100% 45%;
+  --sidebar-primary:   215 14% 68%;
   --sidebar-primary-foreground: 220 38% 3%;
   --sidebar-accent:    220 25% 9%;
   --sidebar-accent-foreground: 215 25% 96%;
-  --sidebar-ring:      163 100% 45%;
+  --sidebar-ring:      220 12% 56%;
   --popover:           220 30% 5%;
   --popover-foreground:215 25% 96%;
   --popover-border:    220 20% 14%;
-  --primary:           163 100% 45%;
-  --primary-foreground:220 38% 3%;
+  --primary:           215 16% 74%;
+  --primary-foreground:220 25% 6%;
   --secondary:         220 22% 10%;
   --secondary-foreground:215 25% 96%;
   --muted:             220 20% 9%;
@@ -360,26 +360,26 @@
   --surface-header-border:     rgba(255, 255, 255, 0.05);
   --surface-backdrop:          rgba(0, 0, 0, 0.70);
   --surface-btn-border:        rgba(255, 255, 255, 0.06);
-  --surface-btn-active-border: rgba(0, 229, 176, 0.35);
+  --surface-btn-active-border: rgba(255, 255, 255, 0.16);
   --surface-btn-hover:         rgba(10, 14, 20, 0.80);
-  --surface-btn-active-bg:     rgba(0, 229, 176, 0.08);
+  --surface-btn-active-bg:     rgba(255, 255, 255, 0.06);
   --surface-input-bg:          rgba(8, 10, 16, 0.80);
   --surface-input-border:      rgba(255, 255, 255, 0.06);
-  --surface-input-focus:       rgba(0, 229, 176, 0.40);
+  --surface-input-focus:       rgba(255, 255, 255, 0.20);
   --surface-divider:           rgba(255, 255, 255, 0.06);
-  --surface-avatar-bg:         linear-gradient(135deg, rgba(0, 229, 176, 0.18), rgba(5, 7, 10, 0.65));
-  --surface-avatar-border:     rgba(0, 229, 176, 0.24);
-  --surface-avatar-text:       #00E5B0;
+  --surface-avatar-bg:         linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(5, 7, 10, 0.70));
+  --surface-avatar-border:     rgba(255, 255, 255, 0.12);
+  --surface-avatar-text:       #94a3b8;
   --surface-sidebar-bg:        linear-gradient(175deg, #080C14 0%, #05070A 100%);
   --surface-sidebar-border:    rgba(255, 255, 255, 0.04);
   --surface-sidebar-logo-border:rgba(255, 255, 255, 0.05);
   --body-bg:                   #05070A;
-  --body-grad-1:               rgba(0, 229, 176, 0.045);
-  --body-grad-2:               rgba(93, 169, 255, 0.025);
+  --body-grad-1:               rgba(255, 255, 255, 0.004);
+  --body-grad-2:               rgba(93, 169, 255, 0.018);
   --notification-badge-border: #05070A;
-  --glow-teal-sm: 0 0 14px rgba(0, 229, 176, 0.20), 0 0 4px rgba(0, 229, 176, 0.12);
-  --glow-teal-md: 0 0 28px rgba(0, 229, 176, 0.25), 0 0 8px rgba(0, 229, 176, 0.14);
-  --glow-cyan-sm: 0 0 14px rgba(93, 169, 255, 0.20), 0 0 4px rgba(93, 169, 255, 0.10);
+  --glow-teal-sm: 0 0 16px rgba(255, 255, 255, 0.05), 0 0 4px rgba(255, 255, 255, 0.04);
+  --glow-teal-md: 0 0 28px rgba(255, 255, 255, 0.07), 0 0 8px rgba(255, 255, 255, 0.05);
+  --glow-cyan-sm: 0 0 14px rgba(93, 169, 255, 0.14), 0 0 4px rgba(93, 169, 255, 0.08);
 }
 
 /* ─── Base layer ───────────────────────────────────────────────── */
@@ -647,15 +647,15 @@ body.tj-modal-open .glass-card-elevated {
 
 /* ─── Chart / TV button ────────────────────────────────────────── */
 .tv-chart-btn {
-  background: linear-gradient(135deg, rgba(0, 229, 176, 0.08) 0%, rgba(5, 7, 10, 0.06) 100%);
-  border: 1px solid rgba(0, 229, 176, 0.16);
-  color: #00E5B0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: rgba(178, 190, 210, 0.90);
   transition: all 0.18s ease;
 }
 .tv-chart-btn:hover {
-  background: linear-gradient(135deg, rgba(0, 229, 176, 0.15) 0%, rgba(5, 7, 10, 0.10) 100%);
-  border-color: rgba(0, 229, 176, 0.30);
-  box-shadow: 0 0 18px rgba(0, 229, 176, 0.14), 0 2px 8px rgba(0, 0, 0, 0.30);
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.18);
+  box-shadow: 0 0 18px rgba(255, 255, 255, 0.04), 0 2px 8px rgba(0, 0, 0, 0.30);
 }
 .light .tv-chart-btn {
   background: rgba(94, 142, 135, 0.07);
@@ -680,7 +680,7 @@ body.tj-modal-open .glass-card-elevated {
 .shimmer-loading {
   background: linear-gradient(90deg,
     rgba(12, 14, 18, 0.40) 25%,
-    rgba(0, 229, 176, 0.04) 50%,
+    rgba(255, 255, 255, 0.03) 50%,
     rgba(12, 14, 18, 0.40) 75%
   );
   background-size: 200% 100%;

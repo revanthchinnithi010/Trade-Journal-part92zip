@@ -44,7 +44,7 @@ const EMA_COLORS: Record<keyof IndicatorState, string> = {
   ema21:  "#38bdf8",
   ema50:  "#a78bfa",
   ema200: "#f87171",
-  vwap:   "#34d399",
+  vwap:   "#60a5fa",
 };
 
 const EMA_PERIODS: Record<keyof IndicatorState, number> = {

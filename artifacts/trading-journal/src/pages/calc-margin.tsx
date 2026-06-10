@@ -178,9 +178,9 @@ export default function CalcMargin() {
             </div>
           )}
           {calc.status === "safe" && calc.margin > 0 && (
-            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-emerald-500/8 border border-emerald-500/25">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-              <p className="text-[12px] text-emerald-300">Margin level is healthy. Monitor if market moves against you.</p>
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/[0.04] border border-white/[0.08]">
+              <ShieldCheck className="w-4 h-4 text-foreground/60 shrink-0" />
+              <p className="text-[12px] text-foreground/60">Margin level is healthy. Monitor if market moves against you.</p>
             </div>
           )}
         </div>

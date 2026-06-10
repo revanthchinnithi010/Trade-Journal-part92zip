@@ -15,7 +15,7 @@ import { useAlertStore } from "@/store/alertStore";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<AlertStatus, { label: string; dot: string; text: string; bg: string }> = {
-  active:    { label: "Active",    dot: "#34d399", text: "#34d399", bg: "rgba(52,211,153,0.12)"  },
+  active:    { label: "Active",    dot: "#60a5fa", text: "#60a5fa", bg: "rgba(96,165,250,0.12)"  },
   triggered: { label: "Triggered", dot: "#B7FF5A", text: "#B7FF5A", bg: "rgba(183,255,90,0.12)"  },
   paused:    { label: "Paused",    dot: "#FFC857", text: "#FFC857", bg: "rgba(255,200,87,0.12)"  },
   expired:   { label: "Expired",   dot: "#9ca3af", text: "#9ca3af", bg: "rgba(156,163,175,0.10)" },

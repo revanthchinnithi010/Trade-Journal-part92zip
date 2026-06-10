@@ -245,7 +245,7 @@ export default function Reports() {
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-white/[0.04] rounded-lg px-3 py-1.5 border border-white/[0.06]">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
             Live data · {stats.totalTrades} trades
           </span>
         </div>
@@ -534,7 +534,7 @@ export default function Reports() {
             </div>
             <div className="flex items-center gap-3 text-[10px]">
               {topSymbol && (
-                <span className="flex items-center gap-1.5 text-emerald-400/80">
+                <span className="flex items-center gap-1.5 text-foreground/50">
                   <TrendingUp className="w-3 h-3" /> Best: {topSymbol.symbol}
                 </span>
               )}

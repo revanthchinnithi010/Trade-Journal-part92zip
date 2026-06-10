@@ -55,8 +55,8 @@ const NAV_SECTIONS = [
 const BADGES: Record<string, React.ReactNode> = {
   "/brokers": (
     <span className="ml-auto flex items-center gap-1.5">
-      <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00E5B0", boxShadow: "0 0 6px rgba(0,229,176,0.45)" }} />
-      <span className="text-[9px] font-bold" style={{ color: "#00E5B0" }}>2</span>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#94a3b8", boxShadow: "0 0 6px rgba(148,163,184,0.35)" }} />
+      <span className="text-[9px] font-bold" style={{ color: "#94a3b8" }}>2</span>
     </span>
   ),
   "/alerts": (
@@ -242,18 +242,18 @@ export const Layout = memo(function Layout({ children }: { children: React.React
           <div
             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
             style={{
-              background: "linear-gradient(135deg, rgba(0,229,176,0.18) 0%, rgba(5,7,10,0.88) 100%)",
-              boxShadow:  "0 4px 18px rgba(0,229,176,0.20), 0 1px 0 rgba(0,229,176,0.08) inset",
-              border:     "1px solid rgba(0,229,176,0.22)",
+              background: "linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(5,7,10,0.88) 100%)",
+              boxShadow:  "0 4px 18px rgba(0,0,0,0.40), 0 1px 0 rgba(255,255,255,0.06) inset",
+              border:     "1px solid rgba(255,255,255,0.10)",
             }}
           >
-            <Zap className="w-[18px] h-[18px] text-primary" fill="currentColor" />
+            <Zap className="w-[18px] h-[18px] text-foreground/80" fill="currentColor" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-[15px] font-bold tracking-tight text-foreground leading-none">TradeVault</p>
             <p
               className="signature-shimmer text-[13px] leading-none mt-[5px]"
-              style={{ color: "#00E5B0" }}
+              style={{ color: "rgba(148,163,184,0.72)" }}
             >
               Revanth Chinnithi
             </p>
@@ -274,7 +274,7 @@ export const Layout = memo(function Layout({ children }: { children: React.React
             <div key={section.label}>
               <p
                 className="text-[9px] font-bold uppercase tracking-[0.14em] px-3 pb-2 leading-none"
-                style={{ color: "rgba(0, 217, 166, 0.45)" }}
+                style={{ color: "rgba(148, 163, 184, 0.45)" }}
               >
                 {section.label}
               </p>
@@ -306,23 +306,23 @@ export const Layout = memo(function Layout({ children }: { children: React.React
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#00E5B0", boxShadow: "0 0 6px rgba(0,229,176,0.40)" }} />
+                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#94a3b8", boxShadow: "0 0 6px rgba(148,163,184,0.30)" }} />
                 <span className="text-[10px] text-muted-foreground font-medium">Account Balance</span>
               </div>
-              <TrendingUp className="w-2.5 h-2.5" style={{ color: "#00E5B0" }} />
+              <TrendingUp className="w-2.5 h-2.5 text-muted-foreground/50" />
             </div>
             <p className="text-[15px] font-bold text-foreground tracking-tight leading-none">$12,453.20</p>
             <div className="flex items-center justify-between mt-2">
               <span
-                className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full text-primary"
+                className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full text-foreground/60"
                 style={{
-                  background: "rgba(0, 229, 176, 0.07)",
-                  border:     "1px solid rgba(0, 229, 176, 0.18)",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border:     "1px solid rgba(255, 255, 255, 0.10)",
                 }}
               >
                 Pro Plan
               </span>
-              <span className="text-[10px] font-semibold" style={{ color: "#00E5B0" }}>+$1,986 MTD</span>
+              <span className="text-[10px] font-semibold text-emerald-400">+$1,986 MTD</span>
             </div>
           </div>
         </div>

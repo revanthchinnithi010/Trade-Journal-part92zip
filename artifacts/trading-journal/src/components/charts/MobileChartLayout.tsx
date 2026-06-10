@@ -799,7 +799,7 @@ function MoreOptionsSheet({
     },
     {
       icon: <RotateCcw style={{ width:22, height:22 }} />,
-      label: "Bar Replay", accent: "#34d399",
+      label: "Bar Replay", accent: "#60a5fa",
       action: () => { onBarReplay?.(); onClose(); },
     },
     {

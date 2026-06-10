@@ -25,7 +25,7 @@ const DASHBOARD_TIMEOUT_MS = 2_000;
 
 const GREEN = "hsl(145 58% 52%)";
 const RED   = "hsl(0 68% 58%)";
-const PURPLE = "#00E5B0";
+const PURPLE = "#60a5fa";
 const MUTED_CLR = "hsl(128 8% 38%)";
 
 const DEFAULT_STATS = {
@@ -118,7 +118,7 @@ const StatCard = memo(function StatCard({
       )}
 
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-      {trend && <p className="text-[11px] text-emerald-400 font-medium mt-0.5">{trend}</p>}
+      {trend && <p className="text-[11px] text-foreground/60 font-medium mt-0.5">{trend}</p>}
     </div>
   );
 });
@@ -433,8 +433,8 @@ export default function Dashboard() {
                           </p>
                         )}
                         <div className="flex items-center justify-end gap-1 mt-0.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                          <span className="text-[9px] text-emerald-400/70 font-semibold">LIVE</span>
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                          <span className="text-[9px] text-blue-400/70 font-semibold">LIVE</span>
                         </div>
                       </>
                     ) : (

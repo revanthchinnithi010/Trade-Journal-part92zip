@@ -474,7 +474,7 @@ function AddSymbolModal({ onClose, existing }: { onClose: () => void; existing: 
                   <div className="shrink-0">
                     {adding === key ? <div className="w-4 h-4 rounded-full border-2 border-primary/40 border-t-primary animate-spin" />
                     : errors[key] ? <span className="text-[9px] text-red-400">Failed</span>
-                    : added.has(key) ? <span className="text-[9px] text-emerald-400">✓</span>
+                    : added.has(key) ? <span className="text-[9px] text-foreground/60">✓</span>
                     : <Plus className="w-3.5 h-3.5" style={{ color: "rgba(167,184,169,0.4)" }} />}
                   </div>
                 </button>
@@ -1711,8 +1711,8 @@ export default function Charts() {
                 </div>
                 <span style={{
                   width: 6, height: 6, borderRadius: "50%", flexShrink: 0, marginLeft: 2,
-                  background: connected ? "#34d399" : "#f87171",
-                  boxShadow: connected ? "0 0 6px #34d399" : "none",
+                  background: connected ? "#60a5fa" : "#f87171",
+                  boxShadow: connected ? "0 0 6px #60a5fa" : "none",
                 }} />
               </div>
             )}

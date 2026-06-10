@@ -25,14 +25,14 @@ import { useLocation } from "wouter";
 // ─── Small helpers ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: AlertStatus }) {
   const cfg = {
-    active:    { label: "Active",    cls: "bg-emerald-500/15 text-emerald-400 border-emerald-500/20" },
+    active:    { label: "Active",    cls: "bg-blue-500/15 text-blue-400 border-blue-500/20" },
     triggered: { label: "Triggered", cls: "bg-primary/15 text-primary border-primary/20" },
     paused:    { label: "Paused",    cls: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20" },
     expired:   { label: "Expired",   cls: "bg-white/10 text-white/40 border-white/10" },
   }[status];
   return (
     <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.cls}`}>
-      {status === "active"    && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+      {status === "active"    && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />}
       {status === "triggered" && <span className="w-1.5 h-1.5 rounded-full bg-primary" />}
       {status === "paused"    && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />}
       {cfg.label}
@@ -79,7 +79,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 function ConditionIcon({ cond }: { cond: string }) {
-  if (cond === "above")  return <TrendingUp   className="w-3 h-3 text-emerald-400" />;
+  if (cond === "above")  return <TrendingUp   className="w-3 h-3 text-foreground/50" />;
   if (cond === "below")  return <TrendingDown  className="w-3 h-3 text-red-400" />;
   if (cond === "break")  return <Zap          className="w-3 h-3 text-yellow-400" />;
   if (cond === "retest") return <Activity      className="w-3 h-3 text-blue-400" />;
@@ -608,7 +608,7 @@ function ModalWrapper({ title, icon, onClose, children }: {
             background: "hsl(var(--popover))",
             border: "1px solid rgba(255,255,255,0.10)",
             borderTopColor: "rgba(255,255,255,0.18)",
-            boxShadow: "0 24px 64px rgba(7,17,13,0.75), 0 0 0 1px rgba(0,229,176,0.04)",
+            boxShadow: "0 24px 64px rgba(7,17,13,0.75), 0 0 0 1px rgba(255,255,255,0.04)",
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -682,7 +682,7 @@ function AlertRow({ alert, onTogglePause, onDelete }: {
     )}>
       <td className="px-4 py-3">
         <div className="flex items-center gap-2">
-          {alert.status === "active"    && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse flex-shrink-0" />}
+          {alert.status === "active"    && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse flex-shrink-0" />}
           {alert.status === "triggered" && <span className="w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0" />}
           {alert.status === "paused"    && <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 flex-shrink-0" />}
           <span className="text-xs font-bold text-white">{alert.symbol}</span>
@@ -889,7 +889,7 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
       <div className="flex items-center gap-3 text-[11px] text-muted-foreground/60">
         <div className="flex items-center gap-1"><ConditionIcon cond={alert.condition} /><span className="capitalize">{alert.condition}</span></div>
         <span className="w-1 h-1 rounded-full bg-white/20" />
-        <span className={isAscending ? "text-emerald-400/70" : "text-red-400/70"}>{isAscending ? "Ascending" : "Descending"}</span>
+        <span className={isAscending ? "text-foreground/50" : "text-red-400/70"}>{isAscending ? "Ascending" : "Descending"}</span>
       </div>
       {alert.notes && <p className="text-[11px] text-muted-foreground/60 border-t border-white/[0.05] pt-2.5 mt-2.5 leading-relaxed">{alert.notes}</p>}
     </motion.div>
@@ -959,8 +959,8 @@ function ConnectionStatusWidget() {
               {!loaded ? (
                 <span className="text-[10px] text-muted-foreground/30">…</span>
               ) : c.ok ? (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                   Live
                 </span>
               ) : (
@@ -1207,7 +1207,7 @@ export default function Alerts() {
       {/* ── Stats strip ─────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Active Alerts",   value: totalActive,    icon: Activity, color: "text-emerald-400", bg: "bg-emerald-400/10", dot: "bg-emerald-400", animated: true },
+          { label: "Active Alerts",   value: totalActive,    icon: Activity, color: "text-blue-400",    bg: "bg-blue-400/10",    dot: "bg-blue-400",    animated: true },
           { label: "Triggered Today", value: totalTriggered, icon: Zap,      color: "text-primary",     bg: "bg-primary/10",     dot: "bg-primary",     animated: false },
           { label: "Paused Alerts",   value: totalPaused,    icon: Pause,    color: "text-yellow-400",  bg: "bg-yellow-400/10",  dot: "bg-yellow-400",  animated: false },
           { label: "Total Alerts",    value: allAlerts.length, icon: Bell,   color: "text-blue-400",    bg: "bg-blue-400/10",    dot: "bg-blue-400",    animated: false },

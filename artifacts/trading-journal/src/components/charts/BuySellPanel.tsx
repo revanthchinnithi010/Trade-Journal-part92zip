@@ -243,12 +243,12 @@ const BuySellPanel = memo(function BuySellPanel({ symbol, currentPrice, onClose 
             letterSpacing: "0.03em",
             transition:   "all 0.15s",
             background:   submitted
-              ? "rgba(52,211,153,0.2)"
+              ? "rgba(255,255,255,0.08)"
               : parseFloat(quantity) > 0
                 ? (isUp ? "linear-gradient(135deg, #7CBF4B, #B7FF5A)" : "linear-gradient(135deg, #dc2626, #ef4444)")
                 : "rgba(57,91,67,0.15)",
             color: submitted
-              ? "#34d399"
+              ? "rgba(148,163,184,0.9)"
               : parseFloat(quantity) > 0
                 ? (isUp ? "#07110D" : "#fff")
                 : "rgba(167,184,169,0.35)",
