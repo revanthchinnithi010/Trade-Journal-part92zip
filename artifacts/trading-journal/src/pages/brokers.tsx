@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrencyFormatter } from "@/store/currencyStore";
 import {
   SAMPLE_SYNCED_TRADES,
   DELTA_SYNC_HISTORY,
@@ -1053,6 +1053,7 @@ const BROKER_FILTER_OPTIONS: Array<{ label: string; value: BrokerName | "all" }>
 ];
 
 export default function Brokers() {
+  const fc = useCurrencyFormatter();
   const [activeTab, setActiveTab] = useState<ActiveTab>("delta");
   const [deltaConnected, setDeltaConnected] = useState(true);
   const [fusionConnected, setFusionConnected] = useState(false);
@@ -1221,9 +1222,9 @@ export default function Brokers() {
                       {trade.exit < 1 ? trade.exit.toFixed(7) : trade.exit < 10 ? trade.exit.toFixed(4) : trade.exit.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className={`px-4 py-3 text-right font-mono font-bold text-[12px] tabular-nums ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {trade.pnl >= 0 ? "+" : ""}{formatCurrency(trade.pnl)}
+                      {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
                     </td>
-                    <td className="px-4 py-3 text-right font-mono text-[11px] text-muted-foreground tabular-nums">{formatCurrency(trade.fees)}</td>
+                    <td className="px-4 py-3 text-right font-mono text-[11px] text-muted-foreground tabular-nums">{fc(trade.fees)}</td>
                     <td className="px-4 py-3">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border ${
                         trade.broker === "Delta Exchange" ? "bg-orange-500/10 text-orange-400 border-orange-500/20" :
@@ -1251,7 +1252,7 @@ export default function Brokers() {
               <span className="text-emerald-400">{filteredTrades.filter(t => t.status === "win").length} wins</span>
               <span className="text-red-400">{filteredTrades.filter(t => t.status === "loss").length} losses</span>
               <span className={filteredTrades.reduce((a, t) => a + t.pnl, 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
-                {filteredTrades.reduce((a, t) => a + t.pnl, 0) >= 0 ? "+" : ""}{formatCurrency(filteredTrades.reduce((a, t) => a + t.pnl, 0))} total
+                {filteredTrades.reduce((a, t) => a + t.pnl, 0) >= 0 ? "+" : ""}{fc(filteredTrades.reduce((a, t) => a + t.pnl, 0))} total
               </span>
             </div>
           </div>

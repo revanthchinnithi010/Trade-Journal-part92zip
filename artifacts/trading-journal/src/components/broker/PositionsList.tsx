@@ -1,17 +1,19 @@
 import { useState } from "react";
 import { X, TrendingUp, TrendingDown, Loader2, AlertTriangle } from "lucide-react";
+import { useCurrencyFormatter } from "@/store/currencyStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { BROKERS } from "@/types/broker";
 import type { BrokerPosition } from "@/types/broker";
 import { useTickStore } from "@/store/tickStore";
 
 function PnlBadge({ pnl }: { pnl: number }) {
+  const fc  = useCurrencyFormatter();
   const pos = pnl >= 0;
   return (
     <span className="flex items-center gap-0.5 text-[11px] font-bold"
       style={{ color: pos ? "#4ade80" : "#f87171" }}>
       {pos ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {pos ? "+" : ""}{pnl.toFixed(2)}
+      {pos ? "+" : ""}{fc(pnl)}
     </span>
   );
 }

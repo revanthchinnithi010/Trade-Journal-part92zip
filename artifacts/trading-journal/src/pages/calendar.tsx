@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useGetCalendarHeatmap } from "@workspace/api-client-react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrencyFormatter } from "@/store/currencyStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Calendar, BarChart2 } from "lucide-react";
 
@@ -29,6 +29,7 @@ function getIntensityStyle(pnl: number, trades: number, maxAbs: number): React.C
 export default function CalendarPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  const fc = useCurrencyFormatter();
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -125,7 +126,7 @@ export default function CalendarPage() {
         {[
           {
             label: "Month PNL",
-            value: formatCurrency(monthSummary.totalPnl),
+            value: fc(monthSummary.totalPnl),
             positive: monthSummary.totalPnl >= 0,
             icon: monthSummary.totalPnl >= 0 ? TrendingUp : TrendingDown,
             color: monthSummary.totalPnl >= 0 ? "text-emerald-400" : "text-red-400",
@@ -241,7 +242,7 @@ export default function CalendarPage() {
                             <div className="glass-modal px-3 py-2 text-[11px] whitespace-nowrap rounded-xl">
                               <p className="text-muted-foreground mb-1">{new Date(cell.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</p>
                               <p className={`font-bold text-[13px] ${cell.data.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {cell.data.pnl >= 0 ? "+" : ""}{formatCurrency(cell.data.pnl)}
+                                {cell.data.pnl >= 0 ? "+" : ""}{fc(cell.data.pnl)}
                               </p>
                               <p className="text-muted-foreground">{cell.data.trades} trade{cell.data.trades !== 1 ? "s" : ""}</p>
                             </div>
@@ -256,7 +257,7 @@ export default function CalendarPage() {
                     {weekTrades > 0 ? (
                       <>
                         <span className={`text-[11px] font-bold ${weekPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                          {weekPnl >= 0 ? "+" : ""}{formatCurrency(weekPnl)}
+                          {weekPnl >= 0 ? "+" : ""}{fc(weekPnl)}
                         </span>
                         <span className="text-[9px] text-muted-foreground/50">{weekTrades}t</span>
                       </>

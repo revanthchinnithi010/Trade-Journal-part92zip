@@ -6,7 +6,7 @@ import {
   getListTradesQueryKey
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrencyFormatter } from "@/store/currencyStore";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -146,6 +146,7 @@ export default function Trades() {
   const [modalTab, setModalTab] = useState<ModalTab>("details");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
   const isMobile = useIsMobile();
+  const fc       = useCurrencyFormatter();
 
   const queryClient = useQueryClient();
 
@@ -370,13 +371,13 @@ export default function Trades() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
-                        {trade.entryPrice < 1 ? trade.entryPrice.toFixed(5) : formatCurrency(trade.entryPrice)}
+                        {trade.entryPrice < 1 ? trade.entryPrice.toFixed(5) : fc(trade.entryPrice)}
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
-                        {trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : formatCurrency(trade.exitPrice)}
+                        {trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : fc(trade.exitPrice)}
                       </td>
                       <td className={`px-5 py-3.5 text-right font-mono font-bold text-[13px] tabular-nums ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {trade.pnl >= 0 ? "+" : ""}{formatCurrency(trade.pnl)}
+                        {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
                       </td>
                       <td className="px-5 py-3.5">
                         {rr > 0 ? (
@@ -845,7 +846,7 @@ export default function Trades() {
                   </div>
                 </div>
                 <div className={`text-2xl font-black ${selectedTrade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {selectedTrade.pnl >= 0 ? "+" : ""}{formatCurrency(selectedTrade.pnl)}
+                  {selectedTrade.pnl >= 0 ? "+" : ""}{fc(selectedTrade.pnl)}
                 </div>
               </div>
 
@@ -853,12 +854,12 @@ export default function Trades() {
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
-                    { label: "Entry", value: formatCurrency(selectedTrade.entryPrice), mono: true },
-                    { label: "Exit", value: formatCurrency(selectedTrade.exitPrice), mono: true },
+                    { label: "Entry", value: fc(selectedTrade.entryPrice), mono: true },
+                    { label: "Exit", value: fc(selectedTrade.exitPrice), mono: true },
                     { label: "Risk / Reward", value: selectedTrade.riskRewardRatio ? `${selectedTrade.riskRewardRatio.toFixed(2)}R` : "—", mono: true },
                     { label: "Quantity", value: String(selectedTrade.quantity), mono: true },
-                    { label: "Stop Loss", value: selectedTrade.stopLoss ? formatCurrency(selectedTrade.stopLoss) : "—", mono: true },
-                    { label: "Take Profit", value: selectedTrade.takeProfit ? formatCurrency(selectedTrade.takeProfit) : "—", mono: true },
+                    { label: "Stop Loss", value: selectedTrade.stopLoss ? fc(selectedTrade.stopLoss) : "—", mono: true },
+                    { label: "Take Profit", value: selectedTrade.takeProfit ? fc(selectedTrade.takeProfit) : "—", mono: true },
                   ].map(({ label, value, mono }) => (
                     <div key={label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
                       <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1">{label}</p>

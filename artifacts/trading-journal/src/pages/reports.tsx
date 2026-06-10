@@ -4,7 +4,7 @@ import {
   useGetEquityCurve,
   useGetWeeklyPnl,
 } from "@workspace/api-client-react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   PieChart, Pie, AreaChart, Area, RadarChart, Radar, PolarGrid,
@@ -135,23 +135,25 @@ function PerformanceRadar({ stats }: { stats: ReturnType<typeof useGetStatsSumma
 
 // ── Equity Tooltip ────────────────────────────────────────────────────────────
 function EqTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  const fc = useCurrencyFormatter();
   if (!active || !payload?.length) return null;
   return (
     <div style={tooltipStyle} className="border border-white/[0.08]">
       <p className="text-muted-foreground text-[10px] mb-1">{label ? new Date(label).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}</p>
-      <p className="font-bold text-sm text-white">{formatCurrency(payload[0].value)}</p>
+      <p className="font-bold text-sm text-white">{fc(payload[0].value)}</p>
     </div>
   );
 }
 
 // ── Weekly PNL Tooltip ────────────────────────────────────────────────────────
 function WkTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  const fc = useCurrencyFormatter();
   if (!active || !payload?.length) return null;
   const v = payload[0].value;
   return (
     <div style={tooltipStyle} className="border border-white/[0.08]">
       <p className="text-muted-foreground text-[10px] mb-1">Wk of {label}</p>
-      <p className={`font-bold text-sm ${v >= 0 ? "text-emerald-400" : "text-red-400"}`}>{v >= 0 ? "+" : ""}{formatCurrency(v)}</p>
+      <p className={`font-bold text-sm ${v >= 0 ? "text-emerald-400" : "text-red-400"}`}>{v >= 0 ? "+" : ""}{fc(v)}</p>
     </div>
   );
 }
@@ -213,6 +215,9 @@ export default function Reports() {
       }));
   }, [symbolStats]);
 
+  const fc            = useCurrencyFormatter();
+  const axisFormatter = useCurrencyAxisFormatter();
+
   if (!stats || !symbolStats) {
     return (
       <div className="space-y-5 pb-12">
@@ -225,7 +230,6 @@ export default function Reports() {
       </div>
     );
   }
-
   const expectancy = stats.winRate / 100 * stats.averageWin - (1 - stats.winRate / 100) * stats.averageLoss;
   const kellyCrit  = stats.averageLoss > 0
     ? ((stats.winRate / 100) - (1 - stats.winRate / 100) / (stats.averageWin / stats.averageLoss)) * 100
@@ -254,7 +258,7 @@ export default function Reports() {
       {/* ── Top-level stat cards ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard
-          label="Net PNL" value={formatCurrency(stats.netPnl)}
+          label="Net PNL" value={fc(stats.netPnl)}
           sub="All-time realized" icon={stats.netPnl >= 0 ? TrendingUp : TrendingDown}
           color={stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
           iconBg={stats.netPnl >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}
@@ -278,17 +282,17 @@ export default function Reports() {
           color={stats.averageRR >= 2 ? "text-emerald-400" : "text-white"}
         />
         <MetricCard
-          label="Avg Win" value={formatCurrency(stats.averageWin)}
+          label="Avg Win" value={fc(stats.averageWin)}
           sub="Per winning trade" icon={ArrowUpRight}
           color="text-emerald-400" iconBg="bg-emerald-500/10" iconColor="text-emerald-400"
         />
         <MetricCard
-          label="Avg Loss" value={formatCurrency(stats.averageLoss)}
+          label="Avg Loss" value={fc(stats.averageLoss)}
           sub="Per losing trade" icon={ArrowDownRight}
           color="text-red-400" iconBg="bg-red-500/10" iconColor="text-red-400"
         />
         <MetricCard
-          label="Expectancy" value={formatCurrency(expectancy)}
+          label="Expectancy" value={fc(expectancy)}
           sub="Per trade expected" icon={Zap}
           color={expectancy >= 0 ? "text-emerald-400" : "text-red-400"}
         />
@@ -316,7 +320,7 @@ export default function Reports() {
                     ? "bg-emerald-500/15 text-emerald-400"
                     : "bg-red-500/15 text-red-400"
                 }`}>
-                  {formatCurrency(equity[equity.length - 1].equity)}
+                  {fc(equity[equity.length - 1].equity)}
                 </span>
               )}
             </div>
@@ -333,7 +337,7 @@ export default function Reports() {
                   <XAxis dataKey="date" stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
                     tickFormatter={v => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
                   <YAxis stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+                    tickFormatter={axisFormatter} />
                   <Tooltip content={<EqTooltip />} />
                   <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2.5} fill="url(#eqGrad)" dot={false}
                     activeDot={{ r: 5, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2.5 }} />
@@ -374,7 +378,7 @@ export default function Reports() {
               </div>
               <div className="w-px bg-white/[0.06]" />
               <div>
-                <p className="text-base font-bold text-white">{stats.largestWin > 0 ? formatCurrency(stats.largestWin) : "—"}</p>
+                <p className="text-base font-bold text-white">{stats.largestWin > 0 ? fc(stats.largestWin) : "—"}</p>
                 <p className="text-[10px] text-muted-foreground">Best</p>
               </div>
             </div>
@@ -397,7 +401,7 @@ export default function Reports() {
                 <BarChart data={weeklyLabels} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
                   <XAxis dataKey="label" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false} />
                   <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+                    tickFormatter={axisFormatter} />
                   <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
                   <Tooltip content={<WkTooltip />} cursor={{ fill: "rgba(255,255,255,0.025)" }} />
                   <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={28}>
@@ -421,11 +425,11 @@ export default function Reports() {
               <ResponsiveContainer width="100%" height={190}>
                 <BarChart data={symbolStats} layout="vertical" margin={{ top: 4, right: 16, left: 32, bottom: 4 }}>
                   <XAxis type="number" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => `$${Math.round(v / 100) * 100 >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`} />
+                    tickFormatter={axisFormatter} />
                   <YAxis type="category" dataKey="symbol" stroke="transparent" tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
                   <ReferenceLine x={0} stroke="rgba(255,255,255,0.08)" />
                   <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                    formatter={(v: number) => [formatCurrency(v), "PNL"]} />
+                    formatter={(v: number) => [fc(v), "PNL"]} />
                   <Bar dataKey="pnl" radius={[0, 4, 4, 0]} maxBarSize={14}>
                     {symbolStats.map((e, i) => <Cell key={i} fill={e.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
                   </Bar>
@@ -480,9 +484,9 @@ export default function Reports() {
                   <XAxis dataKey="name" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 9 }} tickLine={false} axisLine={false}
                     tickFormatter={v => v === "Delta Exchange" ? "Delta" : v === "FusionMarkets" ? "Fusion" : v} />
                   <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+                    tickFormatter={axisFormatter} />
                   <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.025)" }}
-                    formatter={(v: number, n: string) => [n === "pnl" ? formatCurrency(v) : v, n === "pnl" ? "PNL" : n]} />
+                    formatter={(v: number, n: string) => [n === "pnl" ? fc(v) : v, n === "pnl" ? "PNL" : n]} />
                   <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={36}>
                     {brokerPerf.map((e, i) => (
                       <Cell key={i} fill={i === 0 ? PURPLE : i === 1 ? BLUE : ORANGE} fillOpacity={0.85} />
@@ -508,7 +512,7 @@ export default function Reports() {
             {SESSIONS.map(s => (
               <div key={s.session} className="px-5 pb-5">
                 <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-widest mb-2">{s.session}</p>
-                <p className={`text-lg font-bold mb-0.5 ${s.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{formatCurrency(s.pnl)}</p>
+                <p className={`text-lg font-bold mb-0.5 ${s.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fc(s.pnl)}</p>
                 <p className="text-[11px] text-white/60">{s.winRate.toFixed(0)}% win · {s.trades} trades</p>
                 <div className="mt-2 h-1 bg-white/[0.06] rounded-full overflow-hidden">
                   <div
@@ -575,10 +579,10 @@ export default function Reports() {
                         </div>
                       </td>
                       <td className={`px-4 py-3 text-right font-mono text-xs font-bold ${s.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {formatCurrency(s.pnl)}
+                        {fc(s.pnl)}
                       </td>
                       <td className={`px-4 py-3 text-right font-mono text-[11px] ${avgPnl >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}>
-                        {formatCurrency(avgPnl)}
+                        {fc(avgPnl)}
                       </td>
                     </tr>
                   );
@@ -592,8 +596,8 @@ export default function Reports() {
       {/* ── Best/Worst + Advanced Stats ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: "Largest Win",  value: formatCurrency(stats.largestWin),  color: "text-emerald-400", icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
-          { label: "Largest Loss", value: formatCurrency(stats.largestLoss), color: "text-red-400",     icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400" },
+          { label: "Largest Win",  value: fc(stats.largestWin),  color: "text-emerald-400", icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
+          { label: "Largest Loss", value: fc(stats.largestLoss), color: "text-red-400",     icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400" },
           { label: "Current Streak", value: `${Math.abs(stats.currentStreak)}${stats.currentStreak >= 0 ? "W" : "L"}`,
             color: stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400", icon: Zap, iconBg: "bg-primary/10", iconColor: "text-primary",
             sub: stats.currentStreak >= 0 ? "Winning streak" : "Losing streak" },

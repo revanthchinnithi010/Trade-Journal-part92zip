@@ -19,6 +19,7 @@ import { ChartFocusContext } from "@/contexts/ChartFocusContext";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChartStore } from "@/store/chartStore";
+import { useCurrencyStore, CURRENCY_META } from "@/store/currencyStore";
 
 const NAV_SECTIONS = [
   {
@@ -189,6 +190,10 @@ export const Layout = memo(function Layout({ children }: { children: React.React
     NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === location)?.label || "TradeVault";
 
   const { theme, toggleTheme } = useTheme();
+  const { currency, setCurrency, fetchRate } = useCurrencyStore();
+
+  useEffect(() => { fetchRate(); }, [fetchRate]);
+
   const initials   = getInitials(profile.name);
   const badgeCount = unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;
 
@@ -393,6 +398,19 @@ export const Layout = memo(function Layout({ children }: { children: React.React
                 title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
               >
                 {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              {/* Currency Toggle */}
+              <button
+                onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
+                className="h-9 px-3 flex items-center gap-1 rounded-xl text-muted-foreground transition-all duration-200 text-[12px] font-bold tracking-tight"
+                style={{ border: "1px solid var(--surface-btn-border)" }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
+              >
+                <span>{CURRENCY_META[currency].symbol}</span>
+                <span className="hidden sm:inline">{currency}</span>
               </button>
 
               <div className="relative">

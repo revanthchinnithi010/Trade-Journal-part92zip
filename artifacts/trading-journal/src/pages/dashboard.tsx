@@ -6,7 +6,7 @@ import {
   useListTrades,
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
-import { formatCurrency } from "@/lib/utils";
+import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
 import {
   ArrowUpRight, ArrowDownRight, TrendingUp, Percent, Layers,
   BarChart2, Activity, Target, Flame, ChevronRight,
@@ -48,13 +48,14 @@ const tooltipStyle = {
 const CustomEquityTooltip = memo(function CustomEquityTooltip({
   active, payload, label,
 }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  const fc = useCurrencyFormatter();
   if (!active || !payload?.length) return null;
   return (
     <div style={tooltipStyle} className="border border-white/[0.08]">
       <p className="text-muted-foreground text-[11px] mb-1">
         {label ? new Date(label).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
       </p>
-      <p className="font-bold text-sm text-white">{formatCurrency(payload[0].value)}</p>
+      <p className="font-bold text-sm text-white">{fc(payload[0].value)}</p>
     </div>
   );
 });
@@ -62,13 +63,14 @@ const CustomEquityTooltip = memo(function CustomEquityTooltip({
 const CustomPnlTooltip = memo(function CustomPnlTooltip({
   active, payload, label,
 }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
+  const fc = useCurrencyFormatter();
   if (!active || !payload?.length) return null;
   const val = payload[0].value;
   return (
     <div style={tooltipStyle} className="border border-white/[0.08]">
       <p className="text-muted-foreground text-[11px] mb-1">Week of {label}</p>
       <p className={`font-bold text-sm ${val >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-        {val >= 0 ? "+" : ""}{formatCurrency(val)}
+        {val >= 0 ? "+" : ""}{fc(val)}
       </p>
     </div>
   );
@@ -152,6 +154,8 @@ function MiniSparkline({ data, positive, width = 72, height = 28 }: {
 const CalendarHeatmap = memo(function CalendarHeatmap({
   data, year, month,
 }: { data: Array<{ date: string; pnl: number; trades: number }>; year: number; month: number }) {
+  const fc            = useCurrencyFormatter();
+  const axisFormatter = useCurrencyAxisFormatter();
   const dayMap = useMemo(() => {
     const m: Record<string, { pnl: number; trades: number }> = {};
     data.forEach((d) => { m[d.date] = { pnl: d.pnl, trades: d.trades }; });
@@ -194,13 +198,13 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
         <span className="text-[10px] font-semibold leading-none text-foreground/60">{d}</span>
         {entry && entry.trades > 0 && (
           <span className={`text-[8px] font-bold leading-none mt-0.5 ${entry.pnl > 0 ? "text-emerald-400" : "text-red-400"}`}>
-            {entry.pnl > 0 ? "+" : ""}{Math.abs(entry.pnl) >= 100 ? `$${Math.round(Math.abs(entry.pnl))}` : `$${Math.abs(entry.pnl).toFixed(0)}`}
+            {entry.pnl > 0 ? "+" : ""}{axisFormatter(Math.abs(entry.pnl))}
           </span>
         )}
         {entry && entry.trades > 0 && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 hidden group-hover/cell:block pointer-events-none">
             <div className="glass-card px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-xl border-white/10">
-              <p className={`font-bold ${entry.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{formatCurrency(entry.pnl)}</p>
+              <p className={`font-bold ${entry.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fc(entry.pnl)}</p>
               <p className="text-muted-foreground">{entry.trades} trade{entry.trades !== 1 ? "s" : ""}</p>
             </div>
           </div>
@@ -223,9 +227,11 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 });
 
 export default function Dashboard() {
-  const mountTimeRef = useRef(performance.now());
+  const mountTimeRef  = useRef(performance.now());
   const [timedOut,          setTimedOut]          = useState(false);
-  const ticks = useTickStore(s => s.ticks);
+  const ticks         = useTickStore(s => s.ticks);
+  const fc            = useCurrencyFormatter();
+  const axisFormatter = useCurrencyAxisFormatter();
 
   useEffect(() => {
     console.log("[Dashboard] mount");
@@ -350,7 +356,7 @@ export default function Dashboard() {
             <div className="flex-1">
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">Total Position Value</p>
               <p className="text-[28px] font-black tracking-tight leading-none text-white">
-                {openTrades.length === 0 ? "—" : formatCurrency(totalValue)}
+                {openTrades.length === 0 ? "—" : fc(totalValue)}
               </p>
               <p className="text-[11px] text-muted-foreground/60 mt-1">
                 {openTrades.length === 0 ? "No active positions" : `Across ${openTrades.length} open trade${openTrades.length !== 1 ? "s" : ""}`}
@@ -459,7 +465,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
           label="Net PNL"
-          value={formatCurrency(resolvedStats.netPnl)}
+          value={fc(resolvedStats.netPnl)}
           icon={resolvedStats.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
           positive={resolvedStats.netPnl > 0 ? true : resolvedStats.netPnl < 0 ? false : undefined}
           sub={<span className="flex items-center gap-1"><span className={resolvedStats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{resolvedStats.netPnl >= 0 ? "▲" : "▼"}</span>All time</span>}
@@ -531,7 +537,7 @@ export default function Dashboard() {
                     <XAxis dataKey="date" stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
                       tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
                     <YAxis stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => `$${(v / 1000).toFixed(1)}k`} />
+                      tickFormatter={axisFormatter} />
                     <Tooltip content={<CustomEquityTooltip />} />
                     <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2} fill="url(#equityGrad)" dot={false}
                       activeDot={{ r: 4, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2 }}
@@ -735,7 +741,7 @@ export default function Dashboard() {
                       </td>
                       <td className="px-5 py-3.5">
                         <span className={`text-[13px] font-bold ${pnl > 0 ? "text-emerald-400" : pnl < 0 ? "text-red-400" : "text-foreground/60"}`}>
-                          {pnl > 0 ? "+" : ""}{formatCurrency(pnl)}
+                          {pnl > 0 ? "+" : ""}{fc(pnl)}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-[13px] text-foreground/70">
