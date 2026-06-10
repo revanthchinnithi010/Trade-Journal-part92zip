@@ -7,12 +7,12 @@
  *   - Circle protrudes ~8px above bar top edge
  *   - Circle has a glowing rim border (indigo/cyan)
  *   - Active icon is bright white inside the dark circle
- *   - Spring-slides horizontally between tabs
+ *   - Slides horizontally; grows while traveling, shrinks on arrival
  *   - Water bubbles rise on tap
  */
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import { motion } from "framer-motion";
+import { motion, useAnimation } from "framer-motion";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
@@ -31,14 +31,15 @@ const TABS = [
 ] as const;
 
 const N          = TABS.length;
-const BAR_H      = 62;           // pill bar height
-const BUBBLE_W   = 64;           // rounded-rect width
-const BUBBLE_H   = 52;           // rounded-rect height
-const BUBBLE_R   = 16;           // corner radius — slightly curved
-const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;   // protrudes equally top & bottom
-const CIRCLE_TOP = -PROTRUDE;
-// alias kept for circleX calc
+const BAR_H      = 62;
+const BUBBLE_W   = 64;
+const BUBBLE_H   = 52;
+const BUBBLE_R   = 16;
+const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;
 const CIRCLE_D   = BUBBLE_W;
+
+// How much the bubble grows while in transit (1 = no change)
+const TRAVEL_SCALE = 1.28;
 
 const CSS_ID = "tj-circle-nav-v1";
 function ensureCSS() {
@@ -52,12 +53,6 @@ function ensureCSS() {
     @keyframes tj-cnav-in {
       from { transform: translateY(110%); opacity: 0; }
       to   { transform: translateY(0);    opacity: 1; }
-    }
-
-    /* Rotating gradient border on the circle indicator */
-    @keyframes tj-cnav-spin {
-      from { transform: translate(-50%,-50%) rotate(0deg); }
-      to   { transform: translate(-50%,-50%) rotate(360deg); }
     }
 
     /* Water bubble rise */
@@ -124,6 +119,9 @@ export function MobileBottomNav() {
   const pillRef    = useRef<HTMLDivElement>(null);
   const outerRef   = useRef<HTMLDivElement>(null);
   const [tabW, setTabW] = useState(0);
+  const controls   = useAnimation();
+  const initialized = useRef(false);
+  const prevCircleX = useRef<number | null>(null);
 
   const activeIdx = TABS.findIndex(t => t.href === location);
 
@@ -138,10 +136,47 @@ export function MobileBottomNav() {
     return () => ro.disconnect();
   }, []);
 
-  // circle left edge: center it inside the tab slot
   const circleX = tabW > 0 && activeIdx >= 0
     ? activeIdx * tabW + (tabW - CIRCLE_D) / 2
     : 0;
+
+  useEffect(() => {
+    if (tabW === 0) return;
+
+    // First render: snap into place instantly, no animation
+    if (!initialized.current) {
+      controls.set({ x: circleX, scale: 1, opacity: 1 });
+      initialized.current = true;
+      prevCircleX.current = circleX;
+      return;
+    }
+
+    // No position change — nothing to do
+    if (prevCircleX.current === circleX) return;
+    prevCircleX.current = circleX;
+
+    // Phase 1: slide to new position while growing
+    controls.start({
+      x: circleX,
+      scale: TRAVEL_SCALE,
+      transition: {
+        type:      "spring",
+        stiffness: 380,
+        damping:   28,
+        mass:      0.55,
+      },
+    }).then(() => {
+      // Phase 2: settle back to default size once arrived
+      controls.start({
+        scale: 1,
+        transition: {
+          type:      "spring",
+          stiffness: 260,
+          damping:   22,
+        },
+      });
+    });
+  }, [circleX, tabW, controls]);
 
   const handleTap = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     const outer = outerRef.current;
@@ -193,25 +228,20 @@ export function MobileBottomNav() {
         {/* ── LAYER 1 (z-index 1): Transparent water bubble ──── */}
         {tabW > 0 && (
           <motion.div
-            key={activeIdx}
-            initial={{ x: circleX, scale: 0.65, opacity: 0.5 }}
-            animate={{ x: circleX, scale: 1,    opacity: 1   }}
-            transition={{ type: "spring", stiffness: 480, damping: 22, mass: 0.45 }}
+            animate={controls}
             style={{
               position:        "absolute",
-              top:             (BAR_H - BUBBLE_H) / 2,   // centred vertically
+              top:             (BAR_H - BUBBLE_H) / 2,
               left:            0,
               width:           BUBBLE_W,
               height:          BUBBLE_H,
               borderRadius:    BUBBLE_R,
-              zIndex:          1,          // BELOW icons
+              zIndex:          1,
               pointerEvents:   "none",
-              /* Fully transparent water-bubble interior */
               background:      "rgba(200,210,255,0.04)",
               backdropFilter:  "blur(2px)",
               WebkitBackdropFilter: "blur(2px)",
               willChange:      "transform",
-              /* Iridescent bubble wall */
               border:      "1.5px solid rgba(180,200,255,0.52)",
               boxShadow: [
                 "0 0 0 0.5px rgba(99,102,241,0.28)",
@@ -279,7 +309,7 @@ export function MobileBottomNav() {
                 WebkitTapHighlightColor: "transparent",
                 outline:                 "none",
                 position:                "relative",
-                zIndex:                  10,    // always above the bubble
+                zIndex:                  10,
               } as React.CSSProperties}
             >
               <motion.div
