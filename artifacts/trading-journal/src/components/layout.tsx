@@ -522,6 +522,13 @@ export const Layout = memo(function Layout({ children }: { children: React.React
           >
             {children}
           </div>
+        ) : location === "/markets" ? (
+          <div
+            className="flex-1 overflow-hidden flex flex-col"
+            style={isMobile ? { paddingBottom: 80 } : undefined}
+          >
+            {children}
+          </div>
         ) : location === "/portfolio" ? (
           <div
             className="flex-1 overflow-hidden flex flex-col"
