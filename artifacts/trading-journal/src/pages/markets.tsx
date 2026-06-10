@@ -1,5 +1,5 @@
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { Star, TrendingUp, RefreshCw } from "lucide-react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
+import { Star, TrendingUp, RefreshCw, Search, X } from "lucide-react";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
 
@@ -123,6 +123,7 @@ function SymbolRow({
 export default function Markets() {
   const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
   const [search,    setSearch]    = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const [deltaSymbols,   setDeltaSymbols]   = useState<SymbolInfo[]>([]);
   const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
@@ -245,10 +246,41 @@ export default function Markets() {
           })}
         </div>
 
+        {/* Search bar */}
+        <div style={{ padding: "8px 12px 6px" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            borderRadius: 10, padding: "8px 12px",
+          }}>
+            <Search size={14} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
+            <input
+              ref={searchRef}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={`Search ${activeTab}…`}
+              style={{
+                flex: 1, background: "none", border: "none", outline: "none",
+                color: "#fff", fontSize: 13.5, caretColor: "#f59e0b",
+                minWidth: 0,
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)", flexShrink: 0 }}
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        </div>
+
         {/* Column headers */}
         <div style={{
           display: "flex", alignItems: "center",
-          padding: "6px 16px",
+          padding: "5px 16px 6px",
           background: "rgba(255,255,255,0.02)",
           borderTop: "1px solid rgba(255,255,255,0.06)",
         }}>
