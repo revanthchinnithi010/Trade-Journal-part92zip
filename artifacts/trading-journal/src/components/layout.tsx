@@ -344,8 +344,8 @@ export const Layout = memo(function Layout({ children }: { children: React.React
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — all non-chart/portfolio pages */}
-        {location !== "/charts" && location !== "/portfolio" && (
+        {/* Top Header — all non-chart/portfolio/markets pages */}
+        {location !== "/charts" && location !== "/portfolio" && location !== "/markets" && (
           <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
