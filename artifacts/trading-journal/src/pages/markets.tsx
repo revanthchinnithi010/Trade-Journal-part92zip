@@ -1,163 +1,126 @@
-import { useState, useCallback } from "react";
-import { Star, Search, TrendingUp, TrendingDown } from "lucide-react";
-import { useWatchlist, useWatchlistEntry, SYMBOL_CATALOG, type Market } from "@/contexts/WatchlistContext";
+import { useState, useCallback, useEffect, useMemo } from "react";
+import { Star, Search, Menu, TrendingUp, RefreshCw } from "lucide-react";
+import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
-import { Link } from "wouter";
 
-type Tab = "Watchlist" | Market;
-
+type Tab = "Watchlist" | "Crypto" | "Forex" | "Indices" | "Commodities";
 const TABS: Tab[] = ["Watchlist", "Crypto", "Forex", "Indices", "Commodities"];
 
-const LEVERAGE: Record<string, string> = {
-  BTCUSD: "200x", ETHUSD: "200x", SOLUSD: "100x", DOGEUSD: "100x",
-  PEPEUSD: "100x", EURUSD: "500x", GBPUSD: "500x", GBPJPY: "500x",
-  USDJPY: "500x", AUDUSD: "500x", USDCAD: "500x",
-  NAS100: "100x", US30: "100x", SPX500: "100x", DE40: "50x",
-  XAUUSD: "100x", XAGUSD: "50x", USOIL: "25x", UKOIL: "25x",
-};
-
-const DESCRIPTIONS: Record<string, string> = {
-  BTCUSD: "Bitcoin Perpetual", ETHUSD: "Ethereum Perpetual",
-  SOLUSD: "Solana Perpetual", DOGEUSD: "Dogecoin Perpetual",
-  PEPEUSD: "PEPE Perpetual", EURUSD: "Euro / US Dollar",
-  GBPUSD: "British Pound / USD", GBPJPY: "British Pound / JPY",
-  USDJPY: "US Dollar / Yen", AUDUSD: "Australian Dollar / USD",
-  USDCAD: "US Dollar / CAD", NAS100: "NASDAQ 100 Index",
-  US30: "Dow Jones Industrial", SPX500: "S&P 500 Index",
-  DE40: "DAX 40 Index", XAUUSD: "Gold Spot / USD",
-  XAGUSD: "Silver Spot / USD", USOIL: "WTI Crude Oil",
-  UKOIL: "Brent Crude Oil",
-};
+interface SymbolInfo {
+  symbol:       string;
+  name:         string;
+  contractType: string;
+  broker:       string;
+  underlying:   string;
+  quoteAsset:   string;
+  active:       boolean;
+}
 
 function formatPrice(price: number | undefined): string {
   if (!price) return "—";
-  if (price >= 1000) return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  if (price >= 1) return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  if (price >= 10000)  return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (price >= 100)    return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1)      return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
   return price.toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
 }
 
-function formatVolume(price: number | undefined, tickCount: number): string {
-  if (!price || !tickCount) return "—";
-  const vol = price * tickCount * 1200;
-  if (vol >= 1_000_000_000) return `$${(vol / 1_000_000_000).toFixed(2)}B`;
-  if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(2)}M`;
-  if (vol >= 1_000) return `$${(vol / 1_000).toFixed(1)}K`;
-  return `$${vol.toFixed(0)}`;
-}
+const CONTRACT_LABELS: Record<string, string> = {
+  perpetual_futures: "Perp",
+  forex:             "FX",
+  index:             "Index",
+  commodity:         "Cmdty",
+  metal:             "Metal",
+  crypto:            "Perp",
+  indices:           "Index",
+  commodities:       "Cmdty",
+};
 
-interface SymbolRowProps {
-  symbol: string;
-  isFavorite: boolean;
-  onToggleFavorite: (symbol: string) => void;
-}
-
-function SymbolRow({ symbol, isFavorite, onToggleFavorite }: SymbolRowProps) {
+function SymbolRow({
+  symbol, name, contractType, isFavorite, inWatchlist, onStarPress,
+}: {
+  symbol: string; name: string; contractType: string;
+  isFavorite: boolean; inWatchlist: boolean; onStarPress: () => void;
+}) {
   const tick = useSymbolTick(symbol);
-  const cat  = SYMBOL_CATALOG[symbol];
-  if (!cat) return null;
-
-  const price    = tick?.price;
+  const price     = tick?.price;
   const changePct = tick?.changePct ?? 0;
-  const isUp     = changePct >= 0;
-  const leverage = LEVERAGE[symbol] ?? "";
-  const desc     = DESCRIPTIONS[symbol] ?? cat.label;
+  const isUp      = changePct >= 0;
+  const tag       = CONTRACT_LABELS[contractType] ?? contractType;
 
   return (
-    <Link
-      href={`/charts?symbol=${symbol}`}
-      style={{ display: "block", textDecoration: "none" }}
+    <div
+      style={{
+        display:      "flex",
+        alignItems:   "center",
+        padding:      "11px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        gap:          10,
+        minHeight:    64,
+      }}
     >
-      <div
-        style={{
-          display:       "flex",
-          alignItems:    "center",
-          padding:       "12px 16px",
-          borderBottom:  "1px solid rgba(255,255,255,0.05)",
-          gap:           10,
-          cursor:        "pointer",
-          transition:    "background 0.15s",
-        }}
-        onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.03)")}
-        onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+      {/* Star */}
+      <button
+        onClick={onStarPress}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 2px", flexShrink: 0, lineHeight: 0 }}
       >
-        {/* Star */}
-        <button
-          onClick={e => { e.preventDefault(); e.stopPropagation(); onToggleFavorite(symbol); }}
-          style={{ background: "none", border: "none", cursor: "pointer", padding: 2, flexShrink: 0 }}
-        >
-          <Star
-            size={16}
-            fill={isFavorite ? "#f59e0b" : "none"}
-            color={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.4)"}
-          />
-        </button>
+        <Star
+          size={17}
+          fill={isFavorite ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.25)" : "none"}
+          color={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.38)"}
+          strokeWidth={1.8}
+        />
+      </button>
 
-        {/* Symbol info */}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ color: "#ffffff", fontWeight: 600, fontSize: 14, letterSpacing: "0.01em" }}>
-              {symbol}
-            </span>
-            {leverage && (
-              <span style={{
-                fontSize:        10,
-                fontWeight:      600,
-                color:           "#f59e0b",
-                background:      "rgba(245,158,11,0.12)",
-                border:          "1px solid rgba(245,158,11,0.25)",
-                borderRadius:    4,
-                padding:         "1px 5px",
-                letterSpacing:   "0.02em",
-                flexShrink:      0,
-              }}>
-                {leverage}
-              </span>
-            )}
-          </div>
-          <div style={{ color: "rgba(148,163,184,0.55)", fontSize: 11, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {desc}
-          </div>
-        </div>
-
-        {/* Price + volume */}
-        <div style={{ textAlign: "right", flexShrink: 0 }}>
-          <div style={{
-            color:      price ? "#ffffff" : "rgba(148,163,184,0.4)",
-            fontWeight: 600,
-            fontSize:   14,
-            fontVariantNumeric: "tabular-nums",
+      {/* Symbol + name */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 13.5, letterSpacing: "0.01em" }}>
+            {symbol}
+          </span>
+          <span style={{
+            fontSize: 9.5, fontWeight: 600, color: "#94a3b8",
+            background: "rgba(148,163,184,0.1)", border: "1px solid rgba(148,163,184,0.18)",
+            borderRadius: 4, padding: "1px 5px", letterSpacing: "0.03em", flexShrink: 0,
           }}>
-            {price ? `$${formatPrice(price)}` : "—"}
-          </div>
-          <div style={{ color: "rgba(148,163,184,0.40)", fontSize: 11, marginTop: 2, fontVariantNumeric: "tabular-nums" }}>
-            {formatVolume(price, tick?.tickCount ?? 0)}
-          </div>
+            {tag}
+          </span>
         </div>
-
-        {/* Change badge */}
         <div style={{
-          minWidth:     58,
-          padding:      "5px 8px",
-          borderRadius: 6,
-          textAlign:    "center",
-          fontSize:     12,
-          fontWeight:   700,
-          fontVariantNumeric: "tabular-nums",
-          flexShrink:   0,
-          background:   tick
-            ? isUp ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)"
-            : "rgba(148,163,184,0.08)",
-          color: tick
-            ? isUp ? "#10b981" : "#ef4444"
-            : "rgba(148,163,184,0.4)",
-          border: tick
-            ? isUp ? "1px solid rgba(16,185,129,0.25)" : "1px solid rgba(239,68,68,0.25)"
-            : "1px solid rgba(148,163,184,0.1)",
+          color: "rgba(148,163,184,0.5)", fontSize: 11, marginTop: 2,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
         }}>
-          {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+          {name}
         </div>
       </div>
-    </Link>
+
+      {/* Price */}
+      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 76 }}>
+        <div style={{
+          color: price ? "#fff" : "rgba(148,163,184,0.3)",
+          fontWeight: 600, fontSize: 13.5, fontVariantNumeric: "tabular-nums",
+        }}>
+          {price ? `$${formatPrice(price)}` : "—"}
+        </div>
+      </div>
+
+      {/* Change badge */}
+      <div style={{
+        minWidth:   58, padding: "5px 7px", borderRadius: 6,
+        textAlign:  "center", fontSize: 12, fontWeight: 700,
+        fontVariantNumeric: "tabular-nums", flexShrink: 0,
+        background: tick
+          ? isUp ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)"
+          : "rgba(148,163,184,0.07)",
+        color: tick
+          ? isUp ? "#10b981" : "#ef4444"
+          : "rgba(148,163,184,0.35)",
+        border: tick
+          ? isUp ? "1px solid rgba(16,185,129,0.22)" : "1px solid rgba(239,68,68,0.22)"
+          : "1px solid rgba(148,163,184,0.1)",
+      }}>
+        {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+      </div>
+    </div>
   );
 }
 
@@ -165,123 +128,155 @@ export default function Markets() {
   const [activeTab,  setActiveTab]  = useState<Tab>("Watchlist");
   const [search,     setSearch]     = useState("");
   const [showSearch, setShowSearch] = useState(false);
-  const { items, toggleFavorite } = useWatchlist();
 
-  const favSet = new Set(items.filter(i => i.isFavorite).map(i => i.symbol));
-  const watchSymbols = items.map(i => i.symbol);
+  const [deltaSymbols,   setDeltaSymbols]   = useState<SymbolInfo[]>([]);
+  const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
+  const [loading,        setLoading]        = useState(false);
+  const [loadError,      setLoadError]      = useState<string | null>(null);
 
-  const handleToggleFavorite = useCallback((symbol: string) => {
-    const item = items.find(i => i.symbol === symbol);
-    if (item) toggleFavorite(item.id, item.isFavorite);
-  }, [items, toggleFavorite]);
+  const { items, addSymbol, toggleFavorite } = useWatchlist();
 
-  const allCatalogSymbols = Object.keys(SYMBOL_CATALOG);
+  // Map symbol → watchlist item
+  const watchMap = useMemo(() => {
+    const m = new Map<string, typeof items[0]>();
+    items.forEach(i => m.set(i.symbol, i));
+    return m;
+  }, [items]);
 
-  function getSymbols(): string[] {
-    let syms: string[];
-    if (activeTab === "Watchlist") {
-      syms = watchSymbols;
+  // Load broker symbol catalogs once
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      fetch("/api/symbols?broker=delta").then(r => r.json()),
+      fetch("/api/symbols?broker=ctrader").then(r => r.json()),
+    ])
+      .then(([d, c]) => {
+        setDeltaSymbols((d as { symbols: SymbolInfo[] }).symbols ?? []);
+        setCtraderSymbols((c as { symbols: SymbolInfo[] }).symbols ?? []);
+        setLoadError(null);
+      })
+      .catch(err => setLoadError(String(err)))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleStarPress = useCallback((symbol: string) => {
+    const item = watchMap.get(symbol);
+    if (item) {
+      toggleFavorite(item.id, item.isFavorite);
     } else {
-      syms = allCatalogSymbols.filter(s => SYMBOL_CATALOG[s].market === activeTab);
+      addSymbol(symbol, true);
     }
+  }, [watchMap, addSymbol, toggleFavorite]);
+
+  function getRows(): Array<{ symbol: string; name: string; contractType: string }> {
+    let rows: Array<{ symbol: string; name: string; contractType: string }>;
+
+    if (activeTab === "Watchlist") {
+      rows = items.map(i => ({
+        symbol:       i.symbol,
+        name:         i.label,
+        contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other",
+      }));
+    } else if (activeTab === "Crypto") {
+      rows = deltaSymbols.map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+    } else if (activeTab === "Forex") {
+      rows = ctraderSymbols
+        .filter(s => s.contractType === "forex" || s.contractType === "metal")
+        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+    } else if (activeTab === "Indices") {
+      rows = ctraderSymbols
+        .filter(s => s.contractType === "index")
+        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+    } else {
+      // Commodities
+      rows = ctraderSymbols
+        .filter(s => s.contractType === "commodity")
+        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+    }
+
     if (search.trim()) {
       const q = search.trim().toUpperCase();
-      syms = syms.filter(s =>
-        s.includes(q) ||
-        (DESCRIPTIONS[s] ?? "").toUpperCase().includes(q) ||
-        SYMBOL_CATALOG[s]?.label.toUpperCase().includes(q)
+      rows = rows.filter(r =>
+        r.symbol.toUpperCase().includes(q) ||
+        r.name.toUpperCase().includes(q)
       );
     }
-    return syms;
+    return rows;
   }
 
-  const symbols = getSymbols();
+  const rows = getRows();
 
   return (
     <div style={{
-      display:        "flex",
-      flexDirection:  "column",
-      height:         "100%",
-      background:     "rgb(10,12,16)",
-      color:          "#ffffff",
-      overflowY:      "hidden",
+      display: "flex", flexDirection: "column",
+      height: "100%", background: "rgb(10,12,16)", color: "#fff",
+      overflow: "hidden",
     }}>
-      {/* ── Top bar ── */}
+      {/* ── Own top bar (Layout header hidden for /markets) ── */}
       <div style={{
-        flexShrink:   0,
-        padding:      "14px 16px 0",
-        background:   "rgba(10,12,16,0.98)",
-        backdropFilter: "blur(20px)",
-        position:     "sticky",
-        top:          0,
-        zIndex:       10,
+        flexShrink: 0, background: "rgba(10,12,16,0.98)",
+        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
+        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        position: "sticky", top: 0, zIndex: 10,
       }}>
         {/* Title row */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>
-            Markets
-          </h1>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px 10px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              onClick={() => window.dispatchEvent(new CustomEvent("tj:open-sidebar"))}
+              style={{
+                background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)",
+                borderRadius: 10, padding: "7px 9px", cursor: "pointer", color: "rgba(148,163,184,0.9)",
+                display: "flex", alignItems: "center", lineHeight: 0,
+              }}
+            >
+              <Menu size={17} />
+            </button>
+            <h1 style={{ fontSize: 20, fontWeight: 700, letterSpacing: "-0.02em", margin: 0 }}>Markets</h1>
+          </div>
           <button
-            onClick={() => setShowSearch(s => !s)}
+            onClick={() => { setShowSearch(s => !s); if (showSearch) setSearch(""); }}
             style={{
               background:   showSearch ? "rgba(99,102,241,0.18)" : "rgba(255,255,255,0.07)",
-              border:       showSearch ? "1px solid rgba(99,102,241,0.4)" : "1px solid rgba(255,255,255,0.1)",
-              borderRadius: 10,
-              padding:      "7px 9px",
-              cursor:       "pointer",
+              border:       showSearch ? "1px solid rgba(99,102,241,0.40)" : "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 10, padding: "7px 9px", cursor: "pointer",
               color:        showSearch ? "#818cf8" : "rgba(148,163,184,0.8)",
-              transition:   "all 0.18s",
-              display:      "flex",
-              alignItems:   "center",
+              display: "flex", alignItems: "center", lineHeight: 0, transition: "all 0.15s",
             }}
           >
             <Search size={17} />
           </button>
         </div>
 
-        {/* Search bar */}
+        {/* Search input */}
         {showSearch && (
           <div style={{
-            marginBottom:  10,
-            padding:       "8px 12px",
-            borderRadius:  10,
-            background:    "rgba(255,255,255,0.06)",
-            border:        "1px solid rgba(255,255,255,0.1)",
-            display:       "flex",
-            alignItems:    "center",
-            gap:           8,
+            margin: "0 16px 10px",
+            padding: "8px 12px",
+            borderRadius: 10,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            display: "flex", alignItems: "center", gap: 8,
           }}>
-            <Search size={14} color="rgba(148,163,184,0.5)" />
+            <Search size={13} color="rgba(148,163,184,0.4)" />
             <input
               autoFocus
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Search symbol or name…"
               style={{
-                flex:        1,
-                background:  "none",
-                border:      "none",
-                outline:     "none",
-                color:       "#ffffff",
-                fontSize:    14,
-                caretColor:  "#818cf8",
+                flex: 1, background: "none", border: "none", outline: "none",
+                color: "#fff", fontSize: 13.5, caretColor: "#818cf8",
               }}
             />
             {search && (
-              <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.5)", padding: 0 }}>✕</button>
+              <button onClick={() => setSearch("")} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.5)", padding: 0, lineHeight: 1 }}>✕</button>
             )}
           </div>
         )}
 
-        {/* Tab bar */}
-        <div style={{
-          display:        "flex",
-          overflowX:      "auto",
-          scrollbarWidth: "none",
-          gap:            2,
-          marginBottom:   0,
-          paddingBottom:  0,
-        }}>
+        {/* Tabs */}
+        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" }}>
           {TABS.map(tab => {
             const active = tab === activeTab;
             return (
@@ -289,30 +284,19 @@ export default function Markets() {
                 key={tab}
                 onClick={() => setActiveTab(tab)}
                 style={{
-                  flexShrink:    0,
-                  padding:       "8px 14px",
-                  borderRadius:  "8px 8px 0 0",
-                  border:        "none",
-                  background:    "transparent",
-                  cursor:        "pointer",
-                  fontSize:      13,
-                  fontWeight:    active ? 700 : 400,
-                  color:         active ? "#f59e0b" : "rgba(148,163,184,0.55)",
-                  position:      "relative",
-                  transition:    "color 0.18s",
-                  whiteSpace:    "nowrap",
+                  flexShrink: 0, padding: "8px 12px 9px", border: "none",
+                  background: "transparent", cursor: "pointer",
+                  fontSize: 13, fontWeight: active ? 700 : 400,
+                  color: active ? "#f59e0b" : "rgba(148,163,184,0.50)",
+                  position: "relative", transition: "color 0.15s", whiteSpace: "nowrap",
                 }}
               >
                 {tab}
                 {active && (
                   <div style={{
-                    position:     "absolute",
-                    bottom:       0,
-                    left:         "20%",
-                    right:        "20%",
-                    height:       2,
-                    borderRadius: "2px 2px 0 0",
-                    background:   "#f59e0b",
+                    position: "absolute", bottom: 0,
+                    left: "18%", right: "18%",
+                    height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b",
                   }} />
                 )}
               </button>
@@ -320,61 +304,68 @@ export default function Markets() {
           })}
         </div>
 
-        {/* Divider */}
-        <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "0 -16px" }} />
-
         {/* Column headers */}
         <div style={{
-          display:    "flex",
-          alignItems: "center",
-          padding:    "8px 16px",
-          margin:     "0 -16px",
-          background: "rgba(255,255,255,0.02)",
+          display: "flex", alignItems: "center",
+          padding: "6px 16px",
+          background: "rgba(255,255,255,0.025)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
         }}>
-          <div style={{ width: 26, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 11, color: "rgba(148,163,184,0.45)", fontWeight: 500 }}>Contract</div>
-          <div style={{ width: 90, textAlign: "right", fontSize: 11, color: "rgba(148,163,184,0.45)", fontWeight: 500 }}>
-            Price ↕ | Vol ↕
-          </div>
-          <div style={{ width: 66, textAlign: "center", fontSize: 11, color: "rgba(148,163,184,0.45)", fontWeight: 500, marginLeft: 8 }}>
-            24h Chg. ↕
-          </div>
+          <div style={{ width: 24, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>Contract</div>
+          <div style={{ minWidth: 76, textAlign: "right", fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>Price</div>
+          <div style={{ minWidth: 68, textAlign: "center", marginLeft: 10, fontSize: 11, color: "rgba(148,163,184,0.42)", fontWeight: 500 }}>24h Chg.</div>
         </div>
       </div>
 
-      {/* ── Rows ── */}
+      {/* ── List ── */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {symbols.length === 0 ? (
-          <div style={{
-            display:       "flex",
-            flexDirection: "column",
-            alignItems:    "center",
-            justifyContent: "center",
-            padding:       "60px 24px",
-            color:         "rgba(148,163,184,0.4)",
-            gap:           12,
-          }}>
-            <TrendingUp size={36} strokeWidth={1} color="rgba(148,163,184,0.2)" />
+        {loading && (
+          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "40px 0", gap: 8, color: "rgba(148,163,184,0.5)" }}>
+            <RefreshCw size={16} style={{ animation: "spin 1s linear infinite" }} />
+            <span style={{ fontSize: 13 }}>Loading…</span>
+            <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+          </div>
+        )}
+
+        {!loading && loadError && activeTab !== "Watchlist" && (
+          <div style={{ padding: "40px 24px", textAlign: "center", color: "rgba(239,68,68,0.7)", fontSize: 13 }}>
+            Failed to load symbols. {loadError}
+          </div>
+        )}
+
+        {!loading && rows.length === 0 && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", color: "rgba(148,163,184,0.38)", gap: 10 }}>
+            <TrendingUp size={36} strokeWidth={1} />
             <p style={{ fontSize: 14, margin: 0 }}>
-              {activeTab === "Watchlist"
-                ? "Your watchlist is empty"
-                : `No ${activeTab} symbols found`}
+              {activeTab === "Watchlist" ? "Your watchlist is empty" : `No ${activeTab} symbols found`}
             </p>
-            {search && (
-              <p style={{ fontSize: 12, margin: 0 }}>Try a different search term</p>
+            {activeTab === "Watchlist" && (
+              <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.28)" }}>
+                Tap ★ on any symbol to add it here
+              </p>
             )}
           </div>
-        ) : (
-          symbols.map(symbol => (
-            <SymbolRow
-              key={symbol}
-              symbol={symbol}
-              isFavorite={favSet.has(symbol)}
-              onToggleFavorite={handleToggleFavorite}
-            />
-          ))
         )}
-        <div style={{ height: 24 }} />
+
+        {!loading && rows.map(row => {
+          const wItem     = watchMap.get(row.symbol);
+          const inWatchlist = !!wItem;
+          const isFavorite  = wItem?.isFavorite ?? false;
+          return (
+            <SymbolRow
+              key={row.symbol}
+              symbol={row.symbol}
+              name={row.name}
+              contractType={row.contractType}
+              inWatchlist={inWatchlist}
+              isFavorite={isFavorite}
+              onStarPress={() => handleStarPress(row.symbol)}
+            />
+          );
+        })}
+
+        <div style={{ height: 20 }} />
       </div>
     </div>
   );
