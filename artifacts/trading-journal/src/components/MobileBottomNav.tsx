@@ -17,7 +17,7 @@ import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
   Globe,
-  CandlestickChart,
+  ArrowLeftRight,
   BarChart2,
   Menu,
 } from "lucide-react";
@@ -29,7 +29,7 @@ type NavTab =
 const TABS: NavTab[] = [
   { kind: "link",   href: "/",       label: "Home",    Icon: LayoutDashboard },
   { kind: "link",   href: "/markets", label: "Markets", Icon: Globe           },
-  { kind: "link",   href: "/trade",  label: "Trade",   Icon: CandlestickChart },
+  { kind: "link",   href: "/trade",  label: "Trade",   Icon: ArrowLeftRight   },
   { kind: "link",   href: "/charts", label: "Charts",  Icon: BarChart2        },
   { kind: "action", label: "Menu",   Icon: Menu,
     onTap: () => window.dispatchEvent(new CustomEvent("tj:open-sidebar")) },
