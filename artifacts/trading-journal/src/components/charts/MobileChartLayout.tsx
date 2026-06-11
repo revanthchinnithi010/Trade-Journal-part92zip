@@ -1282,55 +1282,69 @@ function SymbolReelPicker({
   onSelect: (sym: string) => void;
   onClose: () => void;
 }) {
-  const reelRef  = useRef<HTMLDivElement>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeIdx = Math.max(0, items.findIndex(i => i.symbol === activeSymbol));
+  const reelRef        = useRef<HTMLDivElement>(null);
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeIdx      = Math.max(0, items.findIndex(i => i.symbol === activeSymbol));
   const [centeredIdx, setCenteredIdx] = useState(activeIdx);
-  const committedRef = useRef(false);
+
+  // ── Delay backdrop activation so the opening tap can't immediately close the reel ──
+  const backdropReadyRef = useRef(false);
+  useEffect(() => {
+    const t = setTimeout(() => { backdropReadyRef.current = true; }, 220);
+    return () => clearTimeout(t);
+  }, []);
 
   const left   = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 168));
   const bottom = window.innerHeight - anchorRect.top + 10;
 
+  // Scroll to active item on mount (double-rAF for iOS scroll-snap)
   useEffect(() => {
-    const el = reelRef.current;
-    if (!el) return;
-    el.scrollTop = activeIdx * REEL_ITEM_H;
-    requestAnimationFrame(() => {
-      el.scrollTop = activeIdx * REEL_ITEM_H;
-    });
+    const set = () => { if (reelRef.current) reelRef.current.scrollTop = activeIdx * REEL_ITEM_H; };
+    set();
+    requestAnimationFrame(() => requestAnimationFrame(set));
   }, [activeIdx]);
 
-  const commit = useCallback((idx: number) => {
-    if (committedRef.current) return;
-    committedRef.current = true;
-    onSelect(items[Math.max(0, Math.min(items.length - 1, idx))].symbol);
-  }, [items, onSelect]);
-
+  // Track centered item while scrolling; auto-commit when scroll stops
   const handleScroll = useCallback(() => {
     const el = reelRef.current;
     if (!el) return;
     const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / REEL_ITEM_H)));
     setCenteredIdx(idx);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => commit(idx), 320);
-  }, [items.length, commit]);
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    scrollTimerRef.current = setTimeout(() => {
+      const el2 = reelRef.current;
+      if (!el2) return;
+      const finalIdx = Math.max(0, Math.min(items.length - 1, Math.round(el2.scrollTop / REEL_ITEM_H)));
+      onSelect(items[finalIdx].symbol);
+    }, 380);
+  }, [items, onSelect]);
 
-  const handleItemTap = useCallback((idx: number) => {
+  // Direct item tap — scroll to it then select
+  const handleItemTap = useCallback((idx: number, e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
     const el = reelRef.current;
     if (el) el.scrollTo({ top: idx * REEL_ITEM_H, behavior: "smooth" });
-    if (timerRef.current) clearTimeout(timerRef.current);
-    setTimeout(() => commit(idx), 240);
-  }, [commit]);
+    // Wait for scroll animation then commit
+    setTimeout(() => onSelect(items[idx].symbol), 200);
+  }, [items, onSelect]);
 
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+  // Backdrop tap — cancel (close without selecting)
+  const handleBackdropClick = useCallback(() => {
+    if (!backdropReadyRef.current) return;
+    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => () => { if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current); }, []);
 
   return createPortal(
     <div
-      onClick={() => { commit(centeredIdx); onClose(); }}
-      style={{ position:"fixed", inset:0, zIndex:450, touchAction:"none" }}
+      onPointerDown={handleBackdropClick}
+      style={{ position:"fixed", inset:0, zIndex:450 }}
     >
       <div
-        onClick={e => e.stopPropagation()}
+        onPointerDown={e => e.stopPropagation()}
         style={{
           position:"fixed", left, bottom,
           width:160, height:REEL_WINDOW_H,
@@ -1372,17 +1386,19 @@ function SymbolReelPicker({
             paddingTop: REEL_ITEM_H * 2,
             paddingBottom: REEL_ITEM_H * 2,
             position:"relative", zIndex:2,
+            WebkitOverflowScrolling:"touch",
           } as React.CSSProperties}
         >
           {items.map((item, idx) => {
-            const dist   = Math.abs(idx - centeredIdx);
-            const active = idx === centeredIdx;
+            const dist    = Math.abs(idx - centeredIdx);
+            const active  = idx === centeredIdx;
             const opacity = dist === 0 ? 1 : dist === 1 ? 0.46 : 0.18;
-            const scale  = active ? 1.05 : 1;
+            const scale   = active ? 1.05 : 1;
             return (
               <div
                 key={item.symbol}
-                onClick={() => handleItemTap(idx)}
+                onPointerDown={e => { e.stopPropagation(); }}
+                onClick={e => handleItemTap(idx, e)}
                 style={{
                   height:REEL_ITEM_H,
                   scrollSnapAlign:"center",
@@ -1392,6 +1408,7 @@ function SymbolReelPicker({
                   opacity,
                   transform:`scale(${scale})`,
                   transition:"opacity 0.12s, transform 0.12s",
+                  userSelect:"none",
                 }}
               >
                 <div style={{
