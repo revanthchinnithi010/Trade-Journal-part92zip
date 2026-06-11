@@ -6,7 +6,7 @@ import {
   Pencil, Plug, MoreHorizontal, Maximize2, Minimize2,
   LayoutGrid, Activity, Bell, List,
   BarChart2, RotateCcw, Settings2, Camera,
-  MousePointer, Eraser, Wifi, WifiOff,
+  MousePointer, Eraser,
   Undo2, Redo2,
   Star, Search, TrendingUp, RefreshCw,
 } from "lucide-react";
@@ -31,6 +31,8 @@ import type { Drawing, ToolType, DrawingStyle } from "@/types/drawing";
 import { useDrawingStore } from "@/store/drawingStore";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
+import { useBrokerStore } from "@/store/brokerStore";
+import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -828,59 +830,6 @@ function ObjectTreeSheet({ onClose }: { onClose: () => void }) {
           })}
         </div>
       )}
-    </BottomSheet>
-  );
-}
-
-// ── Broker Sheet ───────────────────────────────────────────────────────────
-function BrokerSheet({ onClose, onOpenSettings }: { onClose: () => void; onOpenSettings: () => void }) {
-  const BROKERS = [
-    { id:"ctrader",  name:"cTrader",         desc:"OAuth 2.0 — Spotware",    color:"#3b82f6" },
-    { id:"delta",    name:"Delta Exchange",  desc:"REST + WebSocket",        color:"#8b5cf6" },
-    { id:"mt4",      name:"MetaTrader 4",    desc:"Coming soon",             color:"#6b7280", disabled:true },
-    { id:"mt5",      name:"MetaTrader 5",    desc:"Coming soon",             color:"#6b7280", disabled:true },
-  ];
-
-  return (
-    <BottomSheet title="Connect Broker" onClose={onClose}>
-      <div style={{ padding:"10px 14px 8px" }}>
-        <p style={{ fontSize:12, color:TEXT_DIM, margin:"0 0 14px" }}>
-          Connect a broker to enable live P&amp;L, auto-trade logging, and position sync.
-        </p>
-        {BROKERS.map(b => (
-          <div key={b.id} style={{
-            display:"flex", alignItems:"center", gap:12, padding:"12px 12px",
-            borderRadius:12, marginBottom:8,
-            background: b.disabled ? "rgba(255,255,255,0.02)" : BTN_BG,
-            border:`1px solid ${b.disabled ? "rgba(255,255,255,0.04)" : BTN_BORDER}`,
-            opacity: b.disabled ? 0.5 : 1,
-          }}>
-            <div style={{
-              width:38, height:38, borderRadius:10, flexShrink:0,
-              background:`${b.color}22`, border:`1px solid ${b.color}44`,
-              display:"flex", alignItems:"center", justifyContent:"center",
-            }}>
-              {b.disabled
-                ? <WifiOff style={{ width:16, height:16, color:b.color }} />
-                : <Wifi    style={{ width:16, height:16, color:b.color }} />
-              }
-            </div>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:13, fontWeight:700, color: b.disabled ? TEXT_DIM : TEXT_HI, margin:"0 0 2px" }}>{b.name}</p>
-              <p style={{ fontSize:11, color:TEXT_DIM, margin:0 }}>{b.desc}</p>
-            </div>
-            {!b.disabled && (
-              <button onClick={() => { onOpenSettings(); onClose(); }} style={{
-                height:30, padding:"0 12px", borderRadius:8, fontSize:11, fontWeight:600,
-                background:`${b.color}22`, color:b.color,
-                border:`1px solid ${b.color}44`, cursor:"pointer",
-              }}>
-                Setup
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
     </BottomSheet>
   );
 }
@@ -2194,13 +2143,13 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const { items: watchlistItems } = useWatchlist();
   const { selectedDrawingId, drawings, activeTool, setActiveTool } = useDrawingStore();
   const selectedDrawing = drawings.find(d => d.id === selectedDrawingId) ?? null;
+  const { openSelectModal, showSelectModal } = useBrokerStore();
 
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
   const [showTFSheet,       setShowTFSheet]       = useState(false);
   const [showChartType,     setShowChartType]     = useState(false);
   const [showMoreSheet,     setShowMoreSheet]     = useState(false);
-  const [showBrokerSheet,   setShowBrokerSheet]   = useState(false);
   const [showObjectTree,    setShowObjectTree]    = useState(false);
   const [showWatchlist,     setShowWatchlist]     = useState(false);
   const [showSymbolPicker,  setShowSymbolPicker]  = useState(false);
@@ -2276,7 +2225,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onSelectSymbol={selectSymbol}
           onTF={() => setShowTFSheet(true)}
           onDraw={() => setShowDrawingSheet(true)}
-          onBroker={() => setShowBrokerSheet(true)}
+          onBroker={openSelectModal}
           onMore={() => setShowMoreSheet(true)}
           onPrev={handlePrev}
           onNext={handleNext}
@@ -2291,7 +2240,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {showDrawingSheet && <DrawingToolsSheet onClose={() => setShowDrawingSheet(false)} />}
       {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartStore.chartType ?? "candles"} onSelect={t => chartStore.setChartType(t)} onClose={() => setShowChartType(false)} />}
-      {showBrokerSheet  && <BrokerSheet onClose={() => setShowBrokerSheet(false)} onOpenSettings={openSidebar} />}
+      {showSelectModal  && <BrokerSelectModal />}
       {showObjectTree   && <ObjectTreeSheet onClose={() => setShowObjectTree(false)} />}
       {showMoreSheet && (
         <MoreOptionsSheet
