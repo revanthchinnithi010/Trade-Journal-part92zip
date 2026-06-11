@@ -536,7 +536,17 @@ function TFSheet({ interval, onSelect, onClose }: {
   const [customVal, setCustomVal] = useState("");
   const [customErr, setCustomErr] = useState(false);
   const [customOk,  setCustomOk]  = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef   = useRef<HTMLInputElement>(null);
+  const mountedRef = useRef(true);
+  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    };
+  }, []);
 
   const handleCustomChange = (val: string) => {
     setCustomVal(val);
@@ -548,7 +558,11 @@ function TFSheet({ interval, onSelect, onClose }: {
     const parsed = parseCustomTF(customVal);
     if (!parsed) { setCustomErr(true); return; }
     setCustomOk(true);
-    setTimeout(() => { onSelect(parsed); onClose(); }, 120);
+    timerRef.current = setTimeout(() => {
+      if (!mountedRef.current) return;
+      onSelect(parsed);
+      onClose();
+    }, 120);
   }, [customVal, onSelect, onClose]);
 
   const parsedPreview = useMemo(() => {
@@ -2223,6 +2237,13 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       return next;
     });
   }, [chartStore]);
+
+  // ── Reset store fullscreen flag when this layout unmounts (orientation change) ──
+  useEffect(() => {
+    return () => {
+      chartStore.setMobileChartFullscreen(false);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Main bar tab handler ──
 

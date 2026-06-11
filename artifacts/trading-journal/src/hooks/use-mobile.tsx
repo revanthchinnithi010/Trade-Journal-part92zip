@@ -10,9 +10,23 @@ export function useIsMobile() {
 
   React.useEffect(() => {
     const mql = window.matchMedia("(orientation: portrait)")
-    const onChange = () => setIsMobile(mql.matches)
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const onChange = () => {
+      // Debounce orientation change by 320ms to prevent rapid mount/unmount
+      // cycles when the device fires multiple events during a rotation animation
+      if (timer !== null) clearTimeout(timer)
+      timer = setTimeout(() => {
+        setIsMobile(mql.matches)
+        timer = null
+      }, 320)
+    }
+
     mql.addEventListener("change", onChange)
-    return () => mql.removeEventListener("change", onChange)
+    return () => {
+      mql.removeEventListener("change", onChange)
+      if (timer !== null) clearTimeout(timer)
+    }
   }, [])
 
   return isMobile
