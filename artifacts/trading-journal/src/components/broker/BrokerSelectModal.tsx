@@ -39,7 +39,7 @@ export function BrokerSelectModal() {
         </div>
 
         {/* Scrollable content */}
-        <div className="overflow-y-auto flex-1" style={{ overscrollBehavior: "contain" }}>
+        <div className="overflow-y-auto flex-1 min-h-0" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
           {/* Saved accounts */}
           {accounts.length > 0 && (
             <div className="px-5 pt-4 pb-2">
