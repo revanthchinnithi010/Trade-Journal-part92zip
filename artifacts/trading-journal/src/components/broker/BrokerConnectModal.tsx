@@ -178,20 +178,20 @@ export function BrokerConnectModal() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center sm:p-4"
       style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(4px)" }}
       onClick={e => { if (e.target === e.currentTarget) closeAuthModal(); }}
     >
       <div
-        className="relative w-full max-w-md rounded-2xl overflow-hidden"
-        style={{ ...glassStyle, boxShadow: `0 0 60px ${brokerGlow}, 0 24px 48px rgba(0,0,0,0.6)` }}
+        className="relative w-full sm:max-w-md rounded-t-3xl sm:rounded-2xl flex flex-col"
+        style={{ ...glassStyle, boxShadow: `0 0 60px ${brokerGlow}, 0 24px 48px rgba(0,0,0,0.6)`, maxHeight: "90dvh" }}
       >
         <div
           className="absolute inset-x-0 top-0 h-px"
           style={{ background: `linear-gradient(90deg, transparent, ${broker.color}60, transparent)` }}
         />
 
-        <div className="p-6 pb-0">
+        <div className="p-6 pb-0 shrink-0">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <div
@@ -240,7 +240,7 @@ export function BrokerConnectModal() {
           </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
           {broker.id === "delta" && (
             status === "success" ? (
               <SuccessBanner broker={broker} onClose={closeAuthModal} />

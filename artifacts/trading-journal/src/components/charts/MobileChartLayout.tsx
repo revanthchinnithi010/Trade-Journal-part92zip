@@ -33,6 +33,7 @@ import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import { useBrokerStore } from "@/store/brokerStore";
 import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
+import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -2143,7 +2144,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const { items: watchlistItems } = useWatchlist();
   const { selectedDrawingId, drawings, activeTool, setActiveTool } = useDrawingStore();
   const selectedDrawing = drawings.find(d => d.id === selectedDrawingId) ?? null;
-  const { openSelectModal, showSelectModal } = useBrokerStore();
+  const { openSelectModal, showSelectModal, showAuthModal } = useBrokerStore();
 
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
@@ -2241,6 +2242,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartStore.chartType ?? "candles"} onSelect={t => chartStore.setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
+      {showAuthModal    && <BrokerAuthModal />}
       {showObjectTree   && <ObjectTreeSheet onClose={() => setShowObjectTree(false)} />}
       {showMoreSheet && (
         <MoreOptionsSheet
