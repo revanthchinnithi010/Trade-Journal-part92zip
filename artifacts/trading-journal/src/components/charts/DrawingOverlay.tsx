@@ -1072,16 +1072,78 @@ const DrawingShape = memo(function DrawingShape({
       };
 
       // ── canvasOnly mode ───────────────────────────────────────────────────
-      // Canvas2D renderer (scheduleCanvasRender / RAF) draws zones, fills,
-      // boundary lines, and label bars — it updates every pan/zoom frame via
-      // toPxRef without any React re-renders.
-      // SVG only needs to exist here to provide the interactive hit-area and
-      // the four resize handles when the drawing is selected.
-      // Unselected + canvasOnly → return null; canvas is the sole visual layer.
+      // Canvas2D renderer draws zones/fills/lines via RAF. SVG provides:
+      //   1. Hit-area + resize handles (selected only)
+      //   2. Live P&L overlay (always, for RUNNING trades)
       if (canvasOnly) {
-        if (!isSelected || isPreview) return null;
+        if (isPreview) return null;
+
+        // Build the Live P&L badge + measurement line for RUNNING trades.
+        // This always renders regardless of selection state so the user
+        // can see floating P&L without needing to select the drawing.
+        const livePnlOverlay = tradeStatus === "RUNNING" && lastActiveBar && currentPriceY !== null
+          ? (() => {
+              const lineX1 = ELX + halfBarW;
+              const lineY1 = entY;
+              const lineX2 = activeFillEndX;
+              const lineY2 = currentPriceY;
+
+              const livePriceDiff = isLong
+                ? lastActiveBar.close - entryPrice
+                : entryPrice - lastActiveBar.close;
+
+              const inProfit  = moveInProfit;
+              const pnlColor  = inProfit ? "rgba(0,255,170,1)"    : "rgba(255,90,110,1)";
+              const borderClr = inProfit ? "rgba(0,255,180,0.65)" : "rgba(255,90,110,0.65)";
+              const glowClr   = inProfit ? "rgba(0,255,180,0.18)" : "rgba(255,90,110,0.18)";
+
+              const sign     = floatPct >= 0 ? "+" : "";
+              const pctStr   = `${sign}${floatPct.toFixed(2)}%`;
+              const diffSign = livePriceDiff >= 0 ? "+" : "";
+              const diffStr  = `${diffSign}${fmt(Math.abs(livePriceDiff))}`;
+
+              const LBL_W = 150;
+              const LBL_H = 72;
+              const rawLblX = lineX2 + 10;
+              const LBL_X   = Math.min(rawLblX, W - LBL_W - 4);
+              const LBL_Y   = lineY2 - LBL_H / 2;
+
+              return (
+                <g style={{ pointerEvents: "none" }}>
+                  <line
+                    x1={lineX1} y1={lineY1} x2={lineX2} y2={lineY2}
+                    stroke="rgba(255,255,255,0.28)" strokeWidth={1.5}
+                    strokeDasharray="6 6" strokeLinecap="round" opacity={0.8}
+                  />
+                  <foreignObject x={LBL_X} y={LBL_Y} width={LBL_W} height={LBL_H}
+                    style={{ overflow: "visible" }}>
+                    <div style={{
+                      background: "rgba(20,24,27,0.92)", border: `2px solid ${borderClr}`,
+                      borderRadius: "10px", padding: "6px 10px",
+                      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+                      boxShadow: `0 0 14px ${glowClr}`,
+                      width: `${LBL_W}px`, height: `${LBL_H}px`,
+                      boxSizing: "border-box", display: "flex", flexDirection: "column",
+                      justifyContent: "center", gap: "3px", userSelect: "none",
+                    }}>
+                      <div style={{ color: "rgba(255,255,255,0.96)", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.08em", fontFamily: "'Inter',system-ui,sans-serif", textTransform: "uppercase" }}>Live P&amp;L</div>
+                      <div style={{ color: pnlColor, fontSize: "14px", fontWeight: 700, fontFamily: "'Inter',system-ui,sans-serif", lineHeight: 1.15 }}>{pctStr}</div>
+                      <div style={{ color: pnlColor, fontSize: "10.5px", fontWeight: 500, fontFamily: "'Inter',system-ui,sans-serif", opacity: 0.82 }}>{diffStr}</div>
+                    </div>
+                  </foreignObject>
+                </g>
+              );
+            })()
+          : null;
+
+        if (!isSelected) {
+          if (!livePnlOverlay) return null;
+          return <g opacity={op} shapeRendering="geometricPrecision">{livePnlOverlay}</g>;
+        }
+
         return (
           <g opacity={op} shapeRendering="geometricPrecision">
+            {livePnlOverlay}
             {/* Transparent body hit-area — lets the user select / move the drawing */}
             <rect
               x={ELX} y={totalTop}
