@@ -348,7 +348,7 @@ export default function Markets() {
               inWatchlist={inWatchlist}
               isFavorite={isFavorite}
               onStarPress={() => handleStarPress(row.symbol)}
-              onTap={activeTab === "Watchlist" ? () => handleSymbolTap(row.symbol) : undefined}
+              onTap={() => handleSymbolTap(row.symbol)}
             />
           );
         })}
