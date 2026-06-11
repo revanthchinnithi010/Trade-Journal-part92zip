@@ -314,9 +314,8 @@ export function renderDrawingsToCanvas(
       ctx.shadowBlur   = 8;
     }
 
-    // Position tools render entirely in SVG — skip in canvas loop to avoid double rendering.
-    // The SVG DrawingShape handles all visual output (zones, labels, boundary lines, anchors).
     if (toolType === "position_long" || toolType === "position_short") {
+      renderPositionTool(ctx, { ...drawing, points: pts }, toPx, bars, barHalfWidth, W, isSelected);
       ctx.restore();
       continue;
     }

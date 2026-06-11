@@ -1071,6 +1071,33 @@ const DrawingShape = memo(function DrawingShape({
         );
       };
 
+      // ── canvasOnly mode ───────────────────────────────────────────────────
+      // Canvas2D renderer (scheduleCanvasRender / RAF) draws zones, fills,
+      // boundary lines, and label bars — it updates every pan/zoom frame via
+      // toPxRef without any React re-renders.
+      // SVG only needs to exist here to provide the interactive hit-area and
+      // the four resize handles when the drawing is selected.
+      // Unselected + canvasOnly → return null; canvas is the sole visual layer.
+      if (canvasOnly) {
+        if (!isSelected || isPreview) return null;
+        return (
+          <g opacity={op} shapeRendering="geometricPrecision">
+            {/* Transparent body hit-area — lets the user select / move the drawing */}
+            <rect
+              x={ELX} y={totalTop}
+              width={Math.max(ZW, 8)} height={Math.max(totalH, 20)}
+              fill="transparent"
+              {...hitProps}
+            />
+            {/* 4 TradingView-style position handles */}
+            {tvHandle(ELX, tpY,  "ns-resize", 10, "lt")}
+            {tvHandle(ELX, slY,  "ns-resize", 11, "lb")}
+            {tvHandle(ELX, entY, "ns-resize", 12, "lm")}
+            {tvHandle(ERX, entY, "ew-resize", 13, "rm")}
+          </g>
+        );
+      }
+
       return (
         <g opacity={op} {...eraseClick} shapeRendering="geometricPrecision">
 
