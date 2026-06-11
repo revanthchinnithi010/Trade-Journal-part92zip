@@ -8,6 +8,7 @@ import {
   BarChart2, RotateCcw, Settings2, Camera,
   MousePointer, Eraser, Wifi, WifiOff,
   Undo2, Redo2,
+  Star, Search, TrendingUp, RefreshCw,
 } from "lucide-react";
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
 import { SymbolPickerSheet } from "./SymbolPickerSheet";
@@ -1347,6 +1348,413 @@ const MiniWatchlistRow = memo(function MiniWatchlistRow({
   );
 });
 
+// ── Market Watchlist Sheet ─────────────────────────────────────────────────
+type MktTab = "Watchlist" | "Crypto" | "Forex" | "Indices" | "Commodities";
+const MKT_TABS: MktTab[] = ["Watchlist", "Crypto", "Forex", "Indices", "Commodities"];
+
+const MKT_CONTRACT_LABELS: Record<string, string> = {
+  perpetual_futures: "Perp",
+  forex:             "FX",
+  index:             "Index",
+  commodity:         "Cmdty",
+  metal:             "Metal",
+  crypto:            "Perp",
+  indices:           "Index",
+  commodities:       "Cmdty",
+};
+
+function fmtMktPrice(price: number | undefined): string {
+  if (!price) return "—";
+  if (price >= 10000) return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  if (price >= 100)   return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (price >= 1)     return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  return price.toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
+}
+
+interface MktSymbolInfo {
+  symbol: string;
+  name: string;
+  contractType: string;
+}
+
+function MktRow({
+  symbol, name, contractType, isFavorite, onStar, onTap,
+}: {
+  symbol: string;
+  name: string;
+  contractType: string;
+  isFavorite: boolean;
+  onStar: () => void;
+  onTap: () => void;
+}) {
+  const tick      = useSymbolTick(symbol);
+  const price     = tick?.price;
+  const changePct = tick?.changePct ?? 0;
+  const isUp      = changePct >= 0;
+  const tag       = MKT_CONTRACT_LABELS[contractType] ?? contractType;
+
+  return (
+    <div
+      onClick={e => { if ((e.target as HTMLElement).closest("button")) return; onTap(); }}
+      style={{
+        display: "flex", alignItems: "center",
+        padding: "10px 14px",
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        gap: 9, minHeight: 58, cursor: "pointer",
+      }}
+    >
+      {/* Star */}
+      <button
+        onClick={e => { e.stopPropagation(); onStar(); }}
+        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 2px", flexShrink: 0, lineHeight: 0 }}
+      >
+        <Star
+          size={15}
+          fill={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.15)"}
+          color={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.35)"}
+          strokeWidth={1.8}
+        />
+      </button>
+
+      {/* Symbol + name */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: "#fff", fontWeight: 700, fontSize: 13, letterSpacing: "0.01em" }}>{symbol}</span>
+          <span style={{
+            fontSize: 9, fontWeight: 600, color: "#94a3b8",
+            background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.16)",
+            borderRadius: 4, padding: "1px 4px", letterSpacing: "0.03em", flexShrink: 0,
+          }}>
+            {tag}
+          </span>
+        </div>
+        <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 10.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </div>
+      </div>
+
+      {/* Price */}
+      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 72 }}>
+        <div style={{ color: price ? "#fff" : "rgba(148,163,184,0.3)", fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
+          {price ? `$${fmtMktPrice(price)}` : "—"}
+        </div>
+      </div>
+
+      {/* Change badge */}
+      <div style={{
+        minWidth: 56, padding: "4px 6px", borderRadius: 6,
+        textAlign: "center", fontSize: 11.5, fontWeight: 700,
+        fontVariantNumeric: "tabular-nums", flexShrink: 0,
+        background: tick ? (isUp ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)") : "rgba(148,163,184,0.07)",
+        color: tick ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.3)",
+        border: tick
+          ? (isUp ? "1px solid rgba(16,185,129,0.22)" : "1px solid rgba(239,68,68,0.22)")
+          : "1px solid rgba(148,163,184,0.1)",
+      }}>
+        {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+      </div>
+    </div>
+  );
+}
+
+function MarketWatchlistSheet({
+  onSelect, onClose, activeSymbol,
+}: {
+  onSelect: (symbol: string) => void;
+  onClose: () => void;
+  activeSymbol: string;
+}) {
+  const [activeTab, setActiveTab]         = useState<MktTab>("Watchlist");
+  const [search, setSearch]               = useState("");
+  const [deltaSymbols, setDeltaSymbols]   = useState<MktSymbolInfo[]>([]);
+  const [ctraderSymbols, setCtraderSymbols] = useState<MktSymbolInfo[]>([]);
+  const [loadingBroker, setLoadingBroker] = useState(false);
+
+  const { items: wlItems, addSymbol, toggleFavorite } = useWatchlist();
+
+  const watchMap = useRef(new Map<string, typeof wlItems[0]>());
+  useEffect(() => {
+    const m = new Map<string, typeof wlItems[0]>();
+    wlItems.forEach(i => m.set(i.symbol, i));
+    watchMap.current = m;
+  }, [wlItems]);
+
+  // Load broker catalogs once
+  useEffect(() => {
+    setLoadingBroker(true);
+    Promise.all([
+      fetch(`${BASE}/api/symbols?broker=delta`).then(r => r.json()),
+      fetch(`${BASE}/api/symbols?broker=ctrader`).then(r => r.json()),
+    ])
+      .then(([d, c]) => {
+        setDeltaSymbols((d as { symbols: MktSymbolInfo[] }).symbols ?? []);
+        setCtraderSymbols((c as { symbols: MktSymbolInfo[] }).symbols ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setLoadingBroker(false));
+  }, []);
+
+  const handleStar = useCallback((symbol: string) => {
+    const item = watchMap.current.get(symbol);
+    if (item) toggleFavorite(item.id, item.isFavorite);
+    else addSymbol(symbol, true);
+  }, [addSymbol, toggleFavorite]);
+
+  function getRows(): MktSymbolInfo[] {
+    let rows: MktSymbolInfo[];
+    if (activeTab === "Watchlist") {
+      rows = wlItems
+        .filter(i => i.isFavorite)
+        .map(i => ({ symbol: i.symbol, name: i.label, contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other" }));
+    } else if (activeTab === "Crypto") {
+      rows = deltaSymbols;
+    } else if (activeTab === "Forex") {
+      rows = ctraderSymbols.filter(s => s.contractType === "forex" || s.contractType === "metal");
+    } else if (activeTab === "Indices") {
+      rows = ctraderSymbols.filter(s => s.contractType === "index");
+    } else {
+      rows = ctraderSymbols.filter(s => s.contractType === "commodity");
+    }
+    if (search.trim()) {
+      const q = search.trim().toUpperCase();
+      rows = rows.filter(r => r.symbol.toUpperCase().includes(q) || r.name.toUpperCase().includes(q));
+    }
+    return rows;
+  }
+
+  const rows = getRows();
+
+  // Swipe-to-dismiss
+  const sheetRef   = useRef<HTMLDivElement>(null);
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    let phase: "none" | "pending" | "dragging" = "none";
+    let startY = 0, dy = 0;
+
+    const onTS = (e: TouchEvent) => { phase = "pending"; startY = e.touches[0].clientY; dy = 0; };
+    const onTM = (e: TouchEvent) => {
+      if (phase === "none") return;
+      const delta = e.touches[0].clientY - startY;
+      if (phase === "pending") {
+        if (Math.abs(delta) < 8) return;
+        if (delta <= 0) { phase = "none"; return; }
+        const rect = sheet.getBoundingClientRect();
+        const inHeader = (startY - rect.top) < 100;
+        const scrollAtTop = (scrollRef.current?.scrollTop ?? 0) === 0;
+        if (inHeader || scrollAtTop) phase = "dragging";
+        else { phase = "none"; return; }
+      }
+      if (phase === "dragging") {
+        e.preventDefault();
+        dy = Math.max(0, delta);
+        sheet.style.transition = "none";
+        sheet.style.transform  = `translateY(${dy}px)`;
+      }
+    };
+    const onTE = () => {
+      if (phase !== "dragging") { phase = "none"; return; }
+      phase = "none";
+      if (dy > 120) {
+        sheet.style.transition = "transform 0.22s cubic-bezier(0.4,0,0.9,0.6)";
+        sheet.style.transform  = "translateY(110%)";
+        setTimeout(() => onCloseRef.current(), 210);
+      } else {
+        sheet.style.transition = "transform 0.45s cubic-bezier(0.34,1.4,0.64,1)";
+        sheet.style.transform  = "translateY(0)";
+      }
+    };
+
+    sheet.addEventListener("touchstart",  onTS, { passive: true  });
+    sheet.addEventListener("touchmove",   onTM, { passive: false });
+    sheet.addEventListener("touchend",    onTE, { passive: true  });
+    sheet.addEventListener("touchcancel", onTE, { passive: true  });
+    return () => {
+      sheet.removeEventListener("touchstart",  onTS);
+      sheet.removeEventListener("touchmove",   onTM);
+      sheet.removeEventListener("touchend",    onTE);
+      sheet.removeEventListener("touchcancel", onTE);
+    };
+  }, []);
+
+  return createPortal(
+    <div
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 450,
+        background: "rgba(0,0,0,0.72)",
+        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+        animation: "sheet-fade-in 0.2s ease both",
+      }}
+    >
+      <div
+        ref={sheetRef}
+        onClick={e => e.stopPropagation()}
+        style={{
+          position: "absolute", left: 0, right: 0, bottom: 0,
+          maxHeight: "92vh",
+          display: "flex", flexDirection: "column",
+          background: SHEET_BG,
+          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
+          borderTop: "1px solid rgba(255,255,255,0.10)",
+          borderLeft: "1px solid rgba(255,255,255,0.06)",
+          borderRight: "1px solid rgba(255,255,255,0.06)",
+          borderRadius: "22px 22px 0 0",
+          paddingBottom: "max(env(safe-area-inset-bottom,12px),12px)",
+          boxShadow: `${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
+          animation: "sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both",
+          willChange: "transform",
+        }}
+      >
+        {/* Drag handle */}
+        <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.22)", margin: "12px auto 0", flexShrink: 0 }} />
+
+        {/* Sheet header */}
+        <div style={{ display: "flex", alignItems: "center", padding: "10px 16px 0", flexShrink: 0 }}>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: TEXT_HI, letterSpacing: "0.01em" }}>Market</span>
+          <button
+            onClick={onClose}
+            style={{
+              width: 28, height: 28, borderRadius: 8,
+              border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.06)",
+              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <X style={{ width: 13, height: 13, color: "rgba(255,255,255,0.50)" }} />
+          </button>
+        </div>
+
+        {/* Tab bar */}
+        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "2px 6px 0", flexShrink: 0 }}>
+          {MKT_TABS.map(tab => {
+            const active = tab === activeTab;
+            return (
+              <button
+                key={tab}
+                onClick={() => { setActiveTab(tab); setSearch(""); }}
+                style={{
+                  flexShrink: 0, padding: "9px 13px 10px", border: "none",
+                  background: "transparent", cursor: "pointer",
+                  fontSize: 13, fontWeight: active ? 700 : 400,
+                  color: active ? "#f59e0b" : "rgba(148,163,184,0.50)",
+                  position: "relative", transition: "color 0.15s", whiteSpace: "nowrap",
+                }}
+              >
+                {tab}
+                {active && (
+                  <div style={{
+                    position: "absolute", bottom: 0,
+                    left: "16%", right: "16%",
+                    height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b",
+                  }} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search bar — hidden on Watchlist tab */}
+        {activeTab !== "Watchlist" && (
+          <div style={{ padding: "6px 12px 4px", flexShrink: 0 }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 8,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 10, padding: "7px 12px",
+            }}>
+              <Search size={13} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
+              <input
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder={`Search ${activeTab}…`}
+                style={{
+                  flex: 1, background: "none", border: "none", outline: "none",
+                  color: "#fff", fontSize: 13, caretColor: "#f59e0b", minWidth: 0,
+                }}
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)", flexShrink: 0 }}
+                >
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Column headers */}
+        <div style={{
+          display: "flex", alignItems: "center",
+          padding: "4px 14px 5px",
+          background: "rgba(255,255,255,0.02)",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          flexShrink: 0,
+        }}>
+          <div style={{ width: 24, flexShrink: 0 }} />
+          <div style={{ flex: 1, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Contract</div>
+          <div style={{ minWidth: 76, textAlign: "right", fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Price</div>
+          <div style={{ minWidth: 64, textAlign: "center", marginLeft: 8, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>24h Chg.</div>
+        </div>
+
+        {/* Scrollable symbol list */}
+        <div
+          ref={scrollRef}
+          style={{ overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" } as React.CSSProperties}
+        >
+          {loadingBroker && (
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "36px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
+              <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: 13 }}>Loading…</span>
+              <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+            </div>
+          )}
+
+          {!loadingBroker && rows.length === 0 && (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
+              <TrendingUp size={30} strokeWidth={1} />
+              <p style={{ fontSize: 13.5, margin: 0 }}>
+                {activeTab === "Watchlist" ? "No favourites yet" : `No ${activeTab} symbols found`}
+              </p>
+              {activeTab === "Watchlist" && (
+                <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
+                  Tap ★ on any symbol to add it here
+                </p>
+              )}
+            </div>
+          )}
+
+          {!loadingBroker && rows.map(row => {
+            const wItem      = watchMap.current.get(row.symbol);
+            const isFavorite = wItem?.isFavorite ?? false;
+            return (
+              <MktRow
+                key={row.symbol}
+                symbol={row.symbol}
+                name={row.name}
+                contractType={row.contractType}
+                isFavorite={isFavorite}
+                onStar={() => handleStar(row.symbol)}
+                onTap={() => { onSelect(row.symbol); onClose(); }}
+              />
+            );
+          })}
+
+          <div style={{ height: 20 }} />
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── MiniWatchlistPopup ─────────────────────────────────────────────────────
 function MiniWatchlistPopup({
   items, activeSymbol, anchorRect, onSelect, onClose,
 }: {
@@ -1448,19 +1856,15 @@ function MiniControlBar({
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < watchlistItems.length - 1 && currentIdx >= 0;
 
-  const [showPopup,   setShowPopup]   = useState(false);
-  const [popupAnchor, setPopupAnchor] = useState<DOMRect | null>(null);
+  const [showMarketSheet, setShowMarketSheet] = useState(false);
   const symbolBtnRef = useRef<HTMLButtonElement>(null);
 
   const handleSymbolBtn = useCallback(() => {
-    const rect = symbolBtnRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    setPopupAnchor(rect);
-    setShowPopup(true);
+    setShowMarketSheet(true);
   }, []);
 
-  const handlePopupSelect = useCallback((sym: string) => {
-    setShowPopup(false);
+  const handleSheetSelect = useCallback((sym: string) => {
+    setShowMarketSheet(false);
     onSelectSymbol(sym);
   }, [onSelectSymbol]);
 
@@ -1539,8 +1943,8 @@ function MiniControlBar({
           style={{
             height:36, padding:"0 10px", borderRadius:11, flexShrink:0,
             display:"flex", alignItems:"center", gap:6,
-            background: showPopup ? "rgba(255,255,255,0.12)" : GL_PILL_BG,
-            border: showPopup ? `1px solid rgba(255,255,255,0.28)` : `1px solid ${GL_PILL_BDR}`,
+            background: showMarketSheet ? "rgba(255,255,255,0.12)" : GL_PILL_BG,
+            border: showMarketSheet ? `1px solid rgba(255,255,255,0.28)` : `1px solid ${GL_PILL_BDR}`,
             cursor:"pointer", maxWidth:114,
             transition:"background 0.15s, border-color 0.15s",
           }}
@@ -1555,7 +1959,7 @@ function MiniControlBar({
           <span style={{ fontSize:12.5, fontWeight:700, color: TEXT_HI, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:62 }}>
             {badge}
           </span>
-          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85, transform: showPopup ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.18s" }} />
+          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85, transform: showMarketSheet ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.18s" }} />
         </button>
 
         {/* TF button */}
@@ -1611,14 +2015,12 @@ function MiniControlBar({
         </div>{/* /tj-ctrl-bar-inner */}
       </div>{/* /tj-ctrl-bar-glow */}
 
-      {/* Mini watchlist popup portal */}
-      {showPopup && popupAnchor && (
-        <MiniWatchlistPopup
-          items={watchlistItems.map(w => ({ symbol: w.symbol, badge: w.badge ?? w.symbol.slice(0,4).toUpperCase(), label: (w as any).label }))}
+      {/* Market watchlist sheet */}
+      {showMarketSheet && (
+        <MarketWatchlistSheet
           activeSymbol={activeKey}
-          anchorRect={popupAnchor}
-          onSelect={handlePopupSelect}
-          onClose={() => setShowPopup(false)}
+          onSelect={handleSheetSelect}
+          onClose={() => setShowMarketSheet(false)}
         />
       )}
     </div>
