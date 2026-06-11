@@ -1186,7 +1186,11 @@ export default function Charts() {
   const liveChangePct = activeTick?.changePct ?? 0;
   const isUp = liveChangePct >= 0;
 
+  // Guard so our own setSymbol calls don't re-trigger the external-change subscription
+  const _selfSettingRef = useRef(false);
+
   const selectSymbol = useCallback((key: string) => {
+    _selfSettingRef.current = true;
     const e = watchlistItems.find(i => i.symbol === key);
     const market = e?.market ?? layout.market;
     setLayout(prev => ({ ...prev, symbol: key, market }));
@@ -1194,7 +1198,28 @@ export default function Charts() {
     localStorage.setItem("tv_symbol", key);
     if (e) localStorage.setItem("tv_market", market);
     useChartStore.getState().setSymbol(key);
+    // Reset after Zustand subscriber fires synchronously
+    Promise.resolve().then(() => { _selfSettingRef.current = false; });
   }, [watchlistItems, layout.market, setLayout, saveToDb]);
+
+  // Keep stable refs so the subscription below never needs to re-subscribe
+  const _activeKeyRef    = useRef(activeKey);
+  _activeKeyRef.current  = activeKey;
+  const _selectSymRef    = useRef(selectSymbol);
+  _selectSymRef.current  = selectSymbol;
+
+  // React to external symbol changes (e.g. Markets page tapping a coin → navigate("/charts"))
+  useEffect(() => {
+    return useChartStore.subscribe(
+      (s) => s.symbol,
+      (newSym) => {
+        if (_selfSettingRef.current) return;
+        if (newSym && newSym !== _activeKeyRef.current) {
+          _selectSymRef.current(newSym);
+        }
+      },
+    );
+  }, []); // eslint-disable-line
 
   const selectInterval = useCallback((v: string) => {
     setLayout(prev => ({ ...prev, interval: v }));
