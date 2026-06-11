@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { memo, useState, useCallback, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
 import {
@@ -1268,188 +1268,164 @@ function DrawingMiniBar({
   );
 }
 
-// ── Symbol Reel Picker ──────────────────────────────────────────────────────
-const REEL_ITEM_H = 52;
-const REEL_VISIBLE = 5;
-const REEL_WINDOW_H = REEL_ITEM_H * REEL_VISIBLE;
+// ── Mini watchlist popup — compact floating panel anchored above symbol button ──
 
-function SymbolReelPicker({
+const MiniWatchlistRow = memo(function MiniWatchlistRow({
+  item, isActive, onSelect,
+}: {
+  item: { symbol: string; badge: string; label?: string };
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  const tick = useSymbolTick(item.symbol);
+  const price  = tick?.price ?? null;
+  const pct    = tick?.changePct ?? 0;
+  const isUp   = pct >= 0;
+
+  return (
+    <div
+      onClick={onSelect}
+      onTouchStart={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.09)"; }}
+      onTouchEnd={e => { (e.currentTarget as HTMLElement).style.background = isActive ? "rgba(255,255,255,0.06)" : "transparent"; }}
+      style={{
+        display:"flex", alignItems:"center", gap:10,
+        padding:"9px 12px",
+        background: isActive ? "rgba(255,255,255,0.06)" : "transparent",
+        borderBottom:"1px solid rgba(255,255,255,0.05)",
+        cursor:"pointer",
+        WebkitTapHighlightColor:"transparent",
+        userSelect:"none",
+        transition:"background 0.10s",
+      }}
+    >
+      {/* Badge icon */}
+      <div style={{
+        width:34, height:34, borderRadius:"50%", flexShrink:0,
+        background: isActive ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.08)",
+        border: isActive ? "1px solid rgba(255,255,255,0.24)" : "1px solid rgba(255,255,255,0.08)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize: item.badge.length > 4 ? 7 : item.badge.length > 3 ? 7.5 : 8,
+        fontWeight:900, color: isActive ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
+        transition:"all 0.10s",
+      }}>
+        {item.badge.slice(0,5)}
+      </div>
+
+      {/* Name + label */}
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{
+          fontSize:13, fontWeight:600,
+          color: isActive ? "#fff" : "rgba(255,255,255,0.82)",
+          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+          display:"flex", alignItems:"center", gap:5, lineHeight:1.3,
+        }}>
+          {item.badge}
+          {isActive && (
+            <span style={{
+              fontSize:7, padding:"1px 4px", borderRadius:3, flexShrink:0,
+              background:"rgba(183,255,90,0.14)", color:"#B7FF5A", fontWeight:700, letterSpacing:"0.05em",
+            }}>LIVE</span>
+          )}
+        </div>
+        {item.label && (
+          <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.28)", marginTop:1.5, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {item.label}
+          </div>
+        )}
+      </div>
+
+      {/* Price / change */}
+      <div style={{ textAlign:"right", flexShrink:0 }}>
+        <div style={{ fontSize:12.5, fontWeight:600, color:"rgba(255,255,255,0.88)", fontVariantNumeric:"tabular-nums", lineHeight:1.3 }}>
+          {price !== null ? fmtPrice(price, item.symbol) : "—"}
+        </div>
+        <div style={{ fontSize:10.5, color: isUp ? "#00e676" : "#ff4d67", fontVariantNumeric:"tabular-nums", marginTop:1.5 }}>
+          {isUp ? "+" : ""}{pct.toFixed(2)}%
+        </div>
+      </div>
+    </div>
+  );
+});
+
+function MiniWatchlistPopup({
   items, activeSymbol, anchorRect, onSelect, onClose,
 }: {
-  items: { symbol: string; badge: string }[];
+  items: { symbol: string; badge: string; label?: string }[];
   activeSymbol: string;
   anchorRect: DOMRect;
   onSelect: (sym: string) => void;
   onClose: () => void;
 }) {
-  const reelRef        = useRef<HTMLDivElement>(null);
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const activeIdx      = Math.max(0, items.findIndex(i => i.symbol === activeSymbol));
-  const [centeredIdx, setCenteredIdx] = useState(activeIdx);
-
-  // ── Delay backdrop activation so the opening tap can't immediately close the reel ──
+  // Delay backdrop so the opening tap can't instantly close the popup
   const backdropReadyRef = useRef(false);
   useEffect(() => {
-    const t = setTimeout(() => { backdropReadyRef.current = true; }, 220);
+    const t = setTimeout(() => { backdropReadyRef.current = true; }, 200);
     return () => clearTimeout(t);
   }, []);
 
-  const left   = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 168));
-  const bottom = window.innerHeight - anchorRect.top + 10;
-
-  // Scroll to active item on mount (double-rAF for iOS scroll-snap)
-  useEffect(() => {
-    const set = () => { if (reelRef.current) reelRef.current.scrollTop = activeIdx * REEL_ITEM_H; };
-    set();
-    requestAnimationFrame(() => requestAnimationFrame(set));
-  }, [activeIdx]);
-
-  // Track centered item while scrolling; auto-commit when scroll stops
-  const handleScroll = useCallback(() => {
-    const el = reelRef.current;
-    if (!el) return;
-    const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / REEL_ITEM_H)));
-    setCenteredIdx(idx);
-    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    scrollTimerRef.current = setTimeout(() => {
-      const el2 = reelRef.current;
-      if (!el2) return;
-      const finalIdx = Math.max(0, Math.min(items.length - 1, Math.round(el2.scrollTop / REEL_ITEM_H)));
-      onSelect(items[finalIdx].symbol);
-    }, 380);
-  }, [items, onSelect]);
-
-  // Direct item tap — scroll to it then select
-  const handleItemTap = useCallback((idx: number, e: React.MouseEvent | React.TouchEvent) => {
-    e.stopPropagation();
-    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    const el = reelRef.current;
-    if (el) el.scrollTo({ top: idx * REEL_ITEM_H, behavior: "smooth" });
-    // Wait for scroll animation then commit
-    setTimeout(() => onSelect(items[idx].symbol), 200);
-  }, [items, onSelect]);
-
-  // Backdrop tap — cancel (close without selecting)
-  const handleBackdropClick = useCallback(() => {
-    if (!backdropReadyRef.current) return;
-    if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-    onClose();
-  }, [onClose]);
-
-  useEffect(() => () => { if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current); }, []);
+  const POPUP_W    = 248;
+  const POPUP_MAXH = 340;
+  const left       = Math.max(8, Math.min(anchorRect.left, window.innerWidth - POPUP_W - 8));
+  const bottom     = window.innerHeight - anchorRect.top + 8;
 
   return createPortal(
     <div
-      onPointerDown={handleBackdropClick}
+      onPointerDown={() => { if (backdropReadyRef.current) onClose(); }}
       style={{ position:"fixed", inset:0, zIndex:450 }}
     >
       <div
         onPointerDown={e => e.stopPropagation()}
         style={{
           position:"fixed", left, bottom,
-          width:160, height:REEL_WINDOW_H,
-          background:"rgba(6,7,16,0.98)",
-          backdropFilter:"blur(40px) saturate(220%)",
-          WebkitBackdropFilter:"blur(40px) saturate(220%)",
-          border:"1px solid rgba(255,255,255,0.13)",
-          borderRadius:18,
+          width:POPUP_W, maxHeight:POPUP_MAXH,
+          background:"rgba(7,8,17,0.98)",
+          backdropFilter:"blur(40px) saturate(200%)",
+          WebkitBackdropFilter:"blur(40px) saturate(200%)",
+          border:"1px solid rgba(255,255,255,0.12)",
+          borderRadius:16,
           overflow:"hidden",
+          display:"flex", flexDirection:"column",
           boxShadow:[
-            "0 -12px 48px rgba(0,0,0,0.90)",
-            "0 -4px 16px rgba(0,0,0,0.60)",
-            "0 0 0 1px rgba(255,255,255,0.05) inset",
+            "0 -8px 40px rgba(0,0,0,0.88)",
+            "0 -2px 10px rgba(0,0,0,0.55)",
+            "0 0 0 1px rgba(255,255,255,0.04) inset",
           ].join(","),
-          animation:"reel-pop-in 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
         }}
       >
-        {/* Center selection highlight */}
-        <div aria-hidden style={{
-          position:"absolute", top:"50%", left:10, right:10,
-          transform:"translateY(-50%)",
-          height:REEL_ITEM_H - 6,
-          borderRadius:12,
-          background:"rgba(255,255,255,0.06)",
-          border:"1px solid rgba(255,255,255,0.18)",
-          pointerEvents:"none",
-          zIndex:3,
-        }} />
-
-        {/* Scrollable drum */}
-        <div
-          ref={reelRef}
-          onScroll={handleScroll}
-          style={{
-            height:"100%",
-            overflowY:"scroll",
-            scrollSnapType:"y mandatory",
-            scrollbarWidth:"none",
-            paddingTop: REEL_ITEM_H * 2,
-            paddingBottom: REEL_ITEM_H * 2,
-            position:"relative", zIndex:2,
-            WebkitOverflowScrolling:"touch",
-          } as React.CSSProperties}
-        >
-          {items.map((item, idx) => {
-            const dist    = Math.abs(idx - centeredIdx);
-            const active  = idx === centeredIdx;
-            const opacity = dist === 0 ? 1 : dist === 1 ? 0.46 : 0.18;
-            const scale   = active ? 1.05 : 1;
-            return (
-              <div
-                key={item.symbol}
-                onPointerDown={e => { e.stopPropagation(); }}
-                onClick={e => handleItemTap(idx, e)}
-                style={{
-                  height:REEL_ITEM_H,
-                  scrollSnapAlign:"center",
-                  display:"flex", alignItems:"center", justifyContent:"flex-start",
-                  gap:9, paddingLeft:14, paddingRight:10,
-                  cursor:"pointer",
-                  opacity,
-                  transform:`scale(${scale})`,
-                  transition:"opacity 0.12s, transform 0.12s",
-                  userSelect:"none",
-                }}
-              >
-                <div style={{
-                  width:active?26:22, height:active?26:22,
-                  borderRadius:8, flexShrink:0,
-                  background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.07)",
-                  border: active ? "1px solid rgba(255,255,255,0.32)" : "1px solid rgba(255,255,255,0.08)",
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:7, fontWeight:900,
-                  color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.40)",
-                  transition:"all 0.12s",
-                }}>
-                  {item.badge.slice(0,3)}
-                </div>
-                <span style={{
-                  fontSize: active ? 13.5 : 12.5,
-                  fontWeight: active ? 700 : 500,
-                  color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
-                  whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
-                  maxWidth:90,
-                  transition:"all 0.12s",
-                }}>
-                  {item.badge}
-                </span>
-              </div>
-            );
-          })}
+        {/* Header */}
+        <div style={{
+          display:"flex", alignItems:"center",
+          padding:"10px 12px 8px",
+          borderBottom:"1px solid rgba(255,255,255,0.07)",
+          flexShrink:0,
+        }}>
+          <span style={{
+            flex:1, fontSize:10.5, fontWeight:700, letterSpacing:"0.08em",
+            textTransform:"uppercase", color:"rgba(255,255,255,0.38)",
+          }}>Watchlist</span>
+          <button
+            onClick={onClose}
+            style={{
+              width:22, height:22, borderRadius:6, cursor:"pointer",
+              background:"rgba(255,255,255,0.06)", border:"1px solid rgba(255,255,255,0.09)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+            }}
+          >
+            <X style={{ width:11, height:11, color:"rgba(255,255,255,0.40)" }} />
+          </button>
         </div>
 
-        {/* Top fade */}
-        <div aria-hidden style={{
-          position:"absolute", top:0, left:0, right:0,
-          height:REEL_ITEM_H * 2 + 2, pointerEvents:"none", zIndex:4,
-          background:"linear-gradient(to bottom, rgba(6,7,16,0.98) 20%, rgba(6,7,16,0.80) 60%, transparent)",
-        }} />
-        {/* Bottom fade */}
-        <div aria-hidden style={{
-          position:"absolute", bottom:0, left:0, right:0,
-          height:REEL_ITEM_H * 2 + 2, pointerEvents:"none", zIndex:4,
-          background:"linear-gradient(to top, rgba(6,7,16,0.98) 20%, rgba(6,7,16,0.80) 60%, transparent)",
-        }} />
+        {/* Scrollable list */}
+        <div style={{ overflowY:"auto", flex:1, scrollbarWidth:"none", WebkitOverflowScrolling:"touch" } as React.CSSProperties}>
+          {items.map(item => (
+            <MiniWatchlistRow
+              key={item.symbol}
+              item={item}
+              isActive={item.symbol === activeSymbol}
+              onSelect={() => { onSelect(item.symbol); onClose(); }}
+            />
+          ))}
+        </div>
       </div>
     </div>,
     document.body,
@@ -1472,26 +1448,19 @@ function MiniControlBar({
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < watchlistItems.length - 1 && currentIdx >= 0;
 
-  const [showReel,    setShowReel]    = useState(false);
-  const [reelAnchor,  setReelAnchor]  = useState<DOMRect | null>(null);
+  const [showPopup,   setShowPopup]   = useState(false);
+  const [popupAnchor, setPopupAnchor] = useState<DOMRect | null>(null);
   const symbolBtnRef = useRef<HTMLButtonElement>(null);
-
-  const reelItems = useMemo(() =>
-    watchlistItems.map(w => ({
-      symbol: w.symbol,
-      badge:  (w.badge ?? w.symbol.slice(0,4).toUpperCase()),
-    })),
-  [watchlistItems]);
 
   const handleSymbolBtn = useCallback(() => {
     const rect = symbolBtnRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setReelAnchor(rect);
-    setShowReel(true);
+    setPopupAnchor(rect);
+    setShowPopup(true);
   }, []);
 
-  const handleReelSelect = useCallback((sym: string) => {
-    setShowReel(false);
+  const handlePopupSelect = useCallback((sym: string) => {
+    setShowPopup(false);
     onSelectSymbol(sym);
   }, [onSelectSymbol]);
 
@@ -1562,7 +1531,7 @@ function MiniControlBar({
           background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.30),rgba(255,255,255,0.18),transparent)",
           borderRadius:1,
         }} />
-        {/* Symbol button — opens reel picker */}
+        {/* Symbol button — opens mini watchlist popup */}
         <button
           ref={symbolBtnRef}
           onClick={handleSymbolBtn}
@@ -1570,8 +1539,8 @@ function MiniControlBar({
           style={{
             height:36, padding:"0 10px", borderRadius:11, flexShrink:0,
             display:"flex", alignItems:"center", gap:6,
-            background: showReel ? "rgba(255,255,255,0.12)" : GL_PILL_BG,
-            border: showReel ? `1px solid rgba(255,255,255,0.28)` : `1px solid ${GL_PILL_BDR}`,
+            background: showPopup ? "rgba(255,255,255,0.12)" : GL_PILL_BG,
+            border: showPopup ? `1px solid rgba(255,255,255,0.28)` : `1px solid ${GL_PILL_BDR}`,
             cursor:"pointer", maxWidth:114,
             transition:"background 0.15s, border-color 0.15s",
           }}
@@ -1586,7 +1555,7 @@ function MiniControlBar({
           <span style={{ fontSize:12.5, fontWeight:700, color: TEXT_HI, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:62 }}>
             {badge}
           </span>
-          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85, transform: showReel ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.18s" }} />
+          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85, transform: showPopup ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.18s" }} />
         </button>
 
         {/* TF button */}
@@ -1642,14 +1611,14 @@ function MiniControlBar({
         </div>{/* /tj-ctrl-bar-inner */}
       </div>{/* /tj-ctrl-bar-glow */}
 
-      {/* Reel picker portal */}
-      {showReel && reelAnchor && (
-        <SymbolReelPicker
-          items={reelItems}
+      {/* Mini watchlist popup portal */}
+      {showPopup && popupAnchor && (
+        <MiniWatchlistPopup
+          items={watchlistItems.map(w => ({ symbol: w.symbol, badge: w.badge ?? w.symbol.slice(0,4).toUpperCase(), label: (w as any).label }))}
           activeSymbol={activeKey}
-          anchorRect={reelAnchor}
-          onSelect={handleReelSelect}
-          onClose={() => setShowReel(false)}
+          anchorRect={popupAnchor}
+          onSelect={handlePopupSelect}
+          onClose={() => setShowPopup(false)}
         />
       )}
     </div>
