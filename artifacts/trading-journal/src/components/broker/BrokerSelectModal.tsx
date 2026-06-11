@@ -22,11 +22,17 @@ export function BrokerSelectModal() {
         style={{
           background: "hsl(var(--background))",
           border: "1px solid var(--surface-btn-border)",
-          maxHeight: "85dvh",
+          height: "65vh",
+          maxHeight: "65vh",
         }}
       >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1 shrink-0 sm:hidden">
+          <div style={{ width: 36, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.15)" }} />
+        </div>
+
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4"
+        <div className="flex items-center justify-between px-5 py-4 shrink-0"
           style={{ borderBottom: "1px solid rgba(57,91,67,0.15)" }}>
           <div className="flex items-center gap-2">
             <Plug className="w-4 h-4" style={{ color: "#B7FF5A" }} />
