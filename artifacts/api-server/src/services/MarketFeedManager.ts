@@ -125,7 +125,18 @@ export class MarketFeedManager extends EventEmitter {
   }
 
   subscribe(symbol: string): boolean {
-    const providerName = this.symbolRouting.get(symbol);
+    let providerName = this.symbolRouting.get(symbol);
+
+    // Auto-route: any unknown xyzUSD / xyzUSDT perpetual → Delta India.
+    // This handles coins added before the async bootstrap completes AND
+    // any new Delta India listing not yet in the static routing table.
+    // Symbols explicitly routed elsewhere (finnhub/ctrader) are not overridden.
+    if (!providerName && /^[A-Z0-9]+USDT?$/.test(symbol)) {
+      providerName = "delta";
+      this.symbolRouting.set(symbol, "delta");
+      logger.info({ symbol }, "MarketFeedManager: auto-routed new crypto symbol → delta");
+    }
+
     if (!providerName) return false;
     const provider = this.providers.get(providerName);
     if (!provider) return false;

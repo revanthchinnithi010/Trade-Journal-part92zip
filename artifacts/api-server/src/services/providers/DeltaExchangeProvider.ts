@@ -227,6 +227,20 @@ export class DeltaExchangeProvider extends BaseProvider {
     });
   }
 
+  /**
+   * Override BaseProvider.subscribe() so we can dynamically register symbols
+   * that arrive after the bootstrap (or before it completes).
+   * For Delta India: internalSymbol === deltaSymbol (both "xyzUSD").
+   */
+  override subscribe(symbol: string): boolean {
+    if (!this.internalToDelta.has(symbol) && /^[A-Z0-9]+USDT?$/.test(symbol)) {
+      this.internalToDelta.set(symbol, symbol);
+      this.deltaToInternal.set(symbol, symbol);
+      logger.info({ provider: this.name, symbol }, "DeltaExchangeProvider: dynamically registered new symbol");
+    }
+    return super.subscribe(symbol);
+  }
+
   subscribeSymbol(symbol: string): void {
     const deltaSym = this.internalToDelta.get(symbol);
     if (!deltaSym) {
