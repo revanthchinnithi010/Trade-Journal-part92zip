@@ -1116,7 +1116,7 @@ const DrawingShape = memo(function DrawingShape({
                     strokeDasharray="6 6" strokeLinecap="round" opacity={0.8}
                   />
                   <foreignObject x={LBL_X} y={LBL_Y} width={LBL_W} height={LBL_H}
-                    style={{ overflow: "visible" }}>
+                    pointerEvents="none" style={{ overflow: "visible" }}>
                     <div style={{
                       background: "rgba(20,24,27,0.92)", border: `2px solid ${borderClr}`,
                       borderRadius: "10px", padding: "6px 10px",
@@ -1125,6 +1125,7 @@ const DrawingShape = memo(function DrawingShape({
                       width: `${LBL_W}px`, height: `${LBL_H}px`,
                       boxSizing: "border-box", display: "flex", flexDirection: "column",
                       justifyContent: "center", gap: "3px", userSelect: "none",
+                      pointerEvents: "none",
                     }}>
                       <div style={{ color: "rgba(255,255,255,0.96)", fontSize: "9.5px", fontWeight: 600, letterSpacing: "0.08em", fontFamily: "'Inter',system-ui,sans-serif", textTransform: "uppercase" }}>Live P&amp;L</div>
                       <div style={{ color: pnlColor, fontSize: "14px", fontWeight: 700, fontFamily: "'Inter',system-ui,sans-serif", lineHeight: 1.15 }}>{pctStr}</div>
@@ -1302,7 +1303,7 @@ const DrawingShape = memo(function DrawingShape({
                 />
                 {/* Floating P&L label */}
                 <foreignObject x={LBL_X} y={LBL_Y} width={LBL_W} height={LBL_H}
-                  style={{ overflow: "visible" }}>
+                  pointerEvents="none" style={{ overflow: "visible" }}>
                   <div
                     style={{
                       background:     "rgba(20,24,27,0.92)",
@@ -1320,6 +1321,7 @@ const DrawingShape = memo(function DrawingShape({
                       justifyContent: "center",
                       gap:            "3px",
                       userSelect:     "none",
+                      pointerEvents:  "none",
                     }}
                   >
                     <div style={{
