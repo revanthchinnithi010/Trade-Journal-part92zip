@@ -169,45 +169,89 @@ function renderPositionTool(
   const lossTop   = Math.min(entY, slY);
   const lossH     = Math.abs(slY - entY);
 
-  // Dynamic active split (progress bar)
-  let profitSplitX = ELX;
+  // Scan bars to find TP/SL hits and the last active bar
+  let profitSplitX   = ELX;
+  let lastActiveBar: OhlcBar | null = null;
+  let tpWasHit       = false;
+  let slWasHit       = false;
+
   if (bars.length > 0) {
     const toolLeftTime  = Math.min(points[0].time, points[1].time);
     const toolRightTime = Math.max(points[0].time, points[1].time);
     const barsInRange   = bars.filter(b => b.time >= toolLeftTime && b.time <= toolRightTime);
-    let limitTime: number | null = barsInRange.length > 0 ? barsInRange[barsInRange.length - 1].time : null;
     let tpHitTime: number | null = null, slHitTime: number | null = null;
     for (const bar of barsInRange) {
       if (tpHitTime === null) {
-        if (isLong && bar.high >= tpPrice) tpHitTime = bar.time;
-        if (!isLong && bar.low <= tpPrice) tpHitTime = bar.time;
+        if (isLong  && bar.high >= tpPrice) tpHitTime = bar.time;
+        if (!isLong && bar.low  <= tpPrice) tpHitTime = bar.time;
       }
       if (slHitTime === null) {
-        if (isLong && bar.low <= slPrice) slHitTime = bar.time;
+        if (isLong  && bar.low  <= slPrice) slHitTime = bar.time;
         if (!isLong && bar.high >= slPrice) slHitTime = bar.time;
       }
     }
-    const firstHit = Math.min(tpHitTime ?? Infinity, slHitTime ?? Infinity);
-    if (firstHit !== Infinity && limitTime !== null) limitTime = Math.min(limitTime, firstHit);
+    const lastBarTime   = barsInRange.length > 0 ? barsInRange[barsInRange.length - 1].time : null;
+    const firstHitTime  = Math.min(tpHitTime ?? Infinity, slHitTime ?? Infinity);
+    let limitTime: number | null = lastBarTime;
+    if (firstHitTime !== Infinity) {
+      tpWasHit  = tpHitTime !== null && tpHitTime <= (slHitTime ?? Infinity);
+      slWasHit  = slHitTime !== null && slHitTime <  (tpHitTime ?? Infinity);
+      limitTime = limitTime !== null ? Math.min(limitTime, firstHitTime) : firstHitTime;
+    }
     if (limitTime !== null) {
+      lastActiveBar = barsInRange.filter(b => b.time <= limitTime!).pop() ?? null;
       const sp = toPx({ time: limitTime, price: entryPrice });
       if (sp) profitSplitX = Math.min(ERX, Math.max(ELX, sp.x));
     }
   }
 
+  const tradeStatus  = tpWasHit ? "TP_HIT" : slWasHit ? "SL_HIT" : "RUNNING";
+  const activeFillW  = Math.max(0, profitSplitX - ELX);
+
   ctx.save();
 
-  // Profit zone (dim future + bright active)
-  const activeW  = Math.max(0, profitSplitX - ELX);
-  const futureW  = Math.max(0, ERX - profitSplitX);
-  ctx.fillStyle = hexToRgba(profitHex, 0.55);
-  ctx.fillRect(ELX, profitTop, activeW, profitH);
+  // ── Profit zone ───────────────────────────────────────────────────────────
+  // Always draw dim background covering the full zone.
   ctx.fillStyle = hexToRgba(profitHex, 0.32);
-  ctx.fillRect(ELX + activeW, profitTop, futureW, profitH);
+  ctx.fillRect(ELX, profitTop, ZW, profitH);
 
-  // Loss zone
+  if (tradeStatus === "TP_HIT" && activeFillW > 0) {
+    // TP hit: horizontal bright fill up to the hit candle
+    ctx.fillStyle = hexToRgba(profitHex, 0.55);
+    ctx.fillRect(ELX, profitTop, activeFillW, profitH);
+  } else if (tradeStatus === "RUNNING" && lastActiveBar) {
+    // Running: vertical bright fill from entry price → current close price
+    const inProfitSide = isLong
+      ? lastActiveBar.close >= entryPrice
+      : lastActiveBar.close <= entryPrice;
+    if (inProfitSide) {
+      const closePx = toPx({ time: lastActiveBar.time, price: lastActiveBar.close });
+      if (closePx) {
+        const liveTop = Math.min(entY, closePx.y);
+        const liveH   = Math.abs(closePx.y - entY);
+        if (liveH > 0) {
+          ctx.save();
+          ctx.beginPath();
+          ctx.rect(ELX, profitTop, ZW, profitH);
+          ctx.clip();
+          ctx.fillStyle = hexToRgba(profitHex, 0.55);
+          ctx.fillRect(ELX, liveTop, ZW, liveH);
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  // ── Loss zone ─────────────────────────────────────────────────────────────
+  // Always draw dim background covering the full zone.
   ctx.fillStyle = hexToRgba(stopHex, 0.32);
   ctx.fillRect(ELX, lossTop, ZW, lossH);
+
+  if (tradeStatus === "SL_HIT" && activeFillW > 0) {
+    // SL hit: horizontal bright fill up to the hit candle
+    ctx.fillStyle = hexToRgba(stopHex, 0.55);
+    ctx.fillRect(ELX, lossTop, activeFillW, lossH);
+  }
 
   // Boundary lines
   ctx.setLineDash([]);
