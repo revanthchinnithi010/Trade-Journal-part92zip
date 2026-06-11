@@ -46,16 +46,28 @@ function pollIntervalFor(brokerId: string): number {
 
 type RefreshResult = { ok: true } | { ok: false; error: string };
 
-let pollHandle: ReturnType<typeof setInterval> | null = null;
-let reconnectHandle: ReturnType<typeof setTimeout> | null = null;
+// ── Per-broker poll/reconnect handles ────────────────────────────────────────
+const pollHandles     = new Map<string, ReturnType<typeof setInterval>>();
+const reconnectHandles = new Map<string, ReturnType<typeof setTimeout>>();
 
-function clearPoll() {
-  if (pollHandle) { clearInterval(pollHandle); pollHandle = null; }
+function clearBrokerPoll(brokerId: string) {
+  const h = pollHandles.get(brokerId);
+  if (h) { clearInterval(h); pollHandles.delete(brokerId); }
 }
-function clearReconnect() {
-  if (reconnectHandle) { clearTimeout(reconnectHandle); reconnectHandle = null; }
+function clearBrokerReconnect(brokerId: string) {
+  const h = reconnectHandles.get(brokerId);
+  if (h) { clearTimeout(h); reconnectHandles.delete(brokerId); }
+}
+function clearAllPolls() {
+  pollHandles.forEach(h => clearInterval(h));
+  pollHandles.clear();
+}
+function clearAllReconnects() {
+  reconnectHandles.forEach(h => clearTimeout(h));
+  reconnectHandles.clear();
 }
 
+// ── REST helpers ─────────────────────────────────────────────────────────────
 async function doRefreshBalance(account: BrokerAccount): Promise<RefreshResult & { balance?: BrokerBalance }> {
   const adapter = getAdapter(account.broker_id);
   try {
@@ -89,24 +101,15 @@ async function doRefreshOrders(account: BrokerAccount): Promise<RefreshResult & 
   } catch (e) { return { ok: false, error: String(e) }; }
 }
 
-// ---------------------------------------------------------------------------
-// Delta WS payload normalizers
-// These convert raw Delta Exchange WebSocket message payloads into the typed
-// BrokerBalance / BrokerPosition / BrokerOrder interfaces used by the store.
-// ---------------------------------------------------------------------------
-
+// ── Delta WS normalizers ─────────────────────────────────────────────────────
 function normalizeDeltaWsBalance(payload: Record<string, unknown>): BrokerBalance | null {
   const symbol = String(payload["asset_symbol"] ?? "");
   if (!symbol) return null;
-
-  const walletBal    = parseFloat(String(payload["balance"]          ?? "0"));
-  const orderMargin  = parseFloat(String(payload["order_margin"]     ?? "0"));
-  const posMargin    = parseFloat(String(payload["position_margin"]  ?? "0"));
-
+  const walletBal   = parseFloat(String(payload["balance"]         ?? "0"));
+  const orderMargin = parseFloat(String(payload["order_margin"]    ?? "0"));
+  const posMargin   = parseFloat(String(payload["position_margin"] ?? "0"));
   if (!isFinite(walletBal)) return null;
-
   const available = Math.max(0, walletBal - orderMargin - posMargin);
-
   return {
     coin:               symbol,
     walletBalance:      walletBal.toFixed(4),
@@ -119,28 +122,27 @@ function normalizeDeltaWsBalance(payload: Record<string, unknown>): BrokerBalanc
 function normalizeDeltaWsPosition(payload: Record<string, unknown>): BrokerPosition {
   const side = String(payload["side"] ?? "buy").toLowerCase();
   return {
-    id:           String(payload["product_id"] ?? payload["id"] ?? ""),
-    symbol:       String(payload["product_symbol"] ?? payload["symbol"] ?? ""),
-    side:         side === "buy" ? "Long" : "Short",
-    size:         Math.abs(parseFloat(String(payload["size"] ?? "0"))),
-    entryPrice:   parseFloat(String(payload["entry_price"]     ?? "0")),
-    markPrice:    parseFloat(String(payload["mark_price"]      ?? "0")),
+    id:            String(payload["product_id"] ?? payload["id"] ?? ""),
+    symbol:        String(payload["product_symbol"] ?? payload["symbol"] ?? ""),
+    side:          side === "buy" ? "Long" : "Short",
+    size:          Math.abs(parseFloat(String(payload["size"] ?? "0"))),
+    entryPrice:    parseFloat(String(payload["entry_price"]     ?? "0")),
+    markPrice:     parseFloat(String(payload["mark_price"]      ?? "0")),
     unrealisedPnl: parseFloat(String(payload["unrealized_pnl"] ?? "0")),
-    leverage:     String(payload["leverage"] ?? "1"),
-    raw:          payload,
+    leverage:      String(payload["leverage"] ?? "1"),
+    raw:           payload,
   };
 }
 
 function normalizeDeltaWsOrder(payload: Record<string, unknown>): BrokerOrder {
   const side      = String(payload["side"] ?? "buy").toLowerCase();
   const orderType = String(payload["order_type"] ?? "limit_order")
-    .replace(/_order$/, "")
-    .toLowerCase();
+    .replace(/_order$/, "").toLowerCase();
   return {
     id:        String(payload["id"] ?? ""),
     symbol:    String(payload["product_symbol"] ?? payload["symbol"] ?? ""),
     side:      side === "buy" ? "Buy" : "Sell",
-    orderType: orderType,
+    orderType,
     price:     parseFloat(String(payload["limit_price"] ?? payload["price"] ?? "0")),
     qty:       parseFloat(String(payload["size"] ?? payload["quantity"] ?? "0")),
     status:    String(payload["state"] ?? payload["status"] ?? "open"),
@@ -151,8 +153,73 @@ function normalizeDeltaWsOrder(payload: Record<string, unknown>): BrokerOrder {
 
 const DELTA_ORDER_TERMINAL_STATES = new Set(["filled", "cancelled", "closed", "rejected", "expired"]);
 
+// ── Derived-state helper ─────────────────────────────────────────────────────
+// Computes legacy single-broker fields from the multi-broker maps so that all
+// existing consumers (Portfolio, Charts, PositionsList, etc.) keep working
+// without any changes.
+function deriveLegacy(
+  connectedAccounts: Record<string, BrokerAccount>,
+  brokerStatuses:   Record<string, ConnectionStatus>,
+  brokerBalances:   Record<string, BrokerBalance | null>,
+  brokerPositions:  Record<string, BrokerPosition[]>,
+  brokerOrders:     Record<string, BrokerOrder[]>,
+  activeBrokerId:   string,
+): Pick<BrokerState,
+  "activeAccount" | "connectedBroker" |
+  "connectionStatus" | "brokerStatus" |
+  "balance" | "accountBalance" |
+  "positions" | "orders" | "error"
+> {
+  const ids = Object.keys(connectedAccounts);
+
+  // Primary = activeBrokerId if connected, else first connected
+  const primaryId = (activeBrokerId !== "all" && connectedAccounts[activeBrokerId])
+    ? activeBrokerId
+    : ids[0] ?? null;
+  const primaryAccount = primaryId ? (connectedAccounts[primaryId] ?? null) : null;
+
+  // Connection status = best status across all brokers
+  const allStatuses = Object.values(brokerStatuses);
+  let connectionStatus: ConnectionStatus = "disconnected";
+  if (ids.length > 0) {
+    if (allStatuses.some(s => s === "connected"))  connectionStatus = "connected";
+    else if (allStatuses.some(s => s === "connecting")) connectionStatus = "connecting";
+    else if (allStatuses.some(s => s === "error"))  connectionStatus = "error";
+  }
+
+  // Data = from activeBrokerId if set, else merged across all
+  let positions: BrokerPosition[];
+  let orders:    BrokerOrder[];
+  let balance:   BrokerBalance | null;
+
+  const filterId = activeBrokerId !== "all" && connectedAccounts[activeBrokerId]
+    ? activeBrokerId : null;
+
+  if (filterId) {
+    positions = brokerPositions[filterId] ?? [];
+    orders    = brokerOrders[filterId]    ?? [];
+    balance   = brokerBalances[filterId]  ?? null;
+  } else {
+    positions = ids.flatMap(id => brokerPositions[id] ?? []);
+    orders    = ids.flatMap(id => brokerOrders[id]    ?? []);
+    balance   = ids.map(id => brokerBalances[id]).find(b => b != null) ?? null;
+  }
+
+  return {
+    activeAccount:   primaryAccount,
+    connectedBroker: primaryAccount,
+    connectionStatus,
+    brokerStatus:    connectionStatus,
+    balance,
+    accountBalance:  balance,
+    positions,
+    orders,
+    error: null,
+  };
+}
+
 // ---------------------------------------------------------------------------
-// Store
+// Store interface
 // ---------------------------------------------------------------------------
 
 export type PrivateWsStatus = "idle" | "connecting" | "connected" | "reconnecting" | "failed";
@@ -160,131 +227,143 @@ export type PrivateWsStatus = "idle" | "connecting" | "connected" | "reconnectin
 export interface BrokerState {
   accounts: BrokerAccount[];
 
+  // ── Multi-broker maps (new) ──────────────────────────────────────────────
+  connectedAccounts: Record<string, BrokerAccount>;
+  brokerStatuses:    Record<string, ConnectionStatus>;
+  brokerBalances:    Record<string, BrokerBalance | null>;
+  brokerPositions:   Record<string, BrokerPosition[]>;
+  brokerOrders:      Record<string, BrokerOrder[]>;
+  brokerErrors:      Record<string, string | null>;
+  activeBrokerId:    string;   // broker_id or "all"
+  reconnectAttemptsPer: Record<string, number>;
+
+  // ── Legacy compat (derived from maps above) ──────────────────────────────
   connectedBroker: BrokerAccount | null;
-  activeAccount: BrokerAccount | null;
-
-  brokerStatus: ConnectionStatus;
+  activeAccount:   BrokerAccount | null;
+  brokerStatus:    ConnectionStatus;
   connectionStatus: ConnectionStatus;
+  accountBalance:  BrokerBalance | null;
+  balance:         BrokerBalance | null;
+  positions:       BrokerPosition[];
+  orders:          BrokerOrder[];
+  error:           string | null;
 
-  accountBalance: BrokerBalance | null;
-  balance: BrokerBalance | null;
-
-  positions: BrokerPosition[];
-  orders: BrokerOrder[];
-  error: string | null;
-
-  websocketStatus: WsStatus;
-  connectionLatency: number | null;
-  reconnectingState: boolean;
-  reconnectAttempts: number;
+  websocketStatus:    WsStatus;
+  connectionLatency:  number | null;
+  reconnectingState:  boolean;
+  reconnectAttempts:  number;
   lastSuccessfulPoll: number | null;
+  privateWsStatus:    PrivateWsStatus;
 
-  /** Status of the backend-side authenticated private WS session (Delta only). */
-  privateWsStatus: PrivateWsStatus;
-
-  activeSymbol: string;
+  activeSymbol:    string;
   activeTimeframe: string;
 
-  showSelectModal: boolean;
-  showAuthModal: boolean;
-  authBrokerId: BrokerId | null;
-  showPositions: boolean;
-  showOrders: boolean;
-  showPlaceOrder: boolean;
+  livePnl:        Record<string, number>;
+  wsClientStates: { delta: WsClientState | null; ctrader: WsClientState | null };
 
-  loadAccounts: () => Promise<void>;
+  showSelectModal:  boolean;
+  showAuthModal:    boolean;
+  authBrokerId:     BrokerId | null;
+  showPositions:    boolean;
+  showOrders:       boolean;
+  showPlaceOrder:   boolean;
+
+  // ── Actions ──────────────────────────────────────────────────────────────
+  loadAccounts:  () => Promise<void>;
 
   connectBroker: (account: BrokerAccount) => Promise<void>;
-  connect: (account: BrokerAccount) => Promise<void>;
+  connect:       (account: BrokerAccount) => Promise<void>;
 
-  disconnectBroker: () => void;
-  disconnect: () => void;
+  disconnectBroker: (brokerId: string) => void;
+  disconnectAll:    () => void;
+  disconnect:       () => void;  // backward compat = disconnectAll
 
-  updateBalance: () => Promise<void>;
-  refreshBalance: () => Promise<void>;
+  setActiveBrokerId: (id: string) => void;
 
-  updatePositions: () => Promise<void>;
+  updateBalance:    () => Promise<void>;
+  refreshBalance:   () => Promise<void>;
+  updatePositions:  () => Promise<void>;
   refreshPositions: () => Promise<void>;
-
-  updateOrders: () => Promise<void>;
-  refreshOrders: () => Promise<void>;
-
-  refreshAll: () => Promise<void>;
+  updateOrders:     () => Promise<void>;
+  refreshOrders:    () => Promise<void>;
+  refreshAll:       () => Promise<void>;
 
   setLatency: (ms: number) => void;
 
-  placeOrder: (req: PlaceOrderRequest) => Promise<RefreshResult>;
-  closePosition: (pos: BrokerPosition) => Promise<RefreshResult>;
-  cancelOrder: (ord: BrokerOrder) => Promise<RefreshResult>;
-  deleteAccount: (id: number) => Promise<void>;
+  placeOrder:    (req: PlaceOrderRequest) => Promise<RefreshResult>;
+  closePosition: (pos: BrokerPosition)    => Promise<RefreshResult>;
+  cancelOrder:   (ord: BrokerOrder)       => Promise<RefreshResult>;
+  deleteAccount: (id: number)             => Promise<void>;
 
   reconnect: () => Promise<void>;
 
-  livePnl: Record<string, number>;
-  wsClientStates: { delta: WsClientState | null; ctrader: WsClientState | null };
+  setWebsocketStatus: (s: WsStatus)                       => void;
+  handleWsMessage:    (msg: unknown)                       => void;
+  handleBrokerEvent:  (event: BrokerEvent)                 => void;
+  setOrchestratorRef: (orch: BrokerWsOrchestrator | null)  => void;
 
-  setWebsocketStatus: (s: WsStatus) => void;
-  handleWsMessage: (msg: unknown) => void;
-  handleBrokerEvent: (event: BrokerEvent) => void;
-  setOrchestratorRef: (orch: BrokerWsOrchestrator | null) => void;
-
-  setActiveSymbol: (s: string) => void;
+  setActiveSymbol:    (s: string) => void;
   setActiveTimeframe: (s: string) => void;
 
-  openSelectModal: () => void;
+  openSelectModal:  () => void;
   closeSelectModal: () => void;
-  openAuthModal: (brokerId: BrokerId) => void;
-  closeAuthModal: () => void;
-  setShowPositions: (v: boolean) => void;
-  setShowOrders: (v: boolean) => void;
+  openAuthModal:    (brokerId: BrokerId) => void;
+  closeAuthModal:   () => void;
+  setShowPositions:  (v: boolean) => void;
+  setShowOrders:     (v: boolean) => void;
   setShowPlaceOrder: (v: boolean) => void;
 }
 
-function syncAccount(account: BrokerAccount | null) {
-  return { connectedBroker: account, activeAccount: account };
-}
-function syncStatus(s: ConnectionStatus) {
-  return { brokerStatus: s, connectionStatus: s };
-}
-function syncBalance(b: BrokerBalance | null) {
-  return { accountBalance: b, balance: b };
-}
+// ---------------------------------------------------------------------------
+// Store implementation
+// ---------------------------------------------------------------------------
 
 export const useBrokerStore = create<BrokerState>((set, get) => ({
   accounts: [],
 
+  // Multi-broker maps
+  connectedAccounts:    {},
+  brokerStatuses:       {},
+  brokerBalances:       {},
+  brokerPositions:      {},
+  brokerOrders:         {},
+  brokerErrors:         {},
+  activeBrokerId:       "all",
+  reconnectAttemptsPer: {},
+
+  // Legacy derived (start empty)
   connectedBroker: null,
-  activeAccount: null,
-
-  brokerStatus: "disconnected",
+  activeAccount:   null,
+  brokerStatus:    "disconnected",
   connectionStatus: "disconnected",
+  accountBalance:  null,
+  balance:         null,
+  positions:       [],
+  orders:          [],
+  error:           null,
 
-  accountBalance: null,
-  balance: null,
-
-  positions: [],
-  orders: [],
-  error: null,
-
-  websocketStatus: "disconnected",
-  connectionLatency: null,
-  reconnectingState: false,
-  reconnectAttempts: 0,
+  websocketStatus:    "disconnected",
+  connectionLatency:  null,
+  reconnectingState:  false,
+  reconnectAttempts:  0,
   lastSuccessfulPoll: null,
-  privateWsStatus: "idle",
+  privateWsStatus:    "idle",
 
-  activeSymbol: "BTCUSD",
+  activeSymbol:    "BTCUSD",
   activeTimeframe: "60",
 
-  livePnl: {},
+  livePnl:        {},
   wsClientStates: { delta: null, ctrader: null },
 
-  showSelectModal: false,
-  showAuthModal: false,
-  authBrokerId: null,
-  showPositions: false,
-  showOrders: false,
-  showPlaceOrder: false,
+  showSelectModal:  false,
+  showAuthModal:    false,
+  authBrokerId:     null,
+  showPositions:    false,
+  showOrders:       false,
+  showPlaceOrder:   false,
+
+  // ── Helper to push derived state after any multi-broker mutation ──────────
+  // (called internally — not in interface)
 
   loadAccounts: async () => {
     try {
@@ -295,26 +374,28 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
     } catch { /* ignore */ }
   },
 
-  connectBroker: async (account: BrokerAccount) => {
-    return get().connect(account);
-  },
+  connectBroker: async (account: BrokerAccount) => get().connect(account),
 
   connect: async (account: BrokerAccount) => {
-    clearPoll();
-    clearReconnect();
+    const brokerId = account.broker_id;
+    clearBrokerPoll(brokerId);
+    clearBrokerReconnect(brokerId);
+
     const full = withToken(account);
     saveToken(full.id, full.api_token);
 
-    set({
-      ...syncAccount(full),
-      ...syncStatus("connecting"),
-      ...syncBalance(null),
-      positions: [],
-      orders: [],
-      error: null,
-      reconnectingState: false,
-      reconnectAttempts: 0,
-      privateWsStatus: "idle",
+    // Mark this broker as connecting; keep other brokers untouched
+    set(s => {
+      const brokerStatuses  = { ...s.brokerStatuses,  [brokerId]: "connecting" as ConnectionStatus };
+      const connectedAccounts = { ...s.connectedAccounts, [brokerId]: full };
+      const brokerErrors    = { ...s.brokerErrors,    [brokerId]: null };
+      return {
+        connectedAccounts, brokerStatuses, brokerErrors,
+        ...deriveLegacy(connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId),
+        reconnectAttemptsPer: { ...s.reconnectAttemptsPer, [brokerId]: 0 },
+        reconnectingState: false,
+        privateWsStatus: "idle",
+      };
     });
 
     const [balRes, posRes, ordRes] = await Promise.all([
@@ -325,123 +406,192 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
 
     const allFailed = !balRes.ok && !posRes.ok && !ordRes.ok;
 
-    if (allFailed) {
-      set({ ...syncStatus("error"), error: "All broker API calls failed — check credentials or reconnect" });
-      return;
-    }
+    set(s => {
+      const status: ConnectionStatus = allFailed ? "error" : "connected";
+      const brokerStatuses  = { ...s.brokerStatuses,  [brokerId]: status };
+      const brokerBalances  = { ...s.brokerBalances,  [brokerId]: (balRes.ok && balRes.balance) ? balRes.balance : (s.brokerBalances[brokerId] ?? null) };
+      const brokerPositions = { ...s.brokerPositions, [brokerId]: (posRes.ok && posRes.positions) ? posRes.positions : (s.brokerPositions[brokerId] ?? []) };
+      const brokerOrders    = { ...s.brokerOrders,    [brokerId]: (ordRes.ok && ordRes.orders)    ? ordRes.orders    : (s.brokerOrders[brokerId] ?? []) };
+      const brokerErrors    = { ...s.brokerErrors,    [brokerId]: allFailed ? "All broker API calls failed — check credentials or reconnect" : null };
+      return {
+        brokerStatuses, brokerBalances, brokerPositions, brokerOrders, brokerErrors,
+        ...deriveLegacy(s.connectedAccounts, brokerStatuses, brokerBalances, brokerPositions, brokerOrders, s.activeBrokerId),
+        lastSuccessfulPoll: allFailed ? s.lastSuccessfulPoll : Date.now(),
+      };
+    });
 
-    const patch: Partial<BrokerState> = {
-      ...syncStatus("connected"),
-      lastSuccessfulPoll: Date.now(),
-    };
-    if (balRes.ok && balRes.balance) {
-      patch.accountBalance = balRes.balance;
-      patch.balance = balRes.balance;
-    }
-    if (posRes.ok && posRes.positions) patch.positions = posRes.positions;
-    if (ordRes.ok && ordRes.orders)    patch.orders    = ordRes.orders;
-    set(patch);
+    if (allFailed) return;
 
-    const interval = pollIntervalFor(full.broker_id);
-    pollHandle = setInterval(async () => {
-      const { connectedBroker } = get();
-      if (!connectedBroker) return;
+    // Start independent poll for this broker
+    const handle = setInterval(async () => {
+      const { connectedAccounts } = get();
+      const acct = connectedAccounts[brokerId];
+      if (!acct) return;
 
       const [br, pr, or2] = await Promise.all([
-        doRefreshBalance(connectedBroker),
-        doRefreshPositions(connectedBroker),
-        doRefreshOrders(connectedBroker),
+        doRefreshBalance(acct),
+        doRefreshPositions(acct),
+        doRefreshOrders(acct),
       ]);
 
       const nowAllFailed = !br.ok && !pr.ok && !or2.ok;
-      const patch2: Partial<BrokerState> = {};
 
-      if (br.ok && br.balance) {
-        patch2.accountBalance = br.balance;
-        patch2.balance = br.balance;
-      }
-      if (pr.ok && pr.positions) patch2.positions = pr.positions;
-      if (or2.ok && or2.orders)  patch2.orders    = or2.orders;
+      set(s => {
+        const prevStatus = s.brokerStatuses[brokerId] ?? "disconnected";
+        const status: ConnectionStatus = nowAllFailed && prevStatus === "connected"
+          ? "error"
+          : (!nowAllFailed && prevStatus === "error") ? "connected" : prevStatus;
 
-      if (br.ok || pr.ok || or2.ok) {
-        patch2.lastSuccessfulPoll = Date.now();
-      }
+        const brokerStatuses  = { ...s.brokerStatuses,  [brokerId]: status };
+        const brokerBalances  = { ...s.brokerBalances,  [brokerId]: (br.ok && br.balance) ? br.balance : s.brokerBalances[brokerId] ?? null };
+        const brokerPositions = { ...s.brokerPositions, [brokerId]: (pr.ok && pr.positions) ? pr.positions : s.brokerPositions[brokerId] ?? [] };
+        const brokerOrders    = { ...s.brokerOrders,    [brokerId]: (or2.ok && or2.orders) ? or2.orders : s.brokerOrders[brokerId] ?? [] };
+        return {
+          brokerStatuses, brokerBalances, brokerPositions, brokerOrders,
+          ...deriveLegacy(s.connectedAccounts, brokerStatuses, brokerBalances, brokerPositions, brokerOrders, s.activeBrokerId),
+          lastSuccessfulPoll: nowAllFailed ? s.lastSuccessfulPoll : Date.now(),
+        };
+      });
+    }, pollIntervalFor(brokerId));
 
-      if (nowAllFailed && get().brokerStatus === "connected") {
-        patch2.brokerStatus = "error";
-        patch2.connectionStatus = "error";
-        patch2.error = "Broker API unreachable — will retry";
-      } else if ((br.ok || pr.ok || or2.ok) && get().brokerStatus === "error") {
-        patch2.brokerStatus = "connected";
-        patch2.connectionStatus = "connected";
-        patch2.error = null;
-      }
-
-      if (Object.keys(patch2).length > 0) set(patch2);
-    }, interval);
+    pollHandles.set(brokerId, handle);
   },
 
-  disconnectBroker: () => get().disconnect(),
+  disconnectBroker: (brokerId: string) => {
+    clearBrokerPoll(brokerId);
+    clearBrokerReconnect(brokerId);
 
-  disconnect: () => {
-    clearPoll();
-    clearReconnect();
-    set({
-      ...syncAccount(null),
-      ...syncStatus("disconnected"),
-      ...syncBalance(null),
-      positions: [],
-      orders: [],
-      error: null,
-      reconnectingState: false,
-      reconnectAttempts: 0,
-      privateWsStatus: "idle",
-      showPositions: false,
-      showOrders: false,
-      showPlaceOrder: false,
+    set(s => {
+      const connectedAccounts = Object.fromEntries(Object.entries(s.connectedAccounts).filter(([k]) => k !== brokerId));
+      const brokerStatuses    = Object.fromEntries(Object.entries(s.brokerStatuses).filter(([k]) => k !== brokerId));
+      const brokerBalances    = Object.fromEntries(Object.entries(s.brokerBalances).filter(([k]) => k !== brokerId));
+      const brokerPositions   = Object.fromEntries(Object.entries(s.brokerPositions).filter(([k]) => k !== brokerId));
+      const brokerOrders      = Object.fromEntries(Object.entries(s.brokerOrders).filter(([k]) => k !== brokerId));
+      const brokerErrors      = Object.fromEntries(Object.entries(s.brokerErrors).filter(([k]) => k !== brokerId));
+      const activeBrokerId    = s.activeBrokerId === brokerId ? "all" : s.activeBrokerId;
+      return {
+        connectedAccounts, brokerStatuses, brokerBalances, brokerPositions, brokerOrders, brokerErrors, activeBrokerId,
+        ...deriveLegacy(connectedAccounts, brokerStatuses, brokerBalances, brokerPositions, brokerOrders, activeBrokerId),
+      };
     });
   },
 
-  updateBalance: async () => get().refreshBalance(),
-  refreshBalance: async () => {
-    const { connectedBroker } = get();
-    if (!connectedBroker) return;
-    const r = await doRefreshBalance(connectedBroker);
-    if (r.ok && r.balance) set({ ...syncBalance(r.balance), lastSuccessfulPoll: Date.now() });
+  disconnectAll: () => {
+    clearAllPolls();
+    clearAllReconnects();
+    set({
+      connectedAccounts: {},
+      brokerStatuses:    {},
+      brokerBalances:    {},
+      brokerPositions:   {},
+      brokerOrders:      {},
+      brokerErrors:      {},
+      activeBrokerId:    "all",
+      connectedBroker:   null,
+      activeAccount:     null,
+      connectionStatus:  "disconnected",
+      brokerStatus:      "disconnected",
+      balance:           null,
+      accountBalance:    null,
+      positions:         [],
+      orders:            [],
+      error:             null,
+      reconnectingState: false,
+      reconnectAttempts: 0,
+      privateWsStatus:   "idle",
+      showPositions:     false,
+      showOrders:        false,
+      showPlaceOrder:    false,
+    });
   },
 
-  updatePositions: async () => get().refreshPositions(),
+  disconnect: () => get().disconnectAll(),
+
+  setActiveBrokerId: (id: string) => {
+    set(s => ({
+      activeBrokerId: id,
+      ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, id),
+    }));
+  },
+
+  updateBalance:    async () => get().refreshBalance(),
+  refreshBalance:   async () => {
+    const { connectedBroker } = get();
+    if (!connectedBroker) return;
+    const brokerId = connectedBroker.broker_id;
+    const r = await doRefreshBalance(connectedBroker);
+    if (r.ok && r.balance) {
+      set(s => {
+        const brokerBalances = { ...s.brokerBalances, [brokerId]: r.balance! };
+        return {
+          brokerBalances,
+          ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId),
+          lastSuccessfulPoll: Date.now(),
+        };
+      });
+    }
+  },
+
+  updatePositions:  async () => get().refreshPositions(),
   refreshPositions: async () => {
     const { connectedBroker } = get();
     if (!connectedBroker) return;
+    const brokerId = connectedBroker.broker_id;
     const r = await doRefreshPositions(connectedBroker);
-    if (r.ok && r.positions) set({ positions: r.positions, lastSuccessfulPoll: Date.now() });
+    if (r.ok && r.positions) {
+      set(s => {
+        const brokerPositions = { ...s.brokerPositions, [brokerId]: r.positions! };
+        return {
+          brokerPositions,
+          ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, brokerPositions, s.brokerOrders, s.activeBrokerId),
+          lastSuccessfulPoll: Date.now(),
+        };
+      });
+    }
   },
 
-  updateOrders: async () => get().refreshOrders(),
+  updateOrders:  async () => get().refreshOrders(),
   refreshOrders: async () => {
     const { connectedBroker } = get();
     if (!connectedBroker) return;
+    const brokerId = connectedBroker.broker_id;
     const r = await doRefreshOrders(connectedBroker);
-    if (r.ok && r.orders) set({ orders: r.orders, lastSuccessfulPoll: Date.now() });
+    if (r.ok && r.orders) {
+      set(s => {
+        const brokerOrders = { ...s.brokerOrders, [brokerId]: r.orders! };
+        return {
+          brokerOrders,
+          ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, s.brokerPositions, brokerOrders, s.activeBrokerId),
+          lastSuccessfulPoll: Date.now(),
+        };
+      });
+    }
   },
 
   refreshAll: async () => {
-    const { connectedBroker } = get();
-    if (!connectedBroker) return;
-    const [br, pr, or2] = await Promise.all([
-      doRefreshBalance(connectedBroker),
-      doRefreshPositions(connectedBroker),
-      doRefreshOrders(connectedBroker),
-    ]);
-    const patch: Partial<BrokerState> = {};
-    if (br.ok && br.balance)    { patch.accountBalance = br.balance; patch.balance = br.balance; }
-    if (pr.ok && pr.positions)  patch.positions = pr.positions;
-    if (or2.ok && or2.orders)   patch.orders    = or2.orders;
-    if (Object.keys(patch).length > 0) {
-      patch.lastSuccessfulPoll = Date.now();
-      set(patch);
-    }
+    const { connectedAccounts } = get();
+    const brokerIds = Object.keys(connectedAccounts);
+    if (brokerIds.length === 0) return;
+
+    await Promise.all(brokerIds.map(async brokerId => {
+      const acct = connectedAccounts[brokerId];
+      if (!acct) return;
+      const [br, pr, or2] = await Promise.all([
+        doRefreshBalance(acct),
+        doRefreshPositions(acct),
+        doRefreshOrders(acct),
+      ]);
+      set(s => {
+        const brokerBalances  = { ...s.brokerBalances,  [brokerId]: (br.ok && br.balance)       ? br.balance!   : s.brokerBalances[brokerId] ?? null };
+        const brokerPositions = { ...s.brokerPositions, [brokerId]: (pr.ok && pr.positions)     ? pr.positions! : s.brokerPositions[brokerId] ?? [] };
+        const brokerOrders    = { ...s.brokerOrders,    [brokerId]: (or2.ok && or2.orders)      ? or2.orders!   : s.brokerOrders[brokerId] ?? [] };
+        return {
+          brokerBalances, brokerPositions, brokerOrders,
+          ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, brokerBalances, brokerPositions, brokerOrders, s.activeBrokerId),
+          lastSuccessfulPoll: Date.now(),
+        };
+      });
+    }));
   },
 
   setLatency: (ms: number) => set({ connectionLatency: ms }),
@@ -499,164 +649,134 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
   deleteAccount: async (id: number) => {
     await fetch(`/api/broker-accounts/${id}`, { method: "DELETE" });
     removeToken(id);
-    const { connectedBroker } = get();
-    if (connectedBroker?.id === id) get().disconnect();
+    // Find if this account is currently connected
+    const { connectedAccounts } = get();
+    const brokerId = Object.entries(connectedAccounts)
+      .find(([, acct]) => acct.id === id)?.[0];
+    if (brokerId) get().disconnectBroker(brokerId);
     set(s => ({ accounts: s.accounts.filter(a => a.id !== id) }));
   },
 
   reconnect: async () => {
-    clearPoll();
-    clearReconnect();
-    const { connectedBroker, reconnectAttempts } = get();
+    const { connectedBroker, reconnectAttemptsPer } = get();
     if (!connectedBroker) return;
+    const brokerId = connectedBroker.broker_id;
+    clearBrokerPoll(brokerId);
+    clearBrokerReconnect(brokerId);
 
-    const attempt = reconnectAttempts + 1;
+    const attempt = (reconnectAttemptsPer[brokerId] ?? 0) + 1;
     const delayMs = Math.min(1000 * Math.pow(1.5, attempt - 1), 30_000);
 
-    set({
-      ...syncStatus("connecting"),
-      reconnectingState: true,
-      reconnectAttempts: attempt,
-      error: null,
+    set(s => {
+      const brokerStatuses = { ...s.brokerStatuses, [brokerId]: "connecting" as ConnectionStatus };
+      return {
+        brokerStatuses, reconnectingState: true,
+        reconnectAttemptsPer: { ...s.reconnectAttemptsPer, [brokerId]: attempt },
+        ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId),
+      };
     });
 
-    reconnectHandle = setTimeout(async () => {
-      const { connectedBroker: current } = get();
+    const handle = setTimeout(async () => {
+      const { connectedAccounts } = get();
+      const current = connectedAccounts[brokerId];
       if (!current) return;
       await get().connect(current);
       set({ reconnectingState: false });
     }, attempt > 1 ? delayMs : 0);
+    reconnectHandles.set(brokerId, handle);
   },
 
   setWebsocketStatus: (s: WsStatus) => set({ websocketStatus: s }),
 
-  // ---------------------------------------------------------------------------
-  // handleWsMessage: processes relay messages from the backend (via LiveMarketContext).
-  //
-  // Backend sends these message types:
-  //   pong              — latency ack
-  //   ctrader_status    — cTrader private WS status
-  //   delta_ws_status   — Delta private WS connection state
-  //   delta_ws_error    — Delta authentication / connection error
-  //   delta_balance     — Live balance update (v2/user_balance)
-  //   delta_orders      — Live order update (v2/orders)
-  //   delta_positions   — Live position update (v2/position_lifecycle)
-  // ---------------------------------------------------------------------------
   handleWsMessage: (msg: unknown) => {
     const m = msg as Record<string, unknown>;
     if (!m || typeof m.type !== "string") return;
 
-    // ── Latency pong ──────────────────────────────────────────────────────────
     if (m.type === "pong" && typeof m.latencyMs === "number") {
       set({ connectionLatency: m.latencyMs as number });
       return;
     }
 
-    // ── cTrader status relay ──────────────────────────────────────────────────
     if (m.type === "ctrader_status") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "ctrader") return;
+      const { connectedAccounts } = get();
+      if (!connectedAccounts["ctrader"]) return;
       const st = m as { connected?: boolean };
-      if (st.connected === true && get().brokerStatus !== "connected") {
-        set({ ...syncStatus("connected"), error: null });
-      } else if (st.connected === false && get().brokerStatus === "connected") {
-        set({ ...syncStatus("error"), error: "cTrader WebSocket disconnected — reconnecting" });
+      if (st.connected === true && get().brokerStatuses["ctrader"] !== "connected") {
+        set(s => {
+          const brokerStatuses = { ...s.brokerStatuses, ctrader: "connected" as ConnectionStatus };
+          return { brokerStatuses, ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId), error: null };
+        });
+      } else if (st.connected === false && get().brokerStatuses["ctrader"] === "connected") {
+        set(s => {
+          const brokerStatuses = { ...s.brokerStatuses, ctrader: "error" as ConnectionStatus };
+          return { brokerStatuses, ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId) };
+        });
         get().reconnect();
       }
       return;
     }
 
-    // ── Delta private WS status ───────────────────────────────────────────────
     if (m.type === "delta_ws_status") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "delta") return;
-
+      const { connectedAccounts } = get();
+      if (!connectedAccounts["delta"]) return;
       const status = String(m.status ?? "");
       const statusMap: Record<string, PrivateWsStatus> = {
-        connecting:   "connecting",
-        connected:    "connected",
-        reconnecting: "reconnecting",
-        failed:       "failed",
+        connecting: "connecting", connected: "connected",
+        reconnecting: "reconnecting", failed: "failed",
       };
-      const mapped = statusMap[status] ?? "idle";
-      set({ privateWsStatus: mapped });
+      set({ privateWsStatus: statusMap[status] ?? "idle" });
       return;
     }
 
-    // ── Delta private WS error ────────────────────────────────────────────────
     if (m.type === "delta_ws_error") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "delta") return;
-      set({
-        privateWsStatus: "failed",
-        error: String(m.error ?? "Delta WebSocket authentication failed"),
-      });
+      if (!get().connectedAccounts["delta"]) return;
+      set({ privateWsStatus: "failed", error: String(m.error ?? "Delta WebSocket authentication failed") });
       return;
     }
 
-    // ── Delta live balance update ─────────────────────────────────────────────
     if (m.type === "delta_balance") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "delta") return;
-
+      if (!get().connectedAccounts["delta"]) return;
       const payload = (m.payload ?? m) as Record<string, unknown>;
       const normalized = normalizeDeltaWsBalance(payload);
       if (!normalized) return;
-
-      const existing = get().balance;
-      // Only update if same coin as existing balance, or no balance yet
-      if (!existing || normalized.coin === existing.coin || normalized.coin === "USDT") {
-        set({
-          ...syncBalance(normalized),
-          lastSuccessfulPoll: Date.now(),
-        });
-      }
+      set(s => {
+        const existing = s.brokerBalances["delta"];
+        if (existing && normalized.coin !== existing.coin && normalized.coin !== "USDT") return {};
+        const brokerBalances = { ...s.brokerBalances, delta: normalized };
+        return { brokerBalances, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId), lastSuccessfulPoll: Date.now() };
+      });
       return;
     }
 
-    // ── Delta live order update ───────────────────────────────────────────────
     if (m.type === "delta_orders") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "delta") return;
-
+      if (!get().connectedAccounts["delta"]) return;
       const payload = (m.payload ?? m) as Record<string, unknown>;
       if (!payload["id"]) return;
-
-      const orderId = String(payload["id"]);
+      const orderId    = String(payload["id"]);
       const orderState = String(payload["state"] ?? payload["status"] ?? "open").toLowerCase();
       const isTerminal = DELTA_ORDER_TERMINAL_STATES.has(orderState);
-
       set(s => {
-        const existing = s.orders.filter(o => o.id !== orderId);
-        const orders = isTerminal
-          ? existing
-          : [...existing, normalizeDeltaWsOrder(payload)];
-        return { orders, lastSuccessfulPoll: Date.now() };
+        const existing    = (s.brokerOrders["delta"] ?? []).filter(o => o.id !== orderId);
+        const orders      = isTerminal ? existing : [...existing, normalizeDeltaWsOrder(payload)];
+        const brokerOrders = { ...s.brokerOrders, delta: orders };
+        return { brokerOrders, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, s.brokerPositions, brokerOrders, s.activeBrokerId), lastSuccessfulPoll: Date.now() };
       });
       return;
     }
 
-    // ── Delta live position update ────────────────────────────────────────────
     if (m.type === "delta_positions") {
-      const { connectedBroker } = get();
-      if (!connectedBroker || connectedBroker.broker_id !== "delta") return;
-
-      const payload = (m.payload ?? m) as Record<string, unknown>;
+      if (!get().connectedAccounts["delta"]) return;
+      const payload   = (m.payload ?? m) as Record<string, unknown>;
       const productId = String(payload["product_id"] ?? payload["id"] ?? "");
       if (!productId) return;
-
-      const size = parseFloat(String(payload["size"] ?? "0"));
+      const size     = parseFloat(String(payload["size"] ?? "0"));
       const isClosed = !isFinite(size) || size === 0;
-
       set(s => {
-        const existing = s.positions.filter(p => p.id !== productId);
-        const positions = isClosed
-          ? existing
-          : [...existing, normalizeDeltaWsPosition(payload)];
-        return { positions, lastSuccessfulPoll: Date.now() };
+        const existing      = (s.brokerPositions["delta"] ?? []).filter(p => p.id !== productId);
+        const positions      = isClosed ? existing : [...existing, normalizeDeltaWsPosition(payload)];
+        const brokerPositions = { ...s.brokerPositions, delta: positions };
+        return { brokerPositions, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, brokerPositions, s.brokerOrders, s.activeBrokerId), lastSuccessfulPoll: Date.now() };
       });
-
-      // Sync live PnL tracker with updated positions
       const updated = get().positions;
       _orchestrator?.updatePositions("delta", updated);
       return;
@@ -665,50 +785,52 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
 
   handleBrokerEvent: (event: BrokerEvent) => {
     switch (event.kind) {
-      case "tick": {
-        break;
-      }
+      case "tick": break;
       case "positions": {
-        const { connectedBroker } = get();
-        if (connectedBroker?.broker_id !== event.broker) break;
-        set({ positions: event.positions, lastSuccessfulPoll: event.ts });
+        const brokerId = event.broker as string;
+        if (!get().connectedAccounts[brokerId]) break;
+        set(s => {
+          const brokerPositions = { ...s.brokerPositions, [brokerId]: event.positions };
+          return { brokerPositions, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, brokerPositions, s.brokerOrders, s.activeBrokerId), lastSuccessfulPoll: event.ts };
+        });
         _orchestrator?.updatePositions(event.broker as "delta" | "ctrader", event.positions);
         break;
       }
       case "orders": {
-        const { connectedBroker } = get();
-        if (connectedBroker?.broker_id !== event.broker) break;
-        set({ orders: event.orders, lastSuccessfulPoll: event.ts });
+        const brokerId = event.broker as string;
+        if (!get().connectedAccounts[brokerId]) break;
+        set(s => {
+          const brokerOrders = { ...s.brokerOrders, [brokerId]: event.orders };
+          return { brokerOrders, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, s.brokerPositions, brokerOrders, s.activeBrokerId), lastSuccessfulPoll: event.ts };
+        });
         break;
       }
       case "balance": {
-        const { connectedBroker } = get();
-        if (connectedBroker?.broker_id !== event.broker) break;
-        set({ ...syncBalance(event.balance), lastSuccessfulPoll: event.ts });
+        const brokerId = event.broker as string;
+        if (!get().connectedAccounts[brokerId]) break;
+        set(s => {
+          const brokerBalances = { ...s.brokerBalances, [brokerId]: event.balance };
+          return { brokerBalances, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId), lastSuccessfulPoll: event.ts };
+        });
         break;
       }
       case "pnl": {
-        set(s => ({
-          livePnl: { ...s.livePnl, [event.symbol]: event.unrealisedPnl },
-        }));
+        set(s => ({ livePnl: { ...s.livePnl, [event.symbol]: event.unrealisedPnl } }));
         break;
       }
       case "status": {
-        const { connectedBroker } = get();
-        if (connectedBroker?.broker_id !== event.broker) break;
-        const statusMap: Record<string, import("@/types/broker").ConnectionStatus> = {
-          connected:    "connected",
-          connecting:   "connecting",
-          reconnecting: "connecting",
-          disconnected: "disconnected",
-          error:        "error",
-          idle:         "disconnected",
+        const brokerId = event.broker as string;
+        if (!get().connectedAccounts[brokerId]) break;
+        const statusMap: Record<string, ConnectionStatus> = {
+          connected: "connected", connecting: "connecting", reconnecting: "connecting",
+          disconnected: "disconnected", error: "error", idle: "disconnected",
         };
         const mapped = statusMap[event.status] ?? "error";
-        set({ ...syncStatus(mapped) });
-        if (event.status === "error" || event.status === "disconnected") {
-          get().reconnect();
-        }
+        set(s => {
+          const brokerStatuses = { ...s.brokerStatuses, [brokerId]: mapped };
+          return { brokerStatuses, ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId) };
+        });
+        if (event.status === "error" || event.status === "disconnected") get().reconnect();
         break;
       }
       case "latency": {
@@ -723,14 +845,14 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
     set({ wsClientStates: orch?.state ?? { delta: null, ctrader: null } });
   },
 
-  setActiveSymbol: (s: string) => set({ activeSymbol: s }),
+  setActiveSymbol:    (s: string) => set({ activeSymbol: s }),
   setActiveTimeframe: (s: string) => set({ activeTimeframe: s }),
 
-  openSelectModal: () => set({ showSelectModal: true }),
+  openSelectModal:  () => set({ showSelectModal: true }),
   closeSelectModal: () => set({ showSelectModal: false }),
-  openAuthModal: (brokerId: BrokerId) => set({ showAuthModal: true, authBrokerId: brokerId, showSelectModal: false }),
-  closeAuthModal: () => set({ showAuthModal: false, authBrokerId: null }),
-  setShowPositions: (v) => set({ showPositions: v }),
-  setShowOrders: (v) => set({ showOrders: v }),
+  openAuthModal:    (brokerId: BrokerId) => set({ showAuthModal: true, authBrokerId: brokerId, showSelectModal: false }),
+  closeAuthModal:   () => set({ showAuthModal: false, authBrokerId: null }),
+  setShowPositions:  (v) => set({ showPositions: v }),
+  setShowOrders:     (v) => set({ showOrders: v }),
   setShowPlaceOrder: (v) => set({ showPlaceOrder: v }),
 }));
