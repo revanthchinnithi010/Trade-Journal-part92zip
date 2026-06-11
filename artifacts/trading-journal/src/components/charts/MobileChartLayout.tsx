@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useRef, useEffect } from "react";
+import { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
 import {
@@ -513,10 +513,50 @@ function BottomSheet({ title, onClose, children, maxHeight = "75vh" }: {
   );
 }
 
+// ── Custom TF parser (mirrors desktop TFDropdown logic) ────────────────────
+function parseCustomTF(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const m = s.match(/^(\d+)\s*(m|h|d|w)?$/i);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (n <= 0) return null;
+  const unit = (m[2] ?? "m").toLowerCase();
+  if (unit === "m") return String(n);
+  if (unit === "h") return n === 1 ? "60" : String(n * 60);
+  if (unit === "d") return n === 1 ? "D" : String(n * 1440);
+  if (unit === "w") return n === 1 ? "W" : String(n * 10080);
+  return null;
+}
+
 // ── TF Sheet ───────────────────────────────────────────────────────────────
 function TFSheet({ interval, onSelect, onClose }: {
   interval: string; onSelect: (v: string) => void; onClose: () => void;
 }) {
+  const [customVal, setCustomVal] = useState("");
+  const [customErr, setCustomErr] = useState(false);
+  const [customOk,  setCustomOk]  = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleCustomChange = (val: string) => {
+    setCustomVal(val);
+    setCustomErr(false);
+    setCustomOk(false);
+  };
+
+  const commitCustom = useCallback(() => {
+    const parsed = parseCustomTF(customVal);
+    if (!parsed) { setCustomErr(true); return; }
+    setCustomOk(true);
+    setTimeout(() => { onSelect(parsed); onClose(); }, 120);
+  }, [customVal, onSelect, onClose]);
+
+  const parsedPreview = useMemo(() => {
+    if (!customVal.trim()) return null;
+    const p = parseCustomTF(customVal);
+    return p ? tfLabel(p) : null;
+  }, [customVal]);
+
   return (
     <BottomSheet title="Timeframe" onClose={onClose}>
       <div style={{ overflowY:"auto", padding:"12px 14px 8px" }}>
@@ -541,6 +581,66 @@ function TFSheet({ interval, onSelect, onClose }: {
             </div>
           </div>
         ))}
+
+        {/* ── Custom timeframe ── */}
+        <div style={{ width:"100%", height:1, background:"rgba(255,255,255,0.07)", margin:"4px 0 14px" }} />
+        <p style={{ fontSize:9.5, fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"rgba(255,255,255,0.28)", margin:"0 0 9px" }}>Custom</p>
+        <div style={{ display:"flex", gap:8, alignItems:"stretch" }}>
+          {/* Input */}
+          <div style={{
+            flex:1, display:"flex", alignItems:"center", gap:8,
+            background: customErr ? "rgba(239,68,68,0.08)" : "rgba(255,255,255,0.06)",
+            border: `1px solid ${customErr ? "rgba(239,68,68,0.40)" : customOk ? "rgba(245,158,11,0.40)" : "rgba(255,255,255,0.12)"}`,
+            borderRadius:10, padding:"0 12px", height:42,
+            transition:"border-color 0.15s, background 0.15s",
+          }}>
+            <input
+              ref={inputRef}
+              value={customVal}
+              onChange={e => handleCustomChange(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") commitCustom(); }}
+              placeholder="e.g. 2, 45, 2h, 4h"
+              inputMode="text"
+              style={{
+                flex:1, background:"none", border:"none", outline:"none",
+                color:"#fff", fontSize:13.5, caretColor:"#f59e0b", minWidth:0,
+              }}
+            />
+            {/* live preview badge */}
+            {parsedPreview && !customErr && (
+              <span style={{
+                fontSize:11, fontWeight:700, color:"#f59e0b",
+                background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.25)",
+                borderRadius:5, padding:"2px 6px", flexShrink:0,
+              }}>
+                {parsedPreview}
+              </span>
+            )}
+          </div>
+
+          {/* Apply button */}
+          <button
+            onClick={commitCustom}
+            style={{
+              height:42, padding:"0 16px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", flexShrink:0,
+              background: customOk ? "rgba(245,158,11,0.18)" : "rgba(245,158,11,0.13)",
+              color: "#f59e0b",
+              border: `1px solid ${customOk ? "rgba(245,158,11,0.50)" : "rgba(245,158,11,0.30)"}`,
+              transition:"background 0.15s, border-color 0.15s",
+            }}
+          >
+            Apply
+          </button>
+        </div>
+
+        {/* Error hint */}
+        {customErr && (
+          <p style={{ fontSize:11.5, color:"rgba(239,68,68,0.75)", margin:"6px 0 0", lineHeight:1.4 }}>
+            Invalid format. Try <span style={{ fontWeight:700 }}>45</span>, <span style={{ fontWeight:700 }}>2h</span>, or <span style={{ fontWeight:700 }}>4h</span>.
+          </p>
+        )}
+
+        <div style={{ height:12 }} />
       </div>
     </BottomSheet>
   );
