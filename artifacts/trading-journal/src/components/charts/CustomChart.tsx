@@ -1507,7 +1507,15 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       // handler (handleScale.pinch: true) takes over from here.
       // Do NOT stopPropagation — LWC's pinch needs to see this event.
       if (pressCount >= 2) {
+        // IMPORTANT: release pointer capture on the first finger BEFORE cancelIg()
+        // clears ig. The container captured pointer 1 on first touch (line below);
+        // if we don't release it, LWC never sees pointer 1 events and can't detect
+        // the pinch gesture — causing zoom to silently fail on mobile.
+        const firstPointerId = ig?.pointerId;
         cancelIg();
+        if (firstPointerId !== undefined) {
+          try { container.releasePointerCapture(firstPointerId); } catch { /* ok */ }
+        }
         ig = {
           mode: 'PINCH_ZOOM', pointerId: e.pointerId,
           startX: e.clientX, startY: e.clientY,
