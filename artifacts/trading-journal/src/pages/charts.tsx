@@ -1627,9 +1627,10 @@ export default function Charts() {
 
         {/* RIGHT SECTION */}
 
-        {/* Broker Connect/Trade button */}
+        {/* Broker Connect/Manage button — always opens broker management modal */}
         <button
-          onClick={activeAccount && brokerStatus === "connected" ? () => setShowPlaceOrder(true) : openSelectModal}
+          onClick={openSelectModal}
+          title={activeAccount ? "Manage broker connection" : "Connect a broker"}
           style={{
             height: 34, padding: "0 12px", borderRadius: 8, cursor: "pointer", flexShrink: 0,
             display: "flex", alignItems: "center", gap: 6,
@@ -1641,6 +1642,12 @@ export default function Charts() {
               : "rgba(183,255,90,0.2)"}`,
             transition: "all 0.15s",
           }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = activeAccount
+            ? brokerStatus === "connected" ? "rgba(74,222,128,0.2)" : "rgba(245,158,11,0.2)"
+            : "rgba(183,255,90,0.15)"; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = activeAccount
+            ? brokerStatus === "connected" ? "rgba(74,222,128,0.12)" : "rgba(245,158,11,0.12)"
+            : "rgba(183,255,90,0.08)"; }}
         >
           {activeAccount ? (
             <>
