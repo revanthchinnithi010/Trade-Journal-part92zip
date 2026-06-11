@@ -128,8 +128,12 @@ export function MobileBottomNav() {
   const initialized = useRef(false);
   const prevCircleX = useRef<number | null>(null);
   const isAnimating = useRef(false);
+  const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeIdx = TABS.findIndex(t => t.kind === "link" && t.href === location);
+  // visualIdx drives the bubble — normally mirrors activeIdx, but can temporarily
+  // point at the Menu tab (index 4) so the bubble travels there on tap.
+  const [visualIdx, setVisualIdx] = useState(activeIdx >= 0 ? activeIdx : 0);
 
   useEffect(() => {
     ensureCSS();
@@ -139,11 +143,25 @@ export function MobileBottomNav() {
     update();
     const ro = new ResizeObserver(update);
     if (pillRef.current) ro.observe(pillRef.current);
-    return () => ro.disconnect();
+    return () => {
+      ro.disconnect();
+      if (revertTimer.current) clearTimeout(revertTimer.current);
+    };
   }, []);
 
-  const circleX = tabW > 0 && activeIdx >= 0
-    ? activeIdx * tabW + (tabW - CIRCLE_D) / 2
+  // When location changes (real navigation), sync visualIdx and cancel any revert
+  useEffect(() => {
+    if (activeIdx >= 0) {
+      if (revertTimer.current) {
+        clearTimeout(revertTimer.current);
+        revertTimer.current = null;
+      }
+      setVisualIdx(activeIdx);
+    }
+  }, [activeIdx]);
+
+  const circleX = tabW > 0 && visualIdx >= 0
+    ? visualIdx * tabW + (tabW - CIRCLE_D) / 2
     : 0;
 
   useEffect(() => {
@@ -301,7 +319,8 @@ export function MobileBottomNav() {
       >
         {/* ── Icons + labels (z-index 10 keeps them above bubble) ── */}
         {TABS.map((tab, idx) => {
-          const active = tab.kind === "link" && location === tab.href;
+          // Use visualIdx so Menu icon glows when bubble is there
+          const active = idx === visualIdx;
           const key    = tab.kind === "link" ? tab.href : `action-${idx}`;
 
           const inner = (
@@ -360,7 +379,16 @@ export function MobileBottomNav() {
             return (
               <div
                 key={key}
-                onClick={tab.onTap}
+                onClick={() => {
+                  // Move bubble to Menu, then revert to current route after animation
+                  if (revertTimer.current) clearTimeout(revertTimer.current);
+                  setVisualIdx(idx);
+                  revertTimer.current = setTimeout(() => {
+                    setVisualIdx(prev => activeIdx >= 0 ? activeIdx : prev);
+                    revertTimer.current = null;
+                  }, 520);
+                  tab.onTap();
+                }}
                 style={{
                   flex:                    1,
                   display:                 "flex",
