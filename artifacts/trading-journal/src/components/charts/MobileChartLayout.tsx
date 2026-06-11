@@ -1,4 +1,5 @@
 import { memo, useState, useCallback, useRef, useEffect } from "react";
+import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
 import {
   X, ChevronDown, ChevronLeft, ChevronRight,
@@ -1475,6 +1476,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     onBarReplay,
   } = props;
 
+  const [, navigate]  = useLocation();
   const chartStore = useChartStore();
   const { wsStatus } = useLiveMarketContext();
   const activeTick = useSymbolTick(activeKey);
@@ -1553,7 +1555,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           badge={badge}
           interval={interval}
           watchlistItems={watchlistItems}
-          onSymbol={() => setShowWatchlist(true)}
+          onSymbol={() => navigate("/markets")}
           onTF={() => setShowTFSheet(true)}
           onDraw={() => setShowDrawingSheet(true)}
           onBroker={() => setShowBrokerSheet(true)}
