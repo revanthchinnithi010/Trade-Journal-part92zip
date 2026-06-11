@@ -221,12 +221,18 @@ function renderPositionTool(
   ctx.beginPath(); ctx.moveTo(ELX, entY); ctx.lineTo(ERX, entY); ctx.stroke();
   ctx.setLineDash([]);
 
-  // Labels (simplified - just price text near lines)
+  // Labels — PnL % is always calculated relative to direction:
+  // Long:  TP profit = (tpPrice - entry) / entry;  SL loss = (entry - slPrice) / entry
+  // Short: TP profit = (entry - tpPrice) / entry;  SL loss = (slPrice - entry) / entry
   if (profitH >= 28 && ZW >= 60) {
-    const reward = Math.abs(tpPrice - entryPrice);
-    const risk   = Math.abs(slPrice  - entryPrice);
-    const rrStr  = risk > 0 ? (reward / risk).toFixed(2) : "∞";
-    const tpPct  = Math.abs((tpPrice - entryPrice) / entryPrice * 100).toFixed(2);
+    const reward   = Math.abs(tpPrice - entryPrice);
+    const risk     = Math.abs(slPrice  - entryPrice);
+    const rrStr    = risk > 0 ? (reward / risk).toFixed(2) : "∞";
+    const tpPnlPct = isLong
+      ? ((tpPrice - entryPrice) / entryPrice * 100)
+      : ((entryPrice - tpPrice) / entryPrice * 100);
+    const tpPct    = Math.abs(tpPnlPct).toFixed(2);
+    const tpSign   = tpPnlPct >= 0 ? "+" : "-";
     const LBL_H = 26;
     const tpBarY = isLong ? tpY : tpY - LBL_H;
     ctx.fillStyle = hexToRgba(profitHex, 0.95);
@@ -235,10 +241,14 @@ function renderPositionTool(
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(`Target: ${fmtPrice(tpPrice)}  (+${tpPct}%)  R:R ${rrStr}`, ELX + 8, tpBarY + LBL_H / 2);
+    ctx.fillText(`Target: ${fmtPrice(tpPrice)}  (${tpSign}${tpPct}%)  R:R ${rrStr}`, ELX + 8, tpBarY + LBL_H / 2);
   }
   if (lossH >= 28 && ZW >= 60) {
-    const slPct  = Math.abs((slPrice - entryPrice) / entryPrice * 100).toFixed(2);
+    const slPnlPct = isLong
+      ? ((entryPrice - slPrice) / entryPrice * 100)
+      : ((slPrice - entryPrice) / entryPrice * 100);
+    const slPct    = Math.abs(slPnlPct).toFixed(2);
+    const slSign   = slPnlPct >= 0 ? "-" : "+";
     const LBL_H = 26;
     const slBarY = isLong ? slY - LBL_H : slY;
     ctx.fillStyle = hexToRgba(stopHex, 0.95);
@@ -247,7 +257,7 @@ function renderPositionTool(
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(`Stop: ${fmtPrice(slPrice)}  (-${slPct}%)`, ELX + 8, slBarY + LBL_H / 2);
+    ctx.fillText(`Stop: ${fmtPrice(slPrice)}  (${slSign}${slPct}%)`, ELX + 8, slBarY + LBL_H / 2);
   }
 
   // Selection glow
