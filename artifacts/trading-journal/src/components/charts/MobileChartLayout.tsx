@@ -529,9 +529,10 @@ function TFSheet({ interval, onSelect, onClose }: {
                 return (
                   <button key={v} onClick={() => { onSelect(v); onClose(); }} style={{
                     height:42, minWidth:56, padding:"0 16px", borderRadius:10, fontSize:13, fontWeight:600, cursor:"pointer",
-                    background: active ? ACCENT : BTN_BG,
-                    color: active ? "#07110D" : TEXT_MED,
-                    border: `1px solid ${active ? ACCENT : BTN_BORDER}`,
+                    background: active ? "rgba(245,158,11,0.13)" : BTN_BG,
+                    color: active ? "#f59e0b" : TEXT_MED,
+                    border: `1px solid ${active ? "rgba(245,158,11,0.35)" : BTN_BORDER}`,
+                    transition: "background 0.15s, border-color 0.15s, color 0.15s",
                   }}>
                     {tfLabel(v)}
                   </button>
