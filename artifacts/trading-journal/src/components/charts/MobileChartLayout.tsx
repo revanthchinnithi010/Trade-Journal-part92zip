@@ -1909,6 +1909,7 @@ function MiniWatchlistPopup({
 function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
   onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
+  brokerConnected,
 }: {
   activeKey: string; badge: string; interval: string;
   watchlistItems: { symbol: string; badge?: string }[];
@@ -1916,6 +1917,7 @@ function MiniControlBar({
   onBroker: () => void; onMore: () => void;
   onPrev: () => void; onNext: () => void;
   onFullscreen: () => void; isFullscreen: boolean;
+  brokerConnected: boolean;
 }) {
   const currentIdx = watchlistItems.findIndex(i => i.symbol === activeKey);
   const hasPrev = currentIdx > 0;
@@ -2050,7 +2052,17 @@ function MiniControlBar({
 
         {/* Broker connect */}
         <CtrlBtn onClick={onBroker}>
-          <Plug style={{ width:17, height:17, color: GL_TEAL }} />
+          <div style={{ position:"relative", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <Plug style={{ width:17, height:17, color: brokerConnected ? "#B7FF5A" : GL_TEAL }} />
+            <div style={{
+              position:"absolute", top:-3, right:-4,
+              width:7, height:7, borderRadius:"50%",
+              background: brokerConnected ? "#22C55E" : "rgba(167,184,169,0.35)",
+              border: "1.5px solid rgba(11,16,23,0.9)",
+              boxShadow: brokerConnected ? "0 0 6px rgba(34,197,94,0.7)" : "none",
+              transition: "background 0.3s, box-shadow 0.3s",
+            }} />
+          </div>
         </CtrlBtn>
 
         {/* More options */}
@@ -2144,7 +2156,8 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const { items: watchlistItems } = useWatchlist();
   const { selectedDrawingId, drawings, activeTool, setActiveTool } = useDrawingStore();
   const selectedDrawing = drawings.find(d => d.id === selectedDrawingId) ?? null;
-  const { openSelectModal, showSelectModal, showAuthModal } = useBrokerStore();
+  const { openSelectModal, showSelectModal, showAuthModal, activeAccount, connectionStatus } = useBrokerStore();
+  const brokerConnected = !!activeAccount && connectionStatus === "connected";
 
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
@@ -2232,6 +2245,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onNext={handleNext}
           onFullscreen={handleFullscreen}
           isFullscreen={isFullscreen}
+          brokerConnected={brokerConnected}
         />
       )}
 
