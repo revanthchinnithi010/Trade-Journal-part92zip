@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useRef, useEffect } from "react";
+import { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
 import {
@@ -1268,14 +1268,185 @@ function DrawingMiniBar({
   );
 }
 
+// ── Symbol Reel Picker ──────────────────────────────────────────────────────
+const REEL_ITEM_H = 52;
+const REEL_VISIBLE = 5;
+const REEL_WINDOW_H = REEL_ITEM_H * REEL_VISIBLE;
+
+function SymbolReelPicker({
+  items, activeSymbol, anchorRect, onSelect, onClose,
+}: {
+  items: { symbol: string; badge: string }[];
+  activeSymbol: string;
+  anchorRect: DOMRect;
+  onSelect: (sym: string) => void;
+  onClose: () => void;
+}) {
+  const reelRef  = useRef<HTMLDivElement>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activeIdx = Math.max(0, items.findIndex(i => i.symbol === activeSymbol));
+  const [centeredIdx, setCenteredIdx] = useState(activeIdx);
+  const committedRef = useRef(false);
+
+  const left   = Math.max(8, Math.min(anchorRect.left, window.innerWidth - 168));
+  const bottom = window.innerHeight - anchorRect.top + 10;
+
+  useEffect(() => {
+    const el = reelRef.current;
+    if (!el) return;
+    el.scrollTop = activeIdx * REEL_ITEM_H;
+    requestAnimationFrame(() => {
+      el.scrollTop = activeIdx * REEL_ITEM_H;
+    });
+  }, [activeIdx]);
+
+  const commit = useCallback((idx: number) => {
+    if (committedRef.current) return;
+    committedRef.current = true;
+    onSelect(items[Math.max(0, Math.min(items.length - 1, idx))].symbol);
+  }, [items, onSelect]);
+
+  const handleScroll = useCallback(() => {
+    const el = reelRef.current;
+    if (!el) return;
+    const idx = Math.max(0, Math.min(items.length - 1, Math.round(el.scrollTop / REEL_ITEM_H)));
+    setCenteredIdx(idx);
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => commit(idx), 320);
+  }, [items.length, commit]);
+
+  const handleItemTap = useCallback((idx: number) => {
+    const el = reelRef.current;
+    if (el) el.scrollTo({ top: idx * REEL_ITEM_H, behavior: "smooth" });
+    if (timerRef.current) clearTimeout(timerRef.current);
+    setTimeout(() => commit(idx), 240);
+  }, [commit]);
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
+
+  return createPortal(
+    <div
+      onClick={() => { commit(centeredIdx); onClose(); }}
+      style={{ position:"fixed", inset:0, zIndex:450, touchAction:"none" }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          position:"fixed", left, bottom,
+          width:160, height:REEL_WINDOW_H,
+          background:"rgba(6,7,16,0.98)",
+          backdropFilter:"blur(40px) saturate(220%)",
+          WebkitBackdropFilter:"blur(40px) saturate(220%)",
+          border:"1px solid rgba(255,255,255,0.13)",
+          borderRadius:18,
+          overflow:"hidden",
+          boxShadow:[
+            "0 -12px 48px rgba(0,0,0,0.90)",
+            "0 -4px 16px rgba(0,0,0,0.60)",
+            "0 0 0 1px rgba(255,255,255,0.05) inset",
+          ].join(","),
+          animation:"reel-pop-in 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
+        }}
+      >
+        {/* Center selection highlight */}
+        <div aria-hidden style={{
+          position:"absolute", top:"50%", left:10, right:10,
+          transform:"translateY(-50%)",
+          height:REEL_ITEM_H - 6,
+          borderRadius:12,
+          background:"rgba(255,255,255,0.06)",
+          border:"1px solid rgba(255,255,255,0.18)",
+          pointerEvents:"none",
+          zIndex:3,
+        }} />
+
+        {/* Scrollable drum */}
+        <div
+          ref={reelRef}
+          onScroll={handleScroll}
+          style={{
+            height:"100%",
+            overflowY:"scroll",
+            scrollSnapType:"y mandatory",
+            scrollbarWidth:"none",
+            paddingTop: REEL_ITEM_H * 2,
+            paddingBottom: REEL_ITEM_H * 2,
+            position:"relative", zIndex:2,
+          } as React.CSSProperties}
+        >
+          {items.map((item, idx) => {
+            const dist   = Math.abs(idx - centeredIdx);
+            const active = idx === centeredIdx;
+            const opacity = dist === 0 ? 1 : dist === 1 ? 0.46 : 0.18;
+            const scale  = active ? 1.05 : 1;
+            return (
+              <div
+                key={item.symbol}
+                onClick={() => handleItemTap(idx)}
+                style={{
+                  height:REEL_ITEM_H,
+                  scrollSnapAlign:"center",
+                  display:"flex", alignItems:"center", justifyContent:"flex-start",
+                  gap:9, paddingLeft:14, paddingRight:10,
+                  cursor:"pointer",
+                  opacity,
+                  transform:`scale(${scale})`,
+                  transition:"opacity 0.12s, transform 0.12s",
+                }}
+              >
+                <div style={{
+                  width:active?26:22, height:active?26:22,
+                  borderRadius:8, flexShrink:0,
+                  background: active ? "rgba(255,255,255,0.14)" : "rgba(255,255,255,0.07)",
+                  border: active ? "1px solid rgba(255,255,255,0.32)" : "1px solid rgba(255,255,255,0.08)",
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:7, fontWeight:900,
+                  color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.40)",
+                  transition:"all 0.12s",
+                }}>
+                  {item.badge.slice(0,3)}
+                </div>
+                <span style={{
+                  fontSize: active ? 13.5 : 12.5,
+                  fontWeight: active ? 700 : 500,
+                  color: active ? "rgba(255,255,255,0.95)" : "rgba(255,255,255,0.55)",
+                  whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                  maxWidth:90,
+                  transition:"all 0.12s",
+                }}>
+                  {item.badge}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Top fade */}
+        <div aria-hidden style={{
+          position:"absolute", top:0, left:0, right:0,
+          height:REEL_ITEM_H * 2 + 2, pointerEvents:"none", zIndex:4,
+          background:"linear-gradient(to bottom, rgba(6,7,16,0.98) 20%, rgba(6,7,16,0.80) 60%, transparent)",
+        }} />
+        {/* Bottom fade */}
+        <div aria-hidden style={{
+          position:"absolute", bottom:0, left:0, right:0,
+          height:REEL_ITEM_H * 2 + 2, pointerEvents:"none", zIndex:4,
+          background:"linear-gradient(to top, rgba(6,7,16,0.98) 20%, rgba(6,7,16,0.80) 60%, transparent)",
+        }} />
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── MiniControlBar ─────────────────────────────────────────────────────────
 function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
-  onSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
+  onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
 }: {
   activeKey: string; badge: string; interval: string;
-  watchlistItems: { symbol: string }[];
-  onSymbol: () => void; onTF: () => void; onDraw: () => void;
+  watchlistItems: { symbol: string; badge?: string }[];
+  onSelectSymbol: (key: string) => void; onTF: () => void; onDraw: () => void;
   onBroker: () => void; onMore: () => void;
   onPrev: () => void; onNext: () => void;
   onFullscreen: () => void; isFullscreen: boolean;
@@ -1283,6 +1454,29 @@ function MiniControlBar({
   const currentIdx = watchlistItems.findIndex(i => i.symbol === activeKey);
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < watchlistItems.length - 1 && currentIdx >= 0;
+
+  const [showReel,    setShowReel]    = useState(false);
+  const [reelAnchor,  setReelAnchor]  = useState<DOMRect | null>(null);
+  const symbolBtnRef = useRef<HTMLButtonElement>(null);
+
+  const reelItems = useMemo(() =>
+    watchlistItems.map(w => ({
+      symbol: w.symbol,
+      badge:  (w.badge ?? w.symbol.slice(0,4).toUpperCase()),
+    })),
+  [watchlistItems]);
+
+  const handleSymbolBtn = useCallback(() => {
+    const rect = symbolBtnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setReelAnchor(rect);
+    setShowReel(true);
+  }, []);
+
+  const handleReelSelect = useCallback((sym: string) => {
+    setShowReel(false);
+    onSelectSymbol(sym);
+  }, [onSelectSymbol]);
 
   const CtrlBtn = ({ onClick, children, active = false, disabled = false }: {
     onClick: () => void; children: React.ReactNode; active?: boolean; disabled?: boolean;
@@ -1351,15 +1545,18 @@ function MiniControlBar({
           background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.30),rgba(255,255,255,0.18),transparent)",
           borderRadius:1,
         }} />
-        {/* Symbol button */}
+        {/* Symbol button — opens reel picker */}
         <button
-          onClick={onSymbol}
+          ref={symbolBtnRef}
+          onClick={handleSymbolBtn}
           onPointerDown={pillPress} onPointerUp={pillRelease} onPointerCancel={pillRelease}
           style={{
             height:36, padding:"0 10px", borderRadius:11, flexShrink:0,
             display:"flex", alignItems:"center", gap:6,
-            background: GL_PILL_BG, border:`1px solid ${GL_PILL_BDR}`, cursor:"pointer",
-            maxWidth:114,
+            background: showReel ? "rgba(255,255,255,0.12)" : GL_PILL_BG,
+            border: showReel ? `1px solid rgba(255,255,255,0.28)` : `1px solid ${GL_PILL_BDR}`,
+            cursor:"pointer", maxWidth:114,
+            transition:"background 0.15s, border-color 0.15s",
           }}
         >
           <div style={{
@@ -1372,7 +1569,7 @@ function MiniControlBar({
           <span style={{ fontSize:12.5, fontWeight:700, color: TEXT_HI, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:62 }}>
             {badge}
           </span>
-          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85 }} />
+          <ChevronDown style={{ width:11, height:11, color: GL_TEAL, flexShrink:0, opacity:0.85, transform: showReel ? "rotate(180deg)" : "rotate(0deg)", transition:"transform 0.18s" }} />
         </button>
 
         {/* TF button */}
@@ -1427,6 +1624,17 @@ function MiniControlBar({
         </CtrlBtn>
         </div>{/* /tj-ctrl-bar-inner */}
       </div>{/* /tj-ctrl-bar-glow */}
+
+      {/* Reel picker portal */}
+      {showReel && reelAnchor && (
+        <SymbolReelPicker
+          items={reelItems}
+          activeSymbol={activeKey}
+          anchorRect={reelAnchor}
+          onSelect={handleReelSelect}
+          onClose={() => setShowReel(false)}
+        />
+      )}
     </div>
   );
 }
@@ -1555,7 +1763,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           badge={badge}
           interval={interval}
           watchlistItems={watchlistItems}
-          onSymbol={() => navigate("/markets")}
+          onSelectSymbol={selectSymbol}
           onTF={() => setShowTFSheet(true)}
           onDraw={() => setShowDrawingSheet(true)}
           onBroker={() => setShowBrokerSheet(true)}
