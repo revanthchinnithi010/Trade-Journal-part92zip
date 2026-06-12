@@ -2559,6 +2559,11 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     mobileDrawCrossPx.current    = null;
     mobileDrawDragAnchor.current = null;
     mobilePointerStart.current   = null;
+    // Hide crosshair SVG lines immediately (they may still be display:"" from a
+    // previous draw session when switching between 2-point tools while isDrawMode
+    // stays true and the SVG group is never unmounted).
+    if (xhairHRef.current) xhairHRef.current.style.display = "none";
+    if (xhairVRef.current) xhairVRef.current.style.display = "none";
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
 
@@ -3468,6 +3473,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         setPhase("placed_first");
         setIsDrawing(true);
         clickPhaseRef.current = 1;
+        // Defensively re-assert crosshair lines visible (React re-renders may not
+        // have reset them, but being explicit guarantees they stay shown).
+        if (xhairHRef.current) xhairHRef.current.style.display = "";
+        if (xhairVRef.current) xhairVRef.current.style.display = "";
       } else {
         // Second tap → place Point B and commit
         setSnapIndicator(null);
@@ -3488,10 +3497,20 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         } else {
           await saveDrawing([anchor!, pt]);
         }
-        setAnchor(null); setMousePoint(null);
-        setPhase("idle"); setIsDrawing(false);
+        setAnchor(null);
+        setPhase("idle");
+        setIsDrawing(false);
         clickPhaseRef.current = 0;
-        if (!useDrawingStore.getState().stayInDraw) setActiveTool("cursor");
+        if (useDrawingStore.getState().stayInDraw) {
+          // Keep crosshair + cursor dot at Point B — user can drag immediately
+          // to start the next trendline without re-selecting the tool.
+          setMousePoint(pt);
+          if (xhairHRef.current) xhairHRef.current.style.display = "";
+          if (xhairVRef.current) xhairVRef.current.style.display = "";
+        } else {
+          setMousePoint(null);
+          setActiveTool("cursor");
+        }
       }
       return;
     }
@@ -3837,8 +3856,14 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
             </g>
           )}
 
-          {/* Moving cursor dot */}
-          {(phase === "dragging" || phase === "placed_first") && mousePoint && (() => {
+          {/* Moving cursor dot
+              Extra condition for mobile: also show during "idle" phase so the dot
+              is visible immediately after tool select (before first tap) and after
+              a trendline commit with stayInDraw=true (between drawings).         */}
+          {(phase === "dragging" || phase === "placed_first" ||
+            (isMobile && isDrawMode && phase === "idle" &&
+             !isFreehand(activeTool) && activeTool !== "eraser" && pointsNeeded(activeTool) === 2))
+           && mousePoint && (() => {
             const p = toPx(mousePoint);
             return p ? <circle cx={p.x} cy={p.y} r={4} fill={activeStyle.color} opacity={0.9} style={{ willChange: "cx,cy" }} /> : null;
           })()}
