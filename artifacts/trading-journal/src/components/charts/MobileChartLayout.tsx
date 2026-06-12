@@ -494,7 +494,10 @@ function BottomSheet({
     bd.style.opacity = String(Math.max(0.05, 1 - ratio * 0.90));
   }, []);
 
-  // ── RAF: write translateY to DOM ──────────────────────────────────────────
+  // ── RAF: write translateY + live border-radius interpolation ────────────
+  // border-radius is 0px at FULL (y≈0) → 24px at HALF (y=halfY).
+  // Interpolated every frame during drag — zero layout thrash because the
+  // element already has will-change:transform (composited layer).
   const applyDrag = useCallback(() => {
     ds.current.rafPending = false;
     const sheet = sheetRef.current;
@@ -502,20 +505,29 @@ function BottomSheet({
     const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
     const y = Math.max(-14, raw); // 14px overscroll at top for rubbery feel
     sheet.style.transform = `translateY(${y}px)`;
+    // Live corner morph: 0 at full, 24 at half
+    const { half } = snapYRef.current;
+    const ratio = Math.min(1, Math.max(0, y / Math.max(1, half)));
+    const br = Math.round(ratio * 24);
+    sheet.style.borderRadius = br > 0 ? `${br}px ${br}px 0 0` : "0";
     syncBackdrop(y);
   }, [syncBackdrop]);
 
   // ── Animate to a snap position with spring easing ────────────────────────
-  const SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
+  // SNAP_SPRING animates both transform AND border-radius in lockstep.
+  // Opening/close animations pass a custom easing without border-radius.
+  const SNAP_SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1), border-radius 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
   const animateTo = useCallback((
     targetY: number,
-    easing = SPRING,
+    easing = SNAP_SPRING,
+    targetBorderRadius?: string,
   ) => {
     const sheet = sheetRef.current;
     const bd    = backdropRef.current;
     if (!sheet) return;
     sheet.style.transition = easing;
     sheet.style.transform  = `translateY(${targetY}px)`;
+    if (targetBorderRadius !== undefined) sheet.style.borderRadius = targetBorderRadius;
     if (bd) {
       bd.style.transition = "opacity 0.30s ease";
       syncBackdrop(targetY);
@@ -539,31 +551,35 @@ function BottomSheet({
   }, []);
 
   // ── Snap decision on pointer/touch release ────────────────────────────────
+  // animateTo is called FIRST so the CSS transition is active before any
+  // border-radius change — this ensures the browser animates it, not jumps.
+  // applySnapDom is called after (pill/scroll changes are instant DOM writes).
   const commitSnap = useCallback((currentY: number) => {
     const { half, full } = snapYRef.current;
     const delta = currentY - ds.current.baseY; // positive = dragged down
 
     if (ds.current.snap === "half") {
       if (delta < -60) {
-        // Dragged up far enough → expand to FULL
+        // Dragged up far enough → expand to FULL (corners → square)
         ds.current.snap = "full";
+        animateTo(full, SNAP_SPRING, "0px");
         applySnapDom("full");
-        animateTo(full);
       } else if (delta > 110) {
         // Dragged down → CLOSE
         doClose();
       } else {
-        // Spring back to HALF
-        animateTo(half);
+        // Spring back to HALF — restore corners in case drag partially changed them
+        animateTo(half, SNAP_SPRING, "24px 24px 0 0");
       }
     } else {
       // From FULL: only collapses to HALF, never closes directly from full
       if (delta > 90) {
         ds.current.snap = "half";
+        animateTo(half, SNAP_SPRING, "24px 24px 0 0");
         applySnapDom("half");
-        animateTo(half);
       } else {
-        animateTo(full);
+        // Spring back to FULL — ensure corners stay square
+        animateTo(full, SNAP_SPRING, "0px");
       }
     }
   }, [animateTo, doClose, applySnapDom]);
@@ -744,7 +760,7 @@ function BottomSheet({
           borderTop:`1px solid rgba(255,255,255,0.10)`,
           borderLeft:`1px solid rgba(255,255,255,0.06)`,
           borderRight:`1px solid rgba(255,255,255,0.06)`,
-          borderRadius:"22px 22px 0 0",
+          borderRadius:"24px 24px 0 0",
           paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",
           display:"flex", flexDirection:"column",
           boxShadow:`${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
@@ -798,8 +814,8 @@ function BottomSheet({
             </div>
           </div>
 
-          {/* Centered title only — no buttons */}
-          <div style={{ display:"flex", justifyContent:"center", alignItems:"center", padding:"2px 16px 10px" }}>
+          {/* Left-aligned title — matches TradingView/Binance/Bybit panel style */}
+          <div style={{ display:"flex", justifyContent:"flex-start", alignItems:"center", padding:"4px 18px 10px" }}>
             <span style={{ fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>
               {title}
             </span>
