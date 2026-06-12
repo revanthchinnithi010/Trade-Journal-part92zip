@@ -11,6 +11,7 @@ import { Router, type IRouter } from "express";
 import type { CandleAggregator, OHLCBar, CandleInterval } from "../services/CandleAggregator.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import { fetchDeltaCandles } from "../services/deltaHistoryService.js";
+import { isYahooSymbol, fetchYahooCandles } from "../services/yahooFinanceService.js";
 import { logger } from "../lib/logger.js";
 
 const VALID_INTERVALS = new Set(["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"]);
@@ -47,12 +48,20 @@ export function createCandlesRouter(
       return;
     }
 
-    // ── History pagination: ?before=<unix_seconds> ───────────────────────────
-    // When the client has scrolled near the left edge of loaded data it sends
-    // ?before=<oldest_bar_time> to fetch the preceding 500 bars. These are pure
-    // historical bars — no live aggregator merge is needed or wanted.
     const beforeRaw = req.query["before"];
     const beforeSec = typeof beforeRaw === "string" ? parseInt(beforeRaw, 10) : NaN;
+
+    // ── Yahoo Finance path (indices, commodities, forex) ──────────────────────
+    if (isYahooSymbol(symbol)) {
+      logger.info({ symbol, interval }, "candles: routing to Yahoo Finance (non-crypto symbol)");
+      const bars = await fetchYahooCandles(symbol, interval, !isNaN(beforeSec) && beforeSec > 0 ? beforeSec : undefined);
+      console.log(`[OHLC Loaded] ${symbol} — ${bars.length} bars from Yahoo Finance`);
+      logger.info({ symbol, interval, returned: bars.length }, "candles: Yahoo Finance bars served ✓");
+      res.json(bars);
+      return;
+    }
+
+    // ── History pagination: ?before=<unix_seconds> (Delta crypto) ────────────
     if (!isNaN(beforeSec) && beforeSec > 0) {
       logger.info(
         { symbol, interval, beforeSec },
