@@ -21,7 +21,7 @@ import CustomIndicatorRenderer from "./CustomIndicatorRenderer";
 import IndicatorTags from "./IndicatorTags";
 import IndicatorsPanel from "./IndicatorsPanel";
 import SettingsPanel from "./SettingsPanel";
-import AlertCenterModal from "./AlertCenterModal";
+import { AlertSheetContent } from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
 import { tfLabel } from "./TFDropdown";
 import { fmtPrice, useLiveMarketContext } from "@/contexts/LiveMarketContext";
@@ -1252,6 +1252,18 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
           </div>
         ))}
       </div>
+    </BottomSheet>
+  );
+});
+
+// ── Alert Sheet ─────────────────────────────────────────────────────────────
+// Wraps alert functionality in the exact same BottomSheet system used by
+// Drawing Tools, Broker, and Watchlist sheets — identical snap, spring,
+// GPU optimisations, drag logic, and 60 fps animations.
+const AlertSheet = memo(function AlertSheet({ onClose }: { onClose: () => void }) {
+  return (
+    <BottomSheet title="Alerts" onClose={onClose}>
+      <AlertSheetContent onClose={onClose} />
     </BottomSheet>
   );
 });
@@ -3078,7 +3090,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
       {showSettings    && <SettingsPanel settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={() => setShowSettings(false)} />}
-      {showAlertCenter && <AlertCenterModal onClose={() => setShowAlertCenter(false)} />}
+      {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
       <SymbolPickerSheet
         visible={showSymbolPicker}

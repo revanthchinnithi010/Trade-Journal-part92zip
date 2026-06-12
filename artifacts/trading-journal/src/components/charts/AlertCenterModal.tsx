@@ -597,6 +597,246 @@ function QuickCreateModal({
   );
 }
 
+// ── Alert Sheet Content (mobile BottomSheet body) ─────────────────────────────
+// Used by AlertSheet in MobileChartLayout — no portal/backdrop/animation wrapper.
+// All sub-components (AlertCard, EditAlertModal, QuickCreateModal) are reused.
+export function AlertSheetContent({ onClose: _onClose }: { onClose: () => void }) {
+  const { alerts, addAlert, updateAlert, deleteAlert: storeDelete } = useAlertStore();
+  const [filter, setFilter] = useState<FilterValue>("all");
+  const [query, setQuery] = useState("");
+  const [editTarget, setEditTarget] = useState<AnyAlert | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [triggeringId, setTriggeringId] = useState<string | null>(null);
+
+  const filtered = alerts.filter(a => {
+    if (filter !== "all" && a.status !== filter) return false;
+    if (!query.trim()) return true;
+    const q = query.toLowerCase();
+    return (
+      a.symbol.toLowerCase().includes(q) ||
+      a.type.includes(q) ||
+      a.condition.includes(q) ||
+      (a.notes || "").toLowerCase().includes(q)
+    );
+  });
+
+  const handlePause  = useCallback((id: string) => {
+    updateAlert(id, { status: "paused" as AlertStatus });
+    toast.info("Alert paused", { description: "Alert will no longer trigger until resumed." });
+  }, [updateAlert]);
+
+  const handleResume = useCallback((id: string) => {
+    updateAlert(id, { status: "active" as AlertStatus });
+    toast.success("Alert resumed", { description: "Alert engine restarted." });
+  }, [updateAlert]);
+
+  const handleDelete = useCallback((id: string, symbol: string) => {
+    storeDelete(id);
+    toast.error("Alert deleted", { description: `${symbol} alert removed.` });
+  }, [storeDelete]);
+
+  const handleSaveEdit = useCallback((updated: AnyAlert) => {
+    updateAlert(updated.id, updated);
+    toast.success("Alert updated");
+  }, [updateAlert]);
+
+  const handleCreate = useCallback((a: AnyAlert) => {
+    addAlert(a);
+    setTriggeringId(a.id);
+    setTimeout(() => setTriggeringId(null), 1200);
+    toast.success("Alert created", { description: `${a.symbol} ${a.type} alert is now active.` });
+  }, [addAlert]);
+
+  const counts = {
+    all: alerts.length,
+    active: alerts.filter(a => a.status === "active").length,
+    triggered: alerts.filter(a => a.status === "triggered").length,
+    paused: alerts.filter(a => a.status === "paused").length,
+    expired: alerts.filter(a => a.status === "expired").length,
+  };
+
+  const STICKY_BG = "linear-gradient(170deg,rgba(11,25,19,0.99)0%,rgba(8,18,14,0.99)100%)";
+
+  return (
+    <>
+      {/* Keyframes for AlertCard animations and sub-modal entry */}
+      <style>{`
+        @keyframes acPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        @keyframes acGlow { 0% { background: rgba(183,255,90,0.18); } 100% { background: transparent; } }
+        @keyframes acFadeScale { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+      `}</style>
+
+      {/* ── Sticky header: summary + Create button + Search + Filters ── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 2,
+        background: STICKY_BG,
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        {/* Summary + Create */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 16px 8px" }}>
+          <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.4)" }}>
+            {counts.active} active · {counts.triggered} triggered · {counts.paused} paused
+          </p>
+          <button
+            onClick={() => setShowCreate(true)}
+            style={{
+              display: "flex", alignItems: "center", gap: 5,
+              padding: "6px 12px", borderRadius: 9, cursor: "pointer",
+              border: "1px solid rgba(183,255,90,0.28)",
+              background: "rgba(183,255,90,0.1)", color: "#B7FF5A",
+              fontSize: 11, fontWeight: 700,
+            }}
+          >
+            <Plus style={{ width: 12, height: 12 }} />
+            Create Alert
+          </button>
+        </div>
+
+        {/* Search */}
+        <div style={{ position: "relative", padding: "0 16px 8px" }}>
+          <Search style={{
+            position: "absolute", left: 27, top: "50%", transform: "translateY(-68%)",
+            width: 13, height: 13, color: "rgba(167,184,169,0.3)", pointerEvents: "none",
+          }} />
+          <input
+            value={query}
+            onChange={e => setQuery(e.target.value)}
+            placeholder="Search alerts..."
+            style={{
+              width: "100%", height: 34, paddingLeft: 33, paddingRight: 12,
+              borderRadius: 10, boxSizing: "border-box",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.07)",
+              color: "#F3FFF3", fontSize: 11.5, outline: "none",
+            }}
+          />
+        </div>
+
+        {/* Filter pills */}
+        <div style={{
+          display: "flex", gap: 6, padding: "0 16px 10px",
+          overflowX: "auto", scrollbarWidth: "none",
+        }}>
+          {FILTER_OPTIONS.map(opt => {
+            const active = filter === opt.value;
+            const count  = counts[opt.value];
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setFilter(opt.value)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
+                  padding: "4px 10px", borderRadius: 20, cursor: "pointer",
+                  border: `1px solid ${active ? "rgba(183,255,90,0.35)" : "rgba(255,255,255,0.06)"}`,
+                  background: active ? "rgba(183,255,90,0.12)" : "transparent",
+                  color: active ? "#B7FF5A" : "rgba(167,184,169,0.5)",
+                  fontSize: 10.5, fontWeight: 700, transition: "all 0.12s",
+                }}
+              >
+                {opt.label}
+                {count > 0 && (
+                  <span style={{
+                    minWidth: 16, height: 16, borderRadius: 8, padding: "0 4px",
+                    background: active ? "rgba(183,255,90,0.2)" : "rgba(255,255,255,0.07)",
+                    fontSize: 9, fontWeight: 900,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ── Alert list ── */}
+      {filtered.length === 0 ? (
+        <div style={{
+          display: "flex", flexDirection: "column",
+          alignItems: "center", justifyContent: "center",
+          padding: "48px 20px", gap: 12,
+        }}>
+          <div style={{
+            width: 56, height: 56, borderRadius: 16,
+            background: "rgba(57,91,67,0.1)",
+            boxShadow: "0 0 0 1px rgba(57,91,67,0.2)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <Bell style={{ width: 24, height: 24, color: "rgba(167,184,169,0.25)" }} />
+          </div>
+          <div style={{ textAlign: "center" }}>
+            <p style={{ margin: "0 0 4px", fontSize: 14, fontWeight: 700, color: "rgba(167,184,169,0.5)" }}>
+              {query || filter !== "all" ? "No matching alerts" : "No Active Alerts"}
+            </p>
+            <p style={{ margin: 0, fontSize: 11, color: "rgba(167,184,169,0.28)" }}>
+              {query || filter !== "all"
+                ? "Try adjusting your search or filter"
+                : "Create your first alert to get started"}
+            </p>
+          </div>
+          {!query && filter === "all" && (
+            <button
+              onClick={() => setShowCreate(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "8px 18px", borderRadius: 10, cursor: "pointer",
+                border: "1px solid rgba(183,255,90,0.28)",
+                background: "rgba(183,255,90,0.08)", color: "#B7FF5A",
+                fontSize: 11, fontWeight: 700, marginTop: 4,
+              }}
+            >
+              <Plus style={{ width: 13, height: 13 }} />
+              Create First Alert
+            </button>
+          )}
+        </div>
+      ) : (
+        filtered.map(alert => (
+          <AlertCard
+            key={alert.id}
+            alert={alert}
+            triggering={triggeringId === alert.id}
+            onPause={() => handlePause(alert.id)}
+            onResume={() => handleResume(alert.id)}
+            onDelete={() => handleDelete(alert.id, alert.symbol)}
+            onEdit={() => setEditTarget(alert)}
+          />
+        ))
+      )}
+
+      {/* Footer */}
+      <div style={{
+        padding: "10px 16px 6px",
+        borderTop: "1px solid rgba(255,255,255,0.04)",
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+      }}>
+        <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.28)" }}>
+          {filtered.length} of {alerts.length} alert{alerts.length !== 1 ? "s" : ""}
+        </p>
+        <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.2)" }}>
+          Alerts persist across sessions
+        </p>
+      </div>
+
+      {/* Sub-modals — zIndex 1100 floats above everything including the BottomSheet */}
+      {editTarget && (
+        <EditAlertModal
+          alert={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSave={handleSaveEdit}
+        />
+      )}
+      {showCreate && (
+        <QuickCreateModal
+          onClose={() => setShowCreate(false)}
+          onSave={handleCreate}
+        />
+      )}
+    </>
+  );
+}
+
 // ── Main AlertCenterModal ──────────────────────────────────────────────────────
 export interface AlertCenterModalProps {
   onClose: () => void;
