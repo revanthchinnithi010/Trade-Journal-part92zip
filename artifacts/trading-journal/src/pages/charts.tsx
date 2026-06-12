@@ -54,6 +54,7 @@ import { useAlertStore } from "@/store/alertStore";
 import { chartApiRef } from "@/lib/chartApiRef";
 import type { Drawing } from "@/types/drawing";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useNamedLayouts, type NamedLayout } from "@/hooks/useNamedLayouts";
 import { MobileChartLayout } from "@/components/charts/MobileChartLayout";
 import { useBrokerStore } from "@/store/brokerStore";
 import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
@@ -1402,6 +1403,36 @@ export default function Charts() {
     });
   }, [activeKey, interval]);
 
+  // ── Named layouts ─────────────────────────────────────────────────────────────
+  const { layouts: namedLayouts, saveLayout, renameLayout, deleteLayout } = useNamedLayouts();
+
+  const handleSaveNamedLayout = useCallback((name: string) => {
+    const store = useChartStore.getState();
+    saveLayout({
+      name,
+      symbol: activeKey,
+      interval,
+      chartType: store.chartType,
+      indicators: store.indicators,
+      chartSettings,
+      layoutCount,
+    });
+    toast(`Layout "${name}" saved`);
+  }, [saveLayout, activeKey, interval, chartSettings, layoutCount]);
+
+  const handleLoadNamedLayout = useCallback((layoutData: NamedLayout) => {
+    const store = useChartStore.getState();
+    store.setChartType(layoutData.chartType);
+    (Object.keys(layoutData.indicators) as (keyof typeof layoutData.indicators)[]).forEach(key => {
+      store.setIndicator(key, layoutData.indicators[key]);
+    });
+    selectSymbol(layoutData.symbol);
+    selectInterval(layoutData.interval);
+    handleSettings(layoutData.chartSettings);
+    handleLayoutChange(layoutData.layoutCount as ChartLayoutType);
+    toast(`Layout "${layoutData.name}" loaded`);
+  }, [selectSymbol, selectInterval, handleSettings, handleLayoutChange]);
+
   // ── Mobile layout early-return ────────────────────────────────────────────────
   if (isMobile) {
     return (
@@ -1436,6 +1467,12 @@ export default function Charts() {
         onLayoutChange={handleLayoutChange}
         syncTF={syncTF}
         onSyncTFChange={handleSyncTFChange}
+        namedLayouts={namedLayouts}
+        defaultLayoutName={`${activeKey} ${tfLabel(interval)}`}
+        onSaveNamedLayout={handleSaveNamedLayout}
+        onLoadNamedLayout={handleLoadNamedLayout}
+        onRenameNamedLayout={renameLayout}
+        onDeleteNamedLayout={deleteLayout}
       />
     );
   }
@@ -1929,6 +1966,12 @@ export default function Charts() {
               onLayoutChange={handleLayoutChange}
               syncTF={syncTF}
               onSyncTFChange={handleSyncTFChange}
+              namedLayouts={namedLayouts}
+              defaultLayoutName={`${activeKey} ${tfLabel(interval)}`}
+              onSaveNamedLayout={handleSaveNamedLayout}
+              onLoadNamedLayout={handleLoadNamedLayout}
+              onRenameNamedLayout={renameLayout}
+              onDeleteNamedLayout={deleteLayout}
               onAlertClick={() => setShowAlertCenter(true)}
               onScreenshot={handleScreenshot}
               onCopyLiveLink={handleCopyLiveLink}

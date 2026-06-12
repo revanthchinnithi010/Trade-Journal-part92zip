@@ -35,6 +35,7 @@ import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import { useBrokerStore } from "@/store/brokerStore";
 import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
+import { type NamedLayout } from "@/hooks/useNamedLayouts";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -865,18 +866,38 @@ type ChartLayoutType = 1 | 2 | 3 | 4;
 
 function LayoutBottomSheet({
   current, onChange, syncTF, onSyncTFChange, onClose,
+  namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout,
 }: {
   current: ChartLayoutType;
   onChange: (n: ChartLayoutType) => void;
   syncTF: boolean;
   onSyncTFChange: (v: boolean) => void;
   onClose: () => void;
+  namedLayouts: NamedLayout[];
+  defaultLayoutName: string;
+  onSaveNamedLayout: (name: string) => void;
+  onLoadNamedLayout: (layout: NamedLayout) => void;
+  onRenameNamedLayout: (id: string, name: string) => void;
+  onDeleteNamedLayout: (id: string) => void;
 }) {
+  const [showSave, setShowSave] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
+
+  const handleSave = () => {
+    if (!saveName.trim()) return;
+    onSaveNamedLayout(saveName.trim());
+    setSaveName("");
+    setShowSave(false);
+  };
+
   return (
     <BottomSheet title="Layout Manager" onClose={onClose}>
       <div style={{ padding:"12px 14px 8px" }}>
         <p style={{ margin:"0 0 12px", fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
-          Select Chart Layout
+          Chart Grid
         </p>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           {([1, 2, 3, 4] as ChartLayoutType[]).map((n, idx) => {
@@ -958,6 +979,91 @@ function LayoutBottomSheet({
             </button>
           </div>
         )}
+
+        {/* ── Saved Layouts ── */}
+        <div style={{ marginTop:16, borderTop:`1px solid ${BTN_BORDER}`, paddingTop:14 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+            <p style={{ margin:0, fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+              Saved Layouts
+            </p>
+            {!showSave && (
+              <button
+                onClick={() => { setShowSave(true); setSaveName(defaultLayoutName); }}
+                style={{ fontSize:11, fontWeight:700, color:ACCENT, background:ACCENT_BG, border:`1px solid ${ACCENT_BORDER}`, borderRadius:8, padding:"4px 10px", cursor:"pointer" }}
+              >
+                + Save Current
+              </button>
+            )}
+          </div>
+
+          {showSave && (
+            <div style={{ display:"flex", gap:6, marginBottom:10 }}>
+              <input
+                autoFocus
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setShowSave(false); }}
+                placeholder="Layout name…"
+                style={{ flex:1, height:36, borderRadius:9, border:`1px solid ${BTN_BORDER}`, background:BTN_BG, color:TEXT_HI, fontSize:13, padding:"0 10px", outline:"none" }}
+              />
+              <button onClick={handleSave}
+                style={{ height:36, padding:"0 12px", borderRadius:9, fontSize:13, fontWeight:700, cursor:"pointer", background:ACCENT_BG, border:`1px solid ${ACCENT_BORDER}`, color:ACCENT }}>
+                Save
+              </button>
+              <button onClick={() => setShowSave(false)}
+                style={{ height:36, padding:"0 10px", borderRadius:9, fontSize:13, cursor:"pointer", background:BTN_BG, border:`1px solid ${BTN_BORDER}`, color:TEXT_DIM }}>
+                ✕
+              </button>
+            </div>
+          )}
+
+          {namedLayouts.length === 0 ? (
+            <p style={{ fontSize:13, color:TEXT_DIM, textAlign:"center", margin:"16px 0", lineHeight:1.6 }}>
+              No saved layouts yet.<br />Save your current chart state to restore it later.
+            </p>
+          ) : (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {namedLayouts.map(layout => (
+                <div key={layout.id} style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 10px", borderRadius:11, background:BTN_BG, boxShadow:`0 0 0 1px ${BTN_BORDER}` }}>
+                  {renameId === layout.id ? (
+                    <input
+                      autoFocus
+                      value={renameName}
+                      onChange={e => setRenameName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
+                        if (e.key === "Escape") setRenameId(null);
+                      }}
+                      onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
+                      style={{ flex:1, height:32, borderRadius:7, border:`1px solid ${ACCENT_BORDER}`, background:"rgba(255,255,255,0.06)", color:TEXT_HI, fontSize:13, padding:"0 8px", outline:"none" }}
+                    />
+                  ) : (
+                    <>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, color:TEXT_HI, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{layout.name}</div>
+                        <div style={{ fontSize:11, color:TEXT_DIM, marginTop:2 }}>{layout.symbol} · {layout.interval}</div>
+                      </div>
+                      <button
+                        onClick={() => { onLoadNamedLayout(layout); }}
+                        style={{ height:30, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", background:ACCENT_BG, border:`1px solid ${ACCENT_BORDER}`, color:ACCENT, flexShrink:0 }}
+                      >
+                        Load
+                      </button>
+                      <button
+                        onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
+                        style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:TEXT_DIM, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+                      >✏</button>
+                      <button
+                        onClick={() => onDeleteNamedLayout(layout.id)}
+                        style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:"rgba(239,68,68,0.6)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+                      >🗑</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </BottomSheet>
   );
@@ -2266,6 +2372,12 @@ export interface MobileChartLayoutProps {
   onLayoutChange:      (n: ChartLayoutType) => void;
   syncTF:              boolean;
   onSyncTFChange:      (v: boolean) => void;
+  namedLayouts:        NamedLayout[];
+  defaultLayoutName:   string;
+  onSaveNamedLayout:   (name: string) => void;
+  onLoadNamedLayout:   (layout: NamedLayout) => void;
+  onRenameNamedLayout: (id: string, name: string) => void;
+  onDeleteNamedLayout: (id: string) => void;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -2281,6 +2393,8 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     openSidebar, handleScreenshot, currentPrice, chartAreaRef,
     onBarReplay,
     layoutCount, onLayoutChange, syncTF, onSyncTFChange,
+    namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
+    onRenameNamedLayout, onDeleteNamedLayout,
   } = props;
 
   const [, navigate]  = useLocation();
@@ -2413,6 +2527,12 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           syncTF={syncTF}
           onSyncTFChange={onSyncTFChange}
           onClose={() => setShowLayoutSheet(false)}
+          namedLayouts={namedLayouts}
+          defaultLayoutName={defaultLayoutName}
+          onSaveNamedLayout={onSaveNamedLayout}
+          onLoadNamedLayout={(layout) => { onLoadNamedLayout(layout); setShowLayoutSheet(false); }}
+          onRenameNamedLayout={onRenameNamedLayout}
+          onDeleteNamedLayout={onDeleteNamedLayout}
         />
       )}
 

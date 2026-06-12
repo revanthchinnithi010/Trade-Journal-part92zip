@@ -11,6 +11,7 @@ import {
   Camera, Maximize2, Minimize2, Settings,
 } from "lucide-react";
 import { useDrawingStore } from "@/store/drawingStore";
+import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import { fmtPrice } from "@/contexts/LiveMarketContext";
 import { useTickStore } from "@/store/tickStore";
 import { useWatchlist } from "@/contexts/WatchlistContext";
@@ -44,6 +45,12 @@ export interface RightToolbarProps {
   onSettings?:     () => void;
   isFullscreen?:   boolean;
   showSettings?:   boolean;
+  namedLayouts:         NamedLayout[];
+  defaultLayoutName:    string;
+  onSaveNamedLayout:    (name: string) => void;
+  onLoadNamedLayout:    (layout: NamedLayout) => void;
+  onRenameNamedLayout:  (id: string, name: string) => void;
+  onDeleteNamedLayout:  (id: string) => void;
 }
 
 /** Width of the icon rail column */
@@ -700,17 +707,37 @@ const LAYOUT_LABELS = ["Single", "Side by Side", "Large + 2", "4 Charts"];
 
 const LayoutSlide = memo(function LayoutSlide({
   current, onChange, onClose, syncTF, onSyncTFChange,
+  namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout,
 }: {
   current: ChartLayoutType; onChange: (n: ChartLayoutType) => void; onClose: () => void;
   syncTF: boolean; onSyncTFChange: (v: boolean) => void;
+  namedLayouts: NamedLayout[];
+  defaultLayoutName: string;
+  onSaveNamedLayout: (name: string) => void;
+  onLoadNamedLayout: (layout: NamedLayout) => void;
+  onRenameNamedLayout: (id: string, name: string) => void;
+  onDeleteNamedLayout: (id: string) => void;
 }) {
+  const [showSave, setShowSave] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [renameId, setRenameId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState("");
+
+  const handleSave = () => {
+    if (!saveName.trim()) return;
+    onSaveNamedLayout(saveName.trim());
+    setSaveName("");
+    setShowSave(false);
+  };
+
   return (
     <>
       <PanelHeader title="Layout Manager" icon={LayoutTemplate} onClose={onClose} />
 
       <div style={{ padding: "14px 14px 10px", flex: 1, overflowY: "auto", scrollbarWidth: "none" }}>
         <p style={{ margin: "0 0 12px", fontSize: 9, fontWeight: 700, color: "rgba(167,184,169,0.32)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
-          Select Chart Layout
+          Chart Grid
         </p>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
@@ -760,7 +787,6 @@ const LayoutSlide = memo(function LayoutSlide({
                 transition: "all 0.15s",
               }}
             >
-              {/* Icon */}
               <div style={{
                 width: 32, height: 32, borderRadius: 9, flexShrink: 0,
                 background: syncTF ? "rgba(183,255,90,0.12)" : "rgba(57,91,67,0.12)",
@@ -772,8 +798,6 @@ const LayoutSlide = memo(function LayoutSlide({
                   ? <Link2   style={{ width: 15, height: 15, color: "#B7FF5A" }} />
                   : <Unlink2 style={{ width: 15, height: 15, color: "rgba(167,184,169,0.45)" }} />}
               </div>
-
-              {/* Label */}
               <div style={{ flex: 1, textAlign: "left" }}>
                 <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: syncTF ? "#B7FF5A" : "#F3FFF3" }}>
                   {syncTF ? "Synced" : "Independent"}
@@ -782,8 +806,6 @@ const LayoutSlide = memo(function LayoutSlide({
                   {syncTF ? "All charts match main timeframe" : "Each chart has own timeframe"}
                 </p>
               </div>
-
-              {/* Toggle pill */}
               <div style={{
                 width: 36, height: 20, borderRadius: 10, flexShrink: 0,
                 background: syncTF ? "#B7FF5A" : "rgba(57,91,67,0.3)",
@@ -807,6 +829,93 @@ const LayoutSlide = memo(function LayoutSlide({
             </p>
           </div>
         )}
+
+        {/* ── Saved Layouts ── */}
+        <div style={{ marginTop: 16, borderTop: "1px solid rgba(57,91,67,0.18)", paddingTop: 14 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: "rgba(167,184,169,0.32)", textTransform: "uppercase", letterSpacing: "0.12em" }}>
+              Saved Layouts
+            </p>
+            {!showSave && (
+              <button
+                onClick={() => { setShowSave(true); setSaveName(defaultLayoutName); }}
+                style={{ fontSize: 10, fontWeight: 700, color: "#B7FF5A", background: "rgba(183,255,90,0.08)", border: "1px solid rgba(183,255,90,0.22)", borderRadius: 7, padding: "3px 9px", cursor: "pointer" }}
+              >
+                + Save Current
+              </button>
+            )}
+          </div>
+
+          {showSave && (
+            <div style={{ display: "flex", gap: 5, marginBottom: 10 }}>
+              <input
+                autoFocus
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleSave(); if (e.key === "Escape") setShowSave(false); }}
+                placeholder="Layout name…"
+                style={{ flex: 1, height: 28, borderRadius: 7, border: "1px solid rgba(57,91,67,0.35)", background: "rgba(57,91,67,0.14)", color: "#F3FFF3", fontSize: 11, padding: "0 8px", outline: "none" }}
+              />
+              <button onClick={handleSave}
+                style={{ height: 28, padding: "0 10px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", background: "rgba(183,255,90,0.12)", border: "1px solid rgba(183,255,90,0.32)", color: "#B7FF5A" }}>
+                Save
+              </button>
+              <button onClick={() => setShowSave(false)}
+                style={{ height: 28, padding: "0 8px", borderRadius: 7, fontSize: 11, cursor: "pointer", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(167,184,169,0.5)" }}>
+                ✕
+              </button>
+            </div>
+          )}
+
+          {namedLayouts.length === 0 ? (
+            <p style={{ fontSize: 11, color: "rgba(167,184,169,0.28)", textAlign: "center", margin: "14px 0", lineHeight: 1.6 }}>
+              No saved layouts yet.<br />Save your current chart state to restore it later.
+            </p>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {namedLayouts.map(layout => (
+                <div key={layout.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 8px", borderRadius: 9, background: "rgba(57,91,67,0.07)", boxShadow: "0 0 0 1px rgba(57,91,67,0.18)" }}>
+                  {renameId === layout.id ? (
+                    <input
+                      autoFocus
+                      value={renameName}
+                      onChange={e => setRenameName(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
+                        if (e.key === "Escape") setRenameId(null);
+                      }}
+                      onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
+                      style={{ flex: 1, height: 22, borderRadius: 5, border: "1px solid rgba(183,255,90,0.35)", background: "rgba(57,91,67,0.2)", color: "#F3FFF3", fontSize: 11, padding: "0 6px", outline: "none" }}
+                    />
+                  ) : (
+                    <>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: "#F3FFF3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{layout.name}</div>
+                        <div style={{ fontSize: 9, color: "rgba(167,184,169,0.38)", marginTop: 1 }}>{layout.symbol} · {layout.interval}</div>
+                      </div>
+                      <button
+                        onClick={() => { onLoadNamedLayout(layout); onClose(); }}
+                        style={{ height: 22, padding: "0 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", background: "rgba(183,255,90,0.1)", border: "1px solid rgba(183,255,90,0.28)", color: "#B7FF5A", flexShrink: 0 }}
+                      >
+                        Load
+                      </button>
+                      <button
+                        onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
+                        title="Rename"
+                        style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(167,184,169,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                      >✏</button>
+                      <button
+                        onClick={() => onDeleteNamedLayout(layout.id)}
+                        title="Delete"
+                        style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(239,68,68,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                      >🗑</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </>
   );
@@ -820,6 +929,8 @@ const RightToolbar = memo(function RightToolbar({
   activeSymbol, activeTimeframe, alertCount, onSelectSymbol,
   layoutCount, onLayoutChange, syncTF, onSyncTFChange, onAlertClick,
   onScreenshot, onCopyLiveLink, onFullscreen, onSettings, isFullscreen, showSettings,
+  namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout,
 }: RightToolbarProps) {
   const [openPanel, setOpenPanel] = useState<PanelId>(null);
   const [showCameraMenu, setShowCameraMenu] = useState(false);
@@ -904,6 +1015,12 @@ const RightToolbar = memo(function RightToolbar({
           onClose={() => setOpenPanel(null)}
           syncTF={syncTF}
           onSyncTFChange={onSyncTFChange}
+          namedLayouts={namedLayouts}
+          defaultLayoutName={defaultLayoutName}
+          onSaveNamedLayout={onSaveNamedLayout}
+          onLoadNamedLayout={onLoadNamedLayout}
+          onRenameNamedLayout={onRenameNamedLayout}
+          onDeleteNamedLayout={onDeleteNamedLayout}
         />
       </SlidePanel>
 
