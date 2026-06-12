@@ -465,21 +465,15 @@ function BottomSheet({
   // scroll: overflowY + touchAction updated directly on the DOM node
   const applySnapDom = useCallback((newSnap: "half"|"full") => {
     const pw = pillWrapRef.current;
-    const pi = pillInnerRef.current;
     const sc = scrollRef.current;
     if (newSnap === "full") {
-      // Reclaim pill space instantly — no animated height (avoids layout thrash)
+      // Reclaim pill space instantly — overflow:hidden on wrapper clips content,
+      // no inner animation needed (it would be invisible behind the clip anyway).
       if (pw) pw.style.height = "0px";
-      // GPU-only visual animation on the inner pill content
-      if (pi) { pi.style.transform = "translateY(-100%)"; pi.style.opacity = "0"; }
-      // Enable scroll now that sheet is full-height
       if (sc) { sc.style.overflowY = "auto"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "pan-y"; }
     } else {
-      // Restore pill space instantly
+      // Restore pill space instantly — content reappears as wrapper expands.
       if (pw) pw.style.height = "30px";
-      // GPU-animate pill back into view
-      if (pi) { pi.style.transform = "translateY(0)"; pi.style.opacity = "1"; }
-      // Disable scroll to prevent conflict with drag
       if (sc) { sc.style.overflowY = "hidden"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none"; }
     }
   }, []);
@@ -795,14 +789,15 @@ function BottomSheet({
               willChange:"auto",   // don't promote wrapper; only inner is GPU-animated
             }}
           >
-            {/* Inner: GPU-only transform + opacity transition — zero layout impact */}
+            {/* Inner pill — plain element, no willChange, no transition.
+                 Visibility is controlled solely by the wrapper height + overflow:hidden.
+                 willChange here would promote a nested composited layer inside the
+                 sheet's composited layer, forcing a render surface + compositing overhead
+                 on every drag frame. */}
             <div
               ref={pillInnerRef}
               style={{
                 display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6,
-                transition:"transform 0.26s ease, opacity 0.26s ease",
-                willChange:"transform, opacity",
-                // initial state = half (visible)
               }}
             >
               <div
