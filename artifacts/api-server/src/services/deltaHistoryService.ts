@@ -66,12 +66,15 @@ function toNum(v: number | string | undefined | null): number {
  *                 (matches internal app symbol — no conversion needed)
  * @param interval Internal CandleInterval string, e.g. "1", "60", "240", "D"
  * @param limit    Max bars to return (default 500)
+ * @param endSec   Unix seconds upper bound (exclusive). Defaults to now.
+ *                 Pass the oldest loaded bar's timestamp to page backward.
  * @returns        Ascending-time OHLCBar[] — empty on any error, NO fake fallback
  */
 export async function fetchDeltaCandles(
   symbol:   string,
   interval: string,
   limit     = 500,
+  endSec?: number,
 ): Promise<OHLCBar[]> {
   const resolution = RESOLUTION_MAP[interval];
   if (!resolution) {
@@ -80,15 +83,15 @@ export async function fetchDeltaCandles(
   }
 
   const intervalMins = INTERVAL_MINUTES[interval] ?? 60;
-  const endSec       = Math.floor(Date.now() / 1000);
+  const end          = endSec ?? Math.floor(Date.now() / 1000);
   // Add extra buffer bars so we get at least `limit` after any gaps
-  const startSec     = endSec - intervalMins * 60 * Math.min(limit + 100, 700);
+  const startSec     = end - intervalMins * 60 * Math.min(limit + 100, 700);
 
   const qs = new URLSearchParams({
     resolution,
     symbol,
     start: String(startSec),
-    end:   String(endSec),
+    end:   String(end),
   });
 
   const url = `${DELTA_INDIA_REST}/v2/history/candles?${qs}`;

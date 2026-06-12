@@ -47,14 +47,34 @@ export function createCandlesRouter(
       return;
     }
 
+    // ── History pagination: ?before=<unix_seconds> ───────────────────────────
+    // When the client has scrolled near the left edge of loaded data it sends
+    // ?before=<oldest_bar_time> to fetch the preceding 500 bars. These are pure
+    // historical bars — no live aggregator merge is needed or wanted.
+    const beforeRaw = req.query["before"];
+    const beforeSec = typeof beforeRaw === "string" ? parseInt(beforeRaw, 10) : NaN;
+    if (!isNaN(beforeSec) && beforeSec > 0) {
+      logger.info(
+        { symbol, interval, beforeSec },
+        "candles: history page — fetching older bars before timestamp",
+      );
+      const bars = await fetchDeltaCandles(symbol, interval, 500, beforeSec);
+      logger.info(
+        { symbol, interval, beforeSec, returned: bars.length },
+        bars.length > 0
+          ? "candles: history page served ✓"
+          : "candles: history page — no older bars (exchange history exhausted)",
+      );
+      res.json(bars);
+      return;
+    }
+
+    // ── Initial load: latest 500 bars merged with live aggregator ─────────────
     const iv = interval as CandleInterval;
 
     logger.info({ symbol, interval }, "candles: fetching real Delta Exchange India bars");
 
-    // Fetch real historical candles from Delta India REST API
     const historicalBars = await fetchDeltaCandles(symbol, interval, 500);
-
-    // Merge with live-aggregated bars from the CandleAggregator (tick-by-tick OHLC)
     const aggBars = aggregator.getBars(symbol, iv);
 
     if (historicalBars.length === 0) {

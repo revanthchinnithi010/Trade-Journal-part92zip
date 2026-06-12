@@ -224,8 +224,9 @@ function calcPriceScaleW(price: number, sym: string): number {
 }
 
 const PRICE_SCALE_TOUCH_W = 130; // generous max — covers even sub-micro meme coins
-const DEFAULT_VISIBLE_BARS = 150; // TradingView-style default: show ~150 recent bars on fresh load
-const MIN_FUTURE_BARS      = 50;  // always keep 50 bars of future space on the right
+const DEFAULT_VISIBLE_BARS   = 150; // TradingView-style default: show ~150 recent bars on fresh load
+const MIN_FUTURE_BARS        = 50;  // always keep 50 bars of future space on the right
+const HISTORY_PREFETCH_BARS  = 50;  // trigger history fetch when within this many bars of the left edge
 
 // ── Price-scale touch/mouse handler — unlimited exponential zoom + kinetic ────
 //
@@ -861,6 +862,18 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
   //   When true, each new bar triggers a smooth right-shift to keep latest bar visible.
   const nearRealtimeRef  = useRef(true);
 
+  // ── Infinite history loading state ─────────────────────────────────────────
+  // oldestBarTimeRef: Unix-second timestamp of the oldest bar currently in barsRef.
+  //   Used as the ?before= cursor when fetching older pages.
+  // isLoadingMoreRef: guards against concurrent history fetches.
+  // hasMoreHistoryRef: set false when the exchange returns 0 bars (history exhausted).
+  // loadMoreHistRef: stable ref to the loadMoreHistory fn so onRangeChange
+  //   (inside the chart-init useEffect closure) can always call the current version.
+  const oldestBarTimeRef  = useRef<number | null>(null);
+  const isLoadingMoreRef  = useRef(false);
+  const hasMoreHistoryRef = useRef(true);
+  const loadMoreHistRef   = useRef<() => void>(() => {});
+
   // ── scheduleChartUpdate — the ONLY entry point for series.update() ─────────
   // Call this whenever the live bar changes (tick path OR candle_update path).
   // Rules:
@@ -961,6 +974,87 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     }
     if (n > 0) emaLastBarTimeRef.current = bars[n - 1].time;
   }, []);
+
+  // ── Infinite history loader ───────────────────────────────────────────────
+  // Called by onRangeChange when the user pans near the left edge of loaded data.
+  // Fetches the next older page of 500 bars from the API using the oldest loaded
+  // bar's timestamp as a cursor (?before=...), prepends them to barsRef, and
+  // restores the viewport by shifting the logical range right by the count of
+  // newly added bars so the user stays on the same candles with no jump.
+  const loadMoreHistory = useCallback(async () => {
+    if (isLoadingMoreRef.current || !hasMoreHistoryRef.current) return;
+    const oldestTime = oldestBarTimeRef.current;
+    if (!oldestTime) return;
+    const sym = symRef.current;
+    const iv  = ivRef.current;
+
+    isLoadingMoreRef.current = true;
+    try {
+      const resp = await fetch(`${BASE}/api/candles/${sym}/${iv}?before=${oldestTime}`);
+      if (!resp.ok || !mountedRef.current) return;
+      if (symRef.current !== sym || ivRef.current !== iv) return; // symbol/interval changed during fetch
+
+      const newBars: OHLCBar[] = await resp.json();
+      if (!Array.isArray(newBars) || newBars.length < 2) {
+        // Exchange returned nothing — we've reached the start of available history
+        hasMoreHistoryRef.current = false;
+        return;
+      }
+
+      const existing        = barsRef.current;
+      const earliestExisting = existing[0]?.time ?? Infinity;
+
+      // Only keep bars older than what we already have (strict dedup)
+      const fresh = newBars.filter(b => b.time < earliestExisting);
+      if (fresh.length === 0) {
+        hasMoreHistoryRef.current = false;
+        return;
+      }
+
+      // Merge: prepend fresh bars, dedup by time, sort ascending
+      const merged = [
+        ...new Map([...fresh, ...existing].map(b => [b.time, b])).values(),
+      ].sort((a, b) => a.time - b.time);
+
+      const numAdded = merged.length - existing.length;
+      if (numAdded <= 0) { hasMoreHistoryRef.current = false; return; }
+
+      barsRef.current           = merged;
+      oldestBarTimeRef.current  = merged[0].time;
+
+      const chart  = chartRef.current;
+      const series = mainRef.current;
+      if (!chart || !series || !mountedRef.current) return;
+
+      // Save the current visible logical range BEFORE replacing the series data.
+      // After setData() with N new bars prepended, every existing bar's logical
+      // index shifts right by numAdded — so we compensate by adding numAdded to
+      // both from/to, keeping the user viewing exactly the same candles.
+      const currentRange = chart.timeScale().getVisibleLogicalRange();
+
+      applyBars(series, ctRef.current, merged);
+
+      if (currentRange) {
+        try {
+          chart.timeScale().setVisibleLogicalRange({
+            from: (currentRange.from as number) + numAdded,
+            to:   (currentRange.to   as number) + numAdded,
+          });
+        } catch { /* LWC may reject if range is invalid — ignore */ }
+      }
+
+      // Rebuild indicator series over the full expanded dataset
+      for (const [key, s] of Object.entries(emaRefs.current) as [keyof IndicatorState, ISeriesApi<"Line">][]) {
+        fillIndicator(s, key, merged);
+      }
+    } finally {
+      isLoadingMoreRef.current = false;
+    }
+  }, [fillIndicator]);
+
+  // Keep the ref in sync so the chart-init useEffect's onRangeChange closure
+  // always calls the current version without needing to be recreated.
+  loadMoreHistRef.current = loadMoreHistory;
 
   // ── Apply settings reactively ────────────────────────────────────────────
   useEffect(() => {
@@ -1192,7 +1286,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       if (vpSaveTimerRef.current) clearTimeout(vpSaveTimerRef.current);
       vpSaveTimerRef.current = setTimeout(doSaveVp, 600);
     };
-    // onRangeChange: dual purpose — save viewport + track nearRealtime for auto-follow.
+    // onRangeChange: triple purpose — save viewport + track nearRealtime + trigger history load.
     // Fires on every visible range change (manual pan, zoom, or our own setVisibleLogicalRange).
     const onRangeChange = (range: import("lightweight-charts").LogicalRange | null) => {
       if (range) {
@@ -1201,6 +1295,19 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         // Using -3 (not 0) gives a small buffer so a new bar forming just off-screen
         // still triggers auto-follow rather than requiring a full re-scroll first.
         nearRealtimeRef.current = lastIdx < 0 || (range.to as number) >= lastIdx - 3;
+
+        // Infinite history: when the left edge of the viewport comes within
+        // HISTORY_PREFETCH_BARS of bar 0, fetch the next older page.
+        // loadMoreHistRef.current always points to the latest loadMoreHistory
+        // closure even though this onRangeChange is defined once in the
+        // chart-init useEffect (avoiding a stale-closure bug).
+        if (
+          (range.from as number) < HISTORY_PREFETCH_BARS &&
+          !isLoadingMoreRef.current &&
+          hasMoreHistoryRef.current
+        ) {
+          void loadMoreHistRef.current();
+        }
       }
       schedSaveVp();
     };
@@ -2446,6 +2553,11 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
 
       const bars = [...new Map(raw.map(b => [b.time, b])).values()].sort((a, b) => a.time - b.time);
       barsRef.current = bars;
+
+      // Reset infinite-history state for this new symbol/interval
+      oldestBarTimeRef.current  = bars[0]?.time ?? null;
+      hasMoreHistoryRef.current = true;
+      isLoadingMoreRef.current  = false;
 
       const oldSeries = mainRef.current;
       const chart     = chartRef.current;
