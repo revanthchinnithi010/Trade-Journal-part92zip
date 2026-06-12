@@ -28,6 +28,7 @@ import { ChartContext, type ChartContextValue } from "@/contexts/ChartContext";
 import { ChartBarsContext } from "@/contexts/ChartBarsContext";
 import type { ChartSettings } from "@/components/charts/chartSettingsTypes";
 import { chartApiRef } from "@/lib/chartApiRef";
+import { sheetDragState } from "@/lib/sheetDragState";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -882,6 +883,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
   //   • Otherwise: schedule one RAF that calls updateBar() with the latest bar.
   // Using useCallback with [] deps is safe because every value it reads is a ref.
   const scheduleChartUpdate = useCallback(() => {
+    // Sheet drag lock: suppress chart canvas repaint while a BottomSheet is being
+    // dragged. The pending bar is preserved in pendingChartBarRef and will be
+    // flushed immediately when drag ends via sheetDragState.flush().
+    if (sheetDragState.active) return;
     // Already scheduled for this frame — frame-coalescing is working
     if (chartUpdateRafRef.current !== null) return;
     // 30 fps cap on touch devices: skip if last render was < 33 ms ago
@@ -900,6 +905,14 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       updateBar(s, ctRef.current, b);
     });
   }, []); // all deps are refs — stable forever
+
+  // Register scheduleChartUpdate as the sheet drag flush target.
+  // When a BottomSheet drag ends it calls sheetDragState.flush() to
+  // immediately process any tick bar that was buffered during suppression.
+  useEffect(() => {
+    sheetDragState.flush = scheduleChartUpdate;
+    return () => { if (sheetDragState.flush === scheduleChartUpdate) sheetDragState.flush = null; };
+  }, [scheduleChartUpdate]);
 
   // Track current values in refs so callbacks don't close over stale state
   const symRef      = useRef(symbol);

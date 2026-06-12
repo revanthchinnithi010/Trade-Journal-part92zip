@@ -26,6 +26,7 @@ import { DrawingAlertModal } from "./DrawingAlertModal";
 import { tfLabel } from "./TFDropdown";
 import { fmtPrice, useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useSymbolTick, getSymbolTick } from "@/store/tickStore";
+import { sheetDragState } from "@/lib/sheetDragState";
 import type { ChartSettings } from "./chartSettingsTypes";
 import { type OHLCBar, type ChartType, useChartStore } from "@/store/chartStore";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
@@ -519,6 +520,8 @@ function BottomSheet({
   const doClose = useCallback(() => {
     if (ds.current.closing) return;
     ds.current.closing = true;
+    sheetDragState.active = false;
+    sheetDragState.flush?.();
     cancelAnimationFrame(ds.current.rafId);
     ds.current.rafPending = false;
     const sheet = sheetRef.current;
@@ -536,6 +539,11 @@ function BottomSheet({
   // border-radius change — this ensures the browser animates it, not jumps.
   // applySnapDom is called after (pill/scroll changes are instant DOM writes).
   const commitSnap = useCallback((currentY: number) => {
+    // Release the chart canvas freeze immediately so any buffered tick bar
+    // is flushed via scheduleChartUpdate before the snap animation plays.
+    sheetDragState.active = false;
+    sheetDragState.flush?.();
+
     const { half, full } = snapYRef.current;
     const delta = currentY - ds.current.baseY; // positive = dragged down
 
@@ -579,6 +587,8 @@ function BottomSheet({
       ds.current.startPY  = touchY;
       ds.current.latestPY = touchY;
       sheet.style.transition = "none";
+      // Freeze chart canvas for zero-competition with the sheet's GPU layer
+      sheetDragState.active = true;
     };
 
     const onTS = (e: TouchEvent) => {
@@ -657,6 +667,7 @@ function BottomSheet({
       ds.current.startPY  = e.clientY;
       ds.current.latestPY = e.clientY;
       sheet.style.transition = "none";
+      sheetDragState.active = true;
       try { sheet.setPointerCapture(e.pointerId); } catch {}
     };
 
@@ -2677,7 +2688,6 @@ export interface MobileChartLayoutProps {
   setShowSettings:     React.Dispatch<React.SetStateAction<boolean>>;
   openSidebar:         () => void;
   handleScreenshot:    () => void;
-  currentPrice:        number | null;
   chartAreaRef:        React.RefObject<HTMLDivElement | null>;
   onBarReplay?:        () => void;
   layoutCount:         ChartLayoutType;
@@ -2702,7 +2712,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     showAlertCenter, setShowAlertCenter,
     showQuickAlert, setShowQuickAlert, alertDrawing, closeAlertModal,
     showSettings, setShowSettings,
-    openSidebar, handleScreenshot, currentPrice, chartAreaRef,
+    openSidebar, handleScreenshot, chartAreaRef,
     onBarReplay,
     layoutCount, onLayoutChange, syncTF, onSyncTFChange,
     namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
@@ -2710,7 +2720,12 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   } = props;
 
   const [, navigate]  = useLocation();
-  const chartStore = useChartStore();
+  // Narrow selectors — only re-renders when these specific fields change.
+  // Do NOT use useChartStore() (broad) — livePrice updates on every tick and
+  // would re-render this 3000-line component on every market data event.
+  const chartType            = useChartStore(s => s.chartType);
+  const setChartType         = useChartStore(s => s.setChartType);
+  const setMobileFullscreen  = useChartStore(s => s.setMobileChartFullscreen);
   const { wsStatus } = useLiveMarketContext();
   const { items: watchlistItems } = useWatchlist();
   // Narrow selectors: each field subscribed independently → re-renders ONLY when
@@ -2752,15 +2767,11 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   // ── Live price — NON-REACTIVE read via getSymbolTick ─────────────────────
   // Do NOT use useSymbolTick() here. It would subscribe the entire 3000-line
-  // MobileChartLayout to tick updates, causing full re-renders on every tick
-  // (~every 5s). The parent Charts page also passes `currentPrice` from its own
-  // useSymbolTick call — that alone already triggers memo-busting prop changes.
-  // Adding a second subscription was causing double re-renders per tick, each
-  // blocking the main thread 20–50ms and dropping frames during drag.
+  // MobileChartLayout to tick updates, causing full re-renders on every tick.
   // getSymbolTick() reads the last known value non-reactively — the display
   // updates on any user-driven render. Price-color lag of ~5s is imperceptible.
   const connected      = wsStatus === "connected";
-  const livePrice      = currentPrice ?? chartStore.livePrice;
+  const livePrice      = getSymbolTick(activeKey)?.price ?? null;
   const liveChangePct  = getSymbolTick(activeKey)?.changePct ?? 0;
   const isUp           = liveChangePct >= 0;
 
@@ -2813,16 +2824,14 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleFullscreen = useCallback(() => {
     setIsFullscreen(prev => {
       const next = !prev;
-      chartStore.setMobileChartFullscreen(next);
+      setMobileFullscreen(next);
       return next;
     });
-  }, [chartStore]);
+  }, [setMobileFullscreen]);
 
   // ── Reset store fullscreen flag when this layout unmounts (orientation change) ──
   useEffect(() => {
-    return () => {
-      chartStore.setMobileChartFullscreen(false);
-    };
+    return () => { setMobileFullscreen(false); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Main bar tab handler ──
@@ -2938,7 +2947,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {/* ── Sheets & modals ── */}
       {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
       {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
-      {showChartType    && <ChartTypeSheet current={chartStore.chartType ?? "candles"} onSelect={t => chartStore.setChartType(t)} onClose={() => setShowChartType(false)} />}
+      {showChartType    && <ChartTypeSheet current={chartType ?? "candles"} onSelect={t => setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
       {showAuthModal    && <BrokerAuthModal />}
       {showObjectTree   && <ObjectTreeSheet onClose={handleCloseObjectTree} />}
@@ -2992,7 +3001,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       {(showQuickAlert || alertDrawing !== null) && (
         <DrawingAlertModal
-          symbol={activeKey} currentInterval={interval} currentPrice={currentPrice}
+          symbol={activeKey} currentInterval={interval} currentPrice={getSymbolTick(activeKey)?.price ?? null}
           prefillDrawing={alertDrawing ?? undefined} onClose={closeAlertModal}
           onCreated={() => { if (alertDrawing) addAlertDrawingId(alertDrawing.id); closeAlertModal(); }}
         />

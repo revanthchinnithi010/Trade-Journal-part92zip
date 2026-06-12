@@ -1475,7 +1475,6 @@ export default function Charts() {
         setShowSettings={setShowSettings}
         openSidebar={openSidebar}
         handleScreenshot={handleScreenshot}
-        currentPrice={currentPrice}
         chartAreaRef={chartAreaRef}
         onBarReplay={enterReplay}
         layoutCount={layoutCount}
