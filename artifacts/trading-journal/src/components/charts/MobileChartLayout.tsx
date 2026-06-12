@@ -401,82 +401,192 @@ function FloatingDrawingPill({
   );
 }
 
-// ── BottomSheet base ───────────────────────────────────────────────────────
+// ── BottomSheet base — premium RAF-driven, iOS-style ──────────────────────
 function BottomSheet({ title, onClose, children, maxHeight = "75vh" }: {
   title: string; onClose: () => void; children: React.ReactNode; maxHeight?: string;
 }) {
   const sheetRef    = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const headerRef   = useRef<HTMLDivElement>(null);
   const scrollRef   = useRef<HTMLDivElement>(null);
   const onCloseRef  = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  useEffect(() => {
-    const sheet = sheetRef.current;
-    if (!sheet) return;
+  // ── Shared drag state (never triggers re-render) ──────────────────────────
+  const ds = useRef({
+    active:      false,
+    closing:     false,
+    startY:      0,
+    currentDy:   0,
+    sheetH:      0,
+    rafId:       0,
+  });
 
-    let phase: "none"|"pending"|"dragging" = "none";
-    let startY = 0, dy = 0;
+  // ── Animate sheet to translateY and fade backdrop proportionally ──────────
+  const applyDrag = useCallback(() => {
+    const sheet   = sheetRef.current;
+    const backdrop = backdropRef.current;
+    if (!sheet || ds.current.closing) return;
+    const dy = ds.current.currentDy;
+    sheet.style.transform = `translateY(${dy}px)`;
+    if (backdrop && ds.current.sheetH > 0) {
+      const ratio = Math.min(1, dy / (ds.current.sheetH * 0.55));
+      backdrop.style.opacity = String(Math.max(0.08, 1 - ratio * 0.82));
+    }
+  }, []);
+
+  // ── Smooth close: animate → unmount ──────────────────────────────────────
+  const doClose = useCallback(() => {
+    if (ds.current.closing) return;
+    ds.current.closing = true;
+    cancelAnimationFrame(ds.current.rafId);
+
+    const sheet   = sheetRef.current;
+    const backdrop = backdropRef.current;
+    if (!sheet) { onCloseRef.current(); return; }
+
+    // Kill opening animation so transform is directly controllable
+    sheet.style.animation  = "none";
+    sheet.style.transition = "transform 0.26s cubic-bezier(0.40, 0, 0.80, 0.60)";
+    sheet.style.transform  = "translateY(110%)";
+    if (backdrop) {
+      backdrop.style.transition = "opacity 0.26s ease";
+      backdrop.style.opacity    = "0";
+    }
+    setTimeout(() => onCloseRef.current(), 250);
+  }, []);
+
+  // ── Pointer-based drag: capture from HEADER / HANDLE zone ─────────────────
+  // Header drag is always reliable and never conflicts with scroll.
+  useEffect(() => {
+    const header = headerRef.current;
+    const sheet  = sheetRef.current;
+    if (!header || !sheet) return;
+
+    const onDown = (e: PointerEvent) => {
+      if (ds.current.closing) return;
+      ds.current.active    = true;
+      ds.current.startY    = e.clientY;
+      ds.current.currentDy = 0;
+      ds.current.sheetH    = sheet.getBoundingClientRect().height;
+      // Stop any running CSS transition / animation so we have full control
+      sheet.style.animation  = "none";
+      sheet.style.transition = "none";
+      // Pointer capture: all future pointermove/up come here even if finger leaves element
+      try { header.setPointerCapture(e.pointerId); } catch {}
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (!ds.current.active) return;
+      ds.current.currentDy = Math.max(0, e.clientY - ds.current.startY);
+      cancelAnimationFrame(ds.current.rafId);
+      ds.current.rafId = requestAnimationFrame(applyDrag);
+    };
+
+    const onUp = () => {
+      if (!ds.current.active) return;
+      ds.current.active = false;
+      cancelAnimationFrame(ds.current.rafId);
+      const dy = ds.current.currentDy;
+      if (dy > 150) {
+        doClose();
+      } else {
+        // Spring back to origin
+        const bd = backdropRef.current;
+        sheet.style.transition = "transform 0.44s cubic-bezier(0.34, 1.40, 0.64, 1)";
+        sheet.style.transform  = "translateY(0)";
+        if (bd) { bd.style.transition = "opacity 0.30s ease"; bd.style.opacity = "1"; }
+      }
+    };
+
+    header.addEventListener("pointerdown",   onDown);
+    header.addEventListener("pointermove",   onMove);
+    header.addEventListener("pointerup",     onUp);
+    header.addEventListener("pointercancel", onUp);
+    return () => {
+      header.removeEventListener("pointerdown",   onDown);
+      header.removeEventListener("pointermove",   onMove);
+      header.removeEventListener("pointerup",     onUp);
+      header.removeEventListener("pointercancel", onUp);
+      cancelAnimationFrame(ds.current.rafId);
+    };
+  }, [applyDrag, doClose]);
+
+  // ── Touch-based drag from content area when scroll is at top ──────────────
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    const sheet  = sheetRef.current;
+    if (!scroll || !sheet) return;
+
+    let phase: "idle"|"pending"|"dragging" = "idle";
+    let startY = 0;
 
     const onTS = (e: TouchEvent) => {
-      const t = e.touches[0];
-      phase = "pending"; startY = t.clientY; dy = 0;
+      if (ds.current.closing || ds.current.active) return;
+      phase  = "pending";
+      startY = e.touches[0].clientY;
     };
 
     const onTM = (e: TouchEvent) => {
-      if (phase === "none") return;
-      const t = e.touches[0];
-      const delta = t.clientY - startY;
+      if (phase === "idle" || ds.current.active) return;
+      const delta = e.touches[0].clientY - startY;
 
       if (phase === "pending") {
         if (Math.abs(delta) < 8) return;
-        if (delta <= 0) { phase = "none"; return; }
-        const rect = sheet.getBoundingClientRect();
-        const inHeader = (startY - rect.top) < 76;
-        const scrollAtTop = (scrollRef.current?.scrollTop ?? 0) === 0;
-        if (inHeader || scrollAtTop) { phase = "dragging"; }
-        else { phase = "none"; return; }
+        if (delta <= 0 || (scroll.scrollTop ?? 0) > 2) { phase = "idle"; return; }
+        phase = "dragging";
+        ds.current.active    = true;
+        ds.current.startY    = startY;
+        ds.current.currentDy = 0;
+        ds.current.sheetH    = sheet.getBoundingClientRect().height;
+        sheet.style.animation  = "none";
+        sheet.style.transition = "none";
       }
 
       if (phase === "dragging") {
         e.preventDefault();
-        dy = Math.max(0, delta);
-        sheet.style.transition = "none";
-        sheet.style.transform  = `translateY(${dy}px)`;
+        ds.current.currentDy = Math.max(0, e.touches[0].clientY - ds.current.startY);
+        cancelAnimationFrame(ds.current.rafId);
+        ds.current.rafId = requestAnimationFrame(applyDrag);
       }
     };
 
     const onTE = () => {
-      if (phase !== "dragging") { phase = "none"; return; }
-      phase = "none";
-      if (dy > 120) {
-        sheet.style.transition = "transform 0.22s cubic-bezier(0.4,0,0.9,0.6)";
-        sheet.style.transform  = "translateY(110%)";
-        setTimeout(() => onCloseRef.current(), 210);
+      if (phase !== "dragging") { phase = "idle"; return; }
+      phase = "idle";
+      ds.current.active = false;
+      cancelAnimationFrame(ds.current.rafId);
+      const dy = ds.current.currentDy;
+      if (dy > 150) {
+        doClose();
       } else {
-        sheet.style.transition = "transform 0.45s cubic-bezier(0.34,1.4,0.64,1)";
+        const bd = backdropRef.current;
+        sheet.style.transition = "transform 0.44s cubic-bezier(0.34, 1.40, 0.64, 1)";
         sheet.style.transform  = "translateY(0)";
+        if (bd) { bd.style.transition = "opacity 0.30s ease"; bd.style.opacity = "1"; }
       }
     };
 
-    sheet.addEventListener("touchstart",  onTS, { passive: true  });
-    sheet.addEventListener("touchmove",   onTM, { passive: false });
-    sheet.addEventListener("touchend",    onTE, { passive: true  });
-    sheet.addEventListener("touchcancel", onTE, { passive: true  });
+    scroll.addEventListener("touchstart",  onTS, { passive: true  });
+    scroll.addEventListener("touchmove",   onTM, { passive: false });
+    scroll.addEventListener("touchend",    onTE, { passive: true  });
+    scroll.addEventListener("touchcancel", onTE, { passive: true  });
     return () => {
-      sheet.removeEventListener("touchstart",  onTS);
-      sheet.removeEventListener("touchmove",   onTM);
-      sheet.removeEventListener("touchend",    onTE);
-      sheet.removeEventListener("touchcancel", onTE);
+      scroll.removeEventListener("touchstart",  onTS);
+      scroll.removeEventListener("touchmove",   onTM);
+      scroll.removeEventListener("touchend",    onTE);
+      scroll.removeEventListener("touchcancel", onTE);
     };
-  }, []);
+  }, [applyDrag, doClose]);
 
   return createPortal(
     <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      ref={backdropRef}
+      onClick={e => { if (e.target === e.currentTarget) doClose(); }}
       style={{
         position:"fixed", inset:0, zIndex:300,
-        background:"rgba(0,0,0,0.72)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)",
-        animation:"sheet-fade-in 0.2s ease both",
+        background:"rgba(0,0,0,0.72)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
+        animation:"sheet-fade-in 0.22s ease both",
       }}
     >
       <div
@@ -493,24 +603,55 @@ function BottomSheet({ title, onClose, children, maxHeight = "75vh" }: {
           paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",
           maxHeight, display:"flex", flexDirection:"column",
           boxShadow:`${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
-          animation:"sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both",
+          // Opening animation — 300ms iOS-style ease-out
+          animation:"sheet-slide-up 0.30s cubic-bezier(0.32, 0.72, 0, 1) both",
           willChange:"transform",
         }}
       >
-        {/* Drag handle */}
-        <div style={{ width:40, height:4, borderRadius:2, background:"rgba(255,255,255,0.22)", margin:"12px auto 0", flexShrink:0 }} />
-        <div style={{ display:"flex", alignItems:"center", padding:"10px 16px 10px", flexShrink:0 }}>
-          <span style={{ flex:1, fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>{title}</span>
-          <button
-            onPointerDown={e => e.stopPropagation()}
-            onClick={onClose}
-            style={{ width:28, height:28, borderRadius:8, border:`1px solid rgba(255,255,255,0.10)`, background:"rgba(255,255,255,0.06)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
-          >
-            <X style={{ width:13, height:13, color:"rgba(255,255,255,0.50)" }} />
-          </button>
+        {/* ── Drag zone: handle pill + title row ─────────────────────────── */}
+        <div
+          ref={headerRef}
+          style={{
+            flexShrink:0,
+            touchAction:"none",      // disable browser pan so pointer events fire freely
+            userSelect:"none",
+            WebkitUserSelect:"none",
+            cursor:"grab",
+          } as React.CSSProperties}
+        >
+          {/* Handle pill */}
+          <div style={{
+            width:44, height:5, borderRadius:3,
+            background:"rgba(255,255,255,0.26)",
+            margin:"12px auto 6px",
+            boxShadow:"0 1px 0 rgba(255,255,255,0.08)",
+          }} />
+          {/* Title + close */}
+          <div style={{ display:"flex", alignItems:"center", padding:"4px 16px 10px" }}>
+            <span style={{ flex:1, fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>
+              {title}
+            </span>
+            <button
+              onPointerDown={e => e.stopPropagation()}
+              onClick={doClose}
+              style={{
+                width:28, height:28, borderRadius:8,
+                border:`1px solid rgba(255,255,255,0.10)`,
+                background:"rgba(255,255,255,0.06)",
+                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+              }}
+            >
+              <X style={{ width:13, height:13, color:"rgba(255,255,255,0.50)" }} />
+            </button>
+          </div>
         </div>
+
         <div style={{ width:"100%", height:1, background:`rgba(255,255,255,0.07)`, flexShrink:0 }} />
-        <div ref={scrollRef} style={{ overflowY:"auto", flex:1, WebkitOverflowScrolling:"touch" } as React.CSSProperties}>
+
+        <div
+          ref={scrollRef}
+          style={{ overflowY:"auto", flex:1, WebkitOverflowScrolling:"touch" } as React.CSSProperties}
+        >
           {children}
         </div>
       </div>
