@@ -2483,11 +2483,14 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   }, [chart, candle, scheduleCanvasRender]);
 
   // ── Load drawings ──────────────────────────────────────────────────────────
+  // Drawings are symbol-scoped, not timeframe-scoped. Fetch all drawings for
+  // the symbol regardless of which timeframe is currently active so that a
+  // trendline drawn on 1H is still visible on 5M, 4H, 1D, etc.
   useEffect(() => {
-    if (!symbol || !timeframe) return;
+    if (!symbol) return;
     const load = async () => {
       try {
-        const res = await fetch(`${BASE}/api/drawings?symbol=${encodeURIComponent(symbol)}&timeframe=${encodeURIComponent(timeframe)}`);
+        const res = await fetch(`${BASE}/api/drawings?symbol=${encodeURIComponent(symbol)}`);
         if (res.ok) {
           const data: Drawing[] = await res.json();
           const deletedIds = getDeletedDrawingIds();
@@ -2496,7 +2499,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       } catch { /* ignore */ }
     };
     void load();
-  }, [symbol, timeframe, resetDrawings]);
+  }, [symbol, resetDrawings]);
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────
   useEffect(() => {
