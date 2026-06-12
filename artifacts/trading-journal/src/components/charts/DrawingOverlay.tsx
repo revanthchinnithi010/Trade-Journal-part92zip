@@ -3747,6 +3747,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       onClick={onOverlayClick}
       onContextMenu={e => { e.preventDefault(); setPhase("idle"); setAnchor(null); setMousePoint(null); setIsDrawing(false); clickPhaseRef.current = 0; }}
       onPointerLeave={() => {
+        // On mobile, lifting a finger fires pointerleave — the crosshair must
+        // stay visible throughout the entire 2-point drawing session, so skip
+        // the hide. Only the activeTool reset effect is allowed to hide it.
+        if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) return;
         if (xhairHRef.current) xhairHRef.current.style.display = "none";
         if (xhairVRef.current) xhairVRef.current.style.display = "none";
       }}
