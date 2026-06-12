@@ -1755,12 +1755,23 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         return;
       }
 
+      // ── Two-finger guard: block ALL pointer moves during a pinch ────────────
+      // When in PINCH_ZOOM mode the tracked ig.pointerId is -1 (no single ID),
+      // so the g.pointerId !== e.pointerId check below would return early WITHOUT
+      // calling stopPropagation() — letting LWC see every pointermove and
+      // interpret the finger motion as a pan. At minimum zoom this converts the
+      // clamped pinch-out directly into leftward chart dragging.
+      // Stopping here whenever pressCount ≥ 2 completely severs that path:
+      // two-finger = zoom only, pointer events never reach LWC.
+      if (pressCount >= 2) {
+        e.stopPropagation();
+        return;
+      }
+
       const g = ig;
       if (!g || g.pointerId !== e.pointerId) return;
 
       // Block LWC from processing pointer moves while we own the gesture.
-      // PINCH_ZOOM: also stopPropagation — we handle zoom ourselves via touch
-      // events; LWC must not apply its own zoom on top via pointer events.
       // Without this, LWC's per-pane scroll / price-scale drag can fire
       // during the CROSSHAIR/PENDING threshold window before we enter CHART_PAN.
       e.stopPropagation();
@@ -2214,6 +2225,14 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       const currentBars = (range.to as number) - (range.from as number);
       const ratio       = prevSpan / span;
       const newBars     = Math.max(3, Math.min(500_000, currentBars * ratio));
+
+      // ── Zoom limit guard ─────────────────────────────────────────────────
+      // If newBars equals currentBars the clamp absorbed the entire gesture
+      // (already at min or max zoom). Skip setVisibleLogicalRange completely —
+      // even though newBars didn't change, the anchor-midpoint calculation
+      // below can produce a slightly different newFrom, which manifests as
+      // unwanted horizontal drift when pinching at the zoom boundary.
+      if (newBars === currentBars) return;
 
       // ── Anchor: live midpoint of the two fingers in logical bar space ─────
       const rect   = container.getBoundingClientRect();
