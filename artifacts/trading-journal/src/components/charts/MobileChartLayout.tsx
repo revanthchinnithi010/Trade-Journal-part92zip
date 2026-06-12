@@ -699,7 +699,10 @@ function BottomSheet({
       const dy = e.touches[0].clientY - startTouchY;
 
       if (phase === "pending") {
-        if (Math.abs(dy) < 6) return;
+        // 10px threshold: prevents accidental drag interception when tapping
+        // buttons (finger jitter on mobile is typically 5-8px; intentional
+        // drag is 15px+). 6px was too tight and ate button clicks in HALF state.
+        if (Math.abs(dy) < 10) return;
 
         if (ds.current.snap === "half") {
           // HALF state: drag in any direction starts sheet drag
@@ -2856,6 +2859,13 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const catEntry = SYMBOL_CATALOG[activeKey];
   const wlEntry  = watchlistItems.find(i => i.symbol === activeKey);
   const badge    = wlEntry?.badge ?? catEntry?.badge ?? activeKey.slice(0,4).toUpperCase();
+
+  // ── Fix: BrokerAuthModal renders at zIndex 201, BottomSheet at zIndex 300.
+  // When the auth modal opens, the form would be invisible behind the BrokerSheet.
+  // Close BrokerSheet the moment showAuthModal becomes true so the auth page is visible.
+  useEffect(() => {
+    if (showAuthModal) setShowBrokerSheet(false);
+  }, [showAuthModal]);
 
   // ── Stable sheet close handlers — MUST be useCallback so memo'd sheets
   // don't re-render from a new inline-arrow onClose prop on every parent render ──
