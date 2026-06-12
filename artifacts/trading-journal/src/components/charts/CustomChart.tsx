@@ -226,7 +226,7 @@ function calcPriceScaleW(price: number, sym: string): number {
 const PRICE_SCALE_TOUCH_W = 130; // generous max — covers even sub-micro meme coins
 const DEFAULT_VISIBLE_BARS   = 150; // TradingView-style default: show ~150 recent bars on fresh load
 const MIN_FUTURE_BARS        = 50;  // always keep 50 bars of future space on the right
-const HISTORY_PREFETCH_BARS  = 50;  // trigger history fetch when within this many bars of the left edge
+const HISTORY_PREFETCH_BARS  = 150; // trigger history fetch when within this many bars of the left edge
 
 // ── Price-scale touch/mouse handler — unlimited exponential zoom + kinetic ────
 //
@@ -869,10 +869,11 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
   // hasMoreHistoryRef: set false when the exchange returns 0 bars (history exhausted).
   // loadMoreHistRef: stable ref to the loadMoreHistory fn so onRangeChange
   //   (inside the chart-init useEffect closure) can always call the current version.
-  const oldestBarTimeRef  = useRef<number | null>(null);
-  const isLoadingMoreRef  = useRef(false);
-  const hasMoreHistoryRef = useRef(true);
-  const loadMoreHistRef   = useRef<() => void>(() => {});
+  const oldestBarTimeRef   = useRef<number | null>(null);
+  const isLoadingMoreRef   = useRef(false);
+  const hasMoreHistoryRef  = useRef(true);
+  const loadMoreHistRef    = useRef<() => void>(() => {});
+  const histLoadingDivRef  = useRef<HTMLDivElement | null>(null);
 
   // ── scheduleChartUpdate — the ONLY entry point for series.update() ─────────
   // Call this whenever the live bar changes (tick path OR candle_update path).
@@ -989,6 +990,9 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     const iv  = ivRef.current;
 
     isLoadingMoreRef.current = true;
+    // Show the loading indicator (direct DOM — no React re-render)
+    if (histLoadingDivRef.current) histLoadingDivRef.current.style.display = "flex";
+
     try {
       const resp = await fetch(`${BASE}/api/candles/${sym}/${iv}?before=${oldestTime}`);
       if (!resp.ok || !mountedRef.current) return;
@@ -1001,17 +1005,17 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         return;
       }
 
-      const existing        = barsRef.current;
+      const existing         = barsRef.current;
       const earliestExisting = existing[0]?.time ?? Infinity;
 
-      // Only keep bars older than what we already have (strict dedup)
+      // Only keep bars strictly older than what we already have (strict dedup by time)
       const fresh = newBars.filter(b => b.time < earliestExisting);
       if (fresh.length === 0) {
         hasMoreHistoryRef.current = false;
         return;
       }
 
-      // Merge: prepend fresh bars, dedup by time, sort ascending
+      // Merge: prepend fresh bars, dedup by time key, sort ascending
       const merged = [
         ...new Map([...fresh, ...existing].map(b => [b.time, b])).values(),
       ].sort((a, b) => a.time - b.time);
@@ -1019,36 +1023,47 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       const numAdded = merged.length - existing.length;
       if (numAdded <= 0) { hasMoreHistoryRef.current = false; return; }
 
-      barsRef.current           = merged;
-      oldestBarTimeRef.current  = merged[0].time;
+      barsRef.current          = merged;
+      oldestBarTimeRef.current = merged[0].time;
 
       const chart  = chartRef.current;
       const series = mainRef.current;
       if (!chart || !series || !mountedRef.current) return;
 
-      // Save the current visible logical range BEFORE replacing the series data.
-      // After setData() with N new bars prepended, every existing bar's logical
-      // index shifts right by numAdded — so we compensate by adding numAdded to
-      // both from/to, keeping the user viewing exactly the same candles.
-      const currentRange = chart.timeScale().getVisibleLogicalRange();
+      // Snapshot the visible logical range BEFORE calling setData().
+      // After setData() with N new bars prepended, every bar's logical index
+      // shifts right by numAdded — we compensate by adding numAdded to both
+      // edges, keeping the user viewing exactly the same candles with no jump.
+      const beforeRange = chart.timeScale().getVisibleLogicalRange();
 
       applyBars(series, ctRef.current, merged);
 
-      if (currentRange) {
-        try {
-          chart.timeScale().setVisibleLogicalRange({
-            from: (currentRange.from as number) + numAdded,
-            to:   (currentRange.to   as number) + numAdded,
-          });
-        } catch { /* LWC may reject if range is invalid — ignore */ }
-      }
-
-      // Rebuild indicator series over the full expanded dataset
+      // Rebuild indicator series over the full expanded dataset.
+      // Done before restoring the range so LWC only repaints once.
       for (const [key, s] of Object.entries(emaRefs.current) as [keyof IndicatorState, ISeriesApi<"Line">][]) {
         fillIndicator(s, key, merged);
       }
+
+      // Restore viewport in a RAF so LWC has fully processed setData() before
+      // we programmatically set the range (avoids a frame where LWC shows
+      // fitContent-style all-bars view before our compensation takes effect).
+      if (beforeRange) {
+        requestAnimationFrame(() => {
+          if (!mountedRef.current) return;
+          try {
+            chart.timeScale().setVisibleLogicalRange({
+              from: (beforeRange.from as number) + numAdded,
+              to:   (beforeRange.to   as number) + numAdded,
+            });
+          } catch { /* LWC may reject if chart was disposed — ignore */ }
+        });
+      }
+    } catch (err) {
+      console.warn("[loadMoreHistory] fetch error — will retry on next scroll:", err);
+      // Don't set hasMoreHistoryRef = false on network errors — allow retry
     } finally {
       isLoadingMoreRef.current = false;
+      if (histLoadingDivRef.current) histLoadingDivRef.current.style.display = "none";
     }
   }, [fillIndicator]);
 
@@ -3038,6 +3053,32 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         <div style={{ position: "absolute", inset: 0, touchAction: "none", overscrollBehavior: "none", willChange: "transform", transform: "translate3d(0,0,0)" }}>
           <div ref={containerRef} style={{ position: "absolute", inset: 0, touchAction: "none", willChange: "transform" }} />
           <canvas ref={futureCrossCanvasRef} style={{ position: "absolute", inset: 0, pointerEvents: "none", zIndex: 1 }} />
+          {/* History loading indicator — shown/hidden via direct DOM (no React re-render) */}
+          <div
+            ref={histLoadingDivRef}
+            style={{
+              display:        "none",
+              position:       "absolute",
+              top:            8,
+              left:           "50%",
+              transform:      "translateX(-50%)",
+              alignItems:     "center",
+              gap:            6,
+              background:     "rgba(18,24,38,0.82)",
+              border:         "1px solid rgba(255,255,255,0.10)",
+              borderRadius:   6,
+              padding:        "4px 10px",
+              fontSize:       11,
+              color:          "rgba(255,255,255,0.65)",
+              pointerEvents:  "none",
+              zIndex:         10,
+              backdropFilter: "blur(4px)",
+              whiteSpace:     "nowrap",
+            }}
+          >
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "rgba(255,255,255,0.85)", animation: "spin 0.7s linear infinite" }} />
+            Loading history…
+          </div>
           <TickRateOverlay tickCountRef={tickCountRef} />
           <LivePriceBox
             chart={chartCtx?.chart ?? null}
