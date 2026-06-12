@@ -1008,8 +1008,17 @@ function ChartTypeSheet({ current, onSelect, onClose }: {
 }
 
 // ── Drawing Tools Sheet ────────────────────────────────────────────────────
-function DrawingToolsSheet({ onClose }: { onClose: () => void }) {
-  const { activeTool, setActiveTool, canUndo, canRedo, undo, redo } = useDrawingStore();
+// memo: re-renders only when onClose ref changes (stable useCallback from parent)
+// Selector split: activeTool/canUndo/canRedo are the only reactive fields used here.
+// Actions (setActiveTool/undo/redo) are stable Zustand refs — subscribing to them
+// individually costs zero re-renders.
+const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose: () => void }) {
+  const activeTool    = useDrawingStore(s => s.activeTool);
+  const canUndo       = useDrawingStore(s => s.canUndo);
+  const canRedo       = useDrawingStore(s => s.canRedo);
+  const setActiveTool = useDrawingStore(s => s.setActiveTool);
+  const undo          = useDrawingStore(s => s.undo);
+  const redo          = useDrawingStore(s => s.redo);
 
   const selectTool = useCallback((type: ToolType) => {
     setActiveTool(type);
@@ -1097,11 +1106,17 @@ function DrawingToolsSheet({ onClose }: { onClose: () => void }) {
       </div>
     </BottomSheet>
   );
-}
+});
 
 // ── Object Tree Sheet ──────────────────────────────────────────────────────
-function ObjectTreeSheet({ onClose }: { onClose: () => void }) {
-  const { drawings, removeDrawing, selectedDrawingId, setSelectedDrawingId } = useDrawingStore();
+// memo: re-renders only when onClose ref changes.
+// Reactive fields: drawings (ref changes on add/remove/update), selectedDrawingId.
+// Actions: stable refs — no re-render cost.
+const ObjectTreeSheet = memo(function ObjectTreeSheet({ onClose }: { onClose: () => void }) {
+  const drawings             = useDrawingStore(s => s.drawings);
+  const selectedDrawingId    = useDrawingStore(s => s.selectedDrawingId);
+  const removeDrawing        = useDrawingStore(s => s.removeDrawing);
+  const setSelectedDrawingId = useDrawingStore(s => s.setSelectedDrawingId);
 
   const TOOL_LABEL: Partial<Record<ToolType, string>> = {
     trendline:"Trendline", ray:"Ray", extended:"Extended Line", hline:"H. Line",
@@ -1151,7 +1166,7 @@ function ObjectTreeSheet({ onClose }: { onClose: () => void }) {
       )}
     </BottomSheet>
   );
-}
+});
 
 // ── Layout Bottom Sheet ────────────────────────────────────────────────────
 const LAYOUT_PREVIEWS_MB = [
@@ -1464,14 +1479,20 @@ function MoreOptionsSheet({
 
 // ── Mini Control Bar ───────────────────────────────────────────────────────
 // ── DrawingMiniBar — replaces MiniControlBar when a drawing is selected ───
-function DrawingMiniBar({
+// memo: receives stable drawing object ref (Zustand map() keeps unmodified objects).
+// Zero reactive store subscriptions — only action refs, which are always stable.
+// This component will NOT re-render due to any drawing store update unless the
+// `drawing` prop itself changes (i.e. the selected drawing was modified).
+const DrawingMiniBar = memo(function DrawingMiniBar({
   drawing,
   onAlert,
 }: {
   drawing: Drawing;
   onAlert: (d: Drawing) => void;
 }) {
-  const { updateDrawing, removeDrawing, setSelectedDrawingId } = useDrawingStore();
+  const updateDrawing        = useDrawingStore(s => s.updateDrawing);
+  const removeDrawing        = useDrawingStore(s => s.removeDrawing);
+  const setSelectedDrawingId = useDrawingStore(s => s.setSelectedDrawingId);
   const [showMore,        setShowMore]        = useState(false);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showTextPicker,  setShowTextPicker]  = useState(false);
@@ -1883,7 +1904,7 @@ function DrawingMiniBar({
       )}
     </div>
   );
-}
+});
 
 // ── Mini watchlist popup — compact floating panel anchored above symbol button ──
 
@@ -2717,7 +2738,13 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const chartStore = useChartStore();
   const { wsStatus } = useLiveMarketContext();
   const { items: watchlistItems } = useWatchlist();
-  const { selectedDrawingId, drawings, activeTool, setActiveTool } = useDrawingStore();
+  // Narrow selectors: each field subscribed independently → re-renders ONLY when
+  // that specific field changes. isDrawing/activeStyle/stayInDraw/canUndo/canRedo
+  // no longer cause MobileChartLayout to re-render.
+  const selectedDrawingId = useDrawingStore(s => s.selectedDrawingId);
+  const drawings          = useDrawingStore(s => s.drawings);
+  const activeTool        = useDrawingStore(s => s.activeTool);
+  const setActiveTool     = useDrawingStore(s => s.setActiveTool);
   const selectedDrawing = drawings.find(d => d.id === selectedDrawingId) ?? null;
   const { openSelectModal, showSelectModal, showAuthModal, activeAccount, connectionStatus } = useBrokerStore();
   const brokerConnected = !!activeAccount && connectionStatus === "connected";
@@ -2766,6 +2793,11 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const catEntry = SYMBOL_CATALOG[activeKey];
   const wlEntry  = watchlistItems.find(i => i.symbol === activeKey);
   const badge    = wlEntry?.badge ?? catEntry?.badge ?? activeKey.slice(0,4).toUpperCase();
+
+  // ── Stable sheet close handlers — MUST be useCallback so memo'd sheets
+  // don't re-render from a new inline-arrow onClose prop on every parent render ──
+  const handleCloseDrawingSheet = useCallback(() => setShowDrawingSheet(false), []);
+  const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false), []);
 
   // ── Prev / Next symbol ──
   const handlePrev = useCallback(() => {
@@ -2929,12 +2961,12 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {/* ── Main bar rendered by layout.tsx to avoid remount flash ── */}
 
       {/* ── Sheets & modals ── */}
-      {showDrawingSheet && <DrawingToolsSheet onClose={() => setShowDrawingSheet(false)} />}
+      {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
       {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartStore.chartType ?? "candles"} onSelect={t => chartStore.setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
       {showAuthModal    && <BrokerAuthModal />}
-      {showObjectTree   && <ObjectTreeSheet onClose={() => setShowObjectTree(false)} />}
+      {showObjectTree   && <ObjectTreeSheet onClose={handleCloseObjectTree} />}
       {showMoreSheet && (
         <MoreOptionsSheet
           onClose={() => setShowMoreSheet(false)}
