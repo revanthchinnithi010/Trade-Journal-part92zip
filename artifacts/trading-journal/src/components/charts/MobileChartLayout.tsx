@@ -1044,7 +1044,7 @@ function LayoutBottomSheet({
                         <div style={{ fontSize:11, color:TEXT_DIM, marginTop:2 }}>{layout.symbol} · {layout.interval}</div>
                       </div>
                       <button
-                        onClick={() => { onLoadNamedLayout(layout); }}
+                        onClick={() => { console.log("[mobile] Load tapped — layout id:", layout.id, "name:", layout.name); onLoadNamedLayout(layout); }}
                         style={{ height:30, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", background:ACCENT_BG, border:`1px solid ${ACCENT_BORDER}`, color:ACCENT, flexShrink:0 }}
                       >
                         Load

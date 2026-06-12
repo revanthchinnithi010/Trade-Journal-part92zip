@@ -1421,15 +1421,30 @@ export default function Charts() {
   }, [saveLayout, activeKey, interval, chartSettings, layoutCount]);
 
   const handleLoadNamedLayout = useCallback((layoutData: NamedLayout) => {
+    console.log("[loadLayout] CALLED — id:", layoutData.id, "| layout obj:", JSON.stringify(layoutData));
     const store = useChartStore.getState();
+
+    console.log("[loadLayout] step 1 — setChartType:", layoutData.chartType);
     store.setChartType(layoutData.chartType);
+
+    console.log("[loadLayout] step 2 — setIndicators:", layoutData.indicators);
     (Object.keys(layoutData.indicators) as (keyof typeof layoutData.indicators)[]).forEach(key => {
       store.setIndicator(key, layoutData.indicators[key]);
     });
+
+    console.log("[loadLayout] step 3 — selectSymbol:", layoutData.symbol);
     selectSymbol(layoutData.symbol);
+
+    console.log("[loadLayout] step 4 — selectInterval:", layoutData.interval);
     selectInterval(layoutData.interval);
+
+    console.log("[loadLayout] step 5 — handleSettings:", layoutData.chartSettings);
     handleSettings(layoutData.chartSettings);
+
+    console.log("[loadLayout] step 6 — handleLayoutChange:", layoutData.layoutCount);
     handleLayoutChange(layoutData.layoutCount as ChartLayoutType);
+
+    console.log("[loadLayout] COMPLETE — toast firing");
     toast(`Layout "${layoutData.name}" loaded`);
   }, [selectSymbol, selectInterval, handleSettings, handleLayoutChange]);
 
