@@ -14,6 +14,7 @@ import {
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
 import { SymbolPickerSheet } from "./SymbolPickerSheet";
 import CustomChart from "./CustomChart";
+import MiniChart from "./MiniChart";
 import DrawingOverlay from "./DrawingOverlay";
 import IndicatorRenderer from "./IndicatorRenderer";
 import CustomIndicatorRenderer from "./CustomIndicatorRenderer";
@@ -2417,6 +2418,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showSymbolPicker,  setShowSymbolPicker]  = useState(false);
   const [isFullscreen,      setIsFullscreen]      = useState(false);
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
+  const [activeChartSlot,   setActiveChartSlot]   = useState(0);
 
   // ── Live price ──
   const connected      = wsStatus === "connected";
@@ -2468,12 +2470,77 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <AnimatedMeshBackground />
 
         <IndicatorTags topOffset={8} />
-        <CustomChart settings={chartSettings} replayBars={replayBarSlice}>
-          <DrawingOverlay symbol={activeKey} timeframe={interval} onDrawingAlert={handleDrawingAlert} alertDrawingIds={alertDrawingIds} />
-          <IndicatorRenderer />
-          <CustomIndicatorRenderer />
-        </CustomChart>
 
+        {/* Inner absolutely-pinned container — CSS grid root in multi-chart mode.
+            position:absolute + inset:0 gives explicit pixel dimensions so 1fr rows resolve. */}
+        <div style={{
+          position:"absolute", inset:0,
+          ...(layoutCount > 1 ? {
+            display:"grid",
+            gridTemplateColumns: layoutCount === 3 ? "2fr 1fr" : "1fr 1fr",
+            gridTemplateRows: layoutCount >= 3 ? "1fr 1fr" : "1fr",
+            gap: 2,
+            background: "rgba(255,255,255,0.05)",
+          } : {}),
+        }}>
+
+          {/* Single chart layout */}
+          {layoutCount === 1 && (
+            <CustomChart settings={chartSettings} replayBars={replayBarSlice}>
+              <DrawingOverlay symbol={activeKey} timeframe={interval} onDrawingAlert={handleDrawingAlert} alertDrawingIds={alertDrawingIds} />
+              <IndicatorRenderer />
+              <CustomIndicatorRenderer />
+            </CustomChart>
+          )}
+
+          {/* Multi-chart grid */}
+          {layoutCount > 1 && (
+            <>
+              {/* Slot 0: main chart (spans both rows in 3-chart layout) */}
+              <div
+                onClick={() => setActiveChartSlot(0)}
+                style={{
+                  position:"relative", overflow:"hidden", minHeight:0,
+                  gridRow: layoutCount === 3 ? "1 / 3" : undefined,
+                  cursor:"pointer",
+                  boxShadow: activeChartSlot === 0
+                    ? "inset 0 0 0 2px rgba(56,189,248,0.45)"
+                    : "inset 0 0 0 1px rgba(255,255,255,0.05)",
+                  transition:"box-shadow 0.15s",
+                }}
+              >
+                <CustomChart settings={chartSettings} replayBars={replayBarSlice}>
+                  <DrawingOverlay symbol={activeKey} timeframe={interval} onDrawingAlert={handleDrawingAlert} alertDrawingIds={alertDrawingIds} />
+                  <IndicatorRenderer />
+                  <CustomIndicatorRenderer />
+                </CustomChart>
+              </div>
+
+              {/* Extra MiniChart slots */}
+              {Array.from({ length: layoutCount - 1 }).map((_, i) => (
+                <div
+                  key={i}
+                  onClick={() => setActiveChartSlot(i + 1)}
+                  style={{
+                    position:"relative", overflow:"hidden", minHeight:0,
+                    cursor:"pointer",
+                    boxShadow: activeChartSlot === i + 1
+                      ? "inset 0 0 0 2px rgba(56,189,248,0.45)"
+                      : "inset 0 0 0 1px rgba(255,255,255,0.05)",
+                    transition:"box-shadow 0.15s",
+                  }}
+                >
+                  <MiniChart
+                    defaultSymbol={["ETHUSD", "XAUUSD", "EURUSD"][i] ?? "ETHUSD"}
+                    defaultInterval={interval}
+                    syncedInterval={syncTF ? interval : undefined}
+                  />
+                </div>
+              ))}
+            </>
+          )}
+
+        </div>
       </div>
 
       {/* ── Mini control bar (swaps to drawing bar when drawing selected) ── */}
