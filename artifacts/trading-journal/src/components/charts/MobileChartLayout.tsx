@@ -9,6 +9,7 @@ import {
   MousePointer, Eraser,
   Undo2, Redo2,
   Star, Search, TrendingUp, RefreshCw,
+  LayoutTemplate, Link2, Unlink2,
 } from "lucide-react";
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
 import { SymbolPickerSheet } from "./SymbolPickerSheet";
@@ -835,9 +836,136 @@ function ObjectTreeSheet({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── Layout Bottom Sheet ────────────────────────────────────────────────────
+const LAYOUT_PREVIEWS_MB = [
+  () => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr", gap:2, width:"100%", height:"100%" }}>
+      <div style={{ background:"rgba(56,189,248,0.18)", borderRadius:3 }} />
+    </div>
+  ),
+  () => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:2, width:"100%", height:"100%" }}>
+      {[0,1].map(i => <div key={i} style={{ background:"rgba(56,189,248,0.14)", borderRadius:3 }} />)}
+    </div>
+  ),
+  () => (
+    <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gridTemplateRows:"1fr 1fr", gap:2, width:"100%", height:"100%" }}>
+      <div style={{ gridRow:"1 / 3", background:"rgba(56,189,248,0.14)", borderRadius:3 }} />
+      {[0,1].map(i => <div key={i} style={{ background:"rgba(56,189,248,0.14)", borderRadius:3 }} />)}
+    </div>
+  ),
+  () => (
+    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gridTemplateRows:"1fr 1fr", gap:2, width:"100%", height:"100%" }}>
+      {[0,1,2,3].map(i => <div key={i} style={{ background:"rgba(56,189,248,0.14)", borderRadius:3 }} />)}
+    </div>
+  ),
+];
+const LAYOUT_LABELS_MB = ["Single", "Side by Side", "Large + 2", "4 Charts"];
+type ChartLayoutType = 1 | 2 | 3 | 4;
+
+function LayoutBottomSheet({
+  current, onChange, syncTF, onSyncTFChange, onClose,
+}: {
+  current: ChartLayoutType;
+  onChange: (n: ChartLayoutType) => void;
+  syncTF: boolean;
+  onSyncTFChange: (v: boolean) => void;
+  onClose: () => void;
+}) {
+  return (
+    <BottomSheet title="Layout Manager" onClose={onClose}>
+      <div style={{ padding:"12px 14px 8px" }}>
+        <p style={{ margin:"0 0 12px", fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+          Select Chart Layout
+        </p>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {([1, 2, 3, 4] as ChartLayoutType[]).map((n, idx) => {
+            const Preview = LAYOUT_PREVIEWS_MB[idx];
+            const active = current === n;
+            return (
+              <button key={n} onClick={() => { onChange(n); onClose(); }}
+                style={{
+                  padding:10, borderRadius:11, cursor:"pointer",
+                  background: active ? "rgba(56,189,248,0.09)" : BTN_BG,
+                  boxShadow: active
+                    ? "0 0 0 1.5px rgba(56,189,248,0.4), 0 0 20px rgba(56,189,248,0.08)"
+                    : `0 0 0 1px ${BTN_BORDER}`,
+                  display:"flex", flexDirection:"column", gap:8, alignItems:"center",
+                  transition:"all 0.15s",
+                }}
+                onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.09)"; }}
+                onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = BTN_BG; }}
+              >
+                <div style={{ width:"100%", height:52 }}>
+                  <Preview />
+                </div>
+                <span style={{ fontSize:10, fontWeight: active ? 800 : 600, color: active ? "#38bdf8" : TEXT_DIM }}>
+                  {LAYOUT_LABELS_MB[idx]}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {current > 1 && (
+          <div style={{ marginTop:16 }}>
+            <p style={{ margin:"0 0 8px", fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+              Timeframe Sync
+            </p>
+            <button
+              onClick={() => onSyncTFChange(!syncTF)}
+              style={{
+                width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"10px 12px", borderRadius:10, cursor:"pointer", border:"none",
+                background: syncTF ? "rgba(56,189,248,0.08)" : BTN_BG,
+                boxShadow: syncTF
+                  ? "0 0 0 1.5px rgba(56,189,248,0.35), 0 0 16px rgba(56,189,248,0.07)"
+                  : `0 0 0 1px ${BTN_BORDER}`,
+                transition:"all 0.15s",
+              }}
+            >
+              <div style={{
+                width:32, height:32, borderRadius:9, flexShrink:0,
+                background: syncTF ? "rgba(56,189,248,0.12)" : "rgba(255,255,255,0.06)",
+                boxShadow: syncTF ? "0 0 0 1px rgba(56,189,248,0.3)" : `0 0 0 1px ${BTN_BORDER}`,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                transition:"all 0.15s",
+              }}>
+                {syncTF
+                  ? <Link2   style={{ width:15, height:15, color:"#38bdf8" }} />
+                  : <Unlink2 style={{ width:15, height:15, color:TEXT_DIM }} />}
+              </div>
+              <div style={{ flex:1, textAlign:"left" }}>
+                <p style={{ margin:0, fontSize:11.5, fontWeight:700, color: syncTF ? "#38bdf8" : TEXT_HI }}>
+                  {syncTF ? "Synced" : "Independent"}
+                </p>
+                <p style={{ margin:0, fontSize:9.5, color:TEXT_DIM, marginTop:1, lineHeight:1.4 }}>
+                  {syncTF ? "All charts match main timeframe" : "Each chart has own timeframe"}
+                </p>
+              </div>
+              <div style={{
+                width:36, height:20, borderRadius:10, flexShrink:0,
+                background: syncTF ? "#38bdf8" : "rgba(255,255,255,0.12)",
+                position:"relative", transition:"background 0.2s",
+              }}>
+                <div style={{
+                  position:"absolute", top:3, width:14, height:14, borderRadius:"50%",
+                  background: syncTF ? "#07110D" : "rgba(167,184,169,0.6)",
+                  left: syncTF ? 18 : 3,
+                  transition:"left 0.2s",
+                }} />
+              </div>
+            </button>
+          </div>
+        )}
+      </div>
+    </BottomSheet>
+  );
+}
+
 // ── More Options Sheet ─────────────────────────────────────────────────────
 function MoreOptionsSheet({
-  onClose, onIndicators, onAlerts, onBarReplay, onChartType, onObjectTree, onSettings, onScreenshot,
+  onClose, onIndicators, onAlerts, onBarReplay, onChartType, onObjectTree, onSettings, onScreenshot, onLayout,
 }: {
   onClose: () => void;
   onIndicators: () => void;
@@ -847,12 +975,13 @@ function MoreOptionsSheet({
   onObjectTree: () => void;
   onSettings: () => void;
   onScreenshot: () => void;
+  onLayout: () => void;
 }) {
   const TILES: { icon: React.ReactNode; label: string; action: () => void; accent?: string }[] = [
     {
       icon: <LayoutGrid style={{ width:22, height:22 }} />,
       label: "Layout", accent: "#38bdf8",
-      action: () => { onClose(); },
+      action: () => { onLayout(); onClose(); },
     },
     {
       icon: <Activity style={{ width:22, height:22 }} />,
@@ -2133,6 +2262,10 @@ export interface MobileChartLayoutProps {
   currentPrice:        number | null;
   chartAreaRef:        React.RefObject<HTMLDivElement | null>;
   onBarReplay?:        () => void;
+  layoutCount:         ChartLayoutType;
+  onLayoutChange:      (n: ChartLayoutType) => void;
+  syncTF:              boolean;
+  onSyncTFChange:      (v: boolean) => void;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -2147,6 +2280,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     showSettings, setShowSettings,
     openSidebar, handleScreenshot, currentPrice, chartAreaRef,
     onBarReplay,
+    layoutCount, onLayoutChange, syncTF, onSyncTFChange,
   } = props;
 
   const [, navigate]  = useLocation();
@@ -2168,6 +2302,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showWatchlist,     setShowWatchlist]     = useState(false);
   const [showSymbolPicker,  setShowSymbolPicker]  = useState(false);
   const [isFullscreen,      setIsFullscreen]      = useState(false);
+  const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
 
   // ── Live price ──
   const connected      = wsStatus === "connected";
@@ -2268,6 +2403,16 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onObjectTree={() => setShowObjectTree(true)}
           onSettings={() => setShowSettings(v => !v)}
           onScreenshot={handleScreenshot}
+          onLayout={() => setShowLayoutSheet(true)}
+        />
+      )}
+      {showLayoutSheet && (
+        <LayoutBottomSheet
+          current={layoutCount}
+          onChange={onLayoutChange}
+          syncTF={syncTF}
+          onSyncTFChange={onSyncTFChange}
+          onClose={() => setShowLayoutSheet(false)}
         />
       )}
 

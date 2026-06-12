@@ -1432,6 +1432,10 @@ export default function Charts() {
         currentPrice={currentPrice}
         chartAreaRef={chartAreaRef}
         onBarReplay={enterReplay}
+        layoutCount={layoutCount}
+        onLayoutChange={handleLayoutChange}
+        syncTF={syncTF}
+        onSyncTFChange={handleSyncTFChange}
       />
     );
   }
