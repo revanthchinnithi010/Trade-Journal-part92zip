@@ -1670,28 +1670,21 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         e.stopPropagation();
         e.preventDefault();
         if (g.panMin === null || g.panMax === null || g.panMax <= 0) return;
-        if (g.hRafId !== null) return; // RAF already scheduled
-        const totalDx = e.clientX - g.startX;
-        g.hRafId = requestAnimationFrame(() => {
-          if (!ig || ig.mode !== 'TIME_SCALE_DRAG') return;
-          ig.hRafId = null;
-          const ch = chartRef.current;
-          if (!ch) return;
-          const w = container.clientWidth;
-          if (w <= 0) return;
-          const toEdge    = ig.panMin!;
-          const startBars = ig.panMax!;
-          // Exponential: full-width drag (w px) changes range by ~32× in either direction.
-          // Effectively unlimited zoom — only guarded against degenerate extremes.
-          const newBars = startBars * Math.pow(2, totalDx / (w * 0.2));
-          const safeBars = Math.max(3, Math.min(500_000, newBars));
-          try {
-            ch.timeScale().setVisibleLogicalRange({
-              from: toEdge - safeBars,
-              to:   toEdge,
-            });
-          } catch { /* ignore LWC range-clamp errors */ }
-        });
+        const ch = chartRef.current;
+        const w  = container.clientWidth;
+        if (!ch || w <= 0) return;
+        // Applied directly on every event — no RAF coalescing.
+        // LWC batches canvas repaints to its internal RAF loop so calling
+        // setVisibleLogicalRange on each pointermove is zero-overhead.
+        // Exponential: full-width drag (w px) changes range by ~32× in either direction.
+        const totalDx   = e.clientX - g.startX;
+        const toEdge    = g.panMin;
+        const startBars = g.panMax;
+        const newBars   = startBars * Math.pow(2, totalDx / (w * 0.2));
+        const safeBars  = Math.max(3, Math.min(500_000, newBars));
+        try {
+          ch.timeScale().setVisibleLogicalRange({ from: toEdge - safeBars, to: toEdge });
+        } catch { /* ignore LWC range-clamp errors */ }
         return;
       }
 
@@ -1773,37 +1766,37 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       e.preventDefault();
 
       // ── Horizontal pan (mouse + touch) ────────────────────────────────────
-      if (dx !== 0 && g.hRafId === null) {
+      // Applied directly on every event — no RAF coalescing.
+      // Dropping events (old approach: skip if hRafId pending) caused up to 5× less
+      // movement applied per display frame, making the chart feel sluggish and laggy.
+      if (dx !== 0) {
         // Disable autoScale on the first horizontal frame so LWC doesn't jump
         // the Y-axis to fit newly visible candles while the user scrolls left/right.
         // Only apply when vertical pan hasn't started — vertical pan re-enables it.
         if (!g.panActivated) {
           try { chartRef.current?.priceScale("right").applyOptions({ autoScale: false }); } catch { /* ok */ }
         }
-        const cdx = dx;
-        g.hRafId = requestAnimationFrame(() => {
-          if (!ig || ig.mode !== 'CHART_PAN') return;
-          ig.hRafId = null;
-          const ch = chartRef.current;
-          if (!ch) return;
-          const range = ch.timeScale().getVisibleLogicalRange();
-          if (!range) return;
+        const ch = chartRef.current;
+        const range = ch?.timeScale().getVisibleLogicalRange();
+        if (ch && range) {
           const w = container.clientWidth;
           const barsVisible = (range.to as number) - (range.from as number);
-          if (w <= 0 || barsVisible <= 0) return;
-          try {
-            ch.timeScale().setVisibleLogicalRange({
-              from: (range.from as number) - cdx / (w / barsVisible),
-              to:   (range.to   as number) - cdx / (w / barsVisible),
-            });
-          } catch { /* chart disposed mid-frame */ }
-        });
+          if (w > 0 && barsVisible > 0) {
+            const pxPerBar = w / barsVisible;
+            try {
+              ch.timeScale().setVisibleLogicalRange({
+                from: (range.from as number) - dx / pxPerBar,
+                to:   (range.to   as number) - dx / pxPerBar,
+              });
+            } catch { /* chart disposed */ }
+          }
+        }
       }
 
       // ── Vertical pan (mouse + touch) ─────────────────────────────────────
       // Mouse: 360° drag works in chart area. Price-scale zone is excluded in
       // onDown so LWC handles axisPressedMouseMove.price there natively.
-      if (dy === 0 || g.vRafId !== null) return;
+      if (dy === 0) return;
 
       // Lazy price-range snapshot on the first vertical pan frame.
       // coordinateToPrice(0/h) gives the SCREEN range (includes scaleMargins).
@@ -1872,20 +1865,18 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         updatePanRange(lo, hi);
       }
 
-      g.vRafId = requestAnimationFrame(() => {
-        if (!ig || ig.mode !== 'CHART_PAN') return;
-        ig.vRafId = null;
-        const series = mainRef.current;
-        if (!series) return;
+      // Applied directly on every event — no RAF coalescing.
+      // Each applyOptions call forces LWC to re-evaluate the price scale
+      // and re-call all autoscaleInfoProviders with the latest pan range.
+      const series = mainRef.current;
+      if (series) {
+        const curLo = lo, curHi = hi;
         try {
-          // A new closure per frame forces LWC to re-evaluate the price scale.
-          // Indicator series' live providers also get re-called and read the
-          // current getPanRange() value set via updatePanRange() above.
           series.applyOptions({
-            autoscaleInfoProvider: () => ({ priceRange: { minValue: lo, maxValue: hi } }),
+            autoscaleInfoProvider: () => ({ priceRange: { minValue: curLo, maxValue: curHi } }),
           });
-        } catch { /* chart disposed during HMR */ }
-      });
+        } catch { /* chart disposed */ }
+      }
     };
 
     // ── pointerup / pointercancel ─────────────────────────────────────────────
