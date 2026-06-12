@@ -2277,7 +2277,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     stayInDraw,
     drawings, activeStyle,
     addDrawing, resetDrawings, removeDrawing, updateDrawing, setIsDrawing,
-    setSelectedDrawingId, setActiveStyle,
+    setSelectedDrawingId, setActiveStyle, syncActiveStyle,
   } = useDrawingStore();
 
   const overlayRef  = useRef<HTMLDivElement>(null);
@@ -2364,9 +2364,11 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     setSelectedDrawingId(id);
     if (id !== null) {
       const d = useDrawingStore.getState().drawings.find(x => x.id === id);
-      if (d) setActiveStyle(d.style);
+      // Use syncActiveStyle (not setActiveStyle) so selecting a drawing never
+      // overwrites the persisted per-tool defaults in localStorage.
+      if (d) syncActiveStyle(d.style);
     }
-  }, [setSelectedDrawingId, setActiveStyle]);
+  }, [setSelectedDrawingId, syncActiveStyle]);
 
   const [showStylePanel, setShowStylePanel] = useState(false);
   const handleCloseStylePanel = useCallback(() => setShowStylePanel(false), []);

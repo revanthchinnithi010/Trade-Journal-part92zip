@@ -58,7 +58,18 @@ interface DrawingStore {
   canRedo:  boolean;
 
   activeStyle:         DrawingStyle;
+  /**
+   * Called by the user intentionally changing a style property.
+   * Updates activeStyle AND persists the new defaults to localStorage
+   * so future drawings of the same type inherit them.
+   */
   setActiveStyle:      (style: Partial<DrawingStyle>) => void;
+  /**
+   * Called internally when a drawing is selected, to sync the style
+   * panel to show the selected drawing's current style.
+   * Does NOT save to localStorage — avoids clobbering persisted defaults.
+   */
+  syncActiveStyle:     (style: DrawingStyle) => void;
 
   selectedDrawingId:    number | null;
   setSelectedDrawingId: (id: number | null) => void;
@@ -128,22 +139,28 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     return { drawings: next, _history: history, _future: rest, canUndo: true, canRedo: rest.length > 0 };
   }),
 
-  activeStyle:    DEFAULT_STYLE,
+  activeStyle: DEFAULT_STYLE,
+
+  // User-initiated style change — persists defaults to localStorage.
   setActiveStyle: (patch) => set((s) => {
     const next = { ...s.activeStyle, ...patch };
-    // If a drawing is selected, save defaults under that drawing's tool type
-    // so future drawings of the same type inherit the new style.
-    // Also save under activeTool in case a drawing tool is active.
+
+    // Save as the default for the selected drawing's tool type, so future
+    // drawings of that type inherit the new style.
     if (s.selectedDrawingId !== null) {
       const selectedDrawing = s.drawings.find(d => d.id === s.selectedDrawingId);
       if (selectedDrawing) {
         saveDrawingStyle(selectedDrawing.toolType, next);
       }
     }
+
+    // Also save under the active drawing tool (when no drawing is selected
+    // but a draw tool is active — e.g. user changes color before drawing).
     if (s.activeTool !== "cursor") {
       saveDrawingStyle(s.activeTool, next);
     }
-    // If a drawing is currently selected, update its style in real-time
+
+    // Update selected drawing's style in real-time.
     if (s.selectedDrawingId !== null) {
       const drawings = s.drawings.map(d =>
         d.id === s.selectedDrawingId
@@ -154,6 +171,9 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
     }
     return { activeStyle: next };
   }),
+
+  // Internal selection sync — does NOT persist to localStorage.
+  syncActiveStyle: (style) => set({ activeStyle: style }),
 
   selectedDrawingId:    null,
   setSelectedDrawingId: (id) => set({ selectedDrawingId: id }),
