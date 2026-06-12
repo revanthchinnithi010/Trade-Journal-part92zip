@@ -743,81 +743,21 @@ function BottomSheet({
             paddingBottom:2,
           } as React.CSSProperties}
         >
-          {/* Handle pill + snap chevron */}
-          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", margin:"12px auto 4px", gap:3 }}>
+          {/* Minimal handle pill — visual only, no glow, no shadow */}
+          <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
             <div
               style={{
-                width:44, height:5, borderRadius:3,
-                background: snap === "full" ? "rgba(96,165,250,0.55)" : "rgba(255,255,255,0.26)",
-                boxShadow: snap === "full" ? "0 0 8px rgba(96,165,250,0.35)" : "0 1px 0 rgba(255,255,255,0.08)",
-                transition:"background 0.25s ease, box-shadow 0.25s ease",
+                width:44, height:4, borderRadius:9999,
+                background:"rgba(255,255,255,0.32)",
               }}
             />
-            {/* Subtle expand / collapse hint chevrons */}
-            <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:0, opacity:0.35 }}>
-              {snap === "half" ? (
-                <svg width="18" height="7" viewBox="0 0 18 7" fill="none">
-                  <path d="M2 6L9 1L16 6" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              ) : (
-                <svg width="18" height="7" viewBox="0 0 18 7" fill="none">
-                  <path d="M2 1L9 6L16 1" stroke="rgba(96,165,250,0.85)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-            </div>
           </div>
 
-          {/* Title + close */}
-          <div style={{ display:"flex", alignItems:"center", padding:"2px 16px 10px" }}>
-            <span style={{ flex:1, fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>
+          {/* Centered title only — no buttons */}
+          <div style={{ display:"flex", justifyContent:"center", alignItems:"center", padding:"2px 16px 10px" }}>
+            <span style={{ fontSize:13, fontWeight:600, color:TEXT_HI, letterSpacing:"0.01em" }}>
               {title}
             </span>
-            {/* Expand / collapse toggle button */}
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={() => {
-                const { half, full } = snapYRef.current;
-                if (snap === "half") {
-                  ds.current.snap = "full";
-                  setSnap("full");
-                  animateTo(full);
-                } else {
-                  ds.current.snap = "half";
-                  setSnap("half");
-                  animateTo(half);
-                }
-              }}
-              title={snap === "half" ? "Expand to full screen" : "Collapse"}
-              style={{
-                width:28, height:28, borderRadius:8, marginRight:6,
-                border:`1px solid ${snap === "full" ? "rgba(96,165,250,0.30)" : "rgba(255,255,255,0.10)"}`,
-                background: snap === "full" ? "rgba(96,165,250,0.12)" : "rgba(255,255,255,0.06)",
-                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                transition:"background 0.2s, border-color 0.2s",
-              }}
-            >
-              {snap === "half" ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.50)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
-                </svg>
-              ) : (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#60A5FA" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
-                </svg>
-              )}
-            </button>
-            <button
-              onPointerDown={e => e.stopPropagation()}
-              onClick={doClose}
-              style={{
-                width:28, height:28, borderRadius:8,
-                border:`1px solid rgba(255,255,255,0.10)`,
-                background:"rgba(255,255,255,0.06)",
-                cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-              }}
-            >
-              <X style={{ width:13, height:13, color:"rgba(255,255,255,0.50)" }} />
-            </button>
           </div>
         </div>
 
