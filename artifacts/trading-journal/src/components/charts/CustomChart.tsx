@@ -2081,8 +2081,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     const applyPinchZoom = (t0: Touch, t1: Touch) => {
       if (!ig || ig.mode !== 'PINCH_ZOOM') return;
 
-      const span = Math.abs(t1.clientX - t0.clientX);
-      if (span < 8) return; // ignore degenerate finger overlap
+      // Use Euclidean distance so vertically-aligned same-hand fingers
+      // (near-zero X delta but large Y delta) still produce a valid span.
+      const span = Math.hypot(t1.clientX - t0.clientX, t1.clientY - t0.clientY);
+      if (span < 1) return; // ignore true degenerate overlap only
 
       // ── First call: seed prevSpan, nothing to compare yet ────────────────
       if (ig.pinchPrevSpan === null) {
@@ -2159,15 +2161,19 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     // ── touchend capture — clean up PINCH_ZOOM when fingers lift ─────────────
     // When the user lifts all fingers after a pinch, reset ig so single-finger
     // gestures can start fresh on the next touch.
+    //
+    // NOTE: do NOT set pressCount here. The corresponding pointer event (pointerup
+    // or pointercancel → onUp) fires immediately after touchend and does
+    // pressCount-- correctly. Manually setting pressCount here causes an
+    // off-by-one: e.g. when going 2→1 fingers, setting pressCount=1 here then
+    // onUp decrements to 0 — making the remaining finger invisible to the
+    // pointer-event path and breaking any subsequent single-finger pan.
     const onTouchEnd = (e: TouchEvent) => {
       if (ig?.mode !== 'PINCH_ZOOM') return;
-      if (e.touches.length === 0) {
+      if (e.touches.length <= 1) {
+        // All or all-but-one fingers lifted — clear pinch state.
+        // onUp (pointer event) will decrement pressCount for the lifted finger.
         ig = null;
-        pressCount = 0;
-      } else if (e.touches.length === 1) {
-        // One finger still down — revert to PENDING so they can pan
-        ig = null;
-        pressCount = 1;
       }
     };
 
