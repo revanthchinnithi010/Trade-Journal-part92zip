@@ -743,14 +743,25 @@ function BottomSheet({
             paddingBottom:2,
           } as React.CSSProperties}
         >
-          {/* Minimal handle pill — visual only, no glow, no shadow */}
-          <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
-            <div
-              style={{
-                width:44, height:4, borderRadius:9999,
-                background:"rgba(255,255,255,0.32)",
-              }}
-            />
+          {/* Handle pill — visible in HALF, hidden (collapsed) in FULL.
+               max-height + opacity transition removes the space cleanly.
+               Both driven by React snap state (changes are infrequent — no perf issue). */}
+          <div
+            style={{
+              overflow:"hidden",
+              maxHeight: snap === "full" ? 0 : 30,
+              opacity:   snap === "full" ? 0 : 1,
+              transition:"max-height 0.35s ease, opacity 0.26s ease",
+            }}
+          >
+            <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
+              <div
+                style={{
+                  width:44, height:4, borderRadius:9999,
+                  background:"rgba(255,255,255,0.32)",
+                }}
+              />
+            </div>
           </div>
 
           {/* Centered title only — no buttons */}
