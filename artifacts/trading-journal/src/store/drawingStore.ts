@@ -131,7 +131,18 @@ export const useDrawingStore = create<DrawingStore>((set, get) => ({
   activeStyle:    DEFAULT_STYLE,
   setActiveStyle: (patch) => set((s) => {
     const next = { ...s.activeStyle, ...patch };
-    saveDrawingStyle(s.activeTool, next);
+    // If a drawing is selected, save defaults under that drawing's tool type
+    // so future drawings of the same type inherit the new style.
+    // Also save under activeTool in case a drawing tool is active.
+    if (s.selectedDrawingId !== null) {
+      const selectedDrawing = s.drawings.find(d => d.id === s.selectedDrawingId);
+      if (selectedDrawing) {
+        saveDrawingStyle(selectedDrawing.toolType, next);
+      }
+    }
+    if (s.activeTool !== "cursor") {
+      saveDrawingStyle(s.activeTool, next);
+    }
     // If a drawing is currently selected, update its style in real-time
     if (s.selectedDrawingId !== null) {
       const drawings = s.drawings.map(d =>
