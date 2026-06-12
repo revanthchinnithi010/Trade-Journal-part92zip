@@ -421,15 +421,17 @@ function BottomSheet({
   partialFraction?: number;
   maxHeight?: string;
 }) {
-  const sheetRef    = useRef<HTMLDivElement>(null);
-  const backdropRef = useRef<HTMLDivElement>(null);
-  const headerRef   = useRef<HTMLDivElement>(null);
-  const scrollRef   = useRef<HTMLDivElement>(null);
-  const onCloseRef  = useRef(onClose);
+  const sheetRef     = useRef<HTMLDivElement>(null);
+  const backdropRef  = useRef<HTMLDivElement>(null);
+  const headerRef    = useRef<HTMLDivElement>(null);
+  const scrollRef    = useRef<HTMLDivElement>(null);
+  const pillWrapRef  = useRef<HTMLDivElement>(null);
+  const pillInnerRef = useRef<HTMLDivElement>(null);
+  const onCloseRef   = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  // React state only for pill/chevron colour — snaps are infrequent
-  const [snap, setSnap] = useState<"half"|"full">("half");
+  // ── NO React state for snap — all snap-driven styles via direct DOM ────────
+  // This eliminates the React re-render burst that caused jank on transitions.
 
   // Snap Y offsets in px — initialised synchronously so opening RAF can read them
   const snapYRef = useRef({
@@ -457,6 +459,30 @@ function BottomSheet({
     rafId:      0,
     rafPending: false,
   });
+
+  // ── Apply snap-driven DOM styles without any React re-render ─────────────
+  // pill: instant height change (zero layout thrashing) + GPU transform/opacity
+  // scroll: overflowY + touchAction updated directly on the DOM node
+  const applySnapDom = useCallback((newSnap: "half"|"full") => {
+    const pw = pillWrapRef.current;
+    const pi = pillInnerRef.current;
+    const sc = scrollRef.current;
+    if (newSnap === "full") {
+      // Reclaim pill space instantly — no animated height (avoids layout thrash)
+      if (pw) pw.style.height = "0px";
+      // GPU-only visual animation on the inner pill content
+      if (pi) { pi.style.transform = "translateY(-100%)"; pi.style.opacity = "0"; }
+      // Enable scroll now that sheet is full-height
+      if (sc) { sc.style.overflowY = "auto"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "pan-y"; }
+    } else {
+      // Restore pill space instantly
+      if (pw) pw.style.height = "30px";
+      // GPU-animate pill back into view
+      if (pi) { pi.style.transform = "translateY(0)"; pi.style.opacity = "1"; }
+      // Disable scroll to prevent conflict with drag
+      if (sc) { sc.style.overflowY = "hidden"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none"; }
+    }
+  }, []);
 
   // ── Backdrop opacity: fades when dragging below HALF_Y ───────────────────
   const syncBackdrop = useCallback((y: number) => {
@@ -521,7 +547,7 @@ function BottomSheet({
       if (delta < -60) {
         // Dragged up far enough → expand to FULL
         ds.current.snap = "full";
-        setSnap("full");
+        applySnapDom("full");
         animateTo(full);
       } else if (delta > 110) {
         // Dragged down → CLOSE
@@ -534,13 +560,13 @@ function BottomSheet({
       // From FULL: only collapses to HALF, never closes directly from full
       if (delta > 90) {
         ds.current.snap = "half";
-        setSnap("half");
+        applySnapDom("half");
         animateTo(half);
       } else {
         animateTo(full);
       }
     }
-  }, [animateTo, doClose]);
+  }, [animateTo, doClose, applySnapDom]);
 
   // ── Touch drag on the ENTIRE sheet body ───────────────────────────────────
   useEffect(() => {
@@ -743,18 +769,26 @@ function BottomSheet({
             paddingBottom:2,
           } as React.CSSProperties}
         >
-          {/* Handle pill — visible in HALF, hidden (collapsed) in FULL.
-               max-height + opacity transition removes the space cleanly.
-               Both driven by React snap state (changes are infrequent — no perf issue). */}
+          {/* Handle pill — space managed via ref (instant height), visual via GPU transform/opacity.
+               NO max-height animation: that caused layout recalculation on every frame → jank. */}
           <div
+            ref={pillWrapRef}
             style={{
               overflow:"hidden",
-              maxHeight: snap === "full" ? 0 : 30,
-              opacity:   snap === "full" ? 0 : 1,
-              transition:"max-height 0.35s ease, opacity 0.26s ease",
+              height:30,           // starts at 30px (half state); JS sets to 0 instantly on FULL
+              willChange:"auto",   // don't promote wrapper; only inner is GPU-animated
             }}
           >
-            <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
+            {/* Inner: GPU-only transform + opacity transition — zero layout impact */}
+            <div
+              ref={pillInnerRef}
+              style={{
+                display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6,
+                transition:"transform 0.26s ease, opacity 0.26s ease",
+                willChange:"transform, opacity",
+                // initial state = half (visible)
+              }}
+            >
               <div
                 style={{
                   width:44, height:4, borderRadius:9999,
@@ -774,14 +808,14 @@ function BottomSheet({
 
         <div style={{ width:"100%", height:1, background:`rgba(255,255,255,0.07)`, flexShrink:0 }} />
 
-        {/* Content scroll area — only scrollable when FULL to avoid conflict */}
+        {/* Content scroll area — overflowY + touchAction driven via ref, not React state.
+             Initial state = half (hidden/none). JS updates on snap commit. */}
         <div
           ref={scrollRef}
           style={{
-            overflowY: snap === "full" ? "auto" : "hidden",
+            overflowY:"hidden",
             flex:1,
-            // Allow browser pan-y only when full (to enable native scroll)
-            touchAction: snap === "full" ? "pan-y" : "none",
+            touchAction:"none",
             WebkitOverflowScrolling:"touch",
           } as React.CSSProperties}
         >
