@@ -1497,6 +1497,16 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       // Prevent browser text-selection / native image-drag from stealing the pointer
       e.preventDefault();
 
+      // ── Stale-state guard (touch only) ────────────────────────────────────
+      // If a previous touch's pointerup/cancel was missed (OS interrupt, home
+      // swipe, notification), ig still holds the old pointerId and pressCount
+      // may be > 0. Reset both before treating this as a fresh gesture so we
+      // don't falsely enter PINCH_ZOOM on a single-finger drag.
+      if (e.pointerType !== 'mouse' && ig && ig.pointerId !== e.pointerId) {
+        cancelIg();
+        pressCount = 0;
+      }
+
       // Do NOT dismiss locked crosshair here — wait to see if this touch
       // is a tap (dismiss) or a drag (keep). Decision made in onUp.
 
@@ -2092,6 +2102,18 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       }
     };
 
+    // ── Page-hide / focus-loss recovery ──────────────────────────────────────
+    // OS interruptions (home swipe, notification, app switch, incoming call) can
+    // consume the pointer without delivering pointerup/cancel to our handler.
+    // Reset all gesture state so the next touch starts completely fresh.
+    const onPageHide = () => {
+      cancelIg();
+      pressCount = 0;
+      if (momentumRaf !== null) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
+    };
+    window.addEventListener('blur',               onPageHide);
+    document.addEventListener('visibilitychange', onPageHide);
+
     container.addEventListener('pointerdown',   onDown,          { capture: true });
     container.addEventListener('pointermove',   onMove,          { capture: true });
     container.addEventListener('pointerup',     onUp,            { capture: true });
@@ -2106,6 +2128,8 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       if (momentumRaf !== null) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
       cancelAnimationFrame(wheelRaf);
       cancelIg();
+      window.removeEventListener('blur',               onPageHide);
+      document.removeEventListener('visibilitychange', onPageHide);
       activatePanRange(null); // clear any locked range so indicator series restore auto-scale
       // Flush any pending viewport save before chart is torn down
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
