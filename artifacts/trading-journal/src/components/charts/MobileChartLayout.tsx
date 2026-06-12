@@ -2419,6 +2419,20 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [isFullscreen,      setIsFullscreen]      = useState(false);
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
+  const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
+  const slotInitRef = useRef(false);
+
+  // One-time init: seed slot symbols from watchlist when it first loads
+  useEffect(() => {
+    if (slotInitRef.current || watchlistItems.length === 0) return;
+    slotInitRef.current = true;
+    const candidates = watchlistItems.filter(w => w.symbol !== activeKey);
+    setSlotSymbols([
+      candidates[0]?.symbol ?? "ETHUSD",
+      candidates[1]?.symbol ?? "SOLUSD",
+      candidates[2]?.symbol ?? "DOGEUSD",
+    ]);
+  }, [watchlistItems.length]); // eslint-disable-line
 
   // ── Live price ──
   const connected      = wsStatus === "connected";
@@ -2441,6 +2455,29 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     const idx = watchlistItems.findIndex(i => i.symbol === activeKey);
     if (idx >= 0 && idx < watchlistItems.length - 1) selectSymbol(watchlistItems[idx + 1].symbol);
   }, [watchlistItems, activeKey, selectSymbol]);
+
+  // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
+  const handleSelectSymbol = useCallback((sym: string) => {
+    if (activeChartSlot === 0 || layoutCount <= 1) {
+      selectSymbol(sym);
+    } else {
+      setSlotSymbols(prev => {
+        const next = [...prev];
+        next[activeChartSlot - 1] = sym;
+        return next;
+      });
+    }
+  }, [activeChartSlot, layoutCount, selectSymbol]);
+
+  // Derive the symbol/badge shown in the shared mini control bar for the active slot
+  const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
+    ? activeKey
+    : (slotSymbols[activeChartSlot - 1] ?? activeKey);
+  const activeSlotBadge = (activeChartSlot === 0 || layoutCount <= 1)
+    ? badge
+    : (watchlistItems.find(i => i.symbol === activeSlotSymbol)?.badge
+        ?? SYMBOL_CATALOG[activeSlotSymbol]?.badge
+        ?? activeSlotSymbol.slice(0, 4).toUpperCase());
 
   // ── Fullscreen — sync to store so layout nav can hide ──
   const containerRef = useRef<HTMLDivElement>(null);
@@ -2531,9 +2568,11 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
                   }}
                 >
                   <MiniChart
-                    defaultSymbol={watchlistItems.filter(w => w.symbol !== activeKey)[i]?.symbol ?? ["ETHUSD", "SOLUSD", "DOGEUSD"][i] ?? "ETHUSD"}
+                    defaultSymbol={slotSymbols[i] ?? "ETHUSD"}
                     defaultInterval={interval}
                     syncedInterval={syncTF ? interval : undefined}
+                    headerless={true}
+                    controlledSymbol={slotSymbols[i]}
                   />
                 </div>
               ))}
@@ -2548,11 +2587,11 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <DrawingMiniBar drawing={selectedDrawing} onAlert={handleDrawingAlert} />
       ) : (
         <MiniControlBar
-          activeKey={activeKey}
-          badge={badge}
+          activeKey={activeSlotSymbol}
+          badge={activeSlotBadge}
           interval={interval}
           watchlistItems={watchlistItems}
-          onSelectSymbol={selectSymbol}
+          onSelectSymbol={handleSelectSymbol}
           onTF={() => setShowTFSheet(true)}
           onDraw={() => setShowDrawingSheet(true)}
           onBroker={openSelectModal}
@@ -2605,9 +2644,9 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       <MobileWatchlistOverlay
         visible={showWatchlist}
-        activeSymbol={activeKey}
+        activeSymbol={activeSlotSymbol}
         onClose={() => setShowWatchlist(false)}
-        onSelect={selectSymbol}
+        onSelect={handleSelectSymbol}
         onOpenChart={() => setShowWatchlist(false)}
       />
 
@@ -2617,9 +2656,9 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       <SymbolPickerSheet
         visible={showSymbolPicker}
-        activeSymbol={activeKey}
+        activeSymbol={activeSlotSymbol}
         onClose={() => setShowSymbolPicker(false)}
-        onSelect={selectSymbol}
+        onSelect={handleSelectSymbol}
       />
 
       {(showQuickAlert || alertDrawing !== null) && (

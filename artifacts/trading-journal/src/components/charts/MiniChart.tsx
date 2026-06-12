@@ -94,13 +94,17 @@ function MiniSymbolPicker({ onSelect, onClose }: { onSelect: (s: string) => void
 
 // ── MiniChart ─────────────────────────────────────────────────────────────────
 export interface MiniChartProps {
-  defaultSymbol:    string;
-  defaultInterval:  string;
+  defaultSymbol:     string;
+  defaultInterval:   string;
   /** When provided, overrides internal interval (timeframe sync mode) */
-  syncedInterval?:  string;
+  syncedInterval?:   string;
+  /** When true, hides the symbol/TF header — parent controls symbol via controlledSymbol */
+  headerless?:       boolean;
+  /** When provided, parent controls the displayed symbol (e.g. from the shared mini control bar) */
+  controlledSymbol?: string;
 }
 
-const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, syncedInterval }: MiniChartProps) {
+const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, syncedInterval, headerless, controlledSymbol }: MiniChartProps) {
   const [symbol,     setSymbol]     = useState(defaultSymbol);
   const [interval,   setInterval]   = useState(syncedInterval ?? defaultInterval);
   const [showPicker, setShowPicker] = useState(false);
@@ -127,6 +131,13 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
       setInterval(syncedInterval);
     }
   }, [syncedInterval]); // eslint-disable-line
+
+  // When controlledSymbol changes from parent (shared mini-bar selection), sync internal state
+  useEffect(() => {
+    if (controlledSymbol && controlledSymbol !== symRef.current) {
+      setSymbol(controlledSymbol);
+    }
+  }, [controlledSymbol]); // eslint-disable-line
 
   // Entry from watchlist or catalog fallback
   const entry = items.find(i => i.symbol === symbol) ?? {
@@ -350,7 +361,8 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
 
   return (
     <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", background: "#07110D", overflow: "hidden" }}>
-      {/* Mini header */}
+      {/* Mini header — hidden when parent controls symbol via shared mini control bar */}
+      {!headerless && (
       <div style={{
         height: 34, display: "flex", alignItems: "center", gap: 5, padding: "0 8px",
         background: "rgba(9,15,11,0.96)", borderBottom: "1px solid rgba(57,91,67,0.2)",
@@ -417,6 +429,7 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
           )}
         </div>
       </div>
+      )}
 
       {/* Chart canvas */}
       <div ref={containerRef} style={{ flex: 1, position: "relative", minHeight: 0 }}>
