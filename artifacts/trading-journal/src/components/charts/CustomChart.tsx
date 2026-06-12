@@ -1107,7 +1107,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       kineticScroll: { mouse: false, touch: false },
       handleScale: {
         mouseWheel:           true,  // vertical wheel → zoom (independent of handleScroll.mouseWheel)
-        pinch:                true,
+        pinch:                false, // we implement pinch-to-zoom ourselves in onTouchStart/onTouchMove
         // ROOT CAUSE FIX #2: axisPressedMouseMove.time: true makes LWC apply its own
         // time-axis pan while our engine is in CROSSHAIR mode (below threshold, no
         // stopPropagation) — LWC and our engine both pan concurrently causing jitter.
@@ -1661,14 +1661,13 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       if (!g || g.pointerId !== e.pointerId) return;
 
       // Block LWC from processing pointer moves while we own the gesture.
-      // PINCH_ZOOM is exempt — LWC's native pinch handler needs those events.
+      // PINCH_ZOOM: also stopPropagation — we handle zoom ourselves via touch
+      // events; LWC must not apply its own zoom on top via pointer events.
       // Without this, LWC's per-pane scroll / price-scale drag can fire
       // during the CROSSHAIR/PENDING threshold window before we enter CHART_PAN.
-      if (g.mode !== 'PINCH_ZOOM') {
-        e.stopPropagation();
-      }
+      e.stopPropagation();
 
-      // ── PINCH_ZOOM / IDLE: LWC owns the interaction completely ───────────
+      // ── PINCH_ZOOM: we own the zoom via onTouchMove — nothing else to do ──
       if (g.mode === 'PINCH_ZOOM') return;
 
       // ── TIME_SCALE_DRAG: horizontal drag zooms the time axis ─────────────
