@@ -444,13 +444,14 @@ function BottomSheet({
 
   // ── Shared drag state (never triggers re-render) ──────────────────────────
   const ds = useRef({
-    active:   false,
-    closing:  false,
-    snap:     "partial" as "partial"|"full",
-    baseY:    0,     // translateY at drag start
-    startPY:  0,     // pointer.clientY at drag start
-    latestPY: 0,     // updated on every pointermove (read in RAF)
-    rafId:    0,
+    active:     false,
+    closing:    false,
+    snap:       "partial" as "partial"|"full",
+    baseY:      0,     // translateY at drag start
+    startPY:    0,     // pointer.clientY at drag start
+    latestPY:   0,     // updated on every pointermove (read in RAF)
+    rafId:      0,
+    rafPending: false, // guard: at most one RAF scheduled per frame
   });
 
   // ── Backdrop opacity: fades only when dragging below PARTIAL_Y ───────────
@@ -465,6 +466,7 @@ function BottomSheet({
 
   // ── RAF: write current translateY to DOM ─────────────────────────────────
   const applyDrag = useCallback(() => {
+    ds.current.rafPending = false;
     const sheet = sheetRef.current;
     if (!sheet || ds.current.closing) return;
     const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
@@ -558,8 +560,10 @@ function BottomSheet({
     const onMove = (e: PointerEvent) => {
       if (!ds.current.active) return;
       ds.current.latestPY = e.clientY;
-      cancelAnimationFrame(ds.current.rafId);
-      ds.current.rafId = requestAnimationFrame(applyDrag);
+      if (!ds.current.rafPending) {
+        ds.current.rafPending = true;
+        ds.current.rafId = requestAnimationFrame(applyDrag);
+      }
     };
 
     const onUp = () => {
@@ -621,8 +625,10 @@ function BottomSheet({
       if (phase === "dragging") {
         e.preventDefault();
         ds.current.latestPY = e.touches[0].clientY;
-        cancelAnimationFrame(ds.current.rafId);
-        ds.current.rafId = requestAnimationFrame(applyDrag);
+        if (!ds.current.rafPending) {
+          ds.current.rafPending = true;
+          ds.current.rafId = requestAnimationFrame(applyDrag);
+        }
       }
     };
 
@@ -676,7 +682,11 @@ function BottomSheet({
       onClick={onBackdropClick}
       style={{
         position:"fixed", inset:0, zIndex:300,
-        background:"rgba(0,0,0,0.72)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
+        // No backdropFilter on the full-viewport overlay — blur on a composited
+        // full-screen layer forces a GPU re-pass every frame and is the #1 cause
+        // of frame drops on Android. Dark background + will-change:opacity is enough.
+        background:"rgba(0,0,0,0.72)",
+        willChange:"opacity",
         animation:"sheet-fade-in 0.22s ease both",
       }}
     >
@@ -688,7 +698,8 @@ function BottomSheet({
           // Sheet element is always FULL_H_FRAC tall; translateY controls visible amount
           height:`${FULL_H_FRAC * 100}vh`,
           background: SHEET_BG,
-          backdropFilter:"blur(24px)", WebkitBackdropFilter:"blur(24px)",
+          // No backdropFilter during drag — re-enable only when sheet is settled
+          // via CSS class if desired. Saves a GPU compositing pass every frame.
           borderTop:`1px solid rgba(255,255,255,0.10)`,
           borderLeft:`1px solid rgba(255,255,255,0.06)`,
           borderRight:`1px solid rgba(255,255,255,0.06)`,
@@ -698,7 +709,10 @@ function BottomSheet({
           boxShadow:`${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
           // Opening: slides from off-screen bottom to Y=0, then JS repositions to partialY
           animation:"sheet-slide-up 0.30s cubic-bezier(0.32, 0.72, 0, 1) both",
+          // GPU layer: translate3d forces own compositor layer, contain isolates layout
           willChange:"transform",
+          transform:"translateZ(0)",
+          contain:"layout style",
         }}
       >
         {/* ── Drag zone: handle pill + title row ─────────────────────────── */}
