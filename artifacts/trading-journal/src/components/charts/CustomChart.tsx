@@ -2090,61 +2090,136 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       // Vertical wheel: fall through to LWC for zoom
     };
 
-    // ── touchmove capture — custom pinch zoom + block LWC during pan ────────
+    // ── Helper: apply pinch zoom from a TouchEvent with 2+ touches ──────────
+    // Shared by onTouchStart and onTouchMove so the same logic runs in both.
+    const applyPinchZoom = (t0: Touch, t1: Touch) => {
+      const span = Math.abs(t1.clientX - t0.clientX);
+      if (span < 8) return; // ignore degenerate finger overlap
+
+      if (!ig || ig.mode !== 'PINCH_ZOOM') return;
+
+      // ── Initialise on the first call after entering PINCH_ZOOM ───────────
+      if (ig.pinchStartSpan === null) {
+        const ch    = chartRef.current;
+        const range = ch?.timeScale().getVisibleLogicalRange();
+        if (!ch || !range) return;
+        const rect   = container.getBoundingClientRect();
+        const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
+        const anchor = ch.timeScale().coordinateToLogical(midX);
+        ig.pinchStartSpan      = span;
+        ig.pinchStartFrom      = range.from as number;
+        ig.pinchStartTo        = range.to   as number;
+        ig.pinchAnchorLogical  = anchor ?? (((range.from as number) + (range.to as number)) / 2);
+        return;
+      }
+
+      // ── Apply zoom anchored on the initial pinch midpoint ─────────────
+      // scale > 1 → fingers moved apart → zoom IN (fewer bars visible)
+      // scale < 1 → fingers moved together → zoom OUT (more bars visible)
+      const scale     = ig.pinchStartSpan / span;
+      const startBars = ig.pinchStartTo! - ig.pinchStartFrom!;
+      const newBars   = Math.max(3, Math.min(500_000, startBars * scale));
+      const anchor    = ig.pinchAnchorLogical!;
+      const leftFrac  = (anchor - ig.pinchStartFrom!) / startBars;
+      const newFrom   = anchor - newBars * leftFrac;
+      const newTo     = newFrom + newBars;
+      try {
+        chartRef.current?.timeScale().setVisibleLogicalRange({ from: newFrom, to: newTo });
+      } catch { /* ignore range-clamp errors */ }
+    };
+
+    // ── touchstart capture — detect 2nd finger on iOS ────────────────────────
+    // iOS Safari does NOT reliably fire a second pointerdown for multi-touch.
+    // The pointerdown-based pressCount++ therefore never reaches 2 on iOS, so
+    // PINCH_ZOOM mode is never entered via the pointer path. We fix this by
+    // listening to touchstart in capture phase: whenever e.touches.length >= 2
+    // we force-enter PINCH_ZOOM, cancelling any single-finger gesture state.
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length < 2) return;
+
+      // Two or more fingers on screen — enter PINCH_ZOOM regardless of whether
+      // the pointerdown path already did it.  If already PINCH_ZOOM just reset
+      // the start state so the new finger layout is used as the new reference.
+      if (ig && ig.mode === 'PINCH_ZOOM') {
+        // Reset so applyPinchZoom re-initialises with fresh touch coords
+        ig.pinchStartSpan = null;
+        ig.pinchStartFrom = null;
+        ig.pinchStartTo   = null;
+        ig.pinchAnchorLogical = null;
+        return;
+      }
+
+      // Cancel any running single-finger gesture (PENDING, CHART_PAN, etc.)
+      const firstPointerId = ig?.pointerId;
+      cancelIg();
+      pressCount = e.touches.length; // sync count to actual touch count
+      if (firstPointerId !== undefined) {
+        try { container.releasePointerCapture(firstPointerId); } catch { /* ok */ }
+      }
+
+      ig = {
+        mode: 'PINCH_ZOOM', pointerId: -1, // no single tracking ID; we use e.touches
+        startX: 0, startY: 0, lastX: 0, lastY: 0,
+        lastT: performance.now(), isTouch: true,
+        velY: 0, hRafId: null, vRafId: null,
+        panMin: null, panMax: null, pricePerPx: null, panActivated: false,
+        pinchStartSpan: null, pinchStartFrom: null,
+        pinchStartTo: null, pinchAnchorLogical: null,
+      };
+    };
+
+    // ── touchend capture — clean up PINCH_ZOOM when fingers lift ─────────────
+    // When the user lifts all fingers after a pinch, reset ig so single-finger
+    // gestures can start fresh on the next touch.
+    const onTouchEnd = (e: TouchEvent) => {
+      if (ig?.mode !== 'PINCH_ZOOM') return;
+      if (e.touches.length === 0) {
+        ig = null;
+        pressCount = 0;
+      } else if (e.touches.length === 1) {
+        // One finger still down — revert to PENDING so they can pan
+        ig = null;
+        pressCount = 1;
+      }
+    };
+
+    // ── touchmove capture — custom pinch zoom + block LWC during pan ─────────
     // LWC uses TOUCH events (not pointer events) internally. Our pointer-event
     // stopPropagation has zero effect on LWC's touchmove handler, which keeps
     // repositioning the crosshair even while we own CHART_PAN. This capture-
     // phase touchmove listener fires before LWC's child-element listener.
     //
-    // PINCH_ZOOM: We implement pinch-to-zoom ourselves here using e.touches[]
-    // (which always reflects ALL active touch points, regardless of pointer
-    // capture). This is more reliable than LWC's native handleScale.pinch
-    // because pointer capture on the first finger can prevent LWC from seeing
-    // the multi-touch events it needs for its internal pinch detection.
+    // PINCH_ZOOM: custom implementation using e.touches[] — always reflects
+    // all active touches regardless of pointer capture or iOS quirks.
     const onTouchMove = (e: TouchEvent) => {
-      if (!ig) return;
-
-      // ── Custom pinch-to-zoom (PINCH_ZOOM mode) ───────────────────────────
-      // stopPropagation (even in passive capture) prevents LWC's own touchmove
-      // handler from firing and double-applying zoom.
-      if (ig.mode === 'PINCH_ZOOM') {
-        e.stopPropagation();
-        if (e.touches.length < 2) return;
-        const t0 = e.touches[0];
-        const t1 = e.touches[1];
-        const span = Math.abs(t1.clientX - t0.clientX);
-        if (span < 8) return; // ignore degenerate finger overlap
-
-        // ── Initialise on the first touchmove after entering PINCH_ZOOM ────
-        if (ig.pinchStartSpan === null) {
-          const ch    = chartRef.current;
-          const range = ch?.timeScale().getVisibleLogicalRange();
-          if (!ch || !range) return;
-          const rect   = container.getBoundingClientRect();
-          const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
-          const anchor = ch.timeScale().coordinateToLogical(midX);
-          ig.pinchStartSpan      = span;
-          ig.pinchStartFrom      = range.from as number;
-          ig.pinchStartTo        = range.to   as number;
-          ig.pinchAnchorLogical  = anchor ?? (((range.from as number) + (range.to as number)) / 2);
-          return;
+      // ── Two-finger pinch: enter PINCH_ZOOM if we aren't already ──────────
+      // Fallback for iOS where the second pointerdown may never fire.
+      if (e.touches.length >= 2) {
+        if (!ig || ig.mode !== 'PINCH_ZOOM') {
+          // Transition any existing single-finger state to PINCH_ZOOM
+          const firstPointerId = ig?.pointerId;
+          cancelIg();
+          pressCount = e.touches.length;
+          if (firstPointerId !== undefined && firstPointerId >= 0) {
+            try { container.releasePointerCapture(firstPointerId); } catch { /* ok */ }
+          }
+          ig = {
+            mode: 'PINCH_ZOOM', pointerId: -1,
+            startX: 0, startY: 0, lastX: 0, lastY: 0,
+            lastT: performance.now(), isTouch: true,
+            velY: 0, hRafId: null, vRafId: null,
+            panMin: null, panMax: null, pricePerPx: null, panActivated: false,
+            pinchStartSpan: null, pinchStartFrom: null,
+            pinchStartTo: null, pinchAnchorLogical: null,
+          };
         }
-
-        // ── Apply zoom anchored on the initial pinch midpoint ─────────────
-        // scale > 1 → fingers moved apart → zoom IN (fewer bars visible)
-        // scale < 1 → fingers moved together → zoom OUT (more bars visible)
-        const scale     = ig.pinchStartSpan / span;
-        const startBars = ig.pinchStartTo! - ig.pinchStartFrom!;
-        const newBars   = Math.max(3, Math.min(500_000, startBars * scale));
-        const anchor    = ig.pinchAnchorLogical!;
-        const leftFrac  = (anchor - ig.pinchStartFrom!) / startBars;
-        const newFrom   = anchor - newBars * leftFrac;
-        const newTo     = newFrom + newBars;
-        try {
-          chartRef.current?.timeScale().setVisibleLogicalRange({ from: newFrom, to: newTo });
-        } catch { /* ignore range-clamp errors */ }
+        // Block LWC from double-handling, then apply our zoom
+        e.stopPropagation();
+        applyPinchZoom(e.touches[0], e.touches[1]);
         return;
       }
+
+      if (!ig) return;
 
       if (ig.mode === 'CHART_PAN') {
         e.stopPropagation();
@@ -2175,7 +2250,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     container.addEventListener('pointermove',   onMove,          { capture: true });
     container.addEventListener('pointerup',     onUp,            { capture: true });
     container.addEventListener('pointercancel', onUp,            { capture: true });
+    container.addEventListener('touchstart',    onTouchStart,    { capture: true, passive: true });
     container.addEventListener('touchmove',     onTouchMove,     { capture: true, passive: true });
+    container.addEventListener('touchend',      onTouchEnd,      { capture: true, passive: true });
+    container.addEventListener('touchcancel',   onTouchEnd,      { capture: true, passive: true });
     container.addEventListener('dragstart',     preventDragStart);
     container.addEventListener('wheel',         onWheel,         { capture: true, passive: false });
 
@@ -2201,7 +2279,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       container.removeEventListener('pointermove',   onMove,          { capture: true });
       container.removeEventListener('pointerup',     onUp,            { capture: true });
       container.removeEventListener('pointercancel', onUp,            { capture: true });
+      container.removeEventListener('touchstart',    onTouchStart,    { capture: true });
       container.removeEventListener('touchmove',     onTouchMove,     { capture: true });
+      container.removeEventListener('touchend',      onTouchEnd,      { capture: true });
+      container.removeEventListener('touchcancel',   onTouchEnd,      { capture: true });
       container.removeEventListener('dragstart',     preventDragStart);
       container.removeEventListener('wheel',         onWheel,         { capture: true });
       // Set flag before removal so any already-queued ro callbacks bail immediately
