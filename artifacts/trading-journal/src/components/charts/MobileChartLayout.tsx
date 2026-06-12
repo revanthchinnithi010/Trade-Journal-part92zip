@@ -165,6 +165,20 @@ const LAYOUT_OPTIONS = [
   { cols: 2, rows: 2, label: "4-Grid",  icon: [[2,2]] },
 ];
 
+// ── Sheet-drag blur suppression ────────────────────────────────────────────
+// While a BottomSheet is being finger-dragged, backdrop-filter blur on glass
+// elements (FloatingLeftDrawingPill, MiniControlBar, DrawingMiniBar) forces the
+// GPU to re-blur everything behind them on every compositor frame.
+// Toggling body.tj-sheet-drag removes all backdrop-filter instantly with zero
+// React re-renders or style recalculations — just a single classList mutation.
+if (typeof document !== "undefined") {
+  const _s = document.createElement("style");
+  _s.textContent =
+    "body.tj-sheet-drag *{backdrop-filter:none!important;" +
+    "-webkit-backdrop-filter:none!important}";
+  document.head.appendChild(_s);
+}
+
 // ── Shared styles ──────────────────────────────────────────────────────────
 const SHEET_BG      = "rgba(10,12,16,0.98)";
 const ACCENT        = "#60A5FA";
@@ -522,6 +536,7 @@ function BottomSheet({
     ds.current.closing = true;
     sheetDragState.active = false;
     sheetDragState.flush?.();
+    document.body.classList.remove("tj-sheet-drag");
     cancelAnimationFrame(ds.current.rafId);
     ds.current.rafPending = false;
     const sheet = sheetRef.current;
@@ -539,10 +554,10 @@ function BottomSheet({
   // border-radius change — this ensures the browser animates it, not jumps.
   // applySnapDom is called after (pill/scroll changes are instant DOM writes).
   const commitSnap = useCallback((currentY: number) => {
-    // Release the chart canvas freeze immediately so any buffered tick bar
-    // is flushed via scheduleChartUpdate before the snap animation plays.
+    // Release chart canvas freeze + restore backdrop-filter blurs.
     sheetDragState.active = false;
     sheetDragState.flush?.();
+    document.body.classList.remove("tj-sheet-drag");
 
     const { half, full } = snapYRef.current;
     const delta = currentY - ds.current.baseY; // positive = dragged down
@@ -587,8 +602,9 @@ function BottomSheet({
       ds.current.startPY  = touchY;
       ds.current.latestPY = touchY;
       sheet.style.transition = "none";
-      // Freeze chart canvas for zero-competition with the sheet's GPU layer
+      // Freeze chart canvas + remove all backdrop-filter blurs for 60fps drag
       sheetDragState.active = true;
+      document.body.classList.add("tj-sheet-drag");
     };
 
     const onTS = (e: TouchEvent) => {
@@ -668,6 +684,7 @@ function BottomSheet({
       ds.current.latestPY = e.clientY;
       sheet.style.transition = "none";
       sheetDragState.active = true;
+      document.body.classList.add("tj-sheet-drag");
       try { sheet.setPointerCapture(e.pointerId); } catch {}
     };
 
