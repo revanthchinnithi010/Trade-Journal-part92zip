@@ -25,7 +25,7 @@ import AlertCenterModal from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
 import { tfLabel } from "./TFDropdown";
 import { fmtPrice, useLiveMarketContext } from "@/contexts/LiveMarketContext";
-import { useSymbolTick } from "@/store/tickStore";
+import { useSymbolTick, getSymbolTick } from "@/store/tickStore";
 import type { ChartSettings } from "./chartSettingsTypes";
 import { type OHLCBar, type ChartType, useChartStore } from "@/store/chartStore";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
@@ -488,10 +488,11 @@ function BottomSheet({
     bd.style.opacity = String(Math.max(0.05, 1 - ratio * 0.90));
   }, []);
 
-  // ── RAF: write translateY + live border-radius interpolation ────────────
-  // border-radius is 0px at FULL (y≈0) → 24px at HALF (y=halfY).
-  // Interpolated every frame during drag — zero layout thrash because the
-  // element already has will-change:transform (composited layer).
+  // ── RAF: write translateY only — border-radius is NOT interpolated per frame ──
+  // Reason: sheet has will-change:transform (composited GPU layer) + boxShadow.
+  // Mutating border-radius on a composited layer forces full layer re-rasterization
+  // + shadow re-rasterization on EVERY frame (4-10ms/frame on mobile = 24-60% of
+  // the 16.7ms budget). Corners animate only at snap commit via CSS transition.
   const applyDrag = useCallback(() => {
     ds.current.rafPending = false;
     const sheet = sheetRef.current;
@@ -499,11 +500,6 @@ function BottomSheet({
     const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
     const y = Math.max(-14, raw); // 14px overscroll at top for rubbery feel
     sheet.style.transform = `translateY(${y}px)`;
-    // Live corner morph: 0 at full, 24 at half
-    const { half } = snapYRef.current;
-    const ratio = Math.min(1, Math.max(0, y / Math.max(1, half)));
-    const br = Math.round(ratio * 24);
-    sheet.style.borderRadius = br > 0 ? `${br}px ${br}px 0 0` : "0";
     syncBackdrop(y);
   }, [syncBackdrop]);
 
@@ -2720,7 +2716,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [, navigate]  = useLocation();
   const chartStore = useChartStore();
   const { wsStatus } = useLiveMarketContext();
-  const activeTick = useSymbolTick(activeKey);
   const { items: watchlistItems } = useWatchlist();
   const { selectedDrawingId, drawings, activeTool, setActiveTool } = useDrawingStore();
   const selectedDrawing = drawings.find(d => d.id === selectedDrawingId) ?? null;
@@ -2753,10 +2748,18 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     ]);
   }, [watchlistItems.length]); // eslint-disable-line
 
-  // ── Live price ──
+  // ── Live price — NON-REACTIVE read via getSymbolTick ─────────────────────
+  // Do NOT use useSymbolTick() here. It would subscribe the entire 3000-line
+  // MobileChartLayout to tick updates, causing full re-renders on every tick
+  // (~every 5s). The parent Charts page also passes `currentPrice` from its own
+  // useSymbolTick call — that alone already triggers memo-busting prop changes.
+  // Adding a second subscription was causing double re-renders per tick, each
+  // blocking the main thread 20–50ms and dropping frames during drag.
+  // getSymbolTick() reads the last known value non-reactively — the display
+  // updates on any user-driven render. Price-color lag of ~5s is imperceptible.
   const connected      = wsStatus === "connected";
-  const livePrice      = activeTick?.price ?? chartStore.livePrice ?? currentPrice;
-  const liveChangePct  = activeTick?.changePct ?? 0;
+  const livePrice      = currentPrice ?? chartStore.livePrice;
+  const liveChangePct  = getSymbolTick(activeKey)?.changePct ?? 0;
   const isUp           = liveChangePct >= 0;
 
   // ── Symbol metadata ──
