@@ -30,7 +30,7 @@ function StatusBadge({ status }: { status: ConnectionStatus }) {
 }
 
 // ── Main broker list content ─────────────────────────────────────────────────
-function BrokerListContent({ onClose }: { onClose: () => void }) {
+export function BrokerListContent({ onClose }: { onClose: () => void }) {
   const {
     accounts, connect, deleteAccount, openAuthModal,
     connectedAccounts, brokerStatuses, disconnectBroker,

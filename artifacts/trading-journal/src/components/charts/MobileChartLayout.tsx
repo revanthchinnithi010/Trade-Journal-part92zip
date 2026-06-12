@@ -35,7 +35,7 @@ import { useDrawingStore } from "@/store/drawingStore";
 import { MobileBottomNav } from "@/components/MobileBottomNav";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import { useBrokerStore } from "@/store/brokerStore";
-import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
+import { BrokerSelectModal, BrokerListContent } from "@/components/broker/BrokerSelectModal";
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import * as sheetProfiler from "@/lib/sheetProfiler";
@@ -1249,6 +1249,19 @@ const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose
           </div>
         ))}
       </div>
+    </BottomSheet>
+  );
+});
+
+// ── Broker Sheet ────────────────────────────────────────────────────────────
+// Renders the broker list inside the same BottomSheet system as Drawing Tools.
+// Inherits all snap logic, spring config, GPU optimisations, and FPS counter.
+const BrokerSheet = memo(function BrokerSheet({ onClose }: { onClose: () => void }) {
+  const { loadAccounts } = useBrokerStore();
+  useEffect(() => { loadAccounts(); }, [loadAccounts]);
+  return (
+    <BottomSheet title="Connect Brokers" onClose={onClose}>
+      <BrokerListContent onClose={onClose} />
     </BottomSheet>
   );
 });
@@ -2910,6 +2923,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
+  const [showBrokerSheet,   setShowBrokerSheet]   = useState(false);
   const [showTFSheet,       setShowTFSheet]       = useState(false);
   const [showChartType,     setShowChartType]     = useState(false);
   const [showMoreSheet,     setShowMoreSheet]     = useState(false);
@@ -3101,7 +3115,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onSelectSymbol={handleSelectSymbol}
           onTF={() => setShowTFSheet(true)}
           onDraw={() => setShowDrawingSheet(true)}
-          onBroker={openSelectModal}
+          onBroker={() => setShowBrokerSheet(true)}
           onMore={() => setShowMoreSheet(true)}
           onPrev={handlePrev}
           onNext={handleNext}
@@ -3115,6 +3129,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       {/* ── Sheets & modals ── */}
       {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
+      {showBrokerSheet  && <BrokerSheet onClose={() => setShowBrokerSheet(false)} />}
       {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartType ?? "candles"} onSelect={t => setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
