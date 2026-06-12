@@ -1250,11 +1250,8 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       panMax:       number | null;
       pricePerPx:   number | null;
       panActivated: boolean; // true after the first vertical frame activates pan-range
-      // PINCH_ZOOM fields
-      pinchStartSpan:         number | null;
-      pinchStartFrom:         number | null;
-      pinchStartTo:           number | null;
-      pinchAnchorLogical:     number | null;
+      // PINCH_ZOOM fields — incremental: compare current span to previous frame
+      pinchPrevSpan:          number | null;
     };
 
     const PAN_THRESHOLD = 10; // px — minimum travel before CROSSHAIR → CHART_PAN
@@ -1493,8 +1490,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
           panMax: tsBars,  // bars-visible at drag start
           pricePerPx: null,
           panActivated: false,
-          pinchStartSpan: null, pinchStartFrom: null,
-          pinchStartTo: null, pinchAnchorLogical: null,
+          pinchPrevSpan: null,
         };
         // Pointer capture ensures onUp fires even if pointer leaves container
         try { container.setPointerCapture(e.pointerId); } catch { /* ok */ }
@@ -1539,9 +1535,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
           lastT: performance.now(), isTouch: true,
           velY: 0, hRafId: null, vRafId: null,
           panMin: null, panMax: null, pricePerPx: null, panActivated: false,
-          // Pinch state initialized on first touchmove (when both touch coords available)
-          pinchStartSpan: null, pinchStartFrom: null, pinchStartTo: null,
-          pinchAnchorLogical: null,
+          pinchPrevSpan: null, // initialized on first touchmove
         };
         return;
       }
@@ -1579,10 +1573,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         panMax:       null,
         pricePerPx:   null,
         panActivated: false,
-        pinchStartSpan:     null,
-        pinchStartFrom:     null,
-        pinchStartTo:       null,
-        pinchAnchorLogical: null,
+        pinchPrevSpan: null,
       };
       ig = newIg;
       // Capture the pointer so pointerup fires even if the cursor leaves the
@@ -2090,40 +2081,51 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     };
 
     // ── Helper: apply pinch zoom from a TouchEvent with 2+ touches ──────────
-    // Shared by onTouchStart and onTouchMove so the same logic runs in both.
+    // Uses an INCREMENTAL approach: each frame compares the current finger span
+    // to the PREVIOUS frame's span and applies the delta ratio to the current
+    // visible range. This avoids reference-frame drift from the start-anchored
+    // approach and feels native on both iOS and Android.
+    // The anchor is the current midpoint between the two fingers (in logical bar
+    // space), recomputed each frame so zoom follows the user's hands naturally.
     const applyPinchZoom = (t0: Touch, t1: Touch) => {
+      if (!ig || ig.mode !== 'PINCH_ZOOM') return;
+
       const span = Math.abs(t1.clientX - t0.clientX);
       if (span < 8) return; // ignore degenerate finger overlap
 
-      if (!ig || ig.mode !== 'PINCH_ZOOM') return;
-
-      // ── Initialise on the first call after entering PINCH_ZOOM ───────────
-      if (ig.pinchStartSpan === null) {
-        const ch    = chartRef.current;
-        const range = ch?.timeScale().getVisibleLogicalRange();
-        if (!ch || !range) return;
-        const rect   = container.getBoundingClientRect();
-        const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
-        const anchor = ch.timeScale().coordinateToLogical(midX);
-        ig.pinchStartSpan      = span;
-        ig.pinchStartFrom      = range.from as number;
-        ig.pinchStartTo        = range.to   as number;
-        ig.pinchAnchorLogical  = anchor ?? (((range.from as number) + (range.to as number)) / 2);
+      // ── First call: seed prevSpan, nothing to compare yet ────────────────
+      if (ig.pinchPrevSpan === null) {
+        ig.pinchPrevSpan = span;
         return;
       }
 
-      // ── Apply zoom anchored on the initial pinch midpoint ─────────────
-      // scale > 1 → fingers moved apart → zoom IN (fewer bars visible)
-      // scale < 1 → fingers moved together → zoom OUT (more bars visible)
-      const scale     = ig.pinchStartSpan / span;
-      const startBars = ig.pinchStartTo! - ig.pinchStartFrom!;
-      const newBars   = Math.max(3, Math.min(500_000, startBars * scale));
-      const anchor    = ig.pinchAnchorLogical!;
-      const leftFrac  = (anchor - ig.pinchStartFrom!) / startBars;
-      const newFrom   = anchor - newBars * leftFrac;
-      const newTo     = newFrom + newBars;
+      const prevSpan = ig.pinchPrevSpan;
+      ig.pinchPrevSpan = span; // always update for next frame
+
+      if (prevSpan === span) return; // no change this frame
+
+      const ch = chartRef.current;
+      const range = ch?.timeScale().getVisibleLogicalRange();
+      if (!ch || !range) return;
+
+      // ── Incremental zoom ratio ────────────────────────────────────────────
+      // prevSpan / span > 1 → fingers spread → zoom IN (fewer bars)
+      // prevSpan / span < 1 → fingers pinched → zoom OUT (more bars)
+      const currentBars = (range.to as number) - (range.from as number);
+      const ratio       = prevSpan / span;
+      const newBars     = Math.max(3, Math.min(500_000, currentBars * ratio));
+
+      // ── Anchor: live midpoint of the two fingers in logical bar space ─────
+      const rect   = container.getBoundingClientRect();
+      const midX   = ((t0.clientX + t1.clientX) / 2) - rect.left;
+      const anchor = ch.timeScale().coordinateToLogical(midX)
+                     ?? (((range.from as number) + (range.to as number)) / 2);
+
+      const leftFrac = (anchor - (range.from as number)) / currentBars;
+      const newFrom  = anchor - newBars * leftFrac;
+      const newTo    = newFrom + newBars;
       try {
-        chartRef.current?.timeScale().setVisibleLogicalRange({ from: newFrom, to: newTo });
+        ch.timeScale().setVisibleLogicalRange({ from: newFrom, to: newTo });
       } catch { /* ignore range-clamp errors */ }
     };
 
@@ -2140,11 +2142,8 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       // the pointerdown path already did it.  If already PINCH_ZOOM just reset
       // the start state so the new finger layout is used as the new reference.
       if (ig && ig.mode === 'PINCH_ZOOM') {
-        // Reset so applyPinchZoom re-initialises with fresh touch coords
-        ig.pinchStartSpan = null;
-        ig.pinchStartFrom = null;
-        ig.pinchStartTo   = null;
-        ig.pinchAnchorLogical = null;
+        // Reset prevSpan so applyPinchZoom re-seeds from fresh touch coords
+        ig.pinchPrevSpan = null;
         return;
       }
 
@@ -2162,8 +2161,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         lastT: performance.now(), isTouch: true,
         velY: 0, hRafId: null, vRafId: null,
         panMin: null, panMax: null, pricePerPx: null, panActivated: false,
-        pinchStartSpan: null, pinchStartFrom: null,
-        pinchStartTo: null, pinchAnchorLogical: null,
+        pinchPrevSpan: null,
       };
     };
 
@@ -2208,8 +2206,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
             lastT: performance.now(), isTouch: true,
             velY: 0, hRafId: null, vRafId: null,
             panMin: null, panMax: null, pricePerPx: null, panActivated: false,
-            pinchStartSpan: null, pinchStartFrom: null,
-            pinchStartTo: null, pinchAnchorLogical: null,
+            pinchPrevSpan: null,
           };
         }
         // Block LWC from double-handling, then apply our zoom
