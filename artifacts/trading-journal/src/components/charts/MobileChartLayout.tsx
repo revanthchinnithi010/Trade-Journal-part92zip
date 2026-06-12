@@ -425,8 +425,6 @@ function BottomSheet({
   const backdropRef  = useRef<HTMLDivElement>(null);
   const headerRef    = useRef<HTMLDivElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
-  const pillWrapRef  = useRef<HTMLDivElement>(null);
-  const pillInnerRef = useRef<HTMLDivElement>(null);
   const onCloseRef   = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
@@ -461,19 +459,12 @@ function BottomSheet({
   });
 
   // ── Apply snap-driven DOM styles without any React re-render ─────────────
-  // pill: instant height change (zero layout thrashing) + GPU transform/opacity
   // scroll: overflowY + touchAction updated directly on the DOM node
   const applySnapDom = useCallback((newSnap: "half"|"full") => {
-    const pw = pillWrapRef.current;
     const sc = scrollRef.current;
     if (newSnap === "full") {
-      // Reclaim pill space instantly — overflow:hidden on wrapper clips content,
-      // no inner animation needed (it would be invisible behind the clip anyway).
-      if (pw) pw.style.height = "0px";
       if (sc) { sc.style.overflowY = "auto"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "pan-y"; }
     } else {
-      // Restore pill space instantly — content reappears as wrapper expands.
-      if (pw) pw.style.height = "30px";
       if (sc) { sc.style.overflowY = "hidden"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none"; }
     }
   }, []);
@@ -775,34 +766,18 @@ function BottomSheet({
             paddingBottom:2,
           } as React.CSSProperties}
         >
-          {/* Handle pill — space managed via ref (instant height), visual via GPU transform/opacity.
-               NO max-height animation: that caused layout recalculation on every frame → jank. */}
+          {/* Handle pill — always visible at every snap state; no height toggling */}
           <div
-            ref={pillWrapRef}
             style={{
-              overflow:"hidden",
-              height:30,           // starts at 30px (half state); JS sets to 0 instantly on FULL
-              willChange:"auto",   // don't promote wrapper; only inner is GPU-animated
+              display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6,
             }}
           >
-            {/* Inner pill — plain element, no willChange, no transition.
-                 Visibility is controlled solely by the wrapper height + overflow:hidden.
-                 willChange here would promote a nested composited layer inside the
-                 sheet's composited layer, forcing a render surface + compositing overhead
-                 on every drag frame. */}
             <div
-              ref={pillInnerRef}
               style={{
-                display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6,
+                width:36, height:3, borderRadius:9999,
+                background:"rgba(255,255,255,0.25)",
               }}
-            >
-              <div
-                style={{
-                  width:44, height:4, borderRadius:9999,
-                  background:"rgba(255,255,255,0.32)",
-                }}
-              />
-            </div>
+            />
           </div>
 
           {/* Left-aligned title — matches TradingView/Binance/Bybit panel style */}
