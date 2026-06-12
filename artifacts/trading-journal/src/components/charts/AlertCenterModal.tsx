@@ -7,11 +7,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  SYMBOLS, TIMEFRAMES,
+  TIMEFRAMES,
   type AnyAlert, type AlertStatus, type AlertType,
   type PriceAlert, type ZoneAlert, type TrendlineAlert,
 } from "@/data/alertsData";
 import { useAlertStore } from "@/store/alertStore";
+import { useWatchlist, type WatchlistEntry, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const STATUS_CFG: Record<AlertStatus, { label: string; dot: string; text: string; bg: string }> = {
@@ -364,13 +365,178 @@ function EditAlertModal({
   );
 }
 
+// ── Watchlist Symbol Picker ────────────────────────────────────────────────────
+const MARKET_ORDER = ["Favorites", "Crypto", "Forex", "Indices", "Commodities", "Stocks", "Recently Viewed", "Other"] as const;
+
+function WatchlistSymbolPicker({
+  value, onChange,
+}: { value: string; onChange: (sym: string) => void }) {
+  const { items } = useWatchlist();
+  const [open, setOpen]   = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+  const searchRef    = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setTimeout(() => searchRef.current?.focus(), 60);
+    const handler = (e: MouseEvent) => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const q = query.trim().toLowerCase();
+  const filtered: WatchlistEntry[] = items.filter(it => {
+    if (!q) return true;
+    return (
+      it.symbol.toLowerCase().includes(q) ||
+      it.label.toLowerCase().includes(q) ||
+      it.badge.toLowerCase().includes(q)
+    );
+  });
+
+  const grouped = MARKET_ORDER.reduce<Record<string, WatchlistEntry[]>>((acc, mkt) => {
+    const group = filtered.filter(it => {
+      if (mkt === "Favorites") return it.isFavorite;
+      return it.market === mkt && !it.isFavorite;
+    });
+    if (group.length) acc[mkt] = group;
+    return acc;
+  }, {});
+
+  const currentLabel = (() => {
+    const found = items.find(it => it.symbol === value);
+    if (found) return found.badge || found.symbol;
+    const cat = SYMBOL_CATALOG[value];
+    return cat ? cat.badge || value : value;
+  })();
+
+  return (
+    <div ref={containerRef} style={{ position: "relative", width: "100%" }}>
+      <button
+        type="button"
+        onClick={() => { setOpen(o => !o); setQuery(""); }}
+        style={{
+          width: "100%", height: 34, padding: "0 10px",
+          boxSizing: "border-box", borderRadius: 8,
+          border: `1px solid ${open ? "rgba(183,255,90,0.35)" : "rgba(255,255,255,0.08)"}`,
+          background: "rgba(255,255,255,0.04)", color: "#F3FFF3",
+          fontSize: 11, outline: "none", fontFamily: "inherit",
+          cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between",
+          transition: "border-color 0.15s",
+        }}
+      >
+        <span style={{ fontWeight: 700, letterSpacing: "0.03em" }}>{currentLabel || value}</span>
+        <ChevronDown style={{
+          width: 12, height: 12, color: "rgba(167,184,169,0.45)",
+          transform: open ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.15s",
+          flexShrink: 0,
+        }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0,
+          zIndex: 2000, borderRadius: 10,
+          background: "#0D1416", border: "1px solid rgba(255,255,255,0.1)",
+          boxShadow: "0 12px 40px rgba(0,0,0,0.7)",
+          maxHeight: 280, display: "flex", flexDirection: "column",
+        }}>
+          <div style={{ padding: "8px 8px 4px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{
+              display: "flex", alignItems: "center", gap: 6,
+              background: "rgba(255,255,255,0.04)", borderRadius: 7,
+              padding: "4px 8px", border: "1px solid rgba(255,255,255,0.07)",
+            }}>
+              <Search style={{ width: 11, height: 11, color: "rgba(167,184,169,0.4)", flexShrink: 0 }} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search symbols…"
+                style={{
+                  flex: 1, background: "transparent", border: "none", outline: "none",
+                  color: "#F3FFF3", fontSize: 11, fontFamily: "inherit",
+                }}
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery("")} style={{
+                  background: "transparent", border: "none", cursor: "pointer", padding: 0, lineHeight: 1,
+                }}>
+                  <X style={{ width: 10, height: 10, color: "rgba(167,184,169,0.4)" }} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {Object.keys(grouped).length === 0 ? (
+              <div style={{ padding: "16px 12px", textAlign: "center", fontSize: 11, color: "rgba(167,184,169,0.4)" }}>
+                No symbols found
+              </div>
+            ) : Object.entries(grouped).map(([mkt, syms]) => (
+              <div key={mkt}>
+                <div style={{
+                  padding: "6px 10px 3px", fontSize: 9, fontWeight: 800,
+                  color: "rgba(167,184,169,0.35)", letterSpacing: "0.1em",
+                  textTransform: "uppercase",
+                }}>
+                  {mkt === "Favorites" ? "⭐ Favorites" : mkt}
+                </div>
+                {syms.map(it => (
+                  <button
+                    key={it.id}
+                    type="button"
+                    onMouseDown={e => {
+                      e.preventDefault();
+                      onChange(it.symbol);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center", gap: 8,
+                      padding: "6px 10px", border: "none", background: "transparent",
+                      cursor: "pointer", textAlign: "left",
+                      backgroundColor: it.symbol === value ? "rgba(183,255,90,0.07)" : "transparent",
+                      borderLeft: it.symbol === value ? "2px solid rgba(183,255,90,0.5)" : "2px solid transparent",
+                    }}
+                    onMouseEnter={e => { if (it.symbol !== value) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.04)"; }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = it.symbol === value ? "rgba(183,255,90,0.07)" : "transparent"; }}
+                  >
+                    <span style={{
+                      fontSize: 9, fontWeight: 800, color: "rgba(167,184,169,0.5)",
+                      background: "rgba(255,255,255,0.06)", borderRadius: 4,
+                      padding: "1px 5px", minWidth: 28, textAlign: "center", flexShrink: 0,
+                    }}>{it.badge}</span>
+                    <span style={{ fontSize: 11, fontWeight: it.symbol === value ? 700 : 500, color: "#F3FFF3", flex: 1 }}>{it.label}</span>
+                    {it.symbol === value && (
+                      <CheckCircle2 style={{ width: 11, height: 11, color: "#B7FF5A", flexShrink: 0 }} />
+                    )}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Create Alert sub-modal ─────────────────────────────────────────────────────
 function QuickCreateModal({
   onClose, onSave,
 }: { onClose: () => void; onSave: (a: AnyAlert) => void }) {
+  const { items: wlItems } = useWatchlist();
   const [step, setStep] = useState<"pick" | "price" | "zone" | "trendline">("pick");
+  const defaultSymbol = wlItems[0]?.symbol ?? "NAS100";
   const [form, setForm] = useState({
-    symbol: "NAS100", condition: "above" as string,
+    symbol: defaultSymbol, condition: "above" as string,
     targetPrice: "", notes: "", timeframe: "1H",
     upperPrice: "", lowerPrice: "", zoneType: "supply",
     p1Price: "", p2Price: "",
@@ -498,9 +664,10 @@ function QuickCreateModal({
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <div>
                 <p style={labelStyle}>Symbol</p>
-                <select value={form.symbol} onChange={e => setForm(f => ({ ...f, symbol: e.target.value }))} style={{ ...inputStyle }}>
-                  {SYMBOLS.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
+                <WatchlistSymbolPicker
+                  value={form.symbol}
+                  onChange={sym => setForm(f => ({ ...f, symbol: sym }))}
+                />
               </div>
               {step !== "price" && (
                 <div>
