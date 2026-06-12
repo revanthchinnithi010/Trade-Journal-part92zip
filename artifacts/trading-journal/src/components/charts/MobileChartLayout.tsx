@@ -299,8 +299,8 @@ function FloatingDrawingPill({
       <div
         style={{
           background:"rgba(5,6,18,0.90)",
-          backdropFilter:"blur(32px) saturate(200%)",
-          WebkitBackdropFilter:"blur(32px) saturate(200%)",
+          backdropFilter:"blur(12px) saturate(160%)",
+          WebkitBackdropFilter:"blur(12px) saturate(160%)",
           border:"1px solid rgba(99,102,241,0.26)",
           borderRadius:18,
           padding:"6px 4px",
@@ -474,6 +474,24 @@ function BottomSheet({
     rafPending: false,
   });
 
+  // ── Deferred post-animation state ──────────────────────────────────────────
+  // All three properties are applied in transitionend, NOT during animation:
+  //   borderRadius  — animating on a composited+shadow layer forces per-frame re-rasterization
+  //   restoreBlur   — restoring backdrop-filter mid-animation causes a GPU spike on frame 1
+  //   applyOverflow — switching overflow during animation causes a synchronous layout
+  const pendingTransitionEndRef = useRef<{
+    borderRadius:  string;
+    restoreBlur:   boolean;
+    applyOverflow: "half" | "full" | null;
+  } | null>(null);
+  const pendingFallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── FPS measurement — always active, not gated behind profiler flag ─────────
+  const fpsFramesRef = useRef(0);
+  const fpsStartRef  = useRef(0);
+  const fpsDirRef    = useRef("");
+  const fpsRafRef    = useRef<number | null>(null);
+
   // ── Apply snap-driven DOM styles without any React re-render ─────────────
   // scroll: overflowY + touchAction updated directly on the DOM node
   const applySnapDom = useCallback((newSnap: "half"|"full") => {
@@ -511,20 +529,18 @@ function BottomSheet({
   }, [syncBackdrop]);
 
   // ── Animate to a snap position with spring easing ────────────────────────
-  // SNAP_SPRING animates both transform AND border-radius in lockstep.
-  // Opening/close animations pass a custom easing without border-radius.
-  const SNAP_SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1), border-radius 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
+  // Only `transform` is animated — border-radius, blur, and overflow are applied
+  // after transitionend (see pendingTransitionEndRef) to avoid per-frame GPU work.
+  const SNAP_SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
   const animateTo = useCallback((
     targetY: number,
     easing = SNAP_SPRING,
-    targetBorderRadius?: string,
   ) => {
     const sheet = sheetRef.current;
     const bd    = backdropRef.current;
     if (!sheet) return;
     sheet.style.transition = easing;
     sheet.style.transform  = `translateY(${targetY}px)`;
-    if (targetBorderRadius !== undefined) sheet.style.borderRadius = targetBorderRadius;
     if (bd) {
       bd.style.transition = "opacity 0.30s ease";
       syncBackdrop(targetY);
@@ -535,6 +551,15 @@ function BottomSheet({
   const doClose = useCallback(() => {
     if (ds.current.closing) return;
     ds.current.closing = true;
+    // Cancel any pending snap transition before closing
+    if (pendingTransitionEndRef.current) {
+      pendingTransitionEndRef.current = null;
+      if (pendingFallbackTimerRef.current !== null) {
+        clearTimeout(pendingFallbackTimerRef.current);
+        pendingFallbackTimerRef.current = null;
+      }
+    }
+    if (fpsRafRef.current !== null) { cancelAnimationFrame(fpsRafRef.current); fpsRafRef.current = null; }
     sheetDragState.active = false;
     sheetDragState.flush?.();
     document.body.classList.remove("tj-sheet-drag");
@@ -551,42 +576,95 @@ function BottomSheet({
   }, []);
 
   // ── Snap decision on pointer/touch release ────────────────────────────────
-  // animateTo is called FIRST so the CSS transition is active before any
-  // border-radius change — this ensures the browser animates it, not jumps.
-  // applySnapDom is called after (pill/scroll changes are instant DOM writes).
+  // All three previously-synchronous side-effects are now deferred to transitionend:
+  //   1. border-radius change  — was causing GPU re-rasterization on every animation frame
+  //   2. backdrop-filter restore — was causing a GPU spike on the very first animation frame
+  //   3. overflow/touchAction  — was causing a synchronous layout during animation
   const commitSnap = useCallback((currentY: number) => {
-    // Release chart canvas freeze + restore backdrop-filter blurs.
+    // Settle any still-pending snap from a rapid previous transition
+    if (pendingTransitionEndRef.current) {
+      const p = pendingTransitionEndRef.current;
+      pendingTransitionEndRef.current = null;
+      if (pendingFallbackTimerRef.current !== null) { clearTimeout(pendingFallbackTimerRef.current); pendingFallbackTimerRef.current = null; }
+      const sheet = sheetRef.current;
+      if (sheet) sheet.style.borderRadius = p.borderRadius;
+      if (p.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+      if (p.applyOverflow) applySnapDom(p.applyOverflow);
+    }
+    // Stop any previous FPS measurement
+    if (fpsRafRef.current !== null) { cancelAnimationFrame(fpsRafRef.current); fpsRafRef.current = null; }
+
     sheetDragState.active = false;
     sheetDragState.flush?.();
-    document.body.classList.remove("tj-sheet-drag");
+    // ⚠️ backdrop-filter is NOT restored here — deferred to transitionend.
+    // Restoring blur at the same moment the animation starts causes a GPU spike
+    // that drops frame 1 of the spring animation.
 
     const { half, full } = snapYRef.current;
     const delta = currentY - ds.current.baseY; // positive = dragged down
 
+    // Start FPS counter for this transition
+    fpsFramesRef.current = 0;
+    fpsStartRef.current  = performance.now();
+    const measureFpsFrame = () => {
+      fpsFramesRef.current++;
+      fpsRafRef.current = requestAnimationFrame(measureFpsFrame);
+    };
+    fpsRafRef.current = requestAnimationFrame(measureFpsFrame);
+
+    // Fallback: if transitionend never fires (e.g. no transform change), apply after 500ms
+    pendingFallbackTimerRef.current = setTimeout(() => {
+      pendingFallbackTimerRef.current = null;
+      if (fpsRafRef.current !== null) { cancelAnimationFrame(fpsRafRef.current); fpsRafRef.current = null; }
+      const pending = pendingTransitionEndRef.current;
+      if (!pending) return;
+      pendingTransitionEndRef.current = null;
+      const sheet = sheetRef.current;
+      if (sheet) sheet.style.borderRadius = pending.borderRadius;
+      if (pending.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+      if (pending.applyOverflow) applySnapDom(pending.applyOverflow);
+    }, 500);
+
     if (ds.current.snap === "half") {
       if (delta < -60) {
-        // Dragged up far enough → expand to FULL (corners → square)
+        // Dragged up far enough → expand to FULL
         ds.current.snap = "full";
+        fpsDirRef.current = "HALF→FULL";
         sheetProfiler.markStart("HALF→FULL");
-        animateTo(full, SNAP_SPRING, "0px");
-        applySnapDom("full");
+        pendingTransitionEndRef.current = { borderRadius: "0px", restoreBlur: true, applyOverflow: "full" };
+        // overflow stays hidden during animation (already hidden at half — no layout cost)
+        animateTo(full, SNAP_SPRING);
       } else if (delta > 110) {
-        // Dragged down → CLOSE
+        // Dragged down → CLOSE (clears fallback timer via doClose)
+        clearTimeout(pendingFallbackTimerRef.current!);
+        pendingFallbackTimerRef.current = null;
+        if (fpsRafRef.current !== null) { cancelAnimationFrame(fpsRafRef.current); fpsRafRef.current = null; }
         doClose();
       } else {
-        // Spring back to HALF — restore corners in case drag partially changed them
-        animateTo(half, SNAP_SPRING, "24px 24px 0 0");
+        // Spring back to HALF
+        fpsDirRef.current = "HALF spring-back";
+        pendingTransitionEndRef.current = { borderRadius: "24px 24px 0 0", restoreBlur: true, applyOverflow: null };
+        animateTo(half, SNAP_SPRING);
       }
     } else {
       // From FULL: only collapses to HALF, never closes directly from full
       if (delta > 90) {
         ds.current.snap = "half";
+        fpsDirRef.current = "FULL→HALF";
         sheetProfiler.markStart("FULL→HALF");
-        animateTo(half, SNAP_SPRING, "24px 24px 0 0");
-        applySnapDom("half");
+        // Immediately lock overflow to stop content scrolling during animation
+        const sc = scrollRef.current;
+        if (sc) {
+          sc.style.overflowY = "hidden";
+          (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none";
+        }
+        pendingTransitionEndRef.current = { borderRadius: "24px 24px 0 0", restoreBlur: true, applyOverflow: null };
+        animateTo(half, SNAP_SPRING);
       } else {
-        // Spring back to FULL — ensure corners stay square
-        animateTo(full, SNAP_SPRING, "0px");
+        // Spring back to FULL
+        fpsDirRef.current = "FULL spring-back";
+        pendingTransitionEndRef.current = { borderRadius: "0px", restoreBlur: true, applyOverflow: null };
+        animateTo(full, SNAP_SPRING);
       }
     }
   }, [animateTo, doClose, applySnapDom]);
@@ -743,6 +821,57 @@ function BottomSheet({
     });
     return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
   }, []); // eslint-disable-line
+
+  // ── Post-animation cleanup (transitionend) ────────────────────────────────
+  // Fires once the transform spring settles. Applies all deferred side-effects
+  // that were intentionally withheld during the animation to avoid GPU pressure:
+  //   • border-radius snaps instantly (no per-frame re-rasterization)
+  //   • backdrop-filter blur restored only now (no GPU spike on frame 1)
+  //   • overflow switches now (no synchronous layout during animation)
+  // Also stops the FPS counter and logs the measured frame rate.
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.propertyName !== "transform" || e.target !== sheet) return;
+
+      // Stop FPS counter
+      if (fpsRafRef.current !== null) {
+        cancelAnimationFrame(fpsRafRef.current);
+        fpsRafRef.current = null;
+      }
+      if (pendingFallbackTimerRef.current !== null) {
+        clearTimeout(pendingFallbackTimerRef.current);
+        pendingFallbackTimerRef.current = null;
+      }
+
+      const pending = pendingTransitionEndRef.current;
+      if (pending) {
+        pendingTransitionEndRef.current = null;
+        // 1. Instant border-radius — no animation = no re-rasterization cost
+        sheet.style.borderRadius = pending.borderRadius;
+        // 2. Restore backdrop-filter blur — GPU is idle after transform settles
+        if (pending.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+        // 3. Switch overflow — layout is safe now that animation is complete
+        if (pending.applyOverflow) applySnapDom(pending.applyOverflow);
+      }
+
+      // Report animation FPS to console (color-coded: green ≥55, yellow ≥40, red <40)
+      const frames   = fpsFramesRef.current;
+      const duration = performance.now() - fpsStartRef.current;
+      if (frames > 0 && duration > 0) {
+        const fps = Math.round(frames / (duration / 1000));
+        const color = fps >= 55 ? "color:#34d399;font-weight:bold"
+                    : fps >= 40 ? "color:#fbbf24;font-weight:bold"
+                    :             "color:#f87171;font-weight:bold";
+        console.log(`%c[Sheet FPS] ${fpsDirRef.current}: ${fps} fps — ${frames} frames in ${duration.toFixed(0)} ms`, color);
+      }
+    };
+
+    sheet.addEventListener("transitionend", onTransitionEnd);
+    return () => sheet.removeEventListener("transitionend", onTransitionEnd);
+  }, [applySnapDom]);
 
   // ── Tap backdrop to close ─────────────────────────────────────────────────
   const onBackdropClick = useCallback((e: React.MouseEvent) => {
@@ -2440,8 +2569,8 @@ function MiniWatchlistPopup({
           position:"fixed", left, bottom,
           width:POPUP_W, maxHeight:POPUP_MAXH,
           background:"rgba(7,8,17,0.98)",
-          backdropFilter:"blur(40px) saturate(200%)",
-          WebkitBackdropFilter:"blur(40px) saturate(200%)",
+          backdropFilter:"blur(12px) saturate(160%)",
+          WebkitBackdropFilter:"blur(12px) saturate(160%)",
           border:"1px solid rgba(255,255,255,0.12)",
           borderRadius:16,
           overflow:"hidden",
@@ -2590,7 +2719,7 @@ function MiniControlBar({
       <div className="tj-ctrl-bar-glow">
         <div className="tj-ctrl-bar-inner" style={{
           height:58, display:"flex", alignItems:"center",
-          backdropFilter:"blur(32px) saturate(200%)", WebkitBackdropFilter:"blur(32px) saturate(200%)",
+          backdropFilter:"blur(12px) saturate(160%)", WebkitBackdropFilter:"blur(12px) saturate(160%)",
           paddingLeft:7, paddingRight:7, gap:2,
           overflowX:"auto", scrollbarWidth:"none",
         } as React.CSSProperties}>
