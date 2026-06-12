@@ -2259,11 +2259,11 @@ function MarketWatchlistSheet({
   onClose: () => void;
   activeSymbol: string;
 }) {
-  const [activeTab, setActiveTab]         = useState<MktTab>("Watchlist");
-  const [search, setSearch]               = useState("");
-  const [deltaSymbols, setDeltaSymbols]   = useState<MktSymbolInfo[]>([]);
+  const [activeTab, setActiveTab]           = useState<MktTab>("Watchlist");
+  const [search, setSearch]                 = useState("");
+  const [deltaSymbols, setDeltaSymbols]     = useState<MktSymbolInfo[]>([]);
   const [ctraderSymbols, setCtraderSymbols] = useState<MktSymbolInfo[]>([]);
-  const [loadingBroker, setLoadingBroker] = useState(false);
+  const [loadingBroker, setLoadingBroker]   = useState(false);
 
   const { items: wlItems, addSymbol, toggleFavorite } = useWatchlist();
 
@@ -2274,7 +2274,6 @@ function MarketWatchlistSheet({
     watchMap.current = m;
   }, [wlItems]);
 
-  // Load broker catalogs once
   useEffect(() => {
     setLoadingBroker(true);
     Promise.all([
@@ -2295,136 +2294,69 @@ function MarketWatchlistSheet({
     else addSymbol(symbol, true);
   }, [addSymbol, toggleFavorite]);
 
-  function getRows(): MktSymbolInfo[] {
-    let rows: MktSymbolInfo[];
+  const rows = useMemo((): MktSymbolInfo[] => {
+    let r: MktSymbolInfo[];
     if (activeTab === "Watchlist") {
-      rows = wlItems
+      r = wlItems
         .filter(i => i.isFavorite)
         .map(i => ({ symbol: i.symbol, name: i.label, contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other" }));
     } else if (activeTab === "Crypto") {
-      rows = deltaSymbols;
+      r = deltaSymbols;
     } else if (activeTab === "Forex") {
-      rows = ctraderSymbols.filter(s => s.contractType === "forex" || s.contractType === "metal");
+      r = ctraderSymbols.filter(s => s.contractType === "forex" || s.contractType === "metal");
     } else if (activeTab === "Indices") {
-      rows = ctraderSymbols.filter(s => s.contractType === "index");
+      r = ctraderSymbols.filter(s => s.contractType === "index");
     } else {
-      rows = ctraderSymbols.filter(s => s.contractType === "commodity");
+      r = ctraderSymbols.filter(s => s.contractType === "commodity");
     }
     if (search.trim()) {
       const q = search.trim().toUpperCase();
-      rows = rows.filter(r => r.symbol.toUpperCase().includes(q) || r.name.toUpperCase().includes(q));
+      r = r.filter(row => row.symbol.toUpperCase().includes(q) || row.name.toUpperCase().includes(q));
     }
-    return rows;
-  }
+    return r;
+  }, [activeTab, search, wlItems, deltaSymbols, ctraderSymbols]);
 
-  const rows = getRows();
-
-  // Swipe-to-dismiss
-  const sheetRef   = useRef<HTMLDivElement>(null);
-  const scrollRef  = useRef<HTMLDivElement>(null);
-  const onCloseRef = useRef(onClose);
-  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
-
-  useEffect(() => {
-    const sheet = sheetRef.current;
-    if (!sheet) return;
-    let phase: "none" | "pending" | "dragging" = "none";
-    let startY = 0, dy = 0;
-
-    const onTS = (e: TouchEvent) => { phase = "pending"; startY = e.touches[0].clientY; dy = 0; };
-    const onTM = (e: TouchEvent) => {
-      if (phase === "none") return;
-      const delta = e.touches[0].clientY - startY;
-      if (phase === "pending") {
-        if (Math.abs(delta) < 8) return;
-        if (delta <= 0) { phase = "none"; return; }
-        const rect = sheet.getBoundingClientRect();
-        const inHeader = (startY - rect.top) < 100;
-        const scrollAtTop = (scrollRef.current?.scrollTop ?? 0) === 0;
-        if (inHeader || scrollAtTop) phase = "dragging";
-        else { phase = "none"; return; }
-      }
-      if (phase === "dragging") {
-        e.preventDefault();
-        dy = Math.max(0, delta);
-        sheet.style.transition = "none";
-        sheet.style.transform  = `translateY(${dy}px)`;
-      }
-    };
-    const onTE = () => {
-      if (phase !== "dragging") { phase = "none"; return; }
-      phase = "none";
-      if (dy > 120) {
-        sheet.style.transition = "transform 0.22s cubic-bezier(0.4,0,0.9,0.6)";
-        sheet.style.transform  = "translateY(110%)";
-        setTimeout(() => onCloseRef.current(), 210);
-      } else {
-        sheet.style.transition = "transform 0.45s cubic-bezier(0.34,1.4,0.64,1)";
-        sheet.style.transform  = "translateY(0)";
-      }
-    };
-
-    sheet.addEventListener("touchstart",  onTS, { passive: true  });
-    sheet.addEventListener("touchmove",   onTM, { passive: false });
-    sheet.addEventListener("touchend",    onTE, { passive: true  });
-    sheet.addEventListener("touchcancel", onTE, { passive: true  });
-    return () => {
-      sheet.removeEventListener("touchstart",  onTS);
-      sheet.removeEventListener("touchmove",   onTM);
-      sheet.removeEventListener("touchend",    onTE);
-      sheet.removeEventListener("touchcancel", onTE);
-    };
-  }, []);
-
-  return createPortal(
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 450,
-        background: "rgba(0,0,0,0.72)",
-        backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-        animation: "sheet-fade-in 0.2s ease both",
-      }}
-    >
-      <div
-        ref={sheetRef}
-        onClick={e => e.stopPropagation()}
-        style={{
-          position: "absolute", left: 0, right: 0, bottom: 0,
-          maxHeight: "92vh",
-          display: "flex", flexDirection: "column",
-          background: SHEET_BG,
-          backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)",
-          borderTop: "1px solid rgba(255,255,255,0.10)",
-          borderLeft: "1px solid rgba(255,255,255,0.06)",
-          borderRight: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: "22px 22px 0 0",
-          paddingBottom: "max(env(safe-area-inset-bottom,12px),12px)",
-          boxShadow: `${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
-          animation: "sheet-slide-up 0.32s cubic-bezier(0.22, 1, 0.36, 1) both",
-          willChange: "transform",
-        }}
-      >
-        {/* Drag handle */}
-        <div style={{ width: 40, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.22)", margin: "12px auto 0", flexShrink: 0 }} />
-
-        {/* Sheet header */}
-        <div style={{ display: "flex", alignItems: "center", padding: "10px 16px 0", flexShrink: 0 }}>
-          <span style={{ flex: 1, fontSize: 15, fontWeight: 700, color: TEXT_HI, letterSpacing: "0.01em" }}>Market</span>
-          <button
-            onClick={onClose}
-            style={{
-              width: 28, height: 28, borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.10)", background: "rgba(255,255,255,0.06)",
-              cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-            }}
-          >
-            <X style={{ width: 13, height: 13, color: "rgba(255,255,255,0.50)" }} />
-          </button>
+  // ── Reuse the exact BottomSheet used by Drawing Tools ──────────────────────
+  // Tabs + search + column headers are sticky inside the BottomSheet's scroll
+  // area so they pin at the top while the symbol list scrolls in FULL state.
+  return (
+    <BottomSheet title="Market" onClose={onClose}>
+      {/* ── Sticky header block: pinned to top of scroll area in FULL state ── */}
+      <div style={{
+        position: "sticky", top: 0, zIndex: 2,
+        background: SHEET_BG,
+      }}>
+        {/* Search bar — always visible */}
+        <div style={{ padding: "4px 12px 2px" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.10)",
+            borderRadius: 10, padding: "7px 12px",
+          }}>
+            <Search size={13} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
+            <input
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={`Search ${activeTab === "Watchlist" ? "symbols" : activeTab}…`}
+              style={{
+                flex: 1, background: "none", border: "none", outline: "none",
+                color: "#fff", fontSize: 13, caretColor: "#f59e0b", minWidth: 0,
+              }}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)", flexShrink: 0 }}
+              >
+                <X size={13} />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "2px 6px 0", flexShrink: 0 }}>
+        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" } as React.CSSProperties}>
           {MKT_TABS.map(tab => {
             const active = tab === activeTab;
             return (
@@ -2452,37 +2384,6 @@ function MarketWatchlistSheet({
           })}
         </div>
 
-        {/* Search bar — hidden on Watchlist tab */}
-        {activeTab !== "Watchlist" && (
-          <div style={{ padding: "6px 12px 4px", flexShrink: 0 }}>
-            <div style={{
-              display: "flex", alignItems: "center", gap: 8,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.10)",
-              borderRadius: 10, padding: "7px 12px",
-            }}>
-              <Search size={13} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder={`Search ${activeTab}…`}
-                style={{
-                  flex: 1, background: "none", border: "none", outline: "none",
-                  color: "#fff", fontSize: 13, caretColor: "#f59e0b", minWidth: 0,
-                }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch("")}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)", flexShrink: 0 }}
-                >
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* Column headers */}
         <div style={{
           display: "flex", alignItems: "center",
@@ -2490,62 +2391,55 @@ function MarketWatchlistSheet({
           background: "rgba(255,255,255,0.02)",
           borderTop: "1px solid rgba(255,255,255,0.06)",
           borderBottom: "1px solid rgba(255,255,255,0.06)",
-          flexShrink: 0,
         }}>
           <div style={{ width: 24, flexShrink: 0 }} />
           <div style={{ flex: 1, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Contract</div>
           <div style={{ minWidth: 76, textAlign: "right", fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Price</div>
           <div style={{ minWidth: 64, textAlign: "center", marginLeft: 8, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>24h Chg.</div>
         </div>
-
-        {/* Scrollable symbol list */}
-        <div
-          ref={scrollRef}
-          style={{ overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" } as React.CSSProperties}
-        >
-          {loadingBroker && (
-            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "36px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
-              <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
-              <span style={{ fontSize: 13 }}>Loading…</span>
-              <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
-            </div>
-          )}
-
-          {!loadingBroker && rows.length === 0 && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
-              <TrendingUp size={30} strokeWidth={1} />
-              <p style={{ fontSize: 13.5, margin: 0 }}>
-                {activeTab === "Watchlist" ? "No favourites yet" : `No ${activeTab} symbols found`}
-              </p>
-              {activeTab === "Watchlist" && (
-                <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
-                  Tap ★ on any symbol to add it here
-                </p>
-              )}
-            </div>
-          )}
-
-          {!loadingBroker && rows.map(row => {
-            const wItem      = watchMap.current.get(row.symbol);
-            const isFavorite = wItem?.isFavorite ?? false;
-            return (
-              <MktRow
-                key={row.symbol}
-                symbol={row.symbol}
-                name={row.name}
-                contractType={row.contractType}
-                isFavorite={isFavorite}
-                onStar={() => handleStar(row.symbol)}
-                onTap={() => { onSelect(row.symbol); onClose(); }}
-              />
-            );
-          })}
-
-          <div style={{ height: 20 }} />
-        </div>
       </div>
-    </div>,
-    document.body,
+
+      {/* ── Symbol list — lives directly in BottomSheet's managed scroll area ── */}
+      {loadingBroker && (
+        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "36px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
+          <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
+          <span style={{ fontSize: 13 }}>Loading…</span>
+          <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
+        </div>
+      )}
+
+      {!loadingBroker && rows.length === 0 && (
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
+          <TrendingUp size={30} strokeWidth={1} />
+          <p style={{ fontSize: 13.5, margin: 0 }}>
+            {activeTab === "Watchlist" ? "No favourites yet" : `No ${activeTab} symbols found`}
+          </p>
+          {activeTab === "Watchlist" && (
+            <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
+              Tap ★ on any symbol to add it here
+            </p>
+          )}
+        </div>
+      )}
+
+      {!loadingBroker && rows.map(row => {
+        const wItem      = watchMap.current.get(row.symbol);
+        const isFavorite = wItem?.isFavorite ?? false;
+        return (
+          <MktRow
+            key={row.symbol}
+            symbol={row.symbol}
+            name={row.name}
+            contractType={row.contractType}
+            isFavorite={isFavorite}
+            onStar={() => handleStar(row.symbol)}
+            onTap={() => { onSelect(row.symbol); onClose(); }}
+          />
+        );
+      })}
+
+      <div style={{ height: 20 }} />
+    </BottomSheet>
   );
 }
 
