@@ -1419,6 +1419,12 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     // LWC cannot render there so we use the canvas overlay; this lets us
     // redraw after LWC clears the crosshair on touchend.
     let lockedFutureCrossPixel: { x: number; y: number } | null = null;
+    // Pixel coords of the crosshair at the moment the long-press fires.
+    // Used to compute relative drag offset so the crosshair never jumps.
+    let lockedCrosshairPixel: { x: number; y: number } | null = null;
+    // Anchor saved at the first drag frame: finger + crosshair pixel positions.
+    // Every subsequent CROSSHAIR_DRAG frame applies the delta from these refs.
+    let crosshairDragAnchor: { fingerX: number; fingerY: number; crossX: number; crossY: number } | null = null;
 
     const cancelIg = () => {
       if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null; }
@@ -1753,7 +1759,9 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
             const time     = coordinateToTimeOrExtrapolate(ch, x);
             const price    = series.coordinateToPrice(y);
             if (time !== null && price !== null) {
-              lockedCrosshairPos = { price: price as number, time };
+              lockedCrosshairPos   = { price: price as number, time };
+              lockedCrosshairPixel = { x, y };
+              crosshairDragAnchor  = null; // reset so the next drag starts fresh
               const isFuture = ch.timeScale().coordinateToTime(x) === null;
               if (isFuture) {
                 // Future area — canvas only. Clear LWC's crosshair first so the
@@ -1878,6 +1886,13 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         const totalV = Math.abs(e.clientY - g.startY);
         if (Math.max(totalH, totalV) < PAN_THRESHOLD) return;
         if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null; }
+        if (crosshairLocked && lockedCrosshairPixel) {
+          // Save anchor so relative drag starts from where the crosshair is pinned.
+          crosshairDragAnchor = {
+            fingerX: e.clientX, fingerY: e.clientY,
+            crossX:  lockedCrosshairPixel.x, crossY: lockedCrosshairPixel.y,
+          };
+        }
         g.mode = crosshairLocked ? 'CROSSHAIR_DRAG' : 'CHART_PAN';
       }
 
@@ -1895,18 +1910,47 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       if (g.mode === 'CROSSHAIR_LOCKED' || g.mode === 'CROSSHAIR_DRAG') {
         e.stopPropagation();
         e.preventDefault();
+
+        // First frame of CROSSHAIR_LOCKED → CROSSHAIR_DRAG transition:
+        // save the drag anchor so all subsequent frames apply relative offset
+        // instead of snapping to the current finger position.
+        if (g.mode === 'CROSSHAIR_LOCKED' && lockedCrosshairPixel) {
+          crosshairDragAnchor = {
+            fingerX: e.clientX, fingerY: e.clientY,
+            crossX:  lockedCrosshairPixel.x, crossY: lockedCrosshairPixel.y,
+          };
+        }
         g.mode = 'CROSSHAIR_DRAG';
+
         const ch     = chartRef.current;
         const series = mainRef.current;
         if (ch && series) {
           try {
-            const rect     = container.getBoundingClientRect();
-            const x        = e.clientX - rect.left;
-            const y        = e.clientY - rect.top;
-            const time     = coordinateToTimeOrExtrapolate(ch, x);
-            const price    = series.coordinateToPrice(y);
+            const rect = container.getBoundingClientRect();
+
+            // ── Relative positioning (TradingView-style) ─────────────────────
+            // Compute pixel position from the crosshair's original location plus
+            // the delta the finger has travelled, NOT from the raw finger position.
+            // This prevents the crosshair from jumping when the drag starts.
+            let x: number;
+            let y: number;
+            if (crosshairDragAnchor) {
+              x = crosshairDragAnchor.crossX + (e.clientX - crosshairDragAnchor.fingerX);
+              y = crosshairDragAnchor.crossY + (e.clientY - crosshairDragAnchor.fingerY);
+              // Clamp to chart bounds so crosshair can't escape the container
+              x = Math.max(0, Math.min(x, container.clientWidth  - 1));
+              y = Math.max(0, Math.min(y, container.clientHeight - 1));
+            } else {
+              // Fallback (anchor not yet set — should not normally happen)
+              x = e.clientX - rect.left;
+              y = e.clientY - rect.top;
+            }
+
+            const time  = coordinateToTimeOrExtrapolate(ch, x);
+            const price = series.coordinateToPrice(y);
             if (time !== null && price !== null) {
-              lockedCrosshairPos = { price: price as number, time };
+              lockedCrosshairPos   = { price: price as number, time };
+              lockedCrosshairPixel = { x, y };
               const isFuture = ch.timeScale().coordinateToTime(x) === null;
               if (isFuture) {
                 // Future (blank) area — canvas only. Clear LWC's crosshair so the
@@ -2079,8 +2123,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
         if (longPressTimer !== null) { clearTimeout(longPressTimer); longPressTimer = null; }
         if (crosshairLocked) {
           crosshairLocked = false;
-          lockedCrosshairPos = null;
+          lockedCrosshairPos    = null;
           lockedFutureCrossPixel = null;
+          lockedCrosshairPixel  = null;
+          crosshairDragAnchor   = null;
           drawCanvasCrosshair(null, 0);
           try { chartRef.current?.clearCrosshairPosition(); } catch { /* ok */ }
         }
