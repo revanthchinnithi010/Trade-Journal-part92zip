@@ -2359,6 +2359,15 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   const xhairHRef                   = useRef<SVGLineElement | null>(null);
   const xhairVRef                   = useRef<SVGLineElement | null>(null);
 
+  // ── Mobile 2-point drawing refs ────────────────────────────────────────────
+  // Crosshair pixel position relative to overlay (set on tool select + drag).
+  // Never uses raw finger coords — all movement is relative-offset.
+  const mobileDrawCrossPx    = useRef<{ x: number; y: number } | null>(null);
+  // Finger + crosshair position captured at each drag start.
+  const mobileDrawDragAnchor = useRef<{ fX: number; fY: number; cX: number; cY: number } | null>(null);
+  // Finger position at pointerdown — used to detect tap vs drag.
+  const mobilePointerStart   = useRef<{ x: number; y: number } | null>(null);
+
   // ── Ephemeral rulers (transient — not saved to DB) ─────────────────────────
   const [ephemeralRuler,     setEphemeralRuler]     = useState<[DrawingPoint, DrawingPoint] | null>(null);
   const [ephemeralDateRange, setEphemeralDateRange] = useState<[DrawingPoint, DrawingPoint] | null>(null);
@@ -2546,8 +2555,42 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     setPhase("idle"); setAnchor(null); setMousePoint(null); setIsDrawing(false);
     isDragging.current = false; clickPhaseRef.current = 0;
     freehandRef.current = []; lastFreehandPxRef.current = null; setFreehandPreview(null);
+    // Clear mobile state on tool change
+    mobileDrawCrossPx.current    = null;
+    mobileDrawDragAnchor.current = null;
+    mobilePointerStart.current   = null;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTool]);
+
+  // ── Mobile: show crosshair immediately when a 2-point draw tool is selected ──
+  // TradingView behavior: selecting the trendline tool shows the crosshair
+  // at the chart center without requiring the user to touch the screen first.
+  useEffect(() => {
+    if (!isMobile) return;
+    if (activeTool === "cursor" || activeTool === "eraser" || isFreehand(activeTool)) return;
+    if (pointsNeeded(activeTool) !== 2) return;
+    const overlay = overlayRef.current;
+    if (!overlay) return;
+    // Place crosshair at 40% height (slightly above center — typical chart position)
+    const cx = overlay.clientWidth  / 2;
+    const cy = overlay.clientHeight * 0.4;
+    mobileDrawCrossPx.current = { x: cx, y: cy };
+    if (xhairHRef.current) {
+      xhairHRef.current.setAttribute("y1", String(cy));
+      xhairHRef.current.setAttribute("y2", String(cy));
+      xhairHRef.current.style.display = "";
+    }
+    if (xhairVRef.current) {
+      xhairVRef.current.setAttribute("x1", String(cx));
+      xhairVRef.current.setAttribute("x2", String(cx));
+      xhairVRef.current.style.display = "";
+    }
+    // Seed mousePoint so the cursor dot appears immediately at chart coords
+    const rect = overlay.getBoundingClientRect();
+    const pt = fromPx(rect.left + cx, rect.top + cy);
+    if (pt) setMousePoint(pt);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTool, isMobile]);
 
   // ── Disable/re-enable chart scroll during draw mode ──────────────────────
   useEffect(() => {
@@ -3255,6 +3298,19 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     }
 
     // ── 2-point / 3-point tools: TradingView click-click interaction ───────
+
+    // ── Mobile: crosshair-drag model — save anchor, do NOT place point yet ─
+    // Point placement happens in onPointerUp only when the lift is a tap (<10px).
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+      const cx = mobileDrawCrossPx.current?.x ?? (overlay.clientWidth  / 2);
+      const cy = mobileDrawCrossPx.current?.y ?? (overlay.clientHeight * 0.4);
+      mobileDrawDragAnchor.current = { fX: e.clientX, fY: e.clientY, cX: cx, cY: cy };
+      mobilePointerStart.current   = { x: e.clientX, y: e.clientY };
+      return;
+    }
+
     const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
     if (!pt) return;
 
@@ -3273,6 +3329,26 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
 
   const onPointerMove = useCallback((e: React.PointerEvent) => {
     if (!isDrawMode || activeTool === "eraser") return;
+
+    // ── Mobile 2-point crosshair drag (relative offset, zero finger-snap) ───
+    // Only update crosshair while an active drag is in progress.
+    // When no drag is active (finger lifted), the crosshair stays at its last
+    // position — it never follows raw finger coordinates.
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+      const overlay = overlayRef.current;
+      const drag    = mobileDrawDragAnchor.current;
+      if (overlay && drag) {
+        const nx = Math.max(0, Math.min(drag.cX + (e.clientX - drag.fX), overlay.clientWidth  - 1));
+        const ny = Math.max(0, Math.min(drag.cY + (e.clientY - drag.fY), overlay.clientHeight - 1));
+        mobileDrawCrossPx.current = { x: nx, y: ny };
+        if (xhairHRef.current) { xhairHRef.current.setAttribute("y1", String(ny)); xhairHRef.current.setAttribute("y2", String(ny)); xhairHRef.current.style.display = ""; }
+        if (xhairVRef.current) { xhairVRef.current.setAttribute("x1", String(nx)); xhairVRef.current.setAttribute("x2", String(nx)); xhairVRef.current.style.display = ""; }
+        const rect = overlay.getBoundingClientRect();
+        const pt   = fromPx(rect.left + nx, rect.top + ny);
+        if (pt) setMousePoint(pt);
+      }
+      return; // never let raw finger coords reach crosshair or mousePoint
+    }
 
     // ── Direct-DOM crosshair (zero React overhead) ──────────────────────────
     if (!isFreehand(activeTool) && overlayRef.current) {
@@ -3365,6 +3441,61 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
     // This fires on EVERY pointerUp. We use distance from anchor to discriminate:
     //   • dist < 8 px  → first click released at same spot  → stay in "placed_first"
     //   • dist ≥ 8 px  → second click at a different spot   → commit the drawing
+
+    // ── MOBILE: tap-to-place at current crosshair position ────────────────
+    // Drag (≥10px movement) = reposition crosshair only, no point placed.
+    // Tap  (<10px movement) = place point at CROSSHAIR coords, not finger coords.
+    if (isMobile && pointsNeeded(activeTool) === 2 && !isFreehand(activeTool)) {
+      const start     = mobilePointerStart.current;
+      mobileDrawDragAnchor.current = null;
+      mobilePointerStart.current   = null;
+      const totalMove = start ? Math.hypot(e.clientX - start.x, e.clientY - start.y) : 999;
+      if (totalMove >= 10) return; // drag ended — crosshair repositioned, no point placed
+
+      // Tap: read chart coordinates from the crosshair's current pixel position
+      const overlay = overlayRef.current;
+      if (!overlay) return;
+      const crossPx = mobileDrawCrossPx.current;
+      if (!crossPx) return;
+      const rect = overlay.getBoundingClientRect();
+      const pt   = fromPx(rect.left + crossPx.x, rect.top + crossPx.y);
+      if (!pt) return;
+
+      if (clickPhaseRef.current === 0) {
+        // First tap → place Point A
+        setAnchor(pt);
+        setMousePoint(pt);
+        setPhase("placed_first");
+        setIsDrawing(true);
+        clickPhaseRef.current = 1;
+      } else {
+        // Second tap → place Point B and commit
+        setSnapIndicator(null);
+        if (activeTool === "position_long" || activeTool === "position_short") {
+          const isLong  = activeTool === "position_long";
+          const slPrice = isLong
+            ? anchor!.price - Math.abs(pt.price - anchor!.price) * 0.5
+            : anchor!.price + Math.abs(pt.price - anchor!.price) * 0.5;
+          // eslint-disable-next-line react-hooks/exhaustive-deps
+          const iSec = getIntervalSec(timeframe);
+          const rightOffsetBars     = iSec > 0 ? Math.round((pt.time - anchor!.time) / iSec) : 0;
+          const normalizedRightTime = anchor!.time + rightOffsetBars * iSec;
+          await saveDrawing([
+            { time: anchor!.time,         price: anchor!.price },
+            { time: normalizedRightTime,  price: pt.price      },
+            { time: anchor!.time,         price: slPrice       },
+          ]);
+        } else {
+          await saveDrawing([anchor!, pt]);
+        }
+        setAnchor(null); setMousePoint(null);
+        setPhase("idle"); setIsDrawing(false);
+        clickPhaseRef.current = 0;
+        if (!useDrawingStore.getState().stayInDraw) setActiveTool("cursor");
+      }
+      return;
+    }
+
     if (clickPhaseRef.current !== 1) return;
 
     const pt = snapToOHLC(e.clientX, e.clientY, e.shiftKey);
