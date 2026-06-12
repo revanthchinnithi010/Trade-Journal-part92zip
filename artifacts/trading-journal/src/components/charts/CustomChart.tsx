@@ -1366,6 +1366,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     let ig:          IGesture | null = null;
     let momentumRaf: number   | null = null;
     let pressCount               = 0; // live pointer count for pinch detection
+    let touchCount               = 0; // live touch count (e.touches.length) — ground truth for two-finger detection
     let lastTsDownT              = 0; // timestamp of last pointerdown in the time-scale zone
     let crosshairLocked          = false; // crosshair pinned after touch lift
     let longPressTimer: ReturnType<typeof setTimeout> | null = null;
@@ -1612,7 +1613,14 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       // swipe, notification), ig still holds the old pointerId and pressCount
       // may be > 0. Reset both before treating this as a fresh gesture so we
       // don't falsely enter PINCH_ZOOM on a single-finger drag.
-      if (e.pointerType !== 'mouse' && ig && ig.pointerId !== e.pointerId) {
+      //
+      // IMPORTANT: skip this guard when already in PINCH_ZOOM mode.
+      // onTouchStart sets ig.pointerId = -1 (a sentinel meaning "no single
+      // tracked pointer"). When the second finger's pointerdown then arrives,
+      // ig.pointerId (-1) !== e.pointerId (real ID) would trigger this guard,
+      // resetting pressCount to 0 and cancelling the PINCH_ZOOM that
+      // onTouchStart just established — causing spurious single-finger panning.
+      if (e.pointerType !== 'mouse' && ig && ig.mode !== 'PINCH_ZOOM' && ig.pointerId !== e.pointerId) {
         cancelIg();
         pressCount = 0;
       }
@@ -1756,14 +1764,14 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       }
 
       // ── Two-finger guard: block ALL pointer moves during a pinch ────────────
-      // When in PINCH_ZOOM mode the tracked ig.pointerId is -1 (no single ID),
-      // so the g.pointerId !== e.pointerId check below would return early WITHOUT
-      // calling stopPropagation() — letting LWC see every pointermove and
-      // interpret the finger motion as a pan. At minimum zoom this converts the
-      // clamped pinch-out directly into leftward chart dragging.
-      // Stopping here whenever pressCount ≥ 2 completely severs that path:
-      // two-finger = zoom only, pointer events never reach LWC.
-      if (pressCount >= 2) {
+      // touchCount is the ground-truth number of fingers from e.touches.length,
+      // updated in onTouchStart/onTouchEnd. It can never drift out of sync the
+      // way pressCount can (pressCount is reset by the stale-state guard in onDown
+      // when ig.pointerId = -1, causing it to under-count during the iOS
+      // onTouchStart → pointerdown sequence). Using touchCount ensures that
+      // every pointermove from either finger is blocked while two fingers are
+      // on screen, preventing LWC from interpreting the pinch as a horizontal pan.
+      if (touchCount >= 2) {
         e.stopPropagation();
         return;
       }
@@ -2255,6 +2263,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     // listening to touchstart in capture phase: whenever e.touches.length >= 2
     // we force-enter PINCH_ZOOM, cancelling any single-finger gesture state.
     const onTouchStart = (e: TouchEvent) => {
+      touchCount = e.touches.length; // always track ground-truth touch count
       if (e.touches.length < 2) return;
 
       // Two or more fingers on screen — enter PINCH_ZOOM regardless of whether
@@ -2295,6 +2304,7 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     // onUp decrements to 0 — making the remaining finger invisible to the
     // pointer-event path and breaking any subsequent single-finger pan.
     const onTouchEnd = (e: TouchEvent) => {
+      touchCount = e.touches.length; // always track ground-truth touch count
       if (ig?.mode !== 'PINCH_ZOOM') return;
       if (e.touches.length <= 1) {
         // All or all-but-one fingers lifted — clear pinch state.
