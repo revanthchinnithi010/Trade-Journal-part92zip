@@ -140,7 +140,8 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
   // Create chart once on mount
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container) { console.warn("[MiniChart] Chart mount skipped — containerRef null", defaultSymbol); return; }
+    console.log("[MiniChart] Creating chart", defaultSymbol);
 
     const chart = createChart(container, {
       width:  container.clientWidth  || 400,
@@ -192,6 +193,7 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
     chartRef.current = chart;
     mainRef.current  = main;
     volRef.current   = vol;
+    console.log("[MiniChart] Chart mounted", defaultSymbol);
 
     const ro = new ResizeObserver(entries => {
       const e = entries[0];
@@ -297,13 +299,20 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
   const loadCandles = useCallback(async (sym: string, iv: string) => {
     const main = mainRef.current;
     const vol  = volRef.current;
-    if (!main || !vol) return;
+    if (!main || !vol) { console.log("[MiniChart] loadCandles skipped — series not ready", sym); return; }
+    console.log("[MiniChart] Creating chart / loading OHLC", sym, iv);
     setLoading(true);
     try {
       const res = await fetch(`${BASE}/api/candles/${sym}/${iv}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        console.warn("[MiniChart] OHLC fetch failed", sym, iv, res.status, res.statusText);
+        return;
+      }
       const raw: Bar[] = await res.json();
-      if (!Array.isArray(raw) || raw.length === 0) return;
+      if (!Array.isArray(raw) || raw.length === 0) {
+        console.warn("[MiniChart] OHLC empty response", sym, iv);
+        return;
+      }
       const bars = [...new Map(raw.map(b => [b.time, b])).values()].sort((a, b) => a.time - b.time);
       barsRef.current = bars;
       main.setData(bars.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
@@ -311,7 +320,10 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
       chartRef.current?.timeScale().fitContent();
       const last = bars[bars.length - 1];
       if (last) setLivePrice(last.close);
-    } catch { /* ignore */ } finally { setLoading(false); }
+      console.log("[MiniChart] OHLC loaded", sym, iv, bars.length, "bars");
+    } catch (err) {
+      console.error("[MiniChart] OHLC load error", sym, iv, err);
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { void loadCandles(symbol, interval); }, [symbol, interval, loadCandles]);

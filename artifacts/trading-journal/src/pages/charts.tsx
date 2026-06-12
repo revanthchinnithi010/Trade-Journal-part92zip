@@ -1884,7 +1884,7 @@ export default function Charts() {
                       }}
                     >
                       <MiniChart
-                        defaultSymbol={["ETHUSD", "XAUUSD", "EURUSD"][i] ?? "ETHUSD"}
+                        defaultSymbol={watchlistItems.filter(w => w.symbol !== activeKey)[i]?.symbol ?? ["ETHUSD", "SOLUSD", "DOGEUSD"][i] ?? "ETHUSD"}
                         defaultInterval={interval}
                         syncedInterval={syncTF ? interval : undefined}
                       />
