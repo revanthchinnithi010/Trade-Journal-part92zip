@@ -401,18 +401,20 @@ function FloatingDrawingPill({
   );
 }
 
-// ── BottomSheet — 3-state snap (partial ↔ full ↔ closed), RAF drag ─────────
-// The sheet element is always FULL_H_FRAC tall. We reveal different amounts
-// by shifting it with translateY:
-//   FULL_Y    = 0            → full height visible
-//   PARTIAL_Y = (FULL_H_FRAC - partialFraction) * vh  → partial height visible
-//   off-screen = FULL_H_FRAC * vh + 100              → hidden (close target)
-const FULL_H_FRAC = 0.95; // sheet element height as fraction of viewport
+// ── BottomSheet — 3-state snap (CLOSED ↔ HALF ↔ FULL), RAF drag ──────────
+// Sheet element is always 100vh tall. translateY controls visible amount:
+//   FULL_Y = 0                       → entire screen filled
+//   HALF_Y = 0.50 * window.innerHeight → bottom half visible
+//   off-screen = window.innerHeight + 20 → hidden (close target)
+//
+// Drag is handled on the ENTIRE sheet body (not just the header).
+// Scroll conflict: when FULL + scrollTop > 1 → let scroll happen.
+//                  when FULL + scrollTop ≤ 1 + dragging DOWN → drag sheet.
+//                  when HALF → always drag.
 
 function BottomSheet({
   title, onClose, children,
-  partialFraction = 0.72, // fraction of viewport visible in partial mode
-  // legacy prop kept for back-compat — ignored; use partialFraction instead
+  partialFraction: _ignored,
   maxHeight: _maxHeight,
 }: {
   title: string; onClose: () => void; children: React.ReactNode;
@@ -423,63 +425,65 @@ function BottomSheet({
   const backdropRef = useRef<HTMLDivElement>(null);
   const headerRef   = useRef<HTMLDivElement>(null);
   const scrollRef   = useRef<HTMLDivElement>(null);
-  const handlePillRef = useRef<HTMLDivElement>(null);
   const onCloseRef  = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  // React state only for handle icon — snaps are infrequent (no perf cost)
-  const [snap, setSnap] = useState<"partial"|"full">("partial");
+  // React state only for pill/chevron colour — snaps are infrequent
+  const [snap, setSnap] = useState<"half"|"full">("half");
 
-  // Snap Y offsets in px — computed on first render and on resize
-  const snapYRef = useRef({ partial: 0, full: 0 });
+  // Snap Y offsets in px — initialised synchronously so opening RAF can read them
+  const snapYRef = useRef({
+    full: 0,
+    half: typeof window !== "undefined" ? Math.round(0.50 * window.innerHeight) : 400,
+  });
   const computeSnaps = useCallback(() => {
-    snapYRef.current.full    = 0;
-    snapYRef.current.partial = Math.round((FULL_H_FRAC - partialFraction) * window.innerHeight);
-  }, [partialFraction]);
+    snapYRef.current.full = 0;
+    snapYRef.current.half = Math.round(0.50 * window.innerHeight);
+  }, []);
   useEffect(() => {
     computeSnaps();
     window.addEventListener("resize", computeSnaps);
     return () => window.removeEventListener("resize", computeSnaps);
   }, [computeSnaps]);
 
-  // ── Shared drag state (never triggers re-render) ──────────────────────────
+  // ── Shared drag state — never triggers re-render ──────────────────────────
   const ds = useRef({
     active:     false,
     closing:    false,
-    snap:       "partial" as "partial"|"full",
-    baseY:      0,     // translateY at drag start
-    startPY:    0,     // pointer.clientY at drag start
-    latestPY:   0,     // updated on every pointermove (read in RAF)
+    snap:       "half" as "half"|"full",
+    baseY:      0,
+    startPY:    0,
+    latestPY:   0,
     rafId:      0,
-    rafPending: false, // guard: at most one RAF scheduled per frame
+    rafPending: false,
   });
 
-  // ── Backdrop opacity: fades only when dragging below PARTIAL_Y ───────────
+  // ── Backdrop opacity: fades when dragging below HALF_Y ───────────────────
   const syncBackdrop = useCallback((y: number) => {
     const bd = backdropRef.current;
     if (!bd) return;
-    const pY = snapYRef.current.partial;
-    if (y <= pY) { bd.style.opacity = "1"; return; }
-    const ratio = Math.min(1, (y - pY) / Math.max(1, pY * 0.65));
-    bd.style.opacity = String(Math.max(0.06, 1 - ratio * 0.88));
+    const hY = snapYRef.current.half;
+    if (y <= hY) { bd.style.opacity = "1"; return; }
+    const ratio = Math.min(1, (y - hY) / Math.max(1, hY * 0.75));
+    bd.style.opacity = String(Math.max(0.05, 1 - ratio * 0.90));
   }, []);
 
-  // ── RAF: write current translateY to DOM ─────────────────────────────────
+  // ── RAF: write translateY to DOM ──────────────────────────────────────────
   const applyDrag = useCallback(() => {
     ds.current.rafPending = false;
     const sheet = sheetRef.current;
     if (!sheet || ds.current.closing) return;
     const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
-    // Allow tiny -10px overshoot at top for "rubbery" feel
-    const y = Math.max(-10, raw);
+    const y = Math.max(-14, raw); // 14px overscroll at top for rubbery feel
     sheet.style.transform = `translateY(${y}px)`;
     syncBackdrop(y);
   }, [syncBackdrop]);
 
-  // ── Animate to a snap position (with spring or ease-out) ─────────────────
+  // ── Animate to a snap position with spring easing ────────────────────────
+  const SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
   const animateTo = useCallback((
     targetY: number,
-    easing = "transform 0.44s cubic-bezier(0.34, 1.40, 0.64, 1)",
+    easing = SPRING,
   ) => {
     const sheet = sheetRef.current;
     const bd    = backdropRef.current;
@@ -490,136 +494,98 @@ function BottomSheet({
       bd.style.transition = "opacity 0.30s ease";
       syncBackdrop(targetY);
     }
-  }, [syncBackdrop]);
+  }, [syncBackdrop]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Smooth close: animate → unmount ──────────────────────────────────────
+  // ── Smooth close: slide off-screen → unmount ──────────────────────────────
   const doClose = useCallback(() => {
     if (ds.current.closing) return;
     ds.current.closing = true;
     cancelAnimationFrame(ds.current.rafId);
+    ds.current.rafPending = false;
     const sheet = sheetRef.current;
     const bd    = backdropRef.current;
     if (!sheet) { onCloseRef.current(); return; }
-    sheet.style.animation  = "none";
-    sheet.style.transition = "transform 0.26s cubic-bezier(0.40, 0, 0.80, 0.60)";
-    sheet.style.transform  = `translateY(${Math.round(FULL_H_FRAC * window.innerHeight) + 60}px)`;
-    if (bd) { bd.style.transition = "opacity 0.26s ease"; bd.style.opacity = "0"; }
-    setTimeout(() => onCloseRef.current(), 250);
+    const offY = window.innerHeight + 20;
+    sheet.style.transition = "transform 0.28s cubic-bezier(0.40, 0, 0.80, 0.60)";
+    sheet.style.transform  = `translateY(${offY}px)`;
+    if (bd) { bd.style.transition = "opacity 0.28s ease"; bd.style.opacity = "0"; }
+    setTimeout(() => onCloseRef.current(), 270);
   }, []);
 
-  // ── Snap decision on release ──────────────────────────────────────────────
+  // ── Snap decision on pointer/touch release ────────────────────────────────
   const commitSnap = useCallback((currentY: number) => {
-    const { partial, full } = snapYRef.current;
-    const delta = currentY - ds.current.baseY; // + = dragged down, - = dragged up
+    const { half, full } = snapYRef.current;
+    const delta = currentY - ds.current.baseY; // positive = dragged down
 
-    if (ds.current.snap === "partial") {
-      if (delta < -80) {
-        // Dragged up enough → expand to full
+    if (ds.current.snap === "half") {
+      if (delta < -60) {
+        // Dragged up far enough → expand to FULL
         ds.current.snap = "full";
         setSnap("full");
         animateTo(full);
-      } else if (delta > 150) {
+      } else if (delta > 110) {
+        // Dragged down → CLOSE
         doClose();
       } else {
-        // Spring back to partial
-        animateTo(partial);
+        // Spring back to HALF
+        animateTo(half);
       }
     } else {
-      // From full
-      if (delta > 380) {
-        doClose();
-      } else if (delta > 120) {
-        // Collapse to partial
-        ds.current.snap = "partial";
-        setSnap("partial");
-        animateTo(partial);
+      // From FULL: only collapses to HALF, never closes directly from full
+      if (delta > 90) {
+        ds.current.snap = "half";
+        setSnap("half");
+        animateTo(half);
       } else {
-        // Spring back to full
         animateTo(full);
       }
     }
   }, [animateTo, doClose]);
 
-  // ── Pointer drag from HEADER / HANDLE zone (always reliable) ─────────────
+  // ── Touch drag on the ENTIRE sheet body ───────────────────────────────────
   useEffect(() => {
-    const header = headerRef.current;
-    const sheet  = sheetRef.current;
-    if (!header || !sheet) return;
-
-    const onDown = (e: PointerEvent) => {
-      if (ds.current.closing) return;
-      ds.current.active   = true;
-      ds.current.baseY    = snapYRef.current[ds.current.snap];
-      ds.current.startPY  = e.clientY;
-      ds.current.latestPY = e.clientY;
-      sheet.style.animation  = "none";
-      sheet.style.transition = "none";
-      try { header.setPointerCapture(e.pointerId); } catch {}
-    };
-
-    const onMove = (e: PointerEvent) => {
-      if (!ds.current.active) return;
-      ds.current.latestPY = e.clientY;
-      if (!ds.current.rafPending) {
-        ds.current.rafPending = true;
-        ds.current.rafId = requestAnimationFrame(applyDrag);
-      }
-    };
-
-    const onUp = () => {
-      if (!ds.current.active) return;
-      ds.current.active = false;
-      cancelAnimationFrame(ds.current.rafId);
-      // Read the current visual Y from the element
-      const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
-      commitSnap(Math.max(-10, raw));
-    };
-
-    header.addEventListener("pointerdown",   onDown);
-    header.addEventListener("pointermove",   onMove);
-    header.addEventListener("pointerup",     onUp);
-    header.addEventListener("pointercancel", onUp);
-    return () => {
-      header.removeEventListener("pointerdown",   onDown);
-      header.removeEventListener("pointermove",   onMove);
-      header.removeEventListener("pointerup",     onUp);
-      header.removeEventListener("pointercancel", onUp);
-      cancelAnimationFrame(ds.current.rafId);
-    };
-  }, [applyDrag, commitSnap]);
-
-  // ── Touch drag from content area when scroll is at top ────────────────────
-  useEffect(() => {
-    const scroll = scrollRef.current;
-    const sheet  = sheetRef.current;
-    if (!scroll || !sheet) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
 
     let phase: "idle"|"pending"|"dragging" = "idle";
     let startTouchY = 0;
 
+    const beginDrag = (touchY: number) => {
+      ds.current.active   = true;
+      ds.current.baseY    = snapYRef.current[ds.current.snap];
+      ds.current.startPY  = touchY;
+      ds.current.latestPY = touchY;
+      sheet.style.transition = "none";
+    };
+
     const onTS = (e: TouchEvent) => {
-      if (ds.current.closing || ds.current.active) return;
+      if (ds.current.closing) return;
       phase = "pending";
       startTouchY = e.touches[0].clientY;
     };
 
     const onTM = (e: TouchEvent) => {
-      if (phase === "idle" || ds.current.active) return;
-      const delta = e.touches[0].clientY - startTouchY;
+      if (phase === "idle") return;
+      const dy = e.touches[0].clientY - startTouchY;
 
       if (phase === "pending") {
-        if (Math.abs(delta) < 8) return;
-        // Allow drag in both directions; upward only meaningful when partially visible
-        const canDragDown = delta > 0 && (scroll.scrollTop ?? 0) <= 2;
-        const canDragUp   = delta < 0 && ds.current.snap === "partial";
-        if (!canDragDown && !canDragUp) { phase = "idle"; return; }
-        phase = "dragging";
-        ds.current.active   = true;
-        ds.current.baseY    = snapYRef.current[ds.current.snap];
-        ds.current.startPY  = startTouchY;
-        ds.current.latestPY = startTouchY;
-        sheet.style.animation  = "none";
-        sheet.style.transition = "none";
+        if (Math.abs(dy) < 6) return;
+
+        if (ds.current.snap === "half") {
+          // HALF state: drag in any direction starts sheet drag
+          phase = "dragging";
+          beginDrag(startTouchY);
+        } else {
+          // FULL state: only drag sheet when at scroll top AND dragging DOWN
+          const scrollTop = scrollRef.current ? scrollRef.current.scrollTop : 0;
+          if (dy > 0 && scrollTop <= 1) {
+            phase = "dragging";
+            beginDrag(startTouchY);
+          } else {
+            phase = "idle"; // let the scroll area scroll normally
+            return;
+          }
+        }
       }
 
       if (phase === "dragging") {
@@ -635,43 +601,96 @@ function BottomSheet({
     const onTE = () => {
       if (phase !== "dragging") { phase = "idle"; return; }
       phase = "idle";
+      if (!ds.current.active) return;
       ds.current.active = false;
       cancelAnimationFrame(ds.current.rafId);
+      ds.current.rafPending = false;
       const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
-      commitSnap(Math.max(-10, raw));
+      commitSnap(Math.max(-14, raw));
     };
 
-    scroll.addEventListener("touchstart",  onTS, { passive: true  });
-    scroll.addEventListener("touchmove",   onTM, { passive: false });
-    scroll.addEventListener("touchend",    onTE, { passive: true  });
-    scroll.addEventListener("touchcancel", onTE, { passive: true  });
+    sheet.addEventListener("touchstart",  onTS, { passive: true  });
+    sheet.addEventListener("touchmove",   onTM, { passive: false });
+    sheet.addEventListener("touchend",    onTE, { passive: true  });
+    sheet.addEventListener("touchcancel", onTE, { passive: true  });
     return () => {
-      scroll.removeEventListener("touchstart",  onTS);
-      scroll.removeEventListener("touchmove",   onTM);
-      scroll.removeEventListener("touchend",    onTE);
-      scroll.removeEventListener("touchcancel", onTE);
+      sheet.removeEventListener("touchstart",  onTS);
+      sheet.removeEventListener("touchmove",   onTM);
+      sheet.removeEventListener("touchend",    onTE);
+      sheet.removeEventListener("touchcancel", onTE);
+      cancelAnimationFrame(ds.current.rafId);
     };
   }, [applyDrag, commitSnap]);
 
-  // ── Initial opening: start at partial snap position ───────────────────────
-  // The CSS animation slides from 100% → 0, but our sheet is 95vh tall, so
-  // we override the end position to PARTIAL_Y right after mount.
+  // ── Mouse/pointer drag on entire sheet (desktop preview / non-touch) ──────
   useEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
-    const pY = snapYRef.current.partial;
-    // After opening animation ends, lock to partial Y
-    const tid = setTimeout(() => {
-      if (sheet && !ds.current.active && !ds.current.closing) {
-        sheet.style.animation  = "none";
-        sheet.style.transition = "none";
-        sheet.style.transform  = `translateY(${pY}px)`;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || ds.current.closing) return;
+      ds.current.active   = true;
+      ds.current.baseY    = snapYRef.current[ds.current.snap];
+      ds.current.startPY  = e.clientY;
+      ds.current.latestPY = e.clientY;
+      sheet.style.transition = "none";
+      try { sheet.setPointerCapture(e.pointerId); } catch {}
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || !ds.current.active) return;
+      ds.current.latestPY = e.clientY;
+      if (!ds.current.rafPending) {
+        ds.current.rafPending = true;
+        ds.current.rafId = requestAnimationFrame(applyDrag);
       }
-    }, 310); // just after the 300ms animation
-    return () => clearTimeout(tid);
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || !ds.current.active) return;
+      ds.current.active = false;
+      cancelAnimationFrame(ds.current.rafId);
+      ds.current.rafPending = false;
+      const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
+      commitSnap(Math.max(-14, raw));
+    };
+
+    sheet.addEventListener("pointerdown",   onDown);
+    sheet.addEventListener("pointermove",   onMove);
+    sheet.addEventListener("pointerup",     onUp);
+    sheet.addEventListener("pointercancel", onUp);
+    return () => {
+      sheet.removeEventListener("pointerdown",   onDown);
+      sheet.removeEventListener("pointermove",   onMove);
+      sheet.removeEventListener("pointerup",     onUp);
+      sheet.removeEventListener("pointercancel", onUp);
+      cancelAnimationFrame(ds.current.rafId);
+    };
+  }, [applyDrag, commitSnap]);
+
+  // ── Opening animation: CLOSED → HALF (JS-driven, no CSS hack) ───────────
+  // Start off-screen, animate to HALF on the very next double-RAF.
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    const offY = window.innerHeight + 20;
+    sheet.style.transition = "none";
+    sheet.style.transform  = `translateY(${offY}px)`;
+    // Double-RAF ensures the initial off-screen position is painted first
+    let r1 = 0, r2 = 0;
+    r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        computeSnaps(); // re-sync in case window.innerHeight changed
+        animateTo(
+          snapYRef.current.half,
+          "transform 0.38s cubic-bezier(0.22, 1.00, 0.36, 1)",
+        );
+      });
+    });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
   }, []); // eslint-disable-line
 
-  // Tap-outside handler on backdrop
+  // ── Tap backdrop to close ─────────────────────────────────────────────────
   const onBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) doClose();
   }, [doClose]);
@@ -682,11 +701,9 @@ function BottomSheet({
       onClick={onBackdropClick}
       style={{
         position:"fixed", inset:0, zIndex:300,
-        // No backdropFilter on the full-viewport overlay — blur on a composited
-        // full-screen layer forces a GPU re-pass every frame and is the #1 cause
-        // of frame drops on Android. Dark background + will-change:opacity is enough.
         background:"rgba(0,0,0,0.72)",
         willChange:"opacity",
+        // Backdrop fades in quickly; opacity is later driven by syncBackdrop
         animation:"sheet-fade-in 0.22s ease both",
       }}
     >
@@ -695,11 +712,9 @@ function BottomSheet({
         onClick={e => e.stopPropagation()}
         style={{
           position:"absolute", left:0, right:0, bottom:0,
-          // Sheet element is always FULL_H_FRAC tall; translateY controls visible amount
-          height:`${FULL_H_FRAC * 100}vh`,
+          // 100vh height: at translateY(0) the sheet covers the full screen exactly.
+          height:"100vh",
           background: SHEET_BG,
-          // No backdropFilter during drag — re-enable only when sheet is settled
-          // via CSS class if desired. Saves a GPU compositing pass every frame.
           borderTop:`1px solid rgba(255,255,255,0.10)`,
           borderLeft:`1px solid rgba(255,255,255,0.06)`,
           borderRight:`1px solid rgba(255,255,255,0.06)`,
@@ -707,15 +722,17 @@ function BottomSheet({
           paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",
           display:"flex", flexDirection:"column",
           boxShadow:`${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
-          // Opening: slides from off-screen bottom to Y=0, then JS repositions to partialY
-          animation:"sheet-slide-up 0.30s cubic-bezier(0.32, 0.72, 0, 1) both",
-          // GPU layer: translate3d forces own compositor layer, contain isolates layout
           willChange:"transform",
-          transform:"translateZ(0)",
           contain:"layout style",
-        }}
+          // Initial position — JS immediately overrides in opening useEffect
+          transform:`translateY(${typeof window !== "undefined" ? window.innerHeight + 20 : 900}px)`,
+          // Drag cursor on the sheet container itself
+          cursor:"grab",
+          userSelect:"none",
+          WebkitUserSelect:"none",
+        } as React.CSSProperties}
       >
-        {/* ── Drag zone: handle pill + title row ─────────────────────────── */}
+        {/* ── Handle pill + title row ────────────────────────────────────── */}
         <div
           ref={headerRef}
           style={{
@@ -723,14 +740,12 @@ function BottomSheet({
             touchAction:"none",
             userSelect:"none",
             WebkitUserSelect:"none",
-            cursor:"grab",
             paddingBottom:2,
           } as React.CSSProperties}
         >
           {/* Handle pill + snap chevron */}
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", margin:"12px auto 4px", gap:3 }}>
             <div
-              ref={handlePillRef}
               style={{
                 width:44, height:5, borderRadius:3,
                 background: snap === "full" ? "rgba(96,165,250,0.55)" : "rgba(255,255,255,0.26)",
@@ -740,15 +755,11 @@ function BottomSheet({
             />
             {/* Subtle expand / collapse hint chevrons */}
             <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:0, opacity:0.35 }}>
-              {snap === "partial" ? (
-                // Two small chevron-up strokes — "drag up to expand"
-                <>
-                  <svg width="18" height="7" viewBox="0 0 18 7" fill="none">
-                    <path d="M2 6L9 1L16 6" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </>
+              {snap === "half" ? (
+                <svg width="18" height="7" viewBox="0 0 18 7" fill="none">
+                  <path d="M2 6L9 1L16 6" stroke="rgba(255,255,255,0.7)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
               ) : (
-                // One chevron-down — "drag down to collapse"
                 <svg width="18" height="7" viewBox="0 0 18 7" fill="none">
                   <path d="M2 1L9 6L16 1" stroke="rgba(96,165,250,0.85)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
@@ -765,18 +776,18 @@ function BottomSheet({
             <button
               onPointerDown={e => e.stopPropagation()}
               onClick={() => {
-                const { partial, full } = snapYRef.current;
-                if (snap === "partial") {
+                const { half, full } = snapYRef.current;
+                if (snap === "half") {
                   ds.current.snap = "full";
                   setSnap("full");
                   animateTo(full);
                 } else {
-                  ds.current.snap = "partial";
-                  setSnap("partial");
-                  animateTo(partial);
+                  ds.current.snap = "half";
+                  setSnap("half");
+                  animateTo(half);
                 }
               }}
-              title={snap === "partial" ? "Expand to full screen" : "Collapse"}
+              title={snap === "half" ? "Expand to full screen" : "Collapse"}
               style={{
                 width:28, height:28, borderRadius:8, marginRight:6,
                 border:`1px solid ${snap === "full" ? "rgba(96,165,250,0.30)" : "rgba(255,255,255,0.10)"}`,
@@ -785,8 +796,8 @@ function BottomSheet({
                 transition:"background 0.2s, border-color 0.2s",
               }}
             >
-              {snap === "partial" ? (
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={snap === "full" ? "#60A5FA" : "rgba(255,255,255,0.50)"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {snap === "half" ? (
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.50)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/>
                 </svg>
               ) : (
@@ -812,9 +823,16 @@ function BottomSheet({
 
         <div style={{ width:"100%", height:1, background:`rgba(255,255,255,0.07)`, flexShrink:0 }} />
 
+        {/* Content scroll area — only scrollable when FULL to avoid conflict */}
         <div
           ref={scrollRef}
-          style={{ overflowY:"auto", flex:1, WebkitOverflowScrolling:"touch" } as React.CSSProperties}
+          style={{
+            overflowY: snap === "full" ? "auto" : "hidden",
+            flex:1,
+            // Allow browser pan-y only when full (to enable native scroll)
+            touchAction: snap === "full" ? "pan-y" : "none",
+            WebkitOverflowScrolling:"touch",
+          } as React.CSSProperties}
         >
           {children}
         </div>
