@@ -1,4 +1,4 @@
-import { memo, useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { memo, useState, useCallback, useRef, useEffect, useMemo, useLayoutEffect } from "react";
 import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
 import {
@@ -38,6 +38,7 @@ import { useBrokerStore } from "@/store/brokerStore";
 import { BrokerSelectModal } from "@/components/broker/BrokerSelectModal";
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -566,6 +567,7 @@ function BottomSheet({
       if (delta < -60) {
         // Dragged up far enough → expand to FULL (corners → square)
         ds.current.snap = "full";
+        sheetProfiler.markStart("HALF→FULL");
         animateTo(full, SNAP_SPRING, "0px");
         applySnapDom("full");
       } else if (delta > 110) {
@@ -579,6 +581,7 @@ function BottomSheet({
       // From FULL: only collapses to HALF, never closes directly from full
       if (delta > 90) {
         ds.current.snap = "half";
+        sheetProfiler.markStart("FULL→HALF");
         animateTo(half, SNAP_SPRING, "24px 24px 0 0");
         applySnapDom("half");
       } else {
@@ -1016,6 +1019,16 @@ function ChartTypeSheet({ current, onSelect, onClose }: {
 // Actions (setActiveTool/undo/redo) are stable Zustand refs — subscribing to them
 // individually costs zero re-renders.
 const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose: () => void }) {
+  // ── Profiler: render tracking ─────────────────────────────────────────────
+  const _profRenderCountDTS = useRef(0);
+  _profRenderCountDTS.current++;
+  const _profRenderCountDTSSnap = _profRenderCountDTS.current;
+  const _profRenderStartDTS = useRef(performance.now());
+  _profRenderStartDTS.current = performance.now();
+  useLayoutEffect(() => {
+    sheetProfiler.end(_profRenderStartDTS.current, "DrawingToolsSheet", `render #${_profRenderCountDTSSnap} → layout committed`);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
   const activeTool    = useDrawingStore(s => s.activeTool);
   const canUndo       = useDrawingStore(s => s.canUndo);
   const canRedo       = useDrawingStore(s => s.canRedo);
@@ -2494,6 +2507,16 @@ function MiniControlBar({
   onFullscreen: () => void; isFullscreen: boolean;
   brokerConnected: boolean;
 }) {
+  // ── Profiler: render tracking ─────────────────────────────────────────────
+  const _profRenderCountMCB = useRef(0);
+  _profRenderCountMCB.current++;
+  const _profRenderCountMCBSnap = _profRenderCountMCB.current;
+  const _profRenderStartMCB = useRef(performance.now());
+  _profRenderStartMCB.current = performance.now();
+  useLayoutEffect(() => {
+    sheetProfiler.end(_profRenderStartMCB.current, "MiniControlBar", `render #${_profRenderCountMCBSnap} → layout committed`);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
   const currentIdx = watchlistItems.findIndex(i => i.symbol === activeKey);
   const hasPrev = currentIdx > 0;
   const hasNext = currentIdx < watchlistItems.length - 1 && currentIdx >= 0;

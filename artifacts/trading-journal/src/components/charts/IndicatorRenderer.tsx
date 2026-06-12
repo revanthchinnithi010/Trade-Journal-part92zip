@@ -1,5 +1,6 @@
-import { useEffect, useRef, useMemo, useCallback } from "react";
+import { useEffect, useRef, useMemo, useCallback, useLayoutEffect } from "react";
 import { LineSeries, type ISeriesApi, type Time, LineStyle } from "lightweight-charts";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 import { useChartContext } from "@/contexts/ChartContext";
 import { useChartBars } from "@/contexts/ChartBarsContext";
 import { useIndicatorStore, type AppliedIndicator } from "@/store/indicatorStore";
@@ -67,6 +68,16 @@ function buildPoints(bars: OHLCBar[], ind: AppliedIndicator): { time: Time; valu
 }
 
 export default function IndicatorRenderer() {
+  // ── Profiler: render tracking ─────────────────────────────────────────────
+  const _profRenderCountIR = useRef(0);
+  _profRenderCountIR.current++;
+  const _profRenderCountIRSnap = _profRenderCountIR.current;
+  const _profRenderStartIR = useRef(performance.now());
+  _profRenderStartIR.current = performance.now();
+  useLayoutEffect(() => {
+    sheetProfiler.end(_profRenderStartIR.current, "IndicatorRenderer", `render #${_profRenderCountIRSnap} → layout committed`);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
   const { chart } = useChartContext();
   const { barsRef, replayBarCount } = useChartBars();
   const appliedIndicators = useIndicatorStore(s => s.appliedIndicators);
@@ -120,6 +131,7 @@ export default function IndicatorRenderer() {
     const bars = barsRef.current;
     if (!bars.length) return;
     const map = seriesMapRef.current;
+    const _irt = sheetProfiler.begin("IndicatorRenderer", "sync indicators useEffect (buildPoints+setData)");
 
     // Remove series for deleted indicators
     const currentIds = new Set(builtinInds.map(i => i.id));
@@ -173,6 +185,7 @@ export default function IndicatorRenderer() {
         } catch { /**/ }
       }
     }
+    sheetProfiler.end(_irt, "IndicatorRenderer", "sync indicators useEffect (buildPoints+setData)");
   }, [chart, barsLoaded, builtinInds, barsRef, getPoints, replayBarCount]);
 
   // Live tick updates — only update the last point, never recalculate full series

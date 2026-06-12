@@ -1,8 +1,9 @@
 import {
-  useEffect, useRef, useCallback, memo, useState, useMemo,
+  useEffect, useRef, useCallback, memo, useState, useMemo, useLayoutEffect,
   type ReactNode,
 } from "react";
 import { activatePanRange, updatePanRange, subscribePanRange, getPanRange } from "./chartPanState";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 import type { RefObject } from "react";
 import {
   createChart,
@@ -783,6 +784,16 @@ function LivePriceBox({
 
 // ── Component ─────────────────────────────────────────────────────────────────
 const CustomChart = memo(function CustomChart({ children, settings, replayBars }: { children?: ReactNode; settings?: ChartSettings; replayBars?: OHLCBar[] | null }) {
+  // ── Profiler: render tracking ─────────────────────────────────────────────
+  const _profRenderCountCC = useRef(0);
+  _profRenderCountCC.current++;
+  const _profRenderCountCCSnap = _profRenderCountCC.current;
+  const _profRenderStartCC = useRef(performance.now());
+  _profRenderStartCC.current = performance.now();
+  useLayoutEffect(() => {
+    sheetProfiler.end(_profRenderStartCC.current, "CustomChart", `render #${_profRenderCountCCSnap} → layout committed`);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
   // Use individual selectors so re-renders only happen when these specific
   // values change — not on every crosshair move (which updates crosshairInfo).
   const symbol      = useChartStore(s => s.symbol);
@@ -1275,7 +1286,10 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
       if (!entry) return;
       const w = entry.contentRect.width;
       const h = entry.contentRect.height;
+      sheetProfiler.instant("CustomChart", `ResizeObserver fired → ${w}×${h}`);
+      const _roT = sheetProfiler.begin("CustomChart", "ResizeObserver → chart.applyOptions(w,h)");
       try { chart.applyOptions({ width: w, height: h }); } catch { return; }
+      sheetProfiler.end(_roT, "CustomChart", "ResizeObserver → chart.applyOptions(w,h)");
       // Keep the future-crosshair canvas in sync with the chart size
       const fc = futureCrossCanvasRef.current;
       if (fc) { fc.width = w; fc.height = h; }
@@ -2479,12 +2493,14 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
     if (!container || !chartCtx) return;
 
     const measure = () => {
+      const _mT = sheetProfiler.begin("CustomChart", "priceScale measure (offsetWidth read + setState)");
       const td = container.querySelector('table tr:first-child td:last-child') as HTMLElement | null;
       const w = td?.offsetWidth;
       if (w && w > 20) {
         priceScaleWRef.current = w;   // instant — no React cycle
         setPriceScaleW(w);            // keeps PriceScaleTouchHandler in sync
       }
+      sheetProfiler.end(_mT, "CustomChart", "priceScale measure (offsetWidth read + setState)");
     };
 
     // One-rAF deferral: waits for LWC DOM layout to finish before reading offsetWidth

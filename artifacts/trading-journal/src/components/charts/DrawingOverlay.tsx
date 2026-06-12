@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback, memo, useMemo, useContext } from "react";
+import { useEffect, useRef, useState, useCallback, memo, useMemo, useContext, useLayoutEffect } from "react";
 import { usePopup } from "@/hooks/usePopup";
 import { createPortal } from "react-dom";
 import type { Time, Logical } from "lightweight-charts";
@@ -12,6 +12,7 @@ import { DrawingSettingsModal } from "@/components/charts/DrawingSettingsModal";
 import { PositionToolbar } from "@/components/charts/PositionToolbar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { renderDrawingsToCanvas } from "@/components/charts/drawingCanvasRenderer";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -2271,6 +2272,16 @@ interface Props {
 }
 
 const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawingAlert, alertDrawingIds }: Props) {
+  // ── Profiler: render tracking ─────────────────────────────────────────────
+  const _profRenderCountDO = useRef(0);
+  _profRenderCountDO.current++;
+  const _profRenderCountDOSnap = _profRenderCountDO.current;
+  const _profRenderStartDO = useRef(performance.now());
+  _profRenderStartDO.current = performance.now();
+  useLayoutEffect(() => {
+    sheetProfiler.end(_profRenderStartDO.current, "DrawingOverlay", `render #${_profRenderCountDOSnap} → layout committed`);
+  });
+  // ─────────────────────────────────────────────────────────────────────────
   const { chart, candle } = useChartContext();
   const {
     activeTool, setActiveTool,
@@ -2419,6 +2430,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       } catch { /* ok */ }
       // Skip drawing currently under DOM transform (SVG handles move-drag visuals)
       const moveDragId = dragRef.current?.kind === "move" ? dragRef.current.id : null;
+      const _rct = sheetProfiler.begin("DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
       renderDrawingsToCanvas(
         ctx, W, H,
         drawingsRef.current,
@@ -2430,6 +2442,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         dpr,
         moveDragId,
       );
+      sheetProfiler.end(_rct, "DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
     });
   }, []); // stable — dragRef/dragLiveRef/barsRef/drawingsRef/etc. are all mutable refs
 

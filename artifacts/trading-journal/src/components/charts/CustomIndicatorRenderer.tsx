@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useCallback, memo } from "react";
+import { useEffect, useRef, useState, useCallback, memo, useLayoutEffect } from "react";
 import {
   LineSeries, AreaSeries, LineStyle as LWLineStyle,
   type ISeriesApi, type Time, type SeriesType,
 } from "lightweight-charts";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 import { useChartContext } from "@/contexts/ChartContext";
 import { useChartBars } from "@/contexts/ChartBarsContext";
 import { useIndicatorStore } from "@/store/indicatorStore";
@@ -182,7 +183,9 @@ export default function CustomIndicatorRenderer() {
     for (const ind of customInds) {
       const pineCode = (ind.pineCode as string) ?? "";
       const parsed   = parsePineScript(pineCode);
+      const _cit = sheetProfiler.begin("CustomIndicatorRenderer", `computeCustomIndicator: ${ind.id}`);
       const result   = computeCustomIndicator(parsed, bars, ind.color, pineCode);
+      sheetProfiler.end(_cit, "CustomIndicatorRenderer", `computeCustomIndicator: ${ind.id}`);
       resultsRef.current.set(ind.id, result);
 
       const existing = map.get(ind.id);
