@@ -1,25 +1,15 @@
-import { useEffect, useRef, useState, useCallback, memo, useMemo } from "react";
-import {
-  createChart, CandlestickSeries, HistogramSeries,
-  CrosshairMode, TickMarkType, type IChartApi, type ISeriesApi, type Time,
-} from "lightweight-charts";
-import { ChartContext } from "@/contexts/ChartContext";
-import { ChartBarsContext } from "@/contexts/ChartBarsContext";
-import type { OHLCBar } from "@/store/chartStore";
-import { ChevronDown, Search, Link2, Unlink2 } from "lucide-react";
-import { useLiveMarketContext, fmtPrice } from "@/contexts/LiveMarketContext";
-import { useTickStore, useSymbolTick } from "@/store/tickStore";
+import { useEffect, useRef, useState, memo } from "react";
+import { ChevronDown, Search, Link2 } from "lucide-react";
+import { fmtPrice } from "@/contexts/LiveMarketContext";
+import { useTickStore } from "@/store/tickStore";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
-
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+import CustomChart from "./CustomChart";
 
 const TIMEFRAMES = [
   { label: "1m", value: "1" }, { label: "5m", value: "5" },
   { label: "15m", value: "15" }, { label: "1H", value: "60" },
   { label: "4H", value: "240" }, { label: "1D", value: "D" },
 ];
-
-interface Bar { time: number; open: number; high: number; low: number; close: number; volume: number; }
 
 // ── Symbol picker ─────────────────────────────────────────────────────────────
 function MiniSymbolPicker({ onSelect, onClose }: { onSelect: (s: string) => void; onClose: () => void }) {
@@ -107,7 +97,7 @@ export interface MiniChartProps {
   controlledSymbol?:   string;
   /** When provided, parent controls the displayed interval (active-slot TF routing) */
   controlledInterval?: string;
-  /** DrawingOverlay, IndicatorRenderer, etc. — rendered over the chart via ChartContext */
+  /** DrawingOverlay, IndicatorRenderer, etc. — passed through to CustomChart's children */
   children?:           React.ReactNode;
   /** Called whenever symbol changes (via header picker, controlledSymbol, etc.) */
   onSymbolChange?:     (sym: string) => void;
@@ -115,403 +105,137 @@ export interface MiniChartProps {
   onIntervalChange?:   (iv: string) => void;
 }
 
-const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, syncedInterval, headerless, controlledSymbol, controlledInterval, children, onSymbolChange, onIntervalChange }: MiniChartProps) {
+/**
+ * MiniChart — a layout-slot shell.
+ *
+ * Architecture: this component owns ONLY symbol/interval state and the compact
+ * header UI (symbol picker + timeframe pills + live price).  All chart rendering
+ * is delegated to <CustomChart symbol={…} interval={…}> so every slot is
+ * pixel-identical to the main chart — same LWC config, same plugins, same
+ * price-scale engine, same RAF tick path.
+ */
+const MiniChart = memo(function MiniChart({
+  defaultSymbol, defaultInterval, syncedInterval, headerless,
+  controlledSymbol, controlledInterval, children,
+  onSymbolChange, onIntervalChange,
+}: MiniChartProps) {
   const [symbol,     setSymbol]     = useState(defaultSymbol);
   const [interval,   setInterval]   = useState(syncedInterval ?? defaultInterval);
   const [showPicker, setShowPicker] = useState(false);
-  const [loading,    setLoading]    = useState(true);
-  const [livePrice,  setLivePrice]  = useState<number | null>(null);
 
-  // Provided to children (DrawingOverlay, IndicatorRenderer, etc.) via context
-  const [chartCtx, setChartCtx] = useState<{ chart: IChartApi | null; candle: ISeriesApi<"Candlestick"> | null }>({ chart: null, candle: null });
-
-  const { subscribeToMessages } = useLiveMarketContext();
-  const ticks = useTickStore(s => s.ticks);
-  const { items } = useWatchlist();
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const chartRef     = useRef<IChartApi | null>(null);
-  const mainRef      = useRef<ISeriesApi<"Candlestick"> | null>(null);
-  const volRef       = useRef<ISeriesApi<"Histogram"> | null>(null);
-  const barsRef      = useRef<Bar[]>([]);
-  const symRef       = useRef(symbol);
-  const ivRef        = useRef(interval);
+  const symRef = useRef(symbol);
+  const ivRef  = useRef(interval);
   symRef.current = symbol;
   ivRef.current  = interval;
 
-  // Stable ChartBarsContext value — barsRef never changes identity
-  const chartBarsCtxValue = useMemo(() => ({
-    barsRef: barsRef as unknown as React.MutableRefObject<OHLCBar[]>,
-    replayBarCount: 0,
-  }), []); // eslint-disable-line
+  const ticks      = useTickStore(s => s.ticks);
+  const { items }  = useWatchlist();
 
-  // When syncedInterval changes from parent, override local interval
+  // ── Controlled prop syncing ───────────────────────────────────────────────
   useEffect(() => {
-    if (syncedInterval && syncedInterval !== interval) {
-      setInterval(syncedInterval);
-    }
+    if (syncedInterval && syncedInterval !== ivRef.current) setInterval(syncedInterval);
   }, [syncedInterval]); // eslint-disable-line
 
-  // When controlledSymbol changes from parent (shared mini-bar selection), sync internal state
   useEffect(() => {
-    if (controlledSymbol && controlledSymbol !== symRef.current) {
-      setSymbol(controlledSymbol);
-    }
+    if (controlledSymbol && controlledSymbol !== symRef.current) setSymbol(controlledSymbol);
   }, [controlledSymbol]); // eslint-disable-line
 
-  // When controlledInterval changes from parent (active-slot TF routing), sync internal state
   useEffect(() => {
-    if (controlledInterval && controlledInterval !== ivRef.current) {
-      setInterval(controlledInterval);
-    }
+    if (controlledInterval && controlledInterval !== ivRef.current) setInterval(controlledInterval);
   }, [controlledInterval]); // eslint-disable-line
 
-  // Notify parent whenever symbol or interval changes (allows parent to track per-slot state)
+  // Notify parent of changes
   useEffect(() => { onSymbolChange?.(symbol); }, [symbol]); // eslint-disable-line
   useEffect(() => { onIntervalChange?.(interval); }, [interval]); // eslint-disable-line
 
-  // Entry from watchlist or catalog fallback
+  // ── Derived values for header ─────────────────────────────────────────────
   const entry = items.find(i => i.symbol === symbol) ?? {
     badge:  SYMBOL_CATALOG[symbol]?.badge  ?? symbol.slice(0, 6),
     market: SYMBOL_CATALOG[symbol]?.market ?? "",
   };
   const tick  = ticks[symbol];
   const isPos = (tick?.changePct ?? 0) >= 0;
-  const price = tick?.price ?? livePrice;
-
-  // Create chart once on mount
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) { console.warn("[MiniChart] Chart mount skipped — containerRef null", defaultSymbol); return; }
-    console.log("[MiniChart] Creating chart", defaultSymbol);
-
-    const chart = createChart(container, {
-      width:  container.clientWidth  || 400,
-      height: container.clientHeight || 300,
-      layout: {
-        background: { color: "#07110D" },
-        textColor:  "#A7B8A9",
-        fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif",
-        fontSize:   11,
-        attributionLogo: false,
-      },
-      grid: {
-        vertLines: { color: "rgba(13,28,22,0.7)" },
-        horzLines: { color: "rgba(13,28,22,0.7)" },
-      },
-      crosshair: {
-        mode:     CrosshairMode.Normal,
-        vertLine: { color: "rgba(183,255,90,0.38)", labelBackgroundColor: "#0D2A1A" },
-        horzLine: { color: "rgba(183,255,90,0.38)", labelBackgroundColor: "#0D2A1A" },
-      },
-      rightPriceScale: {
-        borderColor:    "rgba(57,91,67,0.35)",
-        scaleMargins:   { top: 0.07, bottom: 0.25 },
-        autoScale:      true,
-        entireTextOnly: true,
-      },
-      timeScale: {
-        borderColor:    "rgba(57,91,67,0.35)",
-        timeVisible:    true,
-        secondsVisible: false,
-        rightOffset:    40,
-        barSpacing:     8,
-        minBarSpacing:  0.5,
-        fixLeftEdge:    false,
-        fixRightEdge:   false,
-        tickMarkFormatter: (time: number, type: TickMarkType) => {
-          const d    = new Date(time * 1000);
-          const hh   = String(d.getHours()).padStart(2, "0");
-          const min  = String(d.getMinutes()).padStart(2, "0");
-          const day  = d.getDate();
-          const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-          const mon  = MONTHS[d.getMonth()];
-          const yyyy = d.getFullYear();
-          switch (type) {
-            case TickMarkType.Year:       return String(yyyy);
-            case TickMarkType.Month:      return mon;
-            case TickMarkType.DayOfMonth: return `${day} ${mon}`;
-            case TickMarkType.Time:       return `${hh}:${min}`;
-            default:                      return `${hh}:${min}`;
-          }
-        },
-      },
-      handleScroll: {
-        mouseWheel:       false,
-        pressedMouseMove: true,
-        horzTouchDrag:    true,
-        vertTouchDrag:    false,
-      },
-      kineticScroll: { mouse: false, touch: false },
-      handleScale: {
-        mouseWheel:           true,
-        pinch:                true,
-        axisPressedMouseMove: { time: false, price: true },
-        axisDoubleClickReset: { time: true,  price: true },
-      },
-    });
-
-    const main = chart.addSeries(CandlestickSeries, {
-      upColor: "#B7FF5A", downColor: "#ef4444",
-      borderUpColor: "#B7FF5A", borderDownColor: "#ef4444",
-      wickUpColor: "#7CBF4B", wickDownColor: "#dc2626",
-    });
-    const vol = chart.addSeries(HistogramSeries, {
-      color: "#B7FF5A28",
-      priceFormat: { type: "volume" as const },
-      priceScaleId: "volume",
-    });
-    chart.priceScale("volume").applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
-
-    chartRef.current = chart;
-    mainRef.current  = main;
-    volRef.current   = vol;
-    setChartCtx({ chart, candle: main });
-    console.log("[MiniChart] Chart mounted", defaultSymbol);
-
-    const ro = new ResizeObserver(entries => {
-      const e = entries[0];
-      if (e) chart.applyOptions({ width: e.contentRect.width, height: e.contentRect.height });
-    });
-    ro.observe(container);
-
-    return () => {
-      ro.disconnect();
-      chart.remove();
-      chartRef.current = null; mainRef.current = null; volRef.current = null;
-      setChartCtx({ chart: null, candle: null });
-    };
-  }, []); // eslint-disable-line
-
-  // ── Custom price-scale drag (TradingView-style) ───────────────────────────
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const PRICE_SCALE_W   = 60;
-    const DEFAULT_MARGINS = { top: 0.07, bottom: 0.25 };
-
-    let dragging    = false;
-    let startY      = 0;
-    let startTop    = DEFAULT_MARGINS.top;
-    let startBottom = DEFAULT_MARGINS.bottom;
-    let capturedId  = -1;
-
-    const inScale = (clientX: number) => {
-      const r = container.getBoundingClientRect();
-      return (r.right - clientX) <= PRICE_SCALE_W;
-    };
-
-    const onMouseMove  = (e: MouseEvent) => {
-      if (!dragging) container.style.cursor = inScale(e.clientX) ? "ns-resize" : "";
-    };
-    const onMouseLeave = () => { if (!dragging) container.style.cursor = ""; };
-
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.button !== 0 || !inScale(e.clientX)) return;
-      const chart = chartRef.current;
-      if (!chart) return;
-      e.preventDefault();
-      e.stopPropagation();
-      dragging    = true;
-      startY      = e.clientY;
-      capturedId  = e.pointerId;
-      const opts  = chart.priceScale("right").options() as { scaleMargins?: { top: number; bottom: number } };
-      startTop    = opts.scaleMargins?.top    ?? DEFAULT_MARGINS.top;
-      startBottom = opts.scaleMargins?.bottom ?? DEFAULT_MARGINS.bottom;
-      container.setPointerCapture(e.pointerId);
-      container.style.cursor = "ns-resize";
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!dragging || e.pointerId !== capturedId) return;
-      const chart = chartRef.current;
-      if (!chart) return;
-      const dy          = e.clientY - startY;
-      const sensitivity = 0.003;
-      const clamp       = (v: number) => Math.max(0.01, Math.min(0.45, v));
-      chart.priceScale("right").applyOptions({
-        scaleMargins: {
-          top:    clamp(startTop    + dy * sensitivity),
-          bottom: clamp(startBottom + dy * sensitivity),
-        },
-      });
-    };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (!dragging || e.pointerId !== capturedId) return;
-      dragging = false;
-      if (container.hasPointerCapture(e.pointerId)) container.releasePointerCapture(e.pointerId);
-      container.style.cursor = "";
-    };
-
-    const onDblClick = (e: MouseEvent) => {
-      if (!inScale(e.clientX)) return;
-      const chart = chartRef.current;
-      if (!chart) return;
-      chart.priceScale("right").applyOptions({ scaleMargins: DEFAULT_MARGINS });
-    };
-
-    container.addEventListener("mousemove",     onMouseMove);
-    container.addEventListener("mouseleave",    onMouseLeave);
-    container.addEventListener("pointerdown",   onPointerDown);
-    container.addEventListener("pointermove",   onPointerMove);
-    container.addEventListener("pointerup",     onPointerUp);
-    container.addEventListener("pointercancel", onPointerUp);
-    container.addEventListener("dblclick",      onDblClick);
-    return () => {
-      container.removeEventListener("mousemove",     onMouseMove);
-      container.removeEventListener("mouseleave",    onMouseLeave);
-      container.removeEventListener("pointerdown",   onPointerDown);
-      container.removeEventListener("pointermove",   onPointerMove);
-      container.removeEventListener("pointerup",     onPointerUp);
-      container.removeEventListener("pointercancel", onPointerUp);
-      container.removeEventListener("dblclick",      onDblClick);
-    };
-  }, []); // eslint-disable-line
-
-  // Load candle data
-  const loadCandles = useCallback(async (sym: string, iv: string) => {
-    const main = mainRef.current;
-    const vol  = volRef.current;
-    if (!main || !vol) { console.log("[MiniChart] loadCandles skipped — series not ready", sym); return; }
-    console.log("[MiniChart] Creating chart / loading OHLC", sym, iv);
-    setLoading(true);
-    try {
-      const res = await fetch(`${BASE}/api/candles/${sym}/${iv}`);
-      if (!res.ok) {
-        console.warn("[MiniChart] OHLC fetch failed", sym, iv, res.status, res.statusText);
-        return;
-      }
-      const raw: Bar[] = await res.json();
-      if (!Array.isArray(raw) || raw.length === 0) {
-        console.warn("[MiniChart] OHLC empty response", sym, iv);
-        return;
-      }
-      const bars = [...new Map(raw.map(b => [b.time, b])).values()].sort((a, b) => a.time - b.time);
-      barsRef.current = bars;
-      main.setData(bars.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
-      vol.setData(bars.map(b => ({ time: b.time as Time, value: b.volume, color: b.close >= b.open ? "#B7FF5A28" : "#ef444428" })));
-      chartRef.current?.timeScale().fitContent();
-      const last = bars[bars.length - 1];
-      if (last) setLivePrice(last.close);
-      console.log("[MiniChart] OHLC loaded", sym, iv, bars.length, "bars");
-    } catch (err) {
-      console.error("[MiniChart] OHLC load error", sym, iv, err);
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { void loadCandles(symbol, interval); }, [symbol, interval, loadCandles]);
-
-  // Live WS updates
-  useEffect(() => {
-    return subscribeToMessages((raw: unknown) => {
-      const msg = raw as { type: string; symbol?: string; interval?: string; bar?: Bar };
-      if (msg.type !== "candle_update" || msg.symbol !== symRef.current || msg.interval !== ivRef.current || !msg.bar) return;
-      const b  = msg.bar;
-      const cs = mainRef.current;
-      const vs = volRef.current;
-      if (!cs || !vs) return;
-      const stored = barsRef.current;
-      if (stored.length > 0 && stored[stored.length - 1].time === b.time) stored[stored.length - 1] = b;
-      else stored.push(b);
-      cs.update({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close });
-      vs.update({ time: b.time as Time, value: b.volume, color: b.close >= b.open ? "#B7FF5A28" : "#ef444428" });
-      setLivePrice(b.close);
-    });
-  }, [subscribeToMessages]);
-
+  const price = tick?.price ?? null;
   const isSynced = !!syncedInterval;
 
   return (
     <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", background: "#07110D", overflow: "hidden" }}>
-      {/* Mini header — hidden when parent controls symbol via shared mini control bar */}
+
+      {/* ── Compact header — hidden in headerless (mobile) mode ── */}
       {!headerless && (
-      <div style={{
-        height: 34, display: "flex", alignItems: "center", gap: 5, padding: "0 8px",
-        background: "rgba(9,15,11,0.96)", borderBottom: "1px solid rgba(57,91,67,0.2)",
-        flexShrink: 0, position: "relative",
-      }}>
-        {/* Symbol button */}
-        <div style={{ position: "relative" }}>
-          <button onClick={() => setShowPicker(v => !v)}
-            style={{
-              display: "flex", alignItems: "center", gap: 5, height: 24, padding: "0 7px",
-              borderRadius: 7, cursor: "pointer", border: "none",
-              background: showPicker ? "rgba(183,255,90,0.1)" : "rgba(13,22,17,0.85)",
-              boxShadow: `0 0 0 1px ${showPicker ? "rgba(183,255,90,0.3)" : "rgba(57,91,67,0.3)"}`,
-              transition: "all 0.1s",
-            }}>
-            <div style={{ width: 16, height: 16, borderRadius: 4, background: "rgba(183,255,90,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, fontWeight: 900, color: "#B7FF5A" }}>
-              {entry.badge.slice(0, 4)}
-            </div>
-            <span style={{ fontSize: 10.5, fontWeight: 800, color: "#F3FFF3" }}>{entry.badge}</span>
-            <ChevronDown style={{ width: 9, height: 9, color: "rgba(167,184,169,0.4)" }} />
-          </button>
-          {showPicker && <MiniSymbolPicker onSelect={s => { setSymbol(s); setShowPicker(false); }} onClose={() => setShowPicker(false)} />}
-        </div>
+        <div style={{
+          height: 34, display: "flex", alignItems: "center", gap: 5, padding: "0 8px",
+          background: "rgba(9,15,11,0.96)", borderBottom: "1px solid rgba(57,91,67,0.2)",
+          flexShrink: 0, position: "relative",
+        }}>
+          {/* Symbol button */}
+          <div style={{ position: "relative" }}>
+            <button onClick={() => setShowPicker(v => !v)}
+              style={{
+                display: "flex", alignItems: "center", gap: 5, height: 24, padding: "0 7px",
+                borderRadius: 7, cursor: "pointer", border: "none",
+                background: showPicker ? "rgba(183,255,90,0.1)" : "rgba(13,22,17,0.85)",
+                boxShadow: `0 0 0 1px ${showPicker ? "rgba(183,255,90,0.3)" : "rgba(57,91,67,0.3)"}`,
+                transition: "all 0.1s",
+              }}>
+              <div style={{ width: 16, height: 16, borderRadius: 4, background: "rgba(183,255,90,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 6, fontWeight: 900, color: "#B7FF5A" }}>
+                {entry.badge.slice(0, 4)}
+              </div>
+              <span style={{ fontSize: 10.5, fontWeight: 800, color: "#F3FFF3" }}>{entry.badge}</span>
+              <ChevronDown style={{ width: 9, height: 9, color: "rgba(167,184,169,0.4)" }} />
+            </button>
+            {showPicker && <MiniSymbolPicker onSelect={s => { setSymbol(s); setShowPicker(false); }} onClose={() => setShowPicker(false)} />}
+          </div>
 
-        {/* Timeframe pills */}
-        <div style={{ display: "flex", gap: 1 }}>
-          {TIMEFRAMES.map(tf => {
-            const active = tf.value === interval;
-            return (
-              <button key={tf.value}
-                onClick={() => { if (!isSynced) setInterval(tf.value); }}
-                style={{
-                  padding: "0 5px", height: 20, borderRadius: 5, border: "none",
-                  cursor: isSynced ? "default" : "pointer",
-                  fontSize: 9.5, fontWeight: active ? 800 : 600,
-                  background: active ? (isSynced ? "rgba(183,255,90,0.08)" : "rgba(183,255,90,0.12)") : "transparent",
-                  color: active ? "#B7FF5A" : "rgba(167,184,169,0.45)",
-                  opacity: isSynced && !active ? 0.4 : 1,
-                  transition: "all 0.1s",
-                }}
-              >{tf.label}</button>
-            );
-          })}
-        </div>
+          {/* Timeframe pills */}
+          <div style={{ display: "flex", gap: 1 }}>
+            {TIMEFRAMES.map(tf => {
+              const active = tf.value === interval;
+              return (
+                <button key={tf.value}
+                  onClick={() => { if (!isSynced) setInterval(tf.value); }}
+                  style={{
+                    padding: "0 5px", height: 20, borderRadius: 5, border: "none",
+                    cursor: isSynced ? "default" : "pointer",
+                    fontSize: 9.5, fontWeight: active ? 800 : 600,
+                    background: active ? (isSynced ? "rgba(183,255,90,0.08)" : "rgba(183,255,90,0.12)") : "transparent",
+                    color: active ? "#B7FF5A" : "rgba(167,184,169,0.45)",
+                    opacity: isSynced && !active ? 0.4 : 1,
+                    transition: "all 0.1s",
+                  }}
+                >{tf.label}</button>
+              );
+            })}
+          </div>
 
-        {/* Live price */}
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
-          {isSynced && (
-            <div style={{ width: 18, height: 18, borderRadius: 5, background: "rgba(183,255,90,0.1)", boxShadow: "0 0 0 1px rgba(183,255,90,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-              <Link2 style={{ width: 10, height: 10, color: "#B7FF5A" }} />
-            </div>
-          )}
-          {price !== null && price > 0 && (
-            <>
-              <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: "monospace", color: "#F3FFF3" }}>
-                {fmtPrice(price, symbol)}
-              </span>
-              {tick && (
-                <span style={{ fontSize: 9, fontWeight: 700, color: isPos ? "#B7FF5A" : "#ef4444" }}>
-                  {isPos ? "+" : ""}{tick.changePct.toFixed(2)}%
+          {/* Live price + sync indicator */}
+          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5 }}>
+            {isSynced && (
+              <div style={{ width: 18, height: 18, borderRadius: 5, background: "rgba(183,255,90,0.1)", boxShadow: "0 0 0 1px rgba(183,255,90,0.25)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Link2 style={{ width: 10, height: 10, color: "#B7FF5A" }} />
+              </div>
+            )}
+            {price !== null && price > 0 && (
+              <>
+                <span style={{ fontSize: 10.5, fontWeight: 800, fontFamily: "monospace", color: "#F3FFF3" }}>
+                  {fmtPrice(price, symbol)}
                 </span>
-              )}
-            </>
-          )}
+                {tick && (
+                  <span style={{ fontSize: 9, fontWeight: 700, color: isPos ? "#B7FF5A" : "#ef4444" }}>
+                    {isPos ? "+" : ""}{tick.changePct.toFixed(2)}%
+                  </span>
+                )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
       )}
 
-      {/* Chart canvas */}
-      <div ref={containerRef} style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        {loading && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5, background: "rgba(7,17,13,0.35)" }}>
-            <div style={{ width: 22, height: 22, borderRadius: "50%", border: "2.5px solid rgba(183,255,90,0.2)", borderTopColor: "#B7FF5A", animation: "spin 0.8s linear infinite" }} />
-          </div>
-        )}
-        {/* Full-slot overlays: DrawingOverlay, IndicatorRenderer, etc.
-            Rendered inside the chart canvas div so absolute positioning works correctly.
-            ChartContext + ChartBarsContext give overlays access to this slot's chart instance. */}
-        {children && chartCtx.chart && (
-          <ChartContext.Provider value={chartCtx}>
-            <ChartBarsContext.Provider value={chartBarsCtxValue}>
-              {children}
-            </ChartBarsContext.Provider>
-          </ChartContext.Provider>
-        )}
+      {/* ── Chart body — identical to the main chart: same CustomChart instance ── */}
+      <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
+        <CustomChart symbol={symbol} interval={interval}>
+          {children}
+        </CustomChart>
       </div>
     </div>
   );

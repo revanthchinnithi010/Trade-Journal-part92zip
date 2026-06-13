@@ -783,7 +783,18 @@ function LivePriceBox({
 }
 
 // ── Component ─────────────────────────────────────────────────────────────────
-const CustomChart = memo(function CustomChart({ children, settings, replayBars }: { children?: ReactNode; settings?: ChartSettings; replayBars?: OHLCBar[] | null }) {
+const CustomChart = memo(function CustomChart({
+  children, settings, replayBars,
+  symbol: propSymbol, interval: propInterval, chartType: propChartType,
+}: {
+  children?: ReactNode; settings?: ChartSettings; replayBars?: OHLCBar[] | null;
+  /** Slot mode: when provided, overrides global Zustand symbol so each grid slot shows its own market */
+  symbol?: string;
+  /** Slot mode: when provided, overrides global Zustand interval */
+  interval?: string;
+  /** Slot mode: when provided, overrides global Zustand chartType */
+  chartType?: string;
+}) {
   // ── Profiler: render tracking ─────────────────────────────────────────────
   const _profRenderCountCC = useRef(0);
   _profRenderCountCC.current++;
@@ -796,14 +807,28 @@ const CustomChart = memo(function CustomChart({ children, settings, replayBars }
   // ─────────────────────────────────────────────────────────────────────────
   // Use individual selectors so re-renders only happen when these specific
   // values change — not on every crosshair move (which updates crosshairInfo).
-  const symbol      = useChartStore(s => s.symbol);
-  const interval    = useChartStore(s => s.interval);
-  const chartType   = useChartStore(s => s.chartType);
-  const indicators  = useChartStore(s => s.indicators);
-  const setLivePrice  = useChartStore(s => s.setLivePrice);
-  const setLiveOpen   = useChartStore(s => s.setLiveOpen);
-  const setBarsLoaded = useChartStore(s => s.setBarsLoaded);
+  const storeSymbol    = useChartStore(s => s.symbol);
+  const storeInterval  = useChartStore(s => s.interval);
+  const storeChartType = useChartStore(s => s.chartType);
+  const indicators     = useChartStore(s => s.indicators);
+  const storeSetLivePrice  = useChartStore(s => s.setLivePrice);
+  const storeSetLiveOpen   = useChartStore(s => s.setLiveOpen);
+  const storeSetBarsLoaded = useChartStore(s => s.setBarsLoaded);
   const { subscribeToMessages, sendMessage } = useLiveMarketContext();
+
+  // Slot mode: symbol prop present → this instance is a layout grid slot.
+  // Each slot reads its own symbol/interval instead of the shared store.
+  const isSlotRef   = useRef(propSymbol != null);
+  isSlotRef.current = propSymbol != null;
+  const symbol    = propSymbol    ?? storeSymbol;
+  const interval  = propInterval  ?? storeInterval;
+  const chartType = (propChartType as typeof storeChartType) ?? storeChartType;
+
+  // In slot mode: do NOT overwrite the main chart's global live-price / barsLoaded.
+  // Zustand action refs are always stable so these callbacks never change identity.
+  const setLivePrice  = useCallback((p: number | null) => { if (!isSlotRef.current) storeSetLivePrice(p);  }, [storeSetLivePrice]);  // eslint-disable-line
+  const setLiveOpen   = useCallback((p: number | null) => { if (!isSlotRef.current) storeSetLiveOpen(p);   }, [storeSetLiveOpen]);   // eslint-disable-line
+  const setBarsLoaded = useCallback((v: boolean)        => { if (!isSlotRef.current) storeSetBarsLoaded(v); }, [storeSetBarsLoaded]); // eslint-disable-line
 
   const containerRef        = useRef<HTMLDivElement>(null);
   const futureCrossCanvasRef = useRef<HTMLCanvasElement>(null);
