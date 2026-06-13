@@ -1671,6 +1671,30 @@ function MoreOptionsSheet({
   );
 }
 
+// ── Chart Settings Sheet ───────────────────────────────────────────────────
+// Wraps the existing SettingsPanel in the standard BottomSheet shell.
+// embedded=true suppresses SettingsPanel's own overlay/header/backdrop.
+function ChartSettingsSheet({
+  settings, onChange, onSaveAsDefault, onClose,
+}: {
+  settings: ChartSettings;
+  onChange: (s: ChartSettings) => void;
+  onSaveAsDefault?: (s: ChartSettings) => void;
+  onClose: () => void;
+}) {
+  return (
+    <BottomSheet title="Chart Settings" onClose={onClose}>
+      <SettingsPanel
+        settings={settings}
+        onChange={onChange}
+        onSaveAsDefault={onSaveAsDefault}
+        onClose={onClose}
+        embedded
+      />
+    </BottomSheet>
+  );
+}
+
 // ── Mini Control Bar ───────────────────────────────────────────────────────
 // ── DrawingMiniBar — replaces MiniControlBar when a drawing is selected ───
 // memo: receives stable drawing object ref (Zustand map() keeps unmodified objects).
@@ -3142,7 +3166,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onBarReplay={onBarReplay}
           onChartType={() => setShowChartType(true)}
           onObjectTree={() => setShowObjectTree(true)}
-          onSettings={() => setShowSettings(v => !v)}
+          onSettings={() => setShowSettings(true)}
           onScreenshot={handleScreenshot}
           onLayout={() => setShowLayoutSheet(true)}
         />
@@ -3173,7 +3197,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       />
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
-      {showSettings    && <SettingsPanel settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={() => setShowSettings(false)} />}
+      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={() => setShowSettings(false)} />}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
       <SymbolPickerSheet
