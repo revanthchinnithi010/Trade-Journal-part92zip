@@ -2809,7 +2809,11 @@ function MiniWatchlistPopup({
 }
 
 // ── MiniControlBar ─────────────────────────────────────────────────────────
-function MiniControlBar({
+// memo() is critical: this component sits outside the sheet tree but inside
+// MobileChartLayout. Without memo, every parent state change (showSettings,
+// showMoreSheet, etc.) re-renders it. With memo it only re-renders when its
+// own props change — i.e. symbol/interval/watchlist/fullscreen/broker status.
+const MiniControlBar = memo(function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
   onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
   brokerConnected,
@@ -2823,11 +2827,32 @@ function MiniControlBar({
   brokerConnected: boolean;
 }) {
   // ── Profiler: always-on render tracking ──────────────────────────────────
-  // trackRender() is called at render-start (top of fn body); the returned
-  // commit fn is called in useLayoutEffect so duration = render + commit phase.
-  // Does NOT require an active snap session — fires on every render when enabled.
-  const _profCommitMCB = sheetProfiler.trackRender("MiniControlBar", "MobileChartLayout.tsx", 2801);
+  const _profCommitMCB = sheetProfiler.trackRender("MiniControlBar", "MobileChartLayout.tsx", 2811);
   useLayoutEffect(() => { _profCommitMCB(); });
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Render-reason logger — logs which prop changed (or "no-props-changed") ──
+  // Useful for verifying memo is working: after the fix you should only see
+  // activeKey/interval/badge/watchlistItems/isFullscreen/brokerConnected.
+  // You should NEVER see onTF/onDraw/onBroker/onMore/onPrev/onNext changing.
+  const _mcbPrevProps = useRef<Record<string, unknown>>({});
+  useLayoutEffect(() => {
+    const current: Record<string, unknown> = {
+      activeKey, badge, interval, watchlistItems,
+      onSelectSymbol, onTF, onDraw, onBroker, onMore,
+      onPrev, onNext, onFullscreen, isFullscreen, brokerConnected,
+    };
+    const changedProps = Object.entries(current)
+      .filter(([k, v]) => _mcbPrevProps.current[k] !== v)
+      .map(([k]) => k);
+    console.log({
+      component: "MiniControlBar",
+      renderReason: changedProps.length ? changedProps.join(", ") : "parent-rerender/no-props-changed",
+      changedProps,
+      timestamp: performance.now(),
+    });
+    _mcbPrevProps.current = current;
+  });
   // ─────────────────────────────────────────────────────────────────────────
   const currentIdx = watchlistItems.findIndex(i => i.symbol === activeKey);
   const hasPrev = currentIdx > 0;
@@ -3012,7 +3037,7 @@ function MiniControlBar({
       )}
     </div>
   );
-}
+});
 
 
 // ── Profiler Debug Panel ───────────────────────────────────────────────────
@@ -3386,6 +3411,15 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     }
   }, [watchlistItems, activeKey, activeChartSlot, layoutCount, slotSymbols, handleSelectSymbol, selectSymbol]);
 
+  // ── Stable sheet-open handlers for MiniControlBar ────────────────────────
+  // These MUST be useCallback so memo(MiniControlBar) can bail out when parent
+  // state like showSettings / showMoreSheet changes. Inline arrows would create
+  // new references on every render and defeat memo's equality check.
+  const handleOpenTFSheet      = useCallback(() => setShowTFSheet(true),      []);
+  const handleOpenDrawingSheet = useCallback(() => setShowDrawingSheet(true),  []);
+  const handleOpenBrokerSheet  = useCallback(() => setShowBrokerSheet(true),   []);
+  const handleOpenMoreSheet    = useCallback(() => setShowMoreSheet(true),     []);
+
   // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
   const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
     ? activeKey
@@ -3556,10 +3590,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           interval={activeSlotInterval}
           watchlistItems={watchlistItems}
           onSelectSymbol={handleSelectSymbol}
-          onTF={() => setShowTFSheet(true)}
-          onDraw={() => setShowDrawingSheet(true)}
-          onBroker={() => setShowBrokerSheet(true)}
-          onMore={() => setShowMoreSheet(true)}
+          onTF={handleOpenTFSheet}
+          onDraw={handleOpenDrawingSheet}
+          onBroker={handleOpenBrokerSheet}
+          onMore={handleOpenMoreSheet}
           onPrev={handlePrev}
           onNext={handleNext}
           onFullscreen={handleFullscreen}
