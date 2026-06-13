@@ -55,7 +55,7 @@ export interface ColorBoxProps {
 }
 
 export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
-  const _c = sheetProfiler.trackRender("ColorBox", "SettingsPanel.tsx", 58);
+  const _c = sheetProfiler.trackRender("ColorPicker", "SettingsPanel.tsx", 58);
   useLayoutEffect(() => { _c(); });
   const safe   = safeColor(value, fallback);
   const [open, setOpen]     = useState(false);
@@ -137,7 +137,7 @@ export const Section = memo(function Section({ title, children }: { title: strin
 // Hover state removed — on touchscreen it causes pointless re-renders on every
 // finger contact. Color highlight is irrelevant on mobile.
 export const Row = memo(function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
-  const _c = sheetProfiler.trackRender("Row", "SettingsPanel.tsx", 135);
+  const _c = sheetProfiler.trackRender("SettingsRow", "SettingsPanel.tsx", 135);
   useLayoutEffect(() => { _c(); });
   return (
     <div
@@ -274,6 +274,25 @@ export const ThicknessButtons = memo(function ThicknessButtons({ value, onChange
   );
 });
 
+// ── Toggle Row ────────────────────────────────────────────────────────────────
+// Convenience component: a Row that contains exactly one Toggle.
+// Tracked separately so the profiler can distinguish toggle rows from other
+// row content types. Using ToggleRow instead of <Row><Toggle/></Row> also lets
+// memo bail out at the row level when checked/onChange don't change.
+export const ToggleRow = memo(function ToggleRow({
+  label, checked, onChange, last,
+}: {
+  label: string; checked: boolean; onChange: (v: boolean) => void; last?: boolean;
+}) {
+  const _c = sheetProfiler.trackRender("ToggleRow", "SettingsPanel.tsx", 282);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Row label={label} last={last}>
+      <Toggle checked={checked} onChange={onChange} />
+    </Row>
+  );
+});
+
 // ── Desktop sidebar nav item ──────────────────────────────────────────────────
 export type SidebarSection = "Symbol" | "Canvas" | "Scale";
 
@@ -341,6 +360,8 @@ interface Props {
 }
 
 const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAsDefault, onClose }: Props) {
+  const _c = sheetProfiler.trackRender("SettingsPanel", "SettingsPanel.tsx", 363);
+  useLayoutEffect(() => { _c(); });
   const ref = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SidebarSection>("Symbol");
 

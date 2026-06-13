@@ -21,7 +21,7 @@ import CustomIndicatorRenderer from "./CustomIndicatorRenderer";
 import IndicatorTags from "./IndicatorTags";
 import IndicatorsPanel from "./IndicatorsPanel";
 import SettingsPanel, {
-  ColorBox, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton,
+  ColorBox, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton, ToggleRow,
 } from "./SettingsPanel";
 import { AlertSheetContent } from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
@@ -1693,6 +1693,195 @@ const CSS_OPTS_CH_STYLE  = [{value:"solid",label:"Solid"},{value:"dashed",label:
 const CSS_OPTS_FONT_SIZE = [{value:"9",label:"9px"},{value:"10",label:"10px"},{value:"11",label:"11px (default)"},{value:"12",label:"12px"},{value:"13",label:"13px"},{value:"14",label:"14px"}];
 const CSS_OPTS_SCALE     = [{value:"normal",label:"Normal"},{value:"log",label:"Logarithmic"},{value:"percent",label:"Percentage"},{value:"indexed",label:"Indexed to 100"}];
 
+// ── ChartSettingsSheet: handler type + section/tab components ─────────────────
+// Each section/tab is its own memo'd component so the profiler can attribute
+// render cost at section granularity, not just at the sheet level.
+
+type CSSHandlers = {
+  upColor: (v: string) => void; downColor: (v: string) => void;
+  upBorderColor: (v: string) => void; downBorderColor: (v: string) => void;
+  upWickColor: (v: string) => void; downWickColor: (v: string) => void;
+  priceLabelBull: (v: string) => void; priceLabelBear: (v: string) => void;
+  priceLabelText: (v: string) => void; priceLabelLine: (v: string) => void;
+  timezone: (v: string) => void; precision: (v: string) => void;
+  bgType: (v: string) => void; bgColor: (v: string) => void;
+  gridStyle: (v: string) => void; gridColor: (v: string) => void;
+  bordersVisible: (v: boolean) => void; borderColor: (v: string) => void;
+  panelBorderVisible: (v: boolean) => void; panelBorderColor: (v: string) => void;
+  panelBorderThick: (v: number) => void;
+  crosshairColor: (v: string) => void; crosshair: (v: string) => void;
+  crosshairStyle: (v: string) => void; crosshairWidth: (v: number) => void;
+  textColor: (v: string) => void; fontSize: (v: string) => void;
+  linesColor: (v: string) => void;
+  scaleMode: (v: string) => void; priceScaleAuto: (v: boolean) => void;
+};
+
+type CSSSectionProps = { settings: ChartSettings; h: CSSHandlers };
+
+const CandleSection = memo(function CandleSection({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("CandleSection", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Section title="Candles">
+      <ColorPair label="Body" bull={settings.upColor} bear={settings.downColor} onBull={h.upColor} onBear={h.downColor} />
+      <ColorPair label="Borders" bull={settings.upBorderColor} bear={settings.downBorderColor} onBull={h.upBorderColor} onBear={h.downBorderColor} />
+      <ColorPair label="Wick" bull={settings.upWickColor} bear={settings.downWickColor} onBull={h.upWickColor} onBear={h.downWickColor} last />
+    </Section>
+  );
+});
+
+const PriceLabelSection = memo(function PriceLabelSection({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("PriceLabelSection", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Section title="Price Label">
+      <ColorPair label="Background"
+        bull={settings.priceLabelBullColor ?? "#22c55e"}
+        bear={settings.priceLabelBearColor ?? "#ef4444"}
+        onBull={h.priceLabelBull} onBear={h.priceLabelBear} />
+      <Row label="Text Color">
+        <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={h.priceLabelText} label="Price Label Text" fallback="#ffffff" />
+      </Row>
+      <Row label="Line Color" last>
+        <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={h.priceLabelLine} label="Price Line" fallback="rgba(255,255,255,0.4)" />
+      </Row>
+    </Section>
+  );
+});
+
+const GridSection = memo(function GridSection({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("GridSection", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Section title="Grid Lines">
+      <Row label="Display">
+        <StyledSelect value={settings.gridStyle} onChange={h.gridStyle} options={CSS_OPTS_GRID} />
+      </Row>
+      <Row label="Color" last>
+        <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={h.gridColor} label="Grid Color" />
+      </Row>
+    </Section>
+  );
+});
+
+const ThemeSection = memo(function ThemeSection({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("ThemeSection", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Section title="Background">
+      <Row label="Type">
+        <StyledSelect value={settings.bgType} onChange={h.bgType} options={CSS_OPTS_BG_TYPE} />
+      </Row>
+      <Row label="Color" last>
+        <ColorBox value={settings.bgColor} onChange={h.bgColor} label="Background Color" />
+      </Row>
+    </Section>
+  );
+});
+
+// ── Tab-content components ─────────────────────────────────────────────────────
+// Each one gets "SettingsTabContent" as its profiler label so the stats aggregate
+// across all three tabs (only one is ever mounted at a time).
+
+const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <div style={{ padding:"12px 14px 4px" }}>
+      <CandleSection settings={settings} h={h} />
+      <PriceLabelSection settings={settings} h={h} />
+      <Section title="Timezone">
+        <Row label="Display Timezone" last>
+          <StyledSelect value={settings.timezone} onChange={h.timezone} options={CSS_OPTS_TZ} />
+        </Row>
+      </Section>
+      <Section title="Price Precision">
+        <Row label="Decimal Places" last>
+          <StyledSelect value={settings.precision} onChange={h.precision} options={CSS_OPTS_PRECISION} />
+        </Row>
+      </Section>
+    </div>
+  );
+});
+
+const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <div style={{ padding:"12px 14px 4px" }}>
+      <ThemeSection settings={settings} h={h} />
+      <GridSection settings={settings} h={h} />
+      <Section title="Axis Borders">
+        <ToggleRow label="Visible" checked={settings.bordersVisible ?? true} onChange={h.bordersVisible} />
+        <Row label="Color" last>
+          <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={h.borderColor} label="Axis Border Color" />
+        </Row>
+      </Section>
+      <Section title="Chart Panel Border">
+        <ToggleRow label="Visible" checked={settings.panelBorderVisible ?? true} onChange={h.panelBorderVisible} />
+        <Row label="Color">
+          <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={h.panelBorderColor} label="Panel Border Color" />
+        </Row>
+        <Row label="Thickness" last>
+          <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={h.panelBorderThick} />
+        </Row>
+      </Section>
+      <Section title="Crosshair">
+        <Row label="Color">
+          <ColorBox value={settings.crosshairColor} onChange={h.crosshairColor} label="Crosshair Color" />
+        </Row>
+        <Row label="Mode">
+          <StyledSelect value={settings.crosshair} onChange={h.crosshair} options={CSS_OPTS_CROSSHAIR} />
+        </Row>
+        <Row label="Line Style">
+          <StyledSelect value={settings.crosshairStyle} onChange={h.crosshairStyle} options={CSS_OPTS_CH_STYLE} />
+        </Row>
+        <Row label="Thickness" last>
+          <ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={h.crosshairWidth} />
+        </Row>
+      </Section>
+      <Section title="Text">
+        <Row label="Color">
+          <ColorBox value={settings.textColor} onChange={h.textColor} label="Text Color" />
+        </Row>
+        <Row label="Font Size" last>
+          <StyledSelect value={String(settings.fontSize)} onChange={h.fontSize} options={CSS_OPTS_FONT_SIZE} />
+        </Row>
+      </Section>
+      <Section title="Scale Labels">
+        <Row label="Label Color" last>
+          <ColorBox value={settings.linesColor} onChange={h.linesColor} label="Scale Label Color" />
+        </Row>
+      </Section>
+    </div>
+  );
+});
+
+const ScaleTabContent = memo(function ScaleTabContent({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <div style={{ padding:"12px 14px 4px" }}>
+      <Section title="Price Scale Mode">
+        <Row label="Scale Type">
+          <StyledSelect value={settings.scaleMode} onChange={h.scaleMode} options={CSS_OPTS_SCALE} />
+        </Row>
+        <ToggleRow label="Auto Scale" checked={settings.priceScaleAutoScale} onChange={h.priceScaleAuto} last />
+      </Section>
+      <Section title="Interaction">
+        <Row label="Drag Price Scale" last>
+          <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Drag the right axis up/down</span>
+        </Row>
+      </Section>
+      <Section title="Reset">
+        <Row label="Double-click Axis" last>
+          <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Double-click price axis to reset</span>
+        </Row>
+      </Section>
+    </div>
+  );
+});
+
 // Shared helper primitives (ColorBox, Section, Row, …) are imported from
 // SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
 function ChartSettingsSheet({
@@ -1755,6 +1944,32 @@ function ChartSettingsSheet({
     priceScaleAuto:     (v: boolean) => p({ priceScaleAutoScale: v }),
   }), [p]);
 
+  // ── Auto-dump: fires once on every mount of this sheet ───────────────────
+  // Resets all render stats so only THIS open's renders appear in the report.
+  // Dumps 250 ms later — enough time for all useLayoutEffect commits to fire.
+  useEffect(() => {
+    sheetProfiler.resetRenderStats();
+    const timer = setTimeout(() => {
+      const stats = sheetProfiler.getRenderStats();
+      const rows = stats.map(s => ({
+        "Component": s.component,
+        "Renders":   s.renderCount,
+        "Avg ms":    s.renderCount ? (s.totalMs / s.renderCount).toFixed(3) : "—",
+        "Max ms":    s.maxMs.toFixed(3),
+        "Total ms":  s.totalMs.toFixed(3),
+      }));
+      console.group("%c[ChartSettingsSheet] ── Initial Render Report (sorted by Total ms) ──", "color:#f59e0b;font-weight:bold;font-size:13px");
+      if (rows.length) {
+        console.log(`%c🔴 MOST EXPENSIVE: ${rows[0]["Component"]} — total ${rows[0]["Total ms"]} ms, ${rows[0]["Renders"]} render(s), avg ${rows[0]["Avg ms"]} ms`, "color:#f87171;font-weight:bold");
+        console.table(rows);
+      } else {
+        console.log("No renders recorded — check trackRender() calls.");
+      }
+      console.groupEnd();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, []); // intentional: only on mount, not on every settings change
+
   return (
     <BottomSheet title="Chart Settings" onClose={onClose}>
 
@@ -1785,147 +2000,13 @@ function ChartSettingsSheet({
       </div>
 
       {/* ── Candles tab ────────────────────────────────────────────────── */}
-      {tab === "Candles" && (
-        <div style={{ padding:"12px 14px 4px" }}>
-          <Section title="Candles">
-            <ColorPair label="Body"
-              bull={settings.upColor} bear={settings.downColor}
-              onBull={h.upColor} onBear={h.downColor} />
-            <ColorPair label="Borders"
-              bull={settings.upBorderColor} bear={settings.downBorderColor}
-              onBull={h.upBorderColor} onBear={h.downBorderColor} />
-            <ColorPair label="Wick"
-              bull={settings.upWickColor} bear={settings.downWickColor}
-              onBull={h.upWickColor} onBear={h.downWickColor} last />
-          </Section>
-
-          <Section title="Price Label">
-            <ColorPair label="Background"
-              bull={settings.priceLabelBullColor ?? "#22c55e"}
-              bear={settings.priceLabelBearColor ?? "#ef4444"}
-              onBull={h.priceLabelBull}
-              onBear={h.priceLabelBear} />
-            <Row label="Text Color">
-              <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={h.priceLabelText} label="Price Label Text" fallback="#ffffff" />
-            </Row>
-            <Row label="Line Color" last>
-              <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={h.priceLabelLine} label="Price Line" fallback="rgba(255,255,255,0.4)" />
-            </Row>
-          </Section>
-
-          <Section title="Timezone">
-            <Row label="Display Timezone" last>
-              <StyledSelect value={settings.timezone} onChange={h.timezone} options={CSS_OPTS_TZ} />
-            </Row>
-          </Section>
-
-          <Section title="Price Precision">
-            <Row label="Decimal Places" last>
-              <StyledSelect value={settings.precision} onChange={h.precision} options={CSS_OPTS_PRECISION} />
-            </Row>
-          </Section>
-        </div>
-      )}
+      {tab === "Candles" && <CandlesTabContent settings={settings} h={h} />}
 
       {/* ── Appearance tab ─────────────────────────────────────────────── */}
-      {tab === "Appearance" && (
-        <div style={{ padding:"12px 14px 4px" }}>
-          <Section title="Background">
-            <Row label="Type">
-              <StyledSelect value={settings.bgType} onChange={h.bgType} options={CSS_OPTS_BG_TYPE} />
-            </Row>
-            <Row label="Color" last>
-              <ColorBox value={settings.bgColor} onChange={h.bgColor} label="Background Color" />
-            </Row>
-          </Section>
-
-          <Section title="Grid Lines">
-            <Row label="Display">
-              <StyledSelect value={settings.gridStyle} onChange={h.gridStyle} options={CSS_OPTS_GRID} />
-            </Row>
-            <Row label="Color" last>
-              <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={h.gridColor} label="Grid Color" />
-            </Row>
-          </Section>
-
-          <Section title="Axis Borders">
-            <Row label="Visible">
-              <Toggle checked={settings.bordersVisible ?? true} onChange={h.bordersVisible} />
-            </Row>
-            <Row label="Color" last>
-              <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={h.borderColor} label="Axis Border Color" />
-            </Row>
-          </Section>
-
-          <Section title="Chart Panel Border">
-            <Row label="Visible">
-              <Toggle checked={settings.panelBorderVisible ?? true} onChange={h.panelBorderVisible} />
-            </Row>
-            <Row label="Color">
-              <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={h.panelBorderColor} label="Panel Border Color" />
-            </Row>
-            <Row label="Thickness" last>
-              <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={h.panelBorderThick} />
-            </Row>
-          </Section>
-
-          <Section title="Crosshair">
-            <Row label="Color">
-              <ColorBox value={settings.crosshairColor} onChange={h.crosshairColor} label="Crosshair Color" />
-            </Row>
-            <Row label="Mode">
-              <StyledSelect value={settings.crosshair} onChange={h.crosshair} options={CSS_OPTS_CROSSHAIR} />
-            </Row>
-            <Row label="Line Style">
-              <StyledSelect value={settings.crosshairStyle} onChange={h.crosshairStyle} options={CSS_OPTS_CH_STYLE} />
-            </Row>
-            <Row label="Thickness" last>
-              <ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={h.crosshairWidth} />
-            </Row>
-          </Section>
-
-          <Section title="Text">
-            <Row label="Color">
-              <ColorBox value={settings.textColor} onChange={h.textColor} label="Text Color" />
-            </Row>
-            <Row label="Font Size" last>
-              <StyledSelect value={String(settings.fontSize)} onChange={h.fontSize} options={CSS_OPTS_FONT_SIZE} />
-            </Row>
-          </Section>
-
-          <Section title="Scale Labels">
-            <Row label="Label Color" last>
-              <ColorBox value={settings.linesColor} onChange={h.linesColor} label="Scale Label Color" />
-            </Row>
-          </Section>
-        </div>
-      )}
+      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
 
       {/* ── Scale tab ──────────────────────────────────────────────────── */}
-      {tab === "Scale" && (
-        <div style={{ padding:"12px 14px 4px" }}>
-          <Section title="Price Scale Mode">
-            <Row label="Scale Type">
-              <StyledSelect value={settings.scaleMode} onChange={h.scaleMode} options={CSS_OPTS_SCALE} />
-            </Row>
-            <Row label="Auto Scale" last>
-              <Toggle checked={settings.priceScaleAutoScale} onChange={h.priceScaleAuto} />
-            </Row>
-          </Section>
-
-          <Section title="Interaction">
-            <Row label="Drag Price Scale" last>
-              <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Drag the right axis up/down</span>
-            </Row>
-          </Section>
-
-          <Section title="Reset">
-            <Row label="Double-click Axis" last>
-              <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Double-click price axis to reset</span>
-            </Row>
-          </Section>
-        </div>
-      )}
+      {tab === "Scale" && <ScaleTabContent settings={settings} h={h} />}
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div style={{
