@@ -1890,10 +1890,10 @@ export default function Charts() {
                 <>
                   {/* Slot 0: main chart (spans both rows in 3-chart layout) */}
                   <div
-                    onPointerDown={() => {
-                      console.log(`[ChartSelect] Tapped Chart: slot=0  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: 0`);
-                      console.log("[ChartActive]", { activeChartId: activeChartSlot, chartId: 0, isActive: activeChartSlot === 0 });
+                    onPointerDownCapture={() => {
+                      console.log("[PANE TAP]", 0);
                       setActiveChartSlot(0);
+                      console.log("[ACTIVE CHART]", 0);
                     }}
                     style={{
                       position: "relative", overflow: "hidden", minHeight: 0,
@@ -1926,10 +1926,10 @@ export default function Charts() {
                   {Array.from({ length: layoutCount - 1 }).map((_, i) => (
                     <div
                       key={i}
-                      onPointerDown={() => {
-                        console.log(`[ChartSelect] Tapped Chart: slot=${i + 1}  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: ${i + 1}`);
-                        console.log("[ChartActive]", { activeChartId: activeChartSlot, chartId: i + 1, isActive: activeChartSlot === i + 1 });
+                      onPointerDownCapture={() => {
+                        console.log("[PANE TAP]", i + 1);
                         setActiveChartSlot(i + 1);
+                        console.log("[ACTIVE CHART]", i + 1);
                       }}
                       style={{
                         position: "relative", overflow: "hidden", minHeight: 0,
