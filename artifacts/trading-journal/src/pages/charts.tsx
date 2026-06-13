@@ -1246,6 +1246,32 @@ export default function Charts() {
     useChartStore.getState().setInterval(v);
   }, [setLayout, saveToDb]);
 
+  // ── Slot-aware interval/symbol handlers ───────────────────────────────────
+  // FIX: previously selectInterval/selectSymbol were called directly from all
+  // toolbar actions, hardwiring them to the main chart regardless of which
+  // chart panel the user had tapped. These handlers route to the correct slot.
+  const handleSlotSelectInterval = useCallback((v: string) => {
+    console.log(`[ChartSelect] Timeframe Change Target: slot=${activeChartSlot} tf=${v}`);
+    if (activeChartSlot === 0 || layoutCount <= 1) {
+      selectInterval(v);
+    } else {
+      setSlotIntervals(prev => {
+        const next = [...prev]; next[activeChartSlot - 1] = v; return next;
+      });
+    }
+  }, [activeChartSlot, layoutCount, selectInterval]);
+
+  const handleSlotSelectSymbol = useCallback((key: string) => {
+    console.log(`[ChartSelect] Symbol Change Target: slot=${activeChartSlot} sym=${key}`);
+    if (activeChartSlot === 0 || layoutCount <= 1) {
+      selectSymbol(key);
+    } else {
+      setSlotSymbols(prev => {
+        const next = [...prev]; next[activeChartSlot - 1] = key; return next;
+      });
+    }
+  }, [activeChartSlot, layoutCount, selectSymbol]);
+
   const TF_FAV_KEY = "tj_tf_favorites_v1";
   const DEFAULT_FAVS = ["1", "5", "15", "30", "60", "240", "D", "W"];
   const [tfFavorites, setTfFavorites] = useState<string[]>(() => {
@@ -1567,7 +1593,7 @@ export default function Charts() {
           {tfFavorites.map(v => {
             const active = v === interval;
             return (
-              <button key={v} onClick={() => selectInterval(v)}
+              <button key={v} onClick={() => handleSlotSelectInterval(v)}
                 style={{
                   padding: "0 5px", height: 34, borderRadius: 4,
                   fontSize: 13, fontWeight: active ? 700 : 500,
@@ -1587,7 +1613,7 @@ export default function Charts() {
           <TFDropdown
             interval={interval}
             favorites={tfFavorites}
-            onSelect={selectInterval}
+            onSelect={handleSlotSelectInterval}
             onFavoritesChange={updateFavorites}
           />
         </div>
@@ -1862,7 +1888,10 @@ export default function Charts() {
                 <>
                   {/* Slot 0: main chart (spans both rows in 3-chart layout) */}
                   <div
-                    onClick={() => setActiveChartSlot(0)}
+                    onPointerDown={() => {
+                      console.log(`[ChartSelect] Tapped Chart: slot=0  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: 0`);
+                      setActiveChartSlot(0);
+                    }}
                     style={{
                       position: "relative", overflow: "hidden", minHeight: 0,
                       gridRow: layoutCount === 3 ? "1 / 3" : undefined,
@@ -1889,7 +1918,10 @@ export default function Charts() {
                   {Array.from({ length: layoutCount - 1 }).map((_, i) => (
                     <div
                       key={i}
-                      onClick={() => setActiveChartSlot(i + 1)}
+                      onPointerDown={() => {
+                        console.log(`[ChartSelect] Tapped Chart: slot=${i + 1}  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: ${i + 1}`);
+                        setActiveChartSlot(i + 1);
+                      }}
                       style={{
                         position: "relative", overflow: "hidden", minHeight: 0,
                         cursor: "pointer",
@@ -2005,7 +2037,7 @@ export default function Charts() {
               activeSymbol={activeKey}
               activeTimeframe={interval}
               alertCount={activeAlertsCount}
-              onSelectSymbol={selectSymbol}
+              onSelectSymbol={handleSlotSelectSymbol}
               layoutCount={layoutCount}
               onLayoutChange={handleLayoutChange}
               syncTF={syncTF}

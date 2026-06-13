@@ -2887,6 +2887,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
   const handleSelectSymbol = useCallback((sym: string) => {
+    console.log(`[ChartSelect] Symbol Change Target: slot=${activeChartSlot}  sym=${sym}  Mini Control Bar Target: slot=${activeChartSlot}`);
     if (activeChartSlot === 0 || layoutCount <= 1) {
       selectSymbol(sym);
     } else {
@@ -2900,6 +2901,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   // Routes TF selection to the main chart (slot 0) or to a secondary slot's interval
   const handleSelectInterval = useCallback((tf: string) => {
+    console.log(`[ChartSelect] Timeframe Change Target: slot=${activeChartSlot}  tf=${tf}`);
     if (activeChartSlot === 0 || layoutCount <= 1) {
       selectInterval(tf);
     } else {
@@ -3002,7 +3004,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
             <>
               {/* Slot 0: main chart (spans both rows in 3-chart layout) */}
               <div
-                onClick={() => setActiveChartSlot(0)}
+                onPointerDown={() => {
+                  console.log(`[ChartSelect] Tapped Chart: slot=0  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: 0`);
+                  setActiveChartSlot(0);
+                }}
                 style={{
                   position:"relative", overflow:"hidden", minHeight:0,
                   gridRow: layoutCount === 3 ? "1 / 3" : undefined,
@@ -3024,7 +3029,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
               {Array.from({ length: layoutCount - 1 }).map((_, i) => (
                 <div
                   key={i}
-                  onClick={() => setActiveChartSlot(i + 1)}
+                  onPointerDown={() => {
+                    console.log(`[ChartSelect] Tapped Chart: slot=${i + 1}  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: ${i + 1}`);
+                    setActiveChartSlot(i + 1);
+                  }}
                   style={{
                     position:"relative", overflow:"hidden", minHeight:0,
                     cursor:"pointer",
