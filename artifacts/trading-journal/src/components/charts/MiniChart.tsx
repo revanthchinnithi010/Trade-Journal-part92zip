@@ -4,6 +4,7 @@ import { fmtPrice } from "@/contexts/LiveMarketContext";
 import { useTickStore } from "@/store/tickStore";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import CustomChart from "./CustomChart";
+import type { ChartSettings } from "./chartSettingsTypes";
 
 const TIMEFRAMES = [
   { label: "1m", value: "1" }, { label: "5m", value: "5" },
@@ -103,6 +104,8 @@ export interface MiniChartProps {
   onSymbolChange?:     (sym: string) => void;
   /** Called whenever interval changes (via header pills, controlledInterval, etc.) */
   onIntervalChange?:   (iv: string) => void;
+  /** Theme settings — must match the main chart so all panes look identical */
+  settings?:           ChartSettings;
 }
 
 /**
@@ -117,7 +120,7 @@ export interface MiniChartProps {
 const MiniChart = memo(function MiniChart({
   defaultSymbol, defaultInterval, syncedInterval, headerless,
   controlledSymbol, controlledInterval, children,
-  onSymbolChange, onIntervalChange,
+  onSymbolChange, onIntervalChange, settings,
 }: MiniChartProps) {
   const [symbol,     setSymbol]     = useState(defaultSymbol);
   const [interval,   setInterval]   = useState(syncedInterval ?? defaultInterval);
@@ -233,7 +236,7 @@ const MiniChart = memo(function MiniChart({
 
       {/* ── Chart body — identical to the main chart: same CustomChart instance ── */}
       <div style={{ flex: 1, position: "relative", minHeight: 0 }}>
-        <CustomChart symbol={symbol} interval={interval}>
+        <CustomChart symbol={symbol} interval={interval} settings={settings}>
           {children}
         </CustomChart>
       </div>

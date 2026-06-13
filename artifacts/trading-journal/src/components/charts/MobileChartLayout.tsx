@@ -3083,6 +3083,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
                     controlledInterval={syncTF ? undefined : slotIntervals[i]}
                     headerless={true}
                     controlledSymbol={slotSymbols[i]}
+                    settings={chartSettings}
                   >
                     <DrawingOverlay
                       symbol={slotSymbols[i] ?? "ETHUSD"}

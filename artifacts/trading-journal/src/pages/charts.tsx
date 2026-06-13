@@ -1951,6 +1951,7 @@ export default function Charts() {
                         syncedInterval={syncTF ? interval : undefined}
                         controlledInterval={syncTF ? undefined : slotIntervals[i]}
                         controlledSymbol={slotSymbols[i]}
+                        settings={chartSettings}
                         onSymbolChange={sym => setSlotSymbols(prev => { const n = [...prev]; n[i] = sym; return n; })}
                         onIntervalChange={iv => setSlotIntervals(prev => { const n = [...prev]; n[i] = iv; return n; })}
                       >
