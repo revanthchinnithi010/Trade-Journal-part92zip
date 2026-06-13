@@ -1611,6 +1611,10 @@ function MoreOptionsSheet({
   onScreenshot: () => void;
   onLayout: () => void;
 }) {
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  const _profCommitMOS = sheetProfiler.trackRender("MoreOptionsSheet", "MobileChartLayout.tsx", 1601);
+  useLayoutEffect(() => { _profCommitMOS(); });
+  // ─────────────────────────────────────────────────────────────────────────
   const TILES: { icon: React.ReactNode; label: string; action: () => void; accent?: string }[] = [
     {
       icon: <LayoutGrid style={{ width:22, height:22 }} />,
@@ -1688,6 +1692,10 @@ function ChartSettingsSheet({
   onSaveAsDefault?: (s: ChartSettings) => void;
   onClose: () => void;
 }) {
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  const _profCommitCSS = sheetProfiler.trackRender("ChartSettingsSheet", "MobileChartLayout.tsx", 1690);
+  useLayoutEffect(() => { _profCommitCSS(); });
+  // ─────────────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
   const p = useCallback(
     (patch: Partial<ChartSettings>) => onChange({ ...settings, ...patch }),
@@ -2811,15 +2819,12 @@ function MiniControlBar({
   onFullscreen: () => void; isFullscreen: boolean;
   brokerConnected: boolean;
 }) {
-  // ── Profiler: render tracking ─────────────────────────────────────────────
-  const _profRenderCountMCB = useRef(0);
-  _profRenderCountMCB.current++;
-  const _profRenderCountMCBSnap = _profRenderCountMCB.current;
-  const _profRenderStartMCB = useRef(performance.now());
-  _profRenderStartMCB.current = performance.now();
-  useLayoutEffect(() => {
-    sheetProfiler.end(_profRenderStartMCB.current, "MiniControlBar", `render #${_profRenderCountMCBSnap} → layout committed`);
-  });
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  // trackRender() is called at render-start (top of fn body); the returned
+  // commit fn is called in useLayoutEffect so duration = render + commit phase.
+  // Does NOT require an active snap session — fires on every render when enabled.
+  const _profCommitMCB = sheetProfiler.trackRender("MiniControlBar", "MobileChartLayout.tsx", 2801);
+  useLayoutEffect(() => { _profCommitMCB(); });
   // ─────────────────────────────────────────────────────────────────────────
   const currentIdx = watchlistItems.findIndex(i => i.symbol === activeKey);
   const hasPrev = currentIdx > 0;
