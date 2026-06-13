@@ -1155,15 +1155,9 @@ function ChartTypeSheet({ current, onSelect, onClose }: {
 // Actions (setActiveTool/undo/redo) are stable Zustand refs — subscribing to them
 // individually costs zero re-renders.
 const DrawingToolsSheet = memo(function DrawingToolsSheet({ onClose }: { onClose: () => void }) {
-  // ── Profiler: render tracking ─────────────────────────────────────────────
-  const _profRenderCountDTS = useRef(0);
-  _profRenderCountDTS.current++;
-  const _profRenderCountDTSSnap = _profRenderCountDTS.current;
-  const _profRenderStartDTS = useRef(performance.now());
-  _profRenderStartDTS.current = performance.now();
-  useLayoutEffect(() => {
-    sheetProfiler.end(_profRenderStartDTS.current, "DrawingToolsSheet", `render #${_profRenderCountDTSSnap} → layout committed`);
-  });
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  const _profCommitDTS = sheetProfiler.trackRender("DrawingToolsSheet", "MobileChartLayout.tsx", 1157);
+  useLayoutEffect(() => { _profCommitDTS(); });
   // ─────────────────────────────────────────────────────────────────────────
   const activeTool    = useDrawingStore(s => s.activeTool);
   const canUndo       = useDrawingStore(s => s.canUndo);
@@ -1276,6 +1270,10 @@ const AlertSheet = memo(function AlertSheet({ onClose }: { onClose: () => void }
 // Renders the broker list inside the same BottomSheet system as Drawing Tools.
 // Inherits all snap logic, spring config, GPU optimisations, and FPS counter.
 const BrokerSheet = memo(function BrokerSheet({ onClose }: { onClose: () => void }) {
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  const _profCommitBS = sheetProfiler.trackRender("BrokerSheet", "MobileChartLayout.tsx", 1278);
+  useLayoutEffect(() => { _profCommitBS(); });
+  // ─────────────────────────────────────────────────────────────────────────
   const { loadAccounts } = useBrokerStore();
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   return (
@@ -2536,6 +2534,10 @@ function MarketWatchlistSheet({
   onClose: () => void;
   activeSymbol: string;
 }) {
+  // ── Profiler: always-on render tracking ──────────────────────────────────
+  const _profCommitMWS = sheetProfiler.trackRender("MarketWatchlistSheet", "MobileChartLayout.tsx", 2532);
+  useLayoutEffect(() => { _profCommitMWS(); });
+  // ─────────────────────────────────────────────────────────────────────────
   const [activeTab, setActiveTab]           = useState<MktTab>("Watchlist");
   const [search, setSearch]                 = useState("");
   const [deltaSymbols, setDeltaSymbols]     = useState<MktSymbolInfo[]>([]);
