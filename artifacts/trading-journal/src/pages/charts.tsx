@@ -1447,7 +1447,7 @@ export default function Charts() {
   }, [activeKey, interval]);
 
   // ── Named layouts ─────────────────────────────────────────────────────────────
-  const { layouts: namedLayouts, saveLayout, renameLayout, deleteLayout } = useNamedLayouts();
+  const { layouts: namedLayouts, saveLayout, renameLayout, deleteLayout, activeLayoutId, setActiveLayoutId } = useNamedLayouts();
 
   const handleSaveNamedLayout = useCallback((name: string) => {
     const store = useChartStore.getState();
@@ -1464,7 +1464,7 @@ export default function Charts() {
   }, [saveLayout, activeKey, interval, chartSettings, layoutCount]);
 
   const handleLoadNamedLayout = useCallback((layoutData: NamedLayout) => {
-    console.log("[loadLayout] CALLED — id:", layoutData.id, "| layout obj:", JSON.stringify(layoutData));
+    console.log("[loadLayout] CALLED — Selected Layout ID:", layoutData.id, "| Current Active Layout ID:", activeLayoutId, "| layout name:", layoutData.name);
     const store = useChartStore.getState();
 
     console.log("[loadLayout] step 1 — setChartType:", layoutData.chartType);
@@ -1487,9 +1487,10 @@ export default function Charts() {
     console.log("[loadLayout] step 6 — handleLayoutChange:", layoutData.layoutCount);
     handleLayoutChange(layoutData.layoutCount as ChartLayoutType);
 
-    console.log("[loadLayout] COMPLETE — toast firing");
+    setActiveLayoutId(layoutData.id);
+    console.log("[loadLayout] COMPLETE — Stored Layout ID set to:", layoutData.id);
     toast(`Layout "${layoutData.name}" loaded`);
-  }, [selectSymbol, selectInterval, handleSettings, handleLayoutChange]);
+  }, [selectSymbol, selectInterval, handleSettings, handleLayoutChange, activeLayoutId, setActiveLayoutId]);
 
   // ── Mobile layout early-return ────────────────────────────────────────────────
   if (isMobile) {
@@ -1530,6 +1531,7 @@ export default function Charts() {
         onLoadNamedLayout={handleLoadNamedLayout}
         onRenameNamedLayout={renameLayout}
         onDeleteNamedLayout={deleteLayout}
+        activeLayoutId={activeLayoutId}
       />
     );
   }
@@ -2048,6 +2050,7 @@ export default function Charts() {
               onLoadNamedLayout={handleLoadNamedLayout}
               onRenameNamedLayout={renameLayout}
               onDeleteNamedLayout={deleteLayout}
+              activeLayoutId={activeLayoutId}
               onAlertClick={() => setShowAlertCenter(true)}
               onScreenshot={handleScreenshot}
               onCopyLiveLink={handleCopyLiveLink}

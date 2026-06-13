@@ -51,6 +51,7 @@ export interface RightToolbarProps {
   onLoadNamedLayout:    (layout: NamedLayout) => void;
   onRenameNamedLayout:  (id: string, name: string) => void;
   onDeleteNamedLayout:  (id: string) => void;
+  activeLayoutId:       string | null;
 }
 
 /** Width of the icon rail column */
@@ -708,7 +709,7 @@ const LAYOUT_LABELS = ["Single", "Side by Side", "Large + 2", "4 Charts"];
 const LayoutSlide = memo(function LayoutSlide({
   current, onChange, onClose, syncTF, onSyncTFChange,
   namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
-  onRenameNamedLayout, onDeleteNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout, activeLayoutId,
 }: {
   current: ChartLayoutType; onChange: (n: ChartLayoutType) => void; onClose: () => void;
   syncTF: boolean; onSyncTFChange: (v: boolean) => void;
@@ -718,6 +719,7 @@ const LayoutSlide = memo(function LayoutSlide({
   onLoadNamedLayout: (layout: NamedLayout) => void;
   onRenameNamedLayout: (id: string, name: string) => void;
   onDeleteNamedLayout: (id: string) => void;
+  activeLayoutId: string | null;
 }) {
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -873,46 +875,63 @@ const LayoutSlide = memo(function LayoutSlide({
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {namedLayouts.map(layout => (
-                <div key={layout.id} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 8px", borderRadius: 9, background: "rgba(57,91,67,0.07)", boxShadow: "0 0 0 1px rgba(57,91,67,0.18)" }}>
-                  {renameId === layout.id ? (
-                    <input
-                      autoFocus
-                      value={renameName}
-                      onChange={e => setRenameName(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
-                        if (e.key === "Escape") setRenameId(null);
-                      }}
-                      onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
-                      style={{ flex: 1, height: 22, borderRadius: 5, border: "1px solid rgba(183,255,90,0.35)", background: "rgba(57,91,67,0.2)", color: "#F3FFF3", fontSize: 11, padding: "0 6px", outline: "none" }}
-                    />
-                  ) : (
-                    <>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "#F3FFF3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{layout.name}</div>
-                        <div style={{ fontSize: 9, color: "rgba(167,184,169,0.38)", marginTop: 1 }}>{layout.symbol} · {layout.interval}</div>
-                      </div>
-                      <button
-                        onClick={() => { onLoadNamedLayout(layout); onClose(); }}
-                        style={{ height: 22, padding: "0 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", background: "rgba(183,255,90,0.1)", border: "1px solid rgba(183,255,90,0.28)", color: "#B7FF5A", flexShrink: 0 }}
-                      >
-                        Load
-                      </button>
-                      <button
-                        onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
-                        title="Rename"
-                        style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(167,184,169,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                      >✏</button>
-                      <button
-                        onClick={() => onDeleteNamedLayout(layout.id)}
-                        title="Delete"
-                        style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(239,68,68,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
-                      >🗑</button>
-                    </>
-                  )}
-                </div>
-              ))}
+              {namedLayouts.map(layout => {
+                const isActive = layout.id === activeLayoutId;
+                return (
+                  <div key={layout.id} style={{
+                    display: "flex", alignItems: "center", gap: 5, padding: "7px 8px", borderRadius: 9,
+                    background: isActive ? "rgba(59,130,246,0.1)" : "rgba(57,91,67,0.07)",
+                    boxShadow: isActive
+                      ? "0 0 0 1.5px rgba(59,130,246,0.55), 0 0 14px rgba(59,130,246,0.12)"
+                      : "0 0 0 1px rgba(57,91,67,0.18)",
+                    transition: "all 0.15s",
+                  }}>
+                    {renameId === layout.id ? (
+                      <input
+                        autoFocus
+                        value={renameName}
+                        onChange={e => setRenameName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
+                          if (e.key === "Escape") setRenameId(null);
+                        }}
+                        onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
+                        style={{ flex: 1, height: 22, borderRadius: 5, border: "1px solid rgba(183,255,90,0.35)", background: "rgba(57,91,67,0.2)", color: "#F3FFF3", fontSize: 11, padding: "0 6px", outline: "none" }}
+                      />
+                    ) : (
+                      <>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                            <div style={{ fontSize: 11, fontWeight: isActive ? 700 : 600, color: isActive ? "#93c5fd" : "#F3FFF3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{layout.name}</div>
+                            {isActive && (
+                              <span style={{ fontSize: 8.5, fontWeight: 800, color: "#3b82f6", background: "rgba(59,130,246,0.15)", border: "1px solid rgba(59,130,246,0.35)", borderRadius: 4, padding: "1px 5px", letterSpacing: "0.04em", flexShrink: 0 }}>
+                                ✓ Active
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 9, color: isActive ? "rgba(147,197,253,0.55)" : "rgba(167,184,169,0.38)", marginTop: 1 }}>{layout.symbol} · {layout.interval}</div>
+                        </div>
+                        <button
+                          onClick={() => { onLoadNamedLayout(layout); onClose(); }}
+                          style={{ height: 22, padding: "0 8px", borderRadius: 6, fontSize: 10, fontWeight: 700, cursor: "pointer", background: isActive ? "rgba(59,130,246,0.15)" : "rgba(183,255,90,0.1)", border: isActive ? "1px solid rgba(59,130,246,0.4)" : "1px solid rgba(183,255,90,0.28)", color: isActive ? "#93c5fd" : "#B7FF5A", flexShrink: 0 }}
+                        >
+                          {isActive ? "Reload" : "Load"}
+                        </button>
+                        <button
+                          onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
+                          title="Rename"
+                          style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(167,184,169,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >✏</button>
+                        <button
+                          onClick={() => onDeleteNamedLayout(layout.id)}
+                          title="Delete"
+                          style={{ width: 22, height: 22, borderRadius: 5, fontSize: 11, cursor: "pointer", background: "transparent", border: "none", color: "rgba(239,68,68,0.5)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+                        >🗑</button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -1021,6 +1040,7 @@ const RightToolbar = memo(function RightToolbar({
           onLoadNamedLayout={onLoadNamedLayout}
           onRenameNamedLayout={onRenameNamedLayout}
           onDeleteNamedLayout={onDeleteNamedLayout}
+          activeLayoutId={activeLayoutId}
         />
       </SlidePanel>
 

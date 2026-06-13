@@ -14,7 +14,8 @@ export interface NamedLayout {
   savedAt: number;
 }
 
-const LS_KEY = "tj_named_layouts_v1";
+const LS_KEY        = "tj_named_layouts_v1";
+const LS_ACTIVE_KEY = "tj_active_layout_id_v1";
 
 function readLayouts(): NamedLayout[] {
   try {
@@ -27,12 +28,34 @@ function writeLayouts(layouts: NamedLayout[]) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(layouts)); } catch { /* ignore */ }
 }
 
+function readActiveId(): string | null {
+  try { return localStorage.getItem(LS_ACTIVE_KEY); } catch { return null; }
+}
+
+function writeActiveId(id: string | null) {
+  try {
+    if (id === null) {
+      localStorage.removeItem(LS_ACTIVE_KEY);
+    } else {
+      localStorage.setItem(LS_ACTIVE_KEY, id);
+    }
+  } catch { /* ignore */ }
+}
+
 export function useNamedLayouts() {
   const [layouts, setLayouts] = useState<NamedLayout[]>(readLayouts);
+  const [activeLayoutId, setActiveLayoutIdState] = useState<string | null>(readActiveId);
 
   const persist = useCallback((next: NamedLayout[]) => {
     setLayouts(next);
     writeLayouts(next);
+  }, []);
+
+  const setActiveLayoutId = useCallback((id: string | null) => {
+    console.log(`[LayoutActive] Selected Layout ID: ${id}  Stored Layout ID: ${readActiveId()}`);
+    setActiveLayoutIdState(id);
+    writeActiveId(id);
+    console.log(`[LayoutActive] Current Active Layout ID now: ${id}`);
   }, []);
 
   const saveLayout = useCallback((data: Omit<NamedLayout, "id" | "savedAt">) => {
@@ -50,7 +73,9 @@ export function useNamedLayouts() {
 
   const deleteLayout = useCallback((id: string) => {
     persist(readLayouts().filter(l => l.id !== id));
-  }, [persist]);
+    // Clear active if the deleted layout was active
+    if (readActiveId() === id) setActiveLayoutId(null);
+  }, [persist, setActiveLayoutId]);
 
-  return { layouts, saveLayout, renameLayout, deleteLayout };
+  return { layouts, saveLayout, renameLayout, deleteLayout, activeLayoutId, setActiveLayoutId };
 }

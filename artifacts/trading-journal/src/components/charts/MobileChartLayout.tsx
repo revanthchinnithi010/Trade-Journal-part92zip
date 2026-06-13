@@ -1371,7 +1371,7 @@ type ChartLayoutType = 1 | 2 | 3 | 4;
 function LayoutBottomSheet({
   current, onChange, syncTF, onSyncTFChange, onClose,
   namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
-  onRenameNamedLayout, onDeleteNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout, activeLayoutId,
 }: {
   current: ChartLayoutType;
   onChange: (n: ChartLayoutType) => void;
@@ -1384,6 +1384,7 @@ function LayoutBottomSheet({
   onLoadNamedLayout: (layout: NamedLayout) => void;
   onRenameNamedLayout: (id: string, name: string) => void;
   onDeleteNamedLayout: (id: string) => void;
+  activeLayoutId: string | null;
 }) {
   const [showSave, setShowSave] = useState(false);
   const [saveName, setSaveName] = useState("");
@@ -1527,44 +1528,64 @@ function LayoutBottomSheet({
             </p>
           ) : (
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-              {namedLayouts.map(layout => (
-                <div key={layout.id} style={{ display:"flex", alignItems:"center", gap:6, padding:"10px 10px", borderRadius:11, background:BTN_BG, boxShadow:`0 0 0 1px ${BTN_BORDER}` }}>
-                  {renameId === layout.id ? (
-                    <input
-                      autoFocus
-                      value={renameName}
-                      onChange={e => setRenameName(e.target.value)}
-                      onKeyDown={e => {
-                        if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
-                        if (e.key === "Escape") setRenameId(null);
-                      }}
-                      onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
-                      style={{ flex:1, height:32, borderRadius:7, border:`1px solid ${ACCENT_BORDER}`, background:"rgba(255,255,255,0.06)", color:TEXT_HI, fontSize:13, padding:"0 8px", outline:"none" }}
-                    />
-                  ) : (
-                    <>
-                      <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ fontSize:13, fontWeight:600, color:TEXT_HI, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{layout.name}</div>
-                        <div style={{ fontSize:11, color:TEXT_DIM, marginTop:2 }}>{layout.symbol} · {layout.interval}</div>
-                      </div>
-                      <button
-                        onClick={() => { console.log("[mobile] Load tapped — layout id:", layout.id, "name:", layout.name); onLoadNamedLayout(layout); }}
-                        style={{ height:30, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", background:ACCENT_BG, border:`1px solid ${ACCENT_BORDER}`, color:ACCENT, flexShrink:0 }}
-                      >
-                        Load
-                      </button>
-                      <button
-                        onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
-                        style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:TEXT_DIM, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
-                      >✏</button>
-                      <button
-                        onClick={() => onDeleteNamedLayout(layout.id)}
-                        style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:"rgba(239,68,68,0.6)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
-                      >🗑</button>
-                    </>
-                  )}
-                </div>
-              ))}
+              {namedLayouts.map(layout => {
+                const isActive = layout.id === activeLayoutId;
+                return (
+                  <div key={layout.id} style={{
+                    display:"flex", alignItems:"center", gap:6, padding:"10px 10px", borderRadius:11,
+                    background: isActive ? "rgba(59,130,246,0.1)" : BTN_BG,
+                    boxShadow: isActive
+                      ? "0 0 0 1.5px rgba(59,130,246,0.55), 0 0 16px rgba(59,130,246,0.12)"
+                      : `0 0 0 1px ${BTN_BORDER}`,
+                    transition:"all 0.15s",
+                  }}>
+                    {renameId === layout.id ? (
+                      <input
+                        autoFocus
+                        value={renameName}
+                        onChange={e => setRenameName(e.target.value)}
+                        onKeyDown={e => {
+                          if (e.key === "Enter") { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }
+                          if (e.key === "Escape") setRenameId(null);
+                        }}
+                        onBlur={() => { onRenameNamedLayout(layout.id, renameName || layout.name); setRenameId(null); }}
+                        style={{ flex:1, height:32, borderRadius:7, border:`1px solid ${ACCENT_BORDER}`, background:"rgba(255,255,255,0.06)", color:TEXT_HI, fontSize:13, padding:"0 8px", outline:"none" }}
+                      />
+                    ) : (
+                      <>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                            <div style={{ fontSize:13, fontWeight: isActive ? 700 : 600, color: isActive ? "#93c5fd" : TEXT_HI, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{layout.name}</div>
+                            {isActive && (
+                              <span style={{ fontSize:10, fontWeight:800, color:"#3b82f6", background:"rgba(59,130,246,0.15)", border:"1px solid rgba(59,130,246,0.35)", borderRadius:5, padding:"1px 6px", letterSpacing:"0.04em", flexShrink:0 }}>
+                                ✓ Active
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ fontSize:11, color: isActive ? "rgba(147,197,253,0.55)" : TEXT_DIM, marginTop:2 }}>{layout.symbol} · {layout.interval}</div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            console.log("[mobile] Load tapped — Selected Layout ID:", layout.id, "| Current Active Layout ID:", activeLayoutId, "| Stored Layout ID:", localStorage.getItem("tj_active_layout_id_v1"));
+                            onLoadNamedLayout(layout);
+                          }}
+                          style={{ height:30, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer", background: isActive ? "rgba(59,130,246,0.15)" : ACCENT_BG, border: isActive ? "1px solid rgba(59,130,246,0.4)" : `1px solid ${ACCENT_BORDER}`, color: isActive ? "#93c5fd" : ACCENT, flexShrink:0 }}
+                        >
+                          {isActive ? "Reload" : "Load"}
+                        </button>
+                        <button
+                          onClick={() => { setRenameId(layout.id); setRenameName(layout.name); }}
+                          style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:TEXT_DIM, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+                        >✏</button>
+                        <button
+                          onClick={() => onDeleteNamedLayout(layout.id)}
+                          style={{ width:30, height:30, borderRadius:8, fontSize:14, cursor:"pointer", background:"transparent", border:"none", color:"rgba(239,68,68,0.6)", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center" }}
+                        >🗑</button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -2791,6 +2812,7 @@ export interface MobileChartLayoutProps {
   onLoadNamedLayout:   (layout: NamedLayout) => void;
   onRenameNamedLayout: (id: string, name: string) => void;
   onDeleteNamedLayout: (id: string) => void;
+  activeLayoutId:      string | null;
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
@@ -2807,7 +2829,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     onBarReplay,
     layoutCount, onLayoutChange, syncTF, onSyncTFChange,
     namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
-    onRenameNamedLayout, onDeleteNamedLayout,
+    onRenameNamedLayout, onDeleteNamedLayout, activeLayoutId,
   } = props;
 
   const [, navigate]  = useLocation();
@@ -3125,6 +3147,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onLoadNamedLayout={(layout) => { onLoadNamedLayout(layout); setShowLayoutSheet(false); }}
           onRenameNamedLayout={onRenameNamedLayout}
           onDeleteNamedLayout={onDeleteNamedLayout}
+          activeLayoutId={activeLayoutId}
         />
       )}
 
