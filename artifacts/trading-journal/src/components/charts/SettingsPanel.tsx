@@ -48,20 +48,31 @@ function _closeAllColorBoxes(exceptId?: symbol) {
 
 // ── Color box trigger ─────────────────────────────────────────────────────────
 export interface ColorBoxProps {
-  value:     string;
-  onChange:  (v: string) => void;
-  label?:    string;
-  fallback?: string;
+  value:      string;
+  onChange:   (v: string) => void;
+  label?:     string;
+  fallback?:  string;
+  autoOpen?:  boolean;    // start with picker visible (for ColorSwatch lazy pattern)
+  onDismiss?: () => void; // called when picker closes — parent unmounts us
 }
 
-export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
+export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000", autoOpen, onDismiss }: ColorBoxProps) {
   const _c = sheetProfiler.trackRender("ColorPicker", "SettingsPanel.tsx", 58);
   useLayoutEffect(() => { _c(); });
   const safe   = safeColor(value, fallback);
-  const [open, setOpen]     = useState(false);
+  const [open, setOpen]     = useState(autoOpen ?? false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const idRef  = useRef<symbol>(Symbol());
+
+  // When mounted via ColorSwatch (autoOpen=true), capture the button rect on
+  // the first layout pass so the picker appears immediately without a flash.
+  // useLayoutEffect fires before paint, so this is a synchronous flush.
+  useLayoutEffect(() => {
+    if (autoOpen && btnRef.current) {
+      setAnchor(btnRef.current.getBoundingClientRect());
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     return _registerColorBoxCloser(idRef.current, () => setOpen(false));
@@ -74,6 +85,11 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
     _closeAllColorBoxes(idRef.current);
     setOpen(prev => !prev);
   }, []);
+
+  const handleClose = useCallback(() => {
+    setOpen(false);
+    onDismiss?.();
+  }, [onDismiss]);
 
   return (
     <>
@@ -98,8 +114,57 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
         <ColorPickerGlass
           value={safe}
           onChange={onChange}
-          onClose={() => setOpen(false)}
+          onClose={handleClose}
           anchorRect={anchor}
+        />
+      )}
+    </>
+  );
+});
+
+// ── ColorSwatch: lightweight lazy wrapper ─────────────────────────────────────
+// The hot-path replacement for ColorBox in all settings rows.
+// On initial render: just a color swatch <button> + 3 hooks (vs ColorBox's 8).
+// The full ColorBox (ColorPickerGlass, useRef×2, useCallback, useEffect) is
+// created ONLY when the user taps the swatch — zero eager picker instances.
+//
+// One-at-a-time: registers in the same _colorBoxClosers registry so tapping a
+// new swatch automatically collapses any other open picker.
+export const ColorSwatch = memo(function ColorSwatch({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
+  const _c = sheetProfiler.trackRender("ColorSwatch", "SettingsPanel.tsx", 120);
+  useLayoutEffect(() => { _c(); });
+  const safe = safeColor(value, fallback);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const idRef = useRef<symbol>(Symbol());
+
+  useEffect(() => {
+    return _registerColorBoxCloser(idRef.current, () => setPickerOpen(false));
+  }, []);
+
+  return (
+    <>
+      <button
+        onClick={e => {
+          e.stopPropagation();
+          _closeAllColorBoxes(idRef.current);
+          setPickerOpen(true);
+        }}
+        title={label ?? safe}
+        style={{
+          width: 32, height: 20, borderRadius: 5, cursor: "pointer",
+          background: safe,
+          border: `1.5px solid ${T.btnBorder}`,
+          flexShrink: 0, padding: 0, outline: "none",
+        }}
+      />
+      {pickerOpen && (
+        <ColorBox
+          value={value}
+          onChange={onChange}
+          label={label}
+          fallback={fallback}
+          autoOpen
+          onDismiss={() => setPickerOpen(false)}
         />
       )}
     </>
@@ -165,12 +230,12 @@ export const ColorPair = memo(function ColorPair({ label, bull, bear, onBull, on
     <Row label={label} last={last}>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <span style={{ fontSize: 9, color: T.textDim, fontWeight: 700 }}>▲</span>
-        <ColorBox value={bull} onChange={onBull} label={`${label} Bullish`} />
+        <ColorSwatch value={bull} onChange={onBull} label={`${label} Bullish`} />
       </div>
       <div style={{ width: 1, height: 14, background: T.divider, margin: "0 2px" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <span style={{ fontSize: 9, color: "rgba(239,68,68,0.55)", fontWeight: 700 }}>▼</span>
-        <ColorBox value={bear} onChange={onBear} label={`${label} Bearish`} />
+        <ColorSwatch value={bear} onChange={onBear} label={`${label} Bearish`} />
       </div>
     </Row>
   );

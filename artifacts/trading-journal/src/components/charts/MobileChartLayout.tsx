@@ -21,7 +21,7 @@ import CustomIndicatorRenderer from "./CustomIndicatorRenderer";
 import IndicatorTags from "./IndicatorTags";
 import IndicatorsPanel from "./IndicatorsPanel";
 import SettingsPanel, {
-  ColorBox, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton, ToggleRow,
+  ColorBox, ColorSwatch, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton, ToggleRow,
 } from "./SettingsPanel";
 import { AlertSheetContent } from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
@@ -1740,10 +1740,10 @@ const PriceLabelSection = memo(function PriceLabelSection({ settings, h }: CSSSe
         bear={settings.priceLabelBearColor ?? "#ef4444"}
         onBull={h.priceLabelBull} onBear={h.priceLabelBear} />
       <Row label="Text Color">
-        <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={h.priceLabelText} label="Price Label Text" fallback="#ffffff" />
+        <ColorSwatch value={settings.priceLabelTextColor ?? "#ffffff"} onChange={h.priceLabelText} label="Price Label Text" fallback="#ffffff" />
       </Row>
       <Row label="Line Color" last>
-        <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={h.priceLabelLine} label="Price Line" fallback="rgba(255,255,255,0.4)" />
+        <ColorSwatch value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={h.priceLabelLine} label="Price Line" fallback="rgba(255,255,255,0.4)" />
       </Row>
     </Section>
   );
@@ -1758,7 +1758,7 @@ const GridSection = memo(function GridSection({ settings, h }: CSSSectionProps) 
         <StyledSelect value={settings.gridStyle} onChange={h.gridStyle} options={CSS_OPTS_GRID} />
       </Row>
       <Row label="Color" last>
-        <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={h.gridColor} label="Grid Color" />
+        <ColorSwatch value={settings.gridColor ?? settings.linesColor} onChange={h.gridColor} label="Grid Color" />
       </Row>
     </Section>
   );
@@ -1773,7 +1773,7 @@ const ThemeSection = memo(function ThemeSection({ settings, h }: CSSSectionProps
         <StyledSelect value={settings.bgType} onChange={h.bgType} options={CSS_OPTS_BG_TYPE} />
       </Row>
       <Row label="Color" last>
-        <ColorBox value={settings.bgColor} onChange={h.bgColor} label="Background Color" />
+        <ColorSwatch value={settings.bgColor} onChange={h.bgColor} label="Background Color" />
       </Row>
     </Section>
   );
@@ -1822,13 +1822,13 @@ const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }:
       <Section title="Axis Borders">
         <ToggleRow label="Visible" checked={settings.bordersVisible ?? true} onChange={h.bordersVisible} />
         <Row label="Color" last>
-          <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={h.borderColor} label="Axis Border Color" />
+          <ColorSwatch value={settings.borderColor ?? settings.linesColor} onChange={h.borderColor} label="Axis Border Color" />
         </Row>
       </Section>
       <Section title="Chart Panel Border">
         <ToggleRow label="Visible" checked={settings.panelBorderVisible ?? true} onChange={h.panelBorderVisible} />
         <Row label="Color">
-          <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={h.panelBorderColor} label="Panel Border Color" />
+          <ColorSwatch value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={h.panelBorderColor} label="Panel Border Color" />
         </Row>
         <Row label="Thickness" last>
           <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={h.panelBorderThick} />
@@ -1836,7 +1836,7 @@ const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }:
       </Section>
       <Section title="Crosshair">
         <Row label="Color">
-          <ColorBox value={settings.crosshairColor} onChange={h.crosshairColor} label="Crosshair Color" />
+          <ColorSwatch value={settings.crosshairColor} onChange={h.crosshairColor} label="Crosshair Color" />
         </Row>
         <Row label="Mode">
           <StyledSelect value={settings.crosshair} onChange={h.crosshair} options={CSS_OPTS_CROSSHAIR} />
@@ -1850,7 +1850,7 @@ const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }:
       </Section>
       <Section title="Text">
         <Row label="Color">
-          <ColorBox value={settings.textColor} onChange={h.textColor} label="Text Color" />
+          <ColorSwatch value={settings.textColor} onChange={h.textColor} label="Text Color" />
         </Row>
         <Row label="Font Size" last>
           <StyledSelect value={String(settings.fontSize)} onChange={h.fontSize} options={CSS_OPTS_FONT_SIZE} />
@@ -1858,7 +1858,7 @@ const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }:
       </Section>
       <Section title="Scale Labels">
         <Row label="Label Color" last>
-          <ColorBox value={settings.linesColor} onChange={h.linesColor} label="Scale Label Color" />
+          <ColorSwatch value={settings.linesColor} onChange={h.linesColor} label="Scale Label Color" />
         </Row>
       </Section>
     </div>
@@ -1980,6 +1980,7 @@ function ChartSettingsSheet({
     // (each mounts and renders exactly once). After tab switch same rule applies
     // for the new tab's components.
     const cpCount = stats.find(s => s.component === "ColorPicker")?.renderCount ?? 0;
+    const csCount = stats.find(s => s.component === "ColorSwatch")?.renderCount ?? 0;
     const srCount = stats.find(s => s.component === "SettingsRow")?.renderCount ?? 0;
     const rows = stats.map(s => ({
       "Component":    s.component,
@@ -2001,8 +2002,8 @@ function ChartSettingsSheet({
       );
       console.table(rows);
       console.log(
-        `%c  ↳ Mounted ColorPickers: ${cpCount}  ·  Mounted SettingsRows: ${srCount}  ·  Hidden tabs: 0 (lazy conditional — only active tab is mounted)`,
-        "color:#94a3b8;font-size:11px",
+        `%c  ↳ ColorPickers (eager, target=0): ${cpCount}  ·  ColorSwatches (lazy, target=N): ${csCount}  ·  SettingsRows: ${srCount}  ·  Hidden tabs: 0`,
+        cpCount === 0 ? "color:#4ade80;font-size:11px;font-weight:bold" : "color:#f87171;font-size:11px;font-weight:bold",
       );
     } else {
       console.log("No renders captured — trackRender() may not have fired yet.");
