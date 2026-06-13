@@ -877,13 +877,15 @@ const LayoutSlide = memo(function LayoutSlide({
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {namedLayouts.map(layout => {
                 const isActive = layout.id === activeLayoutId;
+                console.log("[LayoutCard]", { activeLayoutId, layoutId: layout.id, isActive });
                 return (
                   <div key={layout.id} style={{
                     display: "flex", alignItems: "center", gap: 5, padding: "7px 8px", borderRadius: 9,
-                    background: isActive ? "rgba(59,130,246,0.1)" : "rgba(57,91,67,0.07)",
+                    background: isActive ? "rgba(59,130,246,0.12)" : "rgba(57,91,67,0.07)",
                     boxShadow: isActive
-                      ? "0 0 0 1.5px rgba(59,130,246,0.55), 0 0 14px rgba(59,130,246,0.12)"
+                      ? "0 0 0 2px #3b82f6 inset, 0 0 14px rgba(59,130,246,0.2)"
                       : "0 0 0 1px rgba(57,91,67,0.18)",
+                    transform: isActive ? "scale(1.02)" : "none",
                     transition: "all 0.15s",
                   }}>
                     {renameId === layout.id ? (
@@ -949,7 +951,7 @@ const RightToolbar = memo(function RightToolbar({
   layoutCount, onLayoutChange, syncTF, onSyncTFChange, onAlertClick,
   onScreenshot, onCopyLiveLink, onFullscreen, onSettings, isFullscreen, showSettings,
   namedLayouts, defaultLayoutName, onSaveNamedLayout, onLoadNamedLayout,
-  onRenameNamedLayout, onDeleteNamedLayout,
+  onRenameNamedLayout, onDeleteNamedLayout, activeLayoutId,
 }: RightToolbarProps) {
   const [openPanel, setOpenPanel] = useState<PanelId>(null);
   const [showCameraMenu, setShowCameraMenu] = useState(false);
