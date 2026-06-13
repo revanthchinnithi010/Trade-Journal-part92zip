@@ -1143,13 +1143,16 @@ export default function Charts() {
     setTimeout(() => window.dispatchEvent(new Event("resize")), 100);
   }, []);
 
-  const handleSettings = (s: ChartSettings) => {
+  // useCallback: stable references prevent ChartSettingsSheet's `p` callback
+  // from getting a new reference on every chart.tsx re-render, which would
+  // cause ALL ColorBoxes / Toggles in the settings sheet to re-render.
+  const handleSettings = useCallback((s: ChartSettings) => {
     setChartSettings(s);
-  };
+  }, []);
 
-  const handleSaveAsDefault = (s: ChartSettings) => {
+  const handleSaveAsDefault = useCallback((s: ChartSettings) => {
     setChartSettings(s);
-  };
+  }, []);
 
   const currentPrice  = activeTick?.price ?? null;
   const prevAlertCount = useRef(0);

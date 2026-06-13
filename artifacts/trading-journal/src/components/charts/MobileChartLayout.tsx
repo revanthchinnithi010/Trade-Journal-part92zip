@@ -1681,6 +1681,18 @@ function MoreOptionsSheet({
 // Component tree: ChartSettingsSheet → BottomSheet → content directly.
 // Identical depth to DrawingToolsSheet → BottomSheet → content.
 // No intermediate wrapper component. All content is inline here.
+// ── Module-level options arrays for ChartSettingsSheet StyledSelects ──────────
+// MUST be defined outside the component. Inline array literals create new object
+// references every render, which defeats memo(StyledSelect)'s prop-equality check.
+const CSS_OPTS_TZ        = [{value:"UTC",label:"UTC"},{value:"IST",label:"IST (India)"},{value:"Exchange",label:"Exchange"},{value:"Local",label:"Local Time"}];
+const CSS_OPTS_PRECISION = [{value:"2",label:"2 decimals"},{value:"4",label:"4 decimals"},{value:"5",label:"5 decimals"},{value:"8",label:"8 decimals"}];
+const CSS_OPTS_BG_TYPE   = [{value:"solid",label:"Solid"},{value:"gradient",label:"Gradient"}];
+const CSS_OPTS_GRID      = [{value:"both",label:"Vertical + Horizontal"},{value:"vertical",label:"Vertical Only"},{value:"horizontal",label:"Horizontal Only"},{value:"none",label:"None"}];
+const CSS_OPTS_CROSSHAIR = [{value:"normal",label:"Normal"},{value:"magnet",label:"Magnet"}];
+const CSS_OPTS_CH_STYLE  = [{value:"solid",label:"Solid"},{value:"dashed",label:"Dashed"},{value:"dotted",label:"Dotted"}];
+const CSS_OPTS_FONT_SIZE = [{value:"9",label:"9px"},{value:"10",label:"10px"},{value:"11",label:"11px (default)"},{value:"12",label:"12px"},{value:"13",label:"13px"},{value:"14",label:"14px"}];
+const CSS_OPTS_SCALE     = [{value:"normal",label:"Normal"},{value:"log",label:"Logarithmic"},{value:"percent",label:"Percentage"},{value:"indexed",label:"Indexed to 100"}];
+
 // Shared helper primitives (ColorBox, Section, Row, …) are imported from
 // SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
 function ChartSettingsSheet({
@@ -1696,10 +1708,52 @@ function ChartSettingsSheet({
   useLayoutEffect(() => { _profCommitCSS(); });
   // ─────────────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
+  // settingsRef lets `p` read the latest settings without being in the dep array.
+  // This makes `p` stable across settings changes — it only updates when `onChange`
+  // changes (which is now useCallback'd in charts.tsx and never changes).
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const p = useCallback(
-    (patch: Partial<ChartSettings>) => onChange({ ...settings, ...patch }),
-    [settings, onChange],
+    (patch: Partial<ChartSettings>) => onChange({ ...settingsRef.current, ...patch }),
+    [onChange],
   );
+
+  // Per-field stable handlers — created once on mount (p is stable so this
+  // useMemo runs once and never again). Each handler is a fixed function reference.
+  // memo'd children (ColorBox, ColorPair, Toggle, ThicknessButtons, StyledSelect)
+  // receive these and will bail out on settings changes that don't affect them.
+  const h = useMemo(() => ({
+    upColor:            (v: string)  => p({ upColor: v }),
+    downColor:          (v: string)  => p({ downColor: v }),
+    upBorderColor:      (v: string)  => p({ upBorderColor: v }),
+    downBorderColor:    (v: string)  => p({ downBorderColor: v }),
+    upWickColor:        (v: string)  => p({ upWickColor: v }),
+    downWickColor:      (v: string)  => p({ downWickColor: v }),
+    priceLabelBull:     (v: string)  => p({ priceLabelBullColor: v }),
+    priceLabelBear:     (v: string)  => p({ priceLabelBearColor: v }),
+    priceLabelText:     (v: string)  => p({ priceLabelTextColor: v }),
+    priceLabelLine:     (v: string)  => p({ priceLabelLineColor: v }),
+    timezone:           (v: string)  => p({ timezone: v as ChartSettings["timezone"] }),
+    precision:          (v: string)  => p({ precision: v as ChartSettings["precision"] }),
+    bgType:             (v: string)  => p({ bgType: v as ChartSettings["bgType"] }),
+    bgColor:            (v: string)  => p({ bgColor: v }),
+    gridStyle:          (v: string)  => p({ gridStyle: v as ChartSettings["gridStyle"], gridVisible: v !== "none" }),
+    gridColor:          (v: string)  => p({ gridColor: v }),
+    bordersVisible:     (v: boolean) => p({ bordersVisible: v }),
+    borderColor:        (v: string)  => p({ borderColor: v }),
+    panelBorderVisible: (v: boolean) => p({ panelBorderVisible: v }),
+    panelBorderColor:   (v: string)  => p({ panelBorderColor: v }),
+    panelBorderThick:   (v: number)  => p({ panelBorderThickness: v }),
+    crosshairColor:     (v: string)  => p({ crosshairColor: v }),
+    crosshair:          (v: string)  => p({ crosshair: v as ChartSettings["crosshair"] }),
+    crosshairStyle:     (v: string)  => p({ crosshairStyle: v as ChartSettings["crosshairStyle"] }),
+    crosshairWidth:     (v: number)  => p({ crosshairWidth: v }),
+    textColor:          (v: string)  => p({ textColor: v }),
+    fontSize:           (v: string)  => p({ fontSize: Number(v) }),
+    linesColor:         (v: string)  => p({ linesColor: v }),
+    scaleMode:          (v: string)  => p({ scaleMode: v as ChartSettings["scaleMode"] }),
+    priceScaleAuto:     (v: boolean) => p({ priceScaleAutoScale: v }),
+  }), [p]);
 
   return (
     <BottomSheet title="Chart Settings" onClose={onClose}>
@@ -1736,40 +1790,38 @@ function ChartSettingsSheet({
           <Section title="Candles">
             <ColorPair label="Body"
               bull={settings.upColor} bear={settings.downColor}
-              onBull={v => p({ upColor:v })} onBear={v => p({ downColor:v })} />
+              onBull={h.upColor} onBear={h.downColor} />
             <ColorPair label="Borders"
               bull={settings.upBorderColor} bear={settings.downBorderColor}
-              onBull={v => p({ upBorderColor:v })} onBear={v => p({ downBorderColor:v })} />
+              onBull={h.upBorderColor} onBear={h.downBorderColor} />
             <ColorPair label="Wick"
               bull={settings.upWickColor} bear={settings.downWickColor}
-              onBull={v => p({ upWickColor:v })} onBear={v => p({ downWickColor:v })} last />
+              onBull={h.upWickColor} onBear={h.downWickColor} last />
           </Section>
 
           <Section title="Price Label">
             <ColorPair label="Background"
               bull={settings.priceLabelBullColor ?? "#22c55e"}
               bear={settings.priceLabelBearColor ?? "#ef4444"}
-              onBull={v => p({ priceLabelBullColor:v })}
-              onBear={v => p({ priceLabelBearColor:v })} />
+              onBull={h.priceLabelBull}
+              onBear={h.priceLabelBear} />
             <Row label="Text Color">
-              <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor:v })} label="Price Label Text" fallback="#ffffff" />
+              <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={h.priceLabelText} label="Price Label Text" fallback="#ffffff" />
             </Row>
             <Row label="Line Color" last>
-              <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor:v })} label="Price Line" fallback="rgba(255,255,255,0.4)" />
+              <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={h.priceLabelLine} label="Price Line" fallback="rgba(255,255,255,0.4)" />
             </Row>
           </Section>
 
           <Section title="Timezone">
             <Row label="Display Timezone" last>
-              <StyledSelect value={settings.timezone} onChange={v => p({ timezone:v as ChartSettings["timezone"] })}
-                options={[{value:"UTC",label:"UTC"},{value:"IST",label:"IST (India)"},{value:"Exchange",label:"Exchange"},{value:"Local",label:"Local Time"}]} />
+              <StyledSelect value={settings.timezone} onChange={h.timezone} options={CSS_OPTS_TZ} />
             </Row>
           </Section>
 
           <Section title="Price Precision">
             <Row label="Decimal Places" last>
-              <StyledSelect value={settings.precision} onChange={v => p({ precision:v as ChartSettings["precision"] })}
-                options={[{value:"2",label:"2 decimals"},{value:"4",label:"4 decimals"},{value:"5",label:"5 decimals"},{value:"8",label:"8 decimals"}]} />
+              <StyledSelect value={settings.precision} onChange={h.precision} options={CSS_OPTS_PRECISION} />
             </Row>
           </Section>
         </div>
@@ -1780,76 +1832,70 @@ function ChartSettingsSheet({
         <div style={{ padding:"12px 14px 4px" }}>
           <Section title="Background">
             <Row label="Type">
-              <StyledSelect value={settings.bgType} onChange={v => p({ bgType:v as ChartSettings["bgType"] })}
-                options={[{value:"solid",label:"Solid"},{value:"gradient",label:"Gradient"}]} />
+              <StyledSelect value={settings.bgType} onChange={h.bgType} options={CSS_OPTS_BG_TYPE} />
             </Row>
             <Row label="Color" last>
-              <ColorBox value={settings.bgColor} onChange={v => p({ bgColor:v })} label="Background Color" />
+              <ColorBox value={settings.bgColor} onChange={h.bgColor} label="Background Color" />
             </Row>
           </Section>
 
           <Section title="Grid Lines">
             <Row label="Display">
-              <StyledSelect value={settings.gridStyle}
-                onChange={v => p({ gridStyle:v as ChartSettings["gridStyle"], gridVisible:v !== "none" })}
-                options={[{value:"both",label:"Vertical + Horizontal"},{value:"vertical",label:"Vertical Only"},{value:"horizontal",label:"Horizontal Only"},{value:"none",label:"None"}]} />
+              <StyledSelect value={settings.gridStyle} onChange={h.gridStyle} options={CSS_OPTS_GRID} />
             </Row>
             <Row label="Color" last>
-              <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor:v })} label="Grid Color" />
+              <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={h.gridColor} label="Grid Color" />
             </Row>
           </Section>
 
           <Section title="Axis Borders">
             <Row label="Visible">
-              <Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible:v })} />
+              <Toggle checked={settings.bordersVisible ?? true} onChange={h.bordersVisible} />
             </Row>
             <Row label="Color" last>
-              <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor:v })} label="Axis Border Color" />
+              <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={h.borderColor} label="Axis Border Color" />
             </Row>
           </Section>
 
           <Section title="Chart Panel Border">
             <Row label="Visible">
-              <Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible:v })} />
+              <Toggle checked={settings.panelBorderVisible ?? true} onChange={h.panelBorderVisible} />
             </Row>
             <Row label="Color">
-              <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor:v })} label="Panel Border Color" />
+              <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={h.panelBorderColor} label="Panel Border Color" />
             </Row>
             <Row label="Thickness" last>
-              <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={v => p({ panelBorderThickness:v })} />
+              <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={h.panelBorderThick} />
             </Row>
           </Section>
 
           <Section title="Crosshair">
             <Row label="Color">
-              <ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor:v })} label="Crosshair Color" />
+              <ColorBox value={settings.crosshairColor} onChange={h.crosshairColor} label="Crosshair Color" />
             </Row>
             <Row label="Mode">
-              <StyledSelect value={settings.crosshair} onChange={v => p({ crosshair:v as ChartSettings["crosshair"] })}
-                options={[{value:"normal",label:"Normal"},{value:"magnet",label:"Magnet"}]} />
+              <StyledSelect value={settings.crosshair} onChange={h.crosshair} options={CSS_OPTS_CROSSHAIR} />
             </Row>
             <Row label="Line Style">
-              <StyledSelect value={settings.crosshairStyle} onChange={v => p({ crosshairStyle:v as ChartSettings["crosshairStyle"] })}
-                options={[{value:"solid",label:"Solid"},{value:"dashed",label:"Dashed"},{value:"dotted",label:"Dotted"}]} />
+              <StyledSelect value={settings.crosshairStyle} onChange={h.crosshairStyle} options={CSS_OPTS_CH_STYLE} />
             </Row>
             <Row label="Thickness" last>
-              <ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={v => p({ crosshairWidth:v })} />
+              <ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={h.crosshairWidth} />
             </Row>
           </Section>
 
           <Section title="Text">
             <Row label="Color">
-              <ColorBox value={settings.textColor} onChange={v => p({ textColor:v })} label="Text Color" />
+              <ColorBox value={settings.textColor} onChange={h.textColor} label="Text Color" />
             </Row>
             <Row label="Font Size" last>
-              <StyledSelect value={String(settings.fontSize)} onChange={v => p({ fontSize:Number(v) })}
-                options={[{value:"9",label:"9px"},{value:"10",label:"10px"},{value:"11",label:"11px (default)"},{value:"12",label:"12px"},{value:"13",label:"13px"},{value:"14",label:"14px"}]} />
+              <StyledSelect value={String(settings.fontSize)} onChange={h.fontSize} options={CSS_OPTS_FONT_SIZE} />
             </Row>
           </Section>
 
           <Section title="Scale Labels">
             <Row label="Label Color" last>
-              <ColorBox value={settings.linesColor} onChange={v => p({ linesColor:v })} label="Scale Label Color" />
+              <ColorBox value={settings.linesColor} onChange={h.linesColor} label="Scale Label Color" />
             </Row>
           </Section>
         </div>
@@ -1860,11 +1906,10 @@ function ChartSettingsSheet({
         <div style={{ padding:"12px 14px 4px" }}>
           <Section title="Price Scale Mode">
             <Row label="Scale Type">
-              <StyledSelect value={settings.scaleMode} onChange={v => p({ scaleMode:v as ChartSettings["scaleMode"] })}
-                options={[{value:"normal",label:"Normal"},{value:"log",label:"Logarithmic"},{value:"percent",label:"Percentage"},{value:"indexed",label:"Indexed to 100"}]} />
+              <StyledSelect value={settings.scaleMode} onChange={h.scaleMode} options={CSS_OPTS_SCALE} />
             </Row>
             <Row label="Auto Scale" last>
-              <Toggle checked={settings.priceScaleAutoScale} onChange={v => p({ priceScaleAutoScale:v })} />
+              <Toggle checked={settings.priceScaleAutoScale} onChange={h.priceScaleAuto} />
             </Row>
           </Section>
 

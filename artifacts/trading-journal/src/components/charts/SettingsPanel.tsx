@@ -1,6 +1,7 @@
 import {
-  memo, useRef, useEffect, useState, useCallback,
+  memo, useRef, useEffect, useLayoutEffect, useState, useCallback,
 } from "react";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 import { X, ChevronDown } from "lucide-react";
 import icoSettingsUrl from "@assets/setting1_1780282162661.svg";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
@@ -54,6 +55,8 @@ export interface ColorBoxProps {
 }
 
 export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
+  const _c = sheetProfiler.trackRender("ColorBox", "SettingsPanel.tsx", 58);
+  useLayoutEffect(() => { _c(); });
   const safe   = safeColor(value, fallback);
   const [open, setOpen]     = useState(false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -104,7 +107,9 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
 });
 
 // ── Section container ─────────────────────────────────────────────────────────
-export function Section({ title, children }: { title: string; children: React.ReactNode }) {
+export const Section = memo(function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const _c = sheetProfiler.trackRender("Section", "SettingsPanel.tsx", 110);
+  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{
@@ -125,33 +130,37 @@ export function Section({ title, children }: { title: string; children: React.Re
       </div>
     </div>
   );
-}
+});
 
 // ── Setting row ───────────────────────────────────────────────────────────────
-export function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
-  const [hovered, setHovered] = useState(false);
+// Row: memo'd to avoid full re-renders when sibling rows change.
+// Hover state removed — on touchscreen it causes pointless re-renders on every
+// finger contact. Color highlight is irrelevant on mobile.
+export const Row = memo(function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
+  const _c = sheetProfiler.trackRender("Row", "SettingsPanel.tsx", 135);
+  useLayoutEffect(() => { _c(); });
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "10px 14px",
         borderBottom: last ? "none" : `1px solid ${T.rowDivider}`,
-        background: hovered ? T.rowHover : "transparent",
-        transition: "background 0.12s",
       }}>
       <span style={{ fontSize: 12, color: T.textMed, fontWeight: 500 }}>{label}</span>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>{children}</div>
     </div>
   );
-}
+});
 
 // ── Color pair (bull + bear) ──────────────────────────────────────────────────
-export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
+// ColorPair: memo'd with stable onBull/onBear from the h-handler object.
+// When upColor changes, only the "Body" ColorPair re-renders; "Borders" bails out.
+export const ColorPair = memo(function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   label: string; bull: string; bear: string;
   onBull: (v: string) => void; onBear: (v: string) => void; last?: boolean;
 }) {
+  const _c = sheetProfiler.trackRender("ColorPair", "SettingsPanel.tsx", 160);
+  useLayoutEffect(() => { _c(); });
   return (
     <Row label={label} last={last}>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -165,14 +174,18 @@ export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
       </div>
     </Row>
   );
-}
+});
 
 // ── Styled select ─────────────────────────────────────────────────────────────
-export function StyledSelect({ value, onChange, options }: {
+// StyledSelect: memo'd. Requires stable `options` arrays (define at module scope,
+// never inline in JSX) and stable `onChange` from the h-handler object.
+export const StyledSelect = memo(function StyledSelect({ value, onChange, options }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
 }) {
+  const _c = sheetProfiler.trackRender("StyledSelect", "SettingsPanel.tsx", 185);
+  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ position: "relative" }}>
       <select
@@ -201,10 +214,14 @@ export function StyledSelect({ value, onChange, options }: {
       }} />
     </div>
   );
-}
+});
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
-export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+// Toggle: memo'd with stable onChange from h-handler — only re-renders when
+// its own `checked` value changes, not when other settings change.
+export const Toggle = memo(function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  const _c = sheetProfiler.trackRender("Toggle", "SettingsPanel.tsx", 228);
+  useLayoutEffect(() => { _c(); });
   return (
     <button
       onClick={() => onChange(!checked)}
@@ -225,10 +242,14 @@ export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: 
       }} />
     </button>
   );
-}
+});
 
 // ── Thickness buttons ─────────────────────────────────────────────────────────
-export function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+// ThicknessButtons: memo'd with stable onChange — only re-renders when its own
+// `value` changes.
+export const ThicknessButtons = memo(function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const _c = sheetProfiler.trackRender("ThicknessButtons", "SettingsPanel.tsx", 260);
+  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ display: "flex", gap: 4 }}>
       {[1, 2, 3].map(w => (
@@ -251,7 +272,7 @@ export function ThicknessButtons({ value, onChange }: { value: number; onChange:
       ))}
     </div>
   );
-}
+});
 
 // ── Desktop sidebar nav item ──────────────────────────────────────────────────
 export type SidebarSection = "Symbol" | "Canvas" | "Scale";
