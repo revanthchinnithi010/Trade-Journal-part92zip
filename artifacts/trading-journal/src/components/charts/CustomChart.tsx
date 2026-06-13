@@ -23,6 +23,7 @@ import {
 } from "lightweight-charts";
 import { useChartStore, type OHLCBar, type ChartType, type IndicatorState } from "@/store/chartStore";
 import { useLiveMarketContext, fmtPrice } from "@/contexts/LiveMarketContext";
+import { SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { emitCrosshair, resetCrosshair } from "@/lib/crosshairState";
 import { RealtimeTradeAggregator, toSec } from "@/lib/realtimeTradeAggregator";
 import { ChartContext, type ChartContextValue } from "@/contexts/ChartContext";
@@ -212,6 +213,18 @@ function pricePrecision(price: number): { precision: number; minMove: number } {
   if (price >= 0.0001) return { precision: 8, minMove: 0.00000001 };
   if (price >= 0.00001) return { precision: 8, minMove: 0.00000001 };
   return { precision: 10, minMove: 0.0000000001 };
+}
+
+// Human-readable timeframe label from internal interval string.
+// "60" → "1H", "240" → "4H", "15" → "15M", "D" → "1D", etc.
+function fmtIntervalLabel(iv: string): string {
+  if (iv === "D" || iv === "1D") return "1D";
+  if (iv === "W" || iv === "1W") return "1W";
+  const mins = parseInt(iv, 10);
+  if (!mins) return iv.toUpperCase();
+  if (mins < 60)  return `${mins}M`;
+  if (mins < 1440) return `${mins / 60}H`;
+  return `${mins / 1440}D`;
 }
 
 // Pixel width for the live-price label box (and the touch-handler overlay).
@@ -3203,6 +3216,38 @@ const CustomChart = memo(function CustomChart({
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "rgba(255,255,255,0.85)", animation: "spin 0.7s linear infinite" }} />
             Loading history…
           </div>
+          {/* ── Symbol · Timeframe overlay — top-left, transparent, pointer-events:none ── */}
+          <div style={{
+            position:      "absolute",
+            top:           8,
+            left:          8,
+            pointerEvents: "none",
+            zIndex:        5,
+            display:       "flex",
+            alignItems:    "baseline",
+            gap:           5,
+            userSelect:    "none",
+          }}>
+            <span style={{
+              fontSize:    12,
+              fontWeight:  600,
+              color:       "rgba(255,255,255,0.82)",
+              letterSpacing: "0.02em",
+              lineHeight:  1,
+            }}>
+              {SYMBOL_CATALOG[symbol]?.badge ?? symbol}
+            </span>
+            <span style={{
+              fontSize:    10,
+              fontWeight:  500,
+              color:       "rgba(255,255,255,0.38)",
+              letterSpacing: "0.01em",
+              lineHeight:  1,
+            }}>
+              · {fmtIntervalLabel(interval)}
+            </span>
+          </div>
+
           <TickRateOverlay tickCountRef={tickCountRef} />
           <LivePriceBox
             chart={chartCtx?.chart ?? null}
