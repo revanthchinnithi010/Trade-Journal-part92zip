@@ -3228,7 +3228,13 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       toolType: drawing.toolType,
     };
     isDragDirty.current = false;
-  }, [activeTool, drawings]);
+    // Immediately schedule a canvas re-render so the drawing is erased from the canvas
+    // the moment move-drag begins. Without this, the canvas retains its last frame
+    // (drawing at the saved position) while the SVG DOM transform shows it at the new
+    // position — creating a ghost duplicate for the entire drag duration.
+    // The canvas RAF will read dragRef.current.kind === "move" and skip the drawing.
+    scheduleCanvasRender();
+  }, [activeTool, drawings, scheduleCanvasRender]);
 
   // ── Cursor-mode: anchor pressed ────────────────────────────────────────────
   const onAnchorDown = useCallback((e: React.PointerEvent, id: number, anchorIdx: number) => {
