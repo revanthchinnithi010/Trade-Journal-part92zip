@@ -1892,16 +1892,22 @@ export default function Charts() {
                   <div
                     onPointerDown={() => {
                       console.log(`[ChartSelect] Tapped Chart: slot=0  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: 0`);
+                      console.log("[ChartActive]", { activeChartId: activeChartSlot, chartId: 0, isActive: activeChartSlot === 0 });
                       setActiveChartSlot(0);
                     }}
                     style={{
                       position: "relative", overflow: "hidden", minHeight: 0,
                       gridRow: layoutCount === 3 ? "1 / 3" : undefined,
                       cursor: "pointer",
+                      outline: activeChartSlot === 0
+                        ? "2px solid #38bdf8"
+                        : "1px solid rgba(255,255,255,0.06)",
+                      outlineOffset: "-1px",
                       boxShadow: activeChartSlot === 0
-                        ? "inset 0 0 0 2px rgba(183,255,90,0.45)"
-                        : "inset 0 0 0 1px rgba(255,255,255,0.05)",
-                      transition: "box-shadow 0.15s",
+                        ? "0 0 0 4px rgba(56,189,248,0.18)"
+                        : "none",
+                      zIndex: activeChartSlot === 0 ? 2 : 1,
+                      transition: "outline 0.15s, box-shadow 0.15s",
                     }}
                   >
                     <CustomChart settings={chartSettings} replayBars={replayBarSlice}>
@@ -1922,15 +1928,21 @@ export default function Charts() {
                       key={i}
                       onPointerDown={() => {
                         console.log(`[ChartSelect] Tapped Chart: slot=${i + 1}  Current Active Chart: ${activeChartSlot}  Mini Control Bar Target: ${i + 1}`);
+                        console.log("[ChartActive]", { activeChartId: activeChartSlot, chartId: i + 1, isActive: activeChartSlot === i + 1 });
                         setActiveChartSlot(i + 1);
                       }}
                       style={{
                         position: "relative", overflow: "hidden", minHeight: 0,
                         cursor: "pointer",
+                        outline: activeChartSlot === i + 1
+                          ? "2px solid #38bdf8"
+                          : "1px solid rgba(255,255,255,0.06)",
+                        outlineOffset: "-1px",
                         boxShadow: activeChartSlot === i + 1
-                          ? "inset 0 0 0 2px rgba(56,189,248,0.45)"
-                          : "inset 0 0 0 1px rgba(255,255,255,0.05)",
-                        transition: "box-shadow 0.15s",
+                          ? "0 0 0 4px rgba(56,189,248,0.18)"
+                          : "none",
+                        zIndex: activeChartSlot === i + 1 ? 2 : 1,
+                        transition: "outline 0.15s, box-shadow 0.15s",
                       }}
                     >
                       <MiniChart
