@@ -1783,6 +1783,18 @@ const ThemeSection = memo(function ThemeSection({ settings, h }: CSSSectionProps
 // Each one gets "SettingsTabContent" as its profiler label so the stats aggregate
 // across all three tabs (only one is ever mounted at a time).
 
+const TimezoneSection = memo(function TimezoneSection({ settings, h }: CSSSectionProps) {
+  const _c = sheetProfiler.trackRender("TimezoneSection", "MobileChartLayout.tsx", 0);
+  useLayoutEffect(() => { _c(); });
+  return (
+    <Section title="Timezone">
+      <Row label="Display Timezone" last>
+        <StyledSelect value={settings.timezone} onChange={h.timezone} options={CSS_OPTS_TZ} />
+      </Row>
+    </Section>
+  );
+});
+
 const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {
   const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
   useLayoutEffect(() => { _c(); });
@@ -1790,11 +1802,7 @@ const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSe
     <div style={{ padding:"12px 14px 4px" }}>
       <CandleSection settings={settings} h={h} />
       <PriceLabelSection settings={settings} h={h} />
-      <Section title="Timezone">
-        <Row label="Display Timezone" last>
-          <StyledSelect value={settings.timezone} onChange={h.timezone} options={CSS_OPTS_TZ} />
-        </Row>
-      </Section>
+      <TimezoneSection settings={settings} h={h} />
       <Section title="Price Precision">
         <Row label="Decimal Places" last>
           <StyledSelect value={settings.precision} onChange={h.precision} options={CSS_OPTS_PRECISION} />
@@ -1944,31 +1952,80 @@ function ChartSettingsSheet({
     priceScaleAuto:     (v: boolean) => p({ priceScaleAutoScale: v }),
   }), [p]);
 
-  // ── Auto-dump: fires once on every mount of this sheet ───────────────────
-  // Resets all render stats so only THIS open's renders appear in the report.
-  // Dumps 250 ms later — enough time for all useLayoutEffect commits to fire.
-  useEffect(() => {
+  // ── Render-phase stat resets ───────────────────────────────────────────────
+  // These fire SYNCHRONOUSLY during ChartSettingsSheet's own render, BEFORE any
+  // child component's trackRender() call executes. This guarantees stats only
+  // contain renders from THIS open / THIS tab activation, not leaked from
+  // other sheets or previous opens.
+
+  // Reset on initial mount (once)
+  const _mountResetDone = useRef(false);
+  if (!_mountResetDone.current) {
+    _mountResetDone.current = true;
     sheetProfiler.resetRenderStats();
-    const timer = setTimeout(() => {
-      const stats = sheetProfiler.getRenderStats();
-      const rows = stats.map(s => ({
-        "Component": s.component,
-        "Renders":   s.renderCount,
-        "Avg ms":    s.renderCount ? (s.totalMs / s.renderCount).toFixed(3) : "—",
-        "Max ms":    s.maxMs.toFixed(3),
-        "Total ms":  s.totalMs.toFixed(3),
-      }));
-      console.group("%c[ChartSettingsSheet] ── Initial Render Report (sorted by Total ms) ──", "color:#f59e0b;font-weight:bold;font-size:13px");
-      if (rows.length) {
-        console.log(`%c🔴 MOST EXPENSIVE: ${rows[0]["Component"]} — total ${rows[0]["Total ms"]} ms, ${rows[0]["Renders"]} render(s), avg ${rows[0]["Avg ms"]} ms`, "color:#f87171;font-weight:bold");
-        console.table(rows);
-      } else {
-        console.log("No renders recorded — check trackRender() calls.");
-      }
-      console.groupEnd();
-    }, 250);
-    return () => clearTimeout(timer);
-  }, []); // intentional: only on mount, not on every settings change
+  }
+
+  // Reset on tab change — fires before new tab content renders its children
+  const _prevTabRef = useRef<typeof tab>(tab);
+  const _tabChangedFrom = _prevTabRef.current !== tab ? _prevTabRef.current : null;
+  if (_prevTabRef.current !== tab) {
+    _prevTabRef.current = tab;
+    sheetProfiler.resetRenderStats();
+  }
+
+  // ── Report dump ────────────────────────────────────────────────────────────
+  const _dumpReport = useCallback((phase: string) => {
+    const stats = sheetProfiler.getRenderStats();
+    // On initial open, renderCount per component == number of mounted instances
+    // (each mounts and renders exactly once). After tab switch same rule applies
+    // for the new tab's components.
+    const cpCount = stats.find(s => s.component === "ColorPicker")?.renderCount ?? 0;
+    const srCount = stats.find(s => s.component === "SettingsRow")?.renderCount ?? 0;
+    const rows = stats.map(s => ({
+      "Component":    s.component,
+      "Render Count": s.renderCount,
+      "Avg ms":       s.renderCount ? (s.totalMs / s.renderCount).toFixed(3) : "—",
+      "Max ms":       s.maxMs.toFixed(3),
+      "Total ms":     s.totalMs.toFixed(3),
+      "File":         s.file.split("/").pop() ?? s.file,
+      "Line":         s.line > 0 ? String(s.line) : "—",
+    }));
+    console.group(
+      `%c[ChartSettingsSheet] ── ${phase} ─── Render Report ──`,
+      "color:#f59e0b;font-weight:bold;font-size:14px",
+    );
+    if (rows.length) {
+      console.log(
+        `%c🔴 MOST EXPENSIVE: ${rows[0]["Component"]} — ${rows[0]["Total ms"]} ms total · ${rows[0]["Render Count"]} render(s) · avg ${rows[0]["Avg ms"]} ms/render`,
+        "color:#f87171;font-weight:bold;font-size:12px",
+      );
+      console.table(rows);
+      console.log(
+        `%c  ↳ Mounted ColorPickers: ${cpCount}  ·  Mounted SettingsRows: ${srCount}  ·  Hidden tabs: 0 (lazy conditional — only active tab is mounted)`,
+        "color:#94a3b8;font-size:11px",
+      );
+    } else {
+      console.log("No renders captured — trackRender() may not have fired yet.");
+    }
+    console.groupEnd();
+  }, []);
+
+  // Dump after initial open (mount-only)
+  useEffect(() => {
+    const t = setTimeout(() => _dumpReport("Open (tab: Candles)"), 250);
+    return () => clearTimeout(t);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Dump after each tab switch.
+  // _tabChangedFrom is a render-phase variable captured by this effect's closure
+  // from the render where tab changed — it correctly holds the PREVIOUS tab name.
+  useEffect(() => {
+    if (_tabChangedFrom === null) return; // null on initial mount, skip
+    const from = _tabChangedFrom;
+    const to = tab;
+    const t = setTimeout(() => _dumpReport(`Tab Switch: ${from} → ${to}`), 250);
+    return () => clearTimeout(t);
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <BottomSheet title="Chart Settings" onClose={onClose}>
