@@ -540,6 +540,7 @@ function LivePriceBox({
   chart: _chart, series, interval,
   upColor = UP_COLOR, downColor = DOWN_COLOR,
   textColor = "#ffffff", boxWidth, boxWidthRef, tickDataRef,
+  symbolOverride, slotMode = false,
 }: {
   chart:        IChartApi | null;
   series:       ISeriesApi<SeriesType> | null;
@@ -552,10 +553,21 @@ function LivePriceBox({
   boxWidthRef?: React.MutableRefObject<number>;
   /** Zero-latency tick data — written by WS handler, read by RAF loop without React cycle */
   tickDataRef?: React.MutableRefObject<{ price: number | null; open: number | null }>;
+  /** Per-pane symbol override — must be set for every slot so fmtPrice uses correct decimals */
+  symbolOverride?: string;
+  /** When true (slot mode), never fall back to global Zustand livePrice/liveOpen */
+  slotMode?: boolean;
 }) {
-  const livePrice = useChartStore(s => s.livePrice);
-  const liveOpen  = useChartStore(s => s.liveOpen);
-  const symbol    = useChartStore(s => s.symbol);
+  const storeLivePrice = useChartStore(s => s.livePrice);
+  const storeLiveOpen  = useChartStore(s => s.liveOpen);
+  const storeSymbol    = useChartStore(s => s.symbol);
+
+  // In slot mode, use only the per-pane tickDataRef — never the global store.
+  // The global store only tracks the main chart; reading it in secondary panes
+  // would show BTC's price/open on every slot regardless of its own symbol.
+  const livePrice = slotMode ? null : storeLivePrice;
+  const liveOpen  = slotMode ? null : storeLiveOpen;
+  const symbol    = symbolOverride ?? storeSymbol;
 
   // DOM element refs — the RAF loop mutates these directly at 60 fps,
   // bypassing React's scheduler entirely for all hot-path updates.
@@ -571,6 +583,7 @@ function LivePriceBox({
     price:       livePrice,
     open:        liveOpen,
     symbol,
+    slotMode,
     series,
     interval,
     upColor,
@@ -589,6 +602,7 @@ function LivePriceBox({
   rc.current.price       = livePrice;
   rc.current.open        = liveOpen;
   rc.current.symbol      = symbol;
+  rc.current.slotMode    = slotMode;
   rc.current.series      = series;
   rc.current.interval    = interval;
   rc.current.upColor     = upColor;
@@ -614,10 +628,20 @@ function LivePriceBox({
       // Prefer tickDataRef (written synchronously by the WS handler, bypassing
       // Zustand setState → React re-render → rc.current) so the box tracks the
       // live candle on the very same frame the LWC canvas updates.
-      // Fall back to rc.current.price (Zustand store value, ~1 render-cycle old)
-      // when tickDataRef is absent or not yet populated (e.g. initial load).
-      const price = r.tickDataRef?.current.price ?? r.price;
-      const open  = r.tickDataRef?.current.open  ?? r.open;
+      // In slot mode, NEVER fall back to the global Zustand store price —
+      // the store only tracks the main chart, so the fallback would show BTC's
+      // price on every secondary pane.  Show hidden instead (null → hides box).
+      const tickPrice = r.tickDataRef?.current.price ?? null;
+      const tickOpen  = r.tickDataRef?.current.open  ?? null;
+      const price = tickPrice ?? (r.slotMode ? null : r.price);
+      const open  = tickOpen  ?? (r.slotMode ? null : r.open);
+
+      // Debug log — throttled to only fire when values change (not every 60fps frame)
+      const _src = tickPrice != null ? "tickDataRef" : r.slotMode ? "hidden(slot)" : "zustand-store";
+      if (_src !== (r as any)._dbgSrc || price !== (r as any)._dbgPx) {
+        (r as any)._dbgSrc = _src; (r as any)._dbgPx = price;
+        console.log("[PRICE LABEL]", { symbol: r.symbol, slotMode: r.slotMode, displayedPrice: price, dataSource: _src });
+      }
 
       // ── Show / hide ────────────────────────────────────────────────────────
       if (price == null || !r.series) {
@@ -3190,6 +3214,8 @@ const CustomChart = memo(function CustomChart({
             boxWidth={priceScaleW}
             boxWidthRef={priceScaleWRef}
             tickDataRef={tickDataRef}
+            symbolOverride={symbol}
+            slotMode={propSymbol != null}
           />
           {children}
           {/* Price scale touch handler — highest z, covers rightmost strip for both mouse and touch drag */}
