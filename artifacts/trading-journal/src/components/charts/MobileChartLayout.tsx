@@ -1404,7 +1404,7 @@ function LayoutBottomSheet({
   return (
     <BottomSheet title="Layout Manager" onClose={onClose}>
       <div style={{ padding:"12px 14px 8px" }}>
-        <p style={{ margin:"0 0 12px", fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+        <p style={{ margin:"0 0 12px", fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
           Chart Grid
         </p>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -1438,7 +1438,7 @@ function LayoutBottomSheet({
 
         {current > 1 && (
           <div style={{ marginTop:16 }}>
-            <p style={{ margin:"0 0 8px", fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+            <p style={{ margin:"0 0 8px", fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
               Timeframe Sync
             </p>
             <button
@@ -1479,7 +1479,7 @@ function LayoutBottomSheet({
               }}>
                 <div style={{
                   position:"absolute", top:3, width:14, height:14, borderRadius:"50%",
-                  background: syncTF ? "#07110D" : "rgba(167,184,169,0.6)",
+                  background: syncTF ? ACCENT : "rgba(255,255,255,0.35)",
                   left: syncTF ? 18 : 3,
                   transition:"left 0.2s",
                 }} />
@@ -1491,7 +1491,7 @@ function LayoutBottomSheet({
         {/* ── Saved Layouts ── */}
         <div style={{ marginTop:16, borderTop:`1px solid ${BTN_BORDER}`, paddingTop:14 }}>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
-            <p style={{ margin:0, fontSize:9, fontWeight:700, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
+            <p style={{ margin:0, fontSize:9, fontWeight:700, color:"rgba(255,255,255,0.25)", textTransform:"uppercase", letterSpacing:"0.12em" }}>
               Saved Layouts
             </p>
             {!showSave && (
@@ -1709,12 +1709,12 @@ function ChartSettingsSheet({
             <button key={t} onClick={() => setTab(t)}
               style={{
                 padding:"7px 16px", borderRadius:20, fontSize:12, fontWeight:600,
-                background: active ? "rgba(183,255,90,0.10)" : BTN_BG,
-                border:`1px solid ${active ? "rgba(183,255,90,0.40)" : BTN_BORDER}`,
-                color: active ? "#B7FF5A" : TEXT_MED,
+                background: active ? ACCENT_BG : BTN_BG,
+                border:`1px solid ${active ? ACCENT_BORDER : BTN_BORDER}`,
+                color: active ? ACCENT : TEXT_MED,
                 cursor:"pointer", outline:"none", transition:"all 0.15s",
               }}
-              onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.15)"; }}
+              onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }}
               onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = BTN_BG; }}
             >
               {t}
@@ -1740,7 +1740,7 @@ function ChartSettingsSheet({
 
           <Section title="Price Label">
             <ColorPair label="Background"
-              bull={settings.priceLabelBullColor ?? "#B7FF5A"}
+              bull={settings.priceLabelBullColor ?? "#22c55e"}
               bear={settings.priceLabelBearColor ?? "#ef4444"}
               onBull={v => p({ priceLabelBullColor:v })}
               onBear={v => p({ priceLabelBearColor:v })} />
@@ -1863,13 +1863,13 @@ function ChartSettingsSheet({
 
           <Section title="Interaction">
             <Row label="Drag Price Scale" last>
-              <span style={{ fontSize:11, color:"rgba(167,184,169,0.5)", fontStyle:"italic" }}>Drag the right axis up/down</span>
+              <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Drag the right axis up/down</span>
             </Row>
           </Section>
 
           <Section title="Reset">
             <Row label="Double-click Axis" last>
-              <span style={{ fontSize:11, color:"rgba(167,184,169,0.5)", fontStyle:"italic" }}>Double-click price axis to reset</span>
+              <span style={{ fontSize:11, color:TEXT_DIM, fontStyle:"italic" }}>Double-click price axis to reset</span>
             </Row>
           </Section>
         </div>
@@ -1878,7 +1878,7 @@ function ChartSettingsSheet({
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div style={{
         padding:"12px 14px 8px",
-        borderTop:`1px solid rgba(57,91,67,0.18)`,
+        borderTop:`1px solid ${DIVIDER}`,
         display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
         flexShrink:0,
       }}>
@@ -1886,11 +1886,11 @@ function ChartSettingsSheet({
           onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
           style={{
             padding:"8px 16px", borderRadius:9, background:"transparent",
-            border:"1px solid rgba(57,91,67,0.3)", color:"rgba(167,184,169,0.6)",
+            border:`1px solid ${BTN_BORDER}`, color:TEXT_DIM,
             fontSize:12, fontWeight:600, cursor:"pointer",
           }}
-          onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(57,91,67,0.6)"; (e.currentTarget as HTMLButtonElement).style.color="rgba(167,184,169,0.9)"; }}
-          onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(57,91,67,0.3)"; (e.currentTarget as HTMLButtonElement).style.color="rgba(167,184,169,0.6)"; }}
+          onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(255,255,255,0.22)"; (e.currentTarget as HTMLButtonElement).style.color=TEXT_MED; }}
+          onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.borderColor=BTN_BORDER; (e.currentTarget as HTMLButtonElement).style.color=TEXT_DIM; }}
         >
           Reset Defaults
         </button>

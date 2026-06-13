@@ -8,6 +8,26 @@ import { ColorPickerGlass } from "@/components/ColorPickerGlass";
 import type { ChartSettings } from "@/components/charts/chartSettingsTypes";
 import { DEFAULT_CHART_SETTINGS } from "@/components/charts/chartSettingsTypes";
 
+// ── Design tokens — match the app's dark glassmorphism system ─────────────────
+const T = {
+  accent:        "#60A5FA",
+  accentBg:      "rgba(96,165,250,0.10)",
+  accentBorder:  "rgba(96,165,250,0.28)",
+  accentGlow:    "rgba(96,165,250,0.20)",
+  modalBg:       "rgba(10,10,15,0.99)",
+  sectionBg:     "rgba(255,255,255,0.04)",
+  sectionBorder: "rgba(255,255,255,0.08)",
+  rowDivider:    "rgba(255,255,255,0.06)",
+  rowHover:      "rgba(255,255,255,0.04)",
+  btnBg:         "rgba(255,255,255,0.06)",
+  btnBorder:     "rgba(255,255,255,0.10)",
+  textHi:        "rgba(255,255,255,0.92)",
+  textMed:       "rgba(255,255,255,0.65)",
+  textDim:       "rgba(255,255,255,0.40)",
+  textXDim:      "rgba(255,255,255,0.25)",
+  divider:       "rgba(255,255,255,0.08)",
+} as const;
+
 function safeColor(v: unknown, fallback = "#000000"): string {
   if (typeof v === "string" && v.length > 0) return v;
   return fallback;
@@ -25,16 +45,16 @@ function _closeAllColorBoxes(exceptId?: symbol) {
   _colorBoxClosers.forEach((fn, id) => { if (id !== exceptId) fn(); });
 }
 
-// ── Color box trigger — exported for use in ChartSettingsSheet ───────────────
+// ── Color box trigger ─────────────────────────────────────────────────────────
 export interface ColorBoxProps {
-  value:    string;
-  onChange: (v: string) => void;
-  label?:   string;
+  value:     string;
+  onChange:  (v: string) => void;
+  label?:    string;
   fallback?: string;
 }
 
 export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
-  const safe  = safeColor(value, fallback);
+  const safe   = safeColor(value, fallback);
   const [open, setOpen]     = useState(false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
@@ -61,8 +81,10 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
         style={{
           width: 32, height: 20, borderRadius: 5, cursor: "pointer",
           background: safe,
-          border: open ? "2px solid #B7FF5A" : "1.5px solid rgba(255,255,255,0.18)",
-          boxShadow: open ? "0 0 0 2px rgba(183,255,90,0.35)" : undefined,
+          border: open
+            ? `2px solid ${T.accent}`
+            : `1.5px solid ${T.btnBorder}`,
+          boxShadow: open ? `0 0 0 3px ${T.accentBg}` : undefined,
           transition: "box-shadow 0.12s, border 0.12s",
           flexShrink: 0,
           padding: 0,
@@ -81,19 +103,23 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
   );
 });
 
-// ── Setting row helpers — exported for use in ChartSettingsSheet ─────────────
+// ── Section container ─────────────────────────────────────────────────────────
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{
-        margin: "0 0 8px", fontSize: 9, fontWeight: 900,
-        color: "rgba(183,255,90,0.3)", textTransform: "uppercase", letterSpacing: "0.14em",
+        margin: "0 0 7px",
+        fontSize: 9, fontWeight: 700,
+        color: T.textXDim,
+        textTransform: "uppercase", letterSpacing: "0.12em",
       }}>
         {title}
       </p>
       <div style={{
-        background: "rgba(57,91,67,0.05)", borderRadius: 10,
-        border: "1px solid rgba(57,91,67,0.18)", overflow: "visible",
+        background: T.sectionBg,
+        borderRadius: 10,
+        border: `1px solid ${T.sectionBorder}`,
+        overflow: "visible",
       }}>
         {children}
       </div>
@@ -101,6 +127,7 @@ export function Section({ title, children }: { title: string; children: React.Re
   );
 }
 
+// ── Setting row ───────────────────────────────────────────────────────────────
 export function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
   const [hovered, setHovered] = useState(false);
   return (
@@ -110,16 +137,17 @@ export function Row({ label, children, last }: { label: string; children: React.
       style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "10px 14px",
-        borderBottom: last ? "none" : "1px solid rgba(57,91,67,0.1)",
-        background: hovered ? "rgba(57,91,67,0.06)" : "transparent",
+        borderBottom: last ? "none" : `1px solid ${T.rowDivider}`,
+        background: hovered ? T.rowHover : "transparent",
         transition: "background 0.12s",
       }}>
-      <span style={{ fontSize: 12, color: "rgba(167,184,169,0.75)", fontWeight: 500 }}>{label}</span>
+      <span style={{ fontSize: 12, color: T.textMed, fontWeight: 500 }}>{label}</span>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>{children}</div>
     </div>
   );
 }
 
+// ── Color pair (bull + bear) ──────────────────────────────────────────────────
 export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   label: string; bull: string; bear: string;
   onBull: (v: string) => void; onBear: (v: string) => void; last?: boolean;
@@ -127,10 +155,10 @@ export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   return (
     <Row label={label} last={last}>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <span style={{ fontSize: 9, color: "rgba(183,255,90,0.45)", fontWeight: 700 }}>▲</span>
+        <span style={{ fontSize: 9, color: T.textDim, fontWeight: 700 }}>▲</span>
         <ColorBox value={bull} onChange={onBull} label={`${label} Bullish`} />
       </div>
-      <div style={{ width: 1, height: 14, background: "rgba(57,91,67,0.3)", margin: "0 2px" }} />
+      <div style={{ width: 1, height: 14, background: T.divider, margin: "0 2px" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <span style={{ fontSize: 9, color: "rgba(239,68,68,0.55)", fontWeight: 700 }}>▼</span>
         <ColorBox value={bear} onChange={onBear} label={`${label} Bearish`} />
@@ -139,6 +167,7 @@ export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   );
 }
 
+// ── Styled select ─────────────────────────────────────────────────────────────
 export function StyledSelect({ value, onChange, options }: {
   value: string;
   onChange: (v: string) => void;
@@ -146,47 +175,59 @@ export function StyledSelect({ value, onChange, options }: {
 }) {
   return (
     <div style={{ position: "relative" }}>
-      <select value={value} onChange={e => onChange(e.target.value)}
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value)}
         style={{
           appearance: "none", WebkitAppearance: "none",
-          background: "rgba(57,91,67,0.12)", border: "1px solid rgba(57,91,67,0.35)",
-          borderRadius: 7, color: "#F3FFF3", fontSize: 11, fontWeight: 600,
-          padding: "5px 28px 5px 10px", cursor: "pointer", outline: "none",
+          background: T.btnBg,
+          border: `1px solid ${T.btnBorder}`,
+          borderRadius: 7, color: T.textHi,
+          fontSize: 11, fontWeight: 600,
+          padding: "5px 28px 5px 10px",
+          cursor: "pointer", outline: "none",
           transition: "border-color 0.12s",
         }}
-        onFocus={e => { (e.currentTarget as HTMLSelectElement).style.borderColor = "rgba(183,255,90,0.4)"; }}
-        onBlur={e => { (e.currentTarget as HTMLSelectElement).style.borderColor = "rgba(57,91,67,0.35)"; }}
+        onFocus={e => { (e.currentTarget as HTMLSelectElement).style.borderColor = T.accentBorder; }}
+        onBlur={e =>  { (e.currentTarget as HTMLSelectElement).style.borderColor = T.btnBorder; }}
       >
-        {options.map(o => <option key={o.value} value={o.value} style={{ background: "#0D2A1A" }}>{o.label}</option>)}
+        {options.map(o => (
+          <option key={o.value} value={o.value} style={{ background: "#0a0a0f" }}>{o.label}</option>
+        ))}
       </select>
-      <ChevronDown style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", width: 12, height: 12, color: "rgba(167,184,169,0.5)", pointerEvents: "none" }} />
+      <ChevronDown style={{
+        position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)",
+        width: 12, height: 12, color: T.textDim, pointerEvents: "none",
+      }} />
     </div>
   );
 }
 
+// ── Toggle ────────────────────────────────────────────────────────────────────
 export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!checked)}
       style={{
         width: 36, height: 20, borderRadius: 10, cursor: "pointer", border: "none",
-        background: checked ? "rgba(183,255,90,0.25)" : "rgba(57,91,67,0.2)",
+        background: checked ? T.accentBg : T.btnBg,
         position: "relative", transition: "background 0.2s",
-        outline: checked ? "1px solid rgba(183,255,90,0.4)" : "1px solid rgba(57,91,67,0.3)",
+        outline: `1px solid ${checked ? T.accentBorder : T.btnBorder}`,
         flexShrink: 0,
       }}
     >
       <div style={{
         position: "absolute", top: 3, left: checked ? 18 : 3,
         width: 14, height: 14, borderRadius: "50%",
-        background: checked ? "#B7FF5A" : "rgba(167,184,169,0.4)",
+        background: checked ? T.accent : T.textDim,
         transition: "left 0.18s, background 0.18s",
-        boxShadow: checked ? "0 0 6px rgba(183,255,90,0.5)" : "none",
+        boxShadow: checked ? `0 0 6px ${T.accentGlow}` : "none",
       }} />
     </button>
   );
 }
 
+// ── Thickness buttons ─────────────────────────────────────────────────────────
 export function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   return (
     <div style={{ display: "flex", gap: 4 }}>
@@ -194,19 +235,25 @@ export function ThicknessButtons({ value, onChange }: { value: number; onChange:
         <button key={w} onClick={() => onChange(w)}
           style={{
             width: 30, height: 28, borderRadius: 7, cursor: "pointer", border: "none",
-            background: value === w ? "rgba(183,255,90,0.12)" : "rgba(57,91,67,0.1)",
-            outline: value === w ? "1.5px solid rgba(183,255,90,0.45)" : "1px solid rgba(57,91,67,0.25)",
+            background: value === w ? T.accentBg : T.btnBg,
+            outline: value === w
+              ? `1.5px solid ${T.accentBorder}`
+              : `1px solid ${T.btnBorder}`,
             display: "flex", alignItems: "center", justifyContent: "center",
             transition: "all 0.12s",
           }}>
-          <div style={{ width: "60%", height: w, background: value === w ? "#B7FF5A" : "rgba(167,184,169,0.5)", borderRadius: 1 }} />
+          <div style={{
+            width: "60%", height: w,
+            background: value === w ? T.accent : T.textDim,
+            borderRadius: 1,
+          }} />
         </button>
       ))}
     </div>
   );
 }
 
-// ── Sidebar nav item (desktop only) ───────────────────────────────────────────
+// ── Desktop sidebar nav item ──────────────────────────────────────────────────
 export type SidebarSection = "Symbol" | "Canvas" | "Scale";
 
 function NavItem({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -215,24 +262,31 @@ function NavItem({ label, active, onClick }: { label: string; active: boolean; o
       style={{
         display: "flex", alignItems: "center", gap: 10,
         width: "100%", padding: "9px 14px",
-        background: active ? "rgba(183,255,90,0.08)" : "transparent",
+        background: active ? T.accentBg : "transparent",
         border: "none",
-        borderLeft: `2px solid ${active ? "#B7FF5A" : "transparent"}`,
+        borderLeft: `2px solid ${active ? T.accent : "transparent"}`,
         cursor: "pointer", textAlign: "left",
         transition: "all 0.12s",
       }}
-      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.1)"; }}
+      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = T.rowHover; }}
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
     >
-      <span style={{ fontSize: 12, fontWeight: active ? 700 : 500, color: active ? "#B7FF5A" : "rgba(167,184,169,0.65)" }}>
+      <span style={{
+        fontSize: 12,
+        fontWeight: active ? 700 : 500,
+        color: active ? T.accent : T.textMed,
+      }}>
         {label}
       </span>
     </button>
   );
 }
 
-// ── Save-as-default button — exported for use in ChartSettingsSheet ───────────
-export function SaveAsDefaultButton({ settings, onSaveAsDefault }: { settings: ChartSettings; onSaveAsDefault: (s: ChartSettings) => void }) {
+// ── Save-as-default button ────────────────────────────────────────────────────
+export function SaveAsDefaultButton({ settings, onSaveAsDefault }: {
+  settings: ChartSettings;
+  onSaveAsDefault: (s: ChartSettings) => void;
+}) {
   const [saved, setSaved] = useState(false);
   const handleClick = () => {
     onSaveAsDefault(settings);
@@ -243,22 +297,21 @@ export function SaveAsDefaultButton({ settings, onSaveAsDefault }: { settings: C
     <button onClick={handleClick}
       style={{
         padding: "7px 16px", borderRadius: 9,
-        background: saved ? "rgba(183,255,90,0.15)" : "transparent",
-        border: `1px solid ${saved ? "rgba(183,255,90,0.5)" : "rgba(57,91,67,0.3)"}`,
-        color: saved ? "#B7FF5A" : "rgba(167,184,169,0.75)",
+        background: saved ? T.accentBg : "transparent",
+        border: `1px solid ${saved ? T.accentBorder : T.btnBorder}`,
+        color: saved ? T.accent : T.textMed,
         fontSize: 11, fontWeight: 600, cursor: "pointer",
-        transition: "all 0.18s",
-        whiteSpace: "nowrap",
+        transition: "all 0.18s", whiteSpace: "nowrap",
       }}
-      onMouseEnter={e => { if (!saved) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.6)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.95)"; } }}
-      onMouseLeave={e => { if (!saved) { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.3)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.75)"; } }}
+      onMouseEnter={e => { if (!saved) { (e.currentTarget as HTMLButtonElement).style.borderColor = T.accentBorder; (e.currentTarget as HTMLButtonElement).style.color = T.textHi; } }}
+      onMouseLeave={e => { if (!saved) { (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; (e.currentTarget as HTMLButtonElement).style.color = T.textMed; } }}
     >
       {saved ? "✓ Saved as Default" : "Save as Default"}
     </button>
   );
 }
 
-// ── Desktop modal — unchanged, exactly as before ──────────────────────────────
+// ── Desktop modal ─────────────────────────────────────────────────────────────
 interface Props {
   settings: ChartSettings;
   onChange: (s: ChartSettings) => void;
@@ -293,7 +346,7 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
         <ColorPair label="Wick" bull={settings.upWickColor} bear={settings.downWickColor} onBull={v => p({ upWickColor: v })} onBear={v => p({ downWickColor: v })} last />
       </Section>
       <Section title="Price Label">
-        <ColorPair label="Background" bull={settings.priceLabelBullColor ?? "#B7FF5A"} bear={settings.priceLabelBearColor ?? "#ef4444"} onBull={v => p({ priceLabelBullColor: v })} onBear={v => p({ priceLabelBearColor: v })} />
+        <ColorPair label="Background" bull={settings.priceLabelBullColor ?? "#22c55e"} bear={settings.priceLabelBearColor ?? "#ef4444"} onBull={v => p({ priceLabelBullColor: v })} onBear={v => p({ priceLabelBearColor: v })} />
         <Row label="Text Color"><ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor: v })} label="Price Label Text" fallback="#ffffff" /></Row>
         <Row label="Line Color" last><ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor: v })} label="Price Line" fallback="rgba(255,255,255,0.4)" /></Row>
       </Section>
@@ -381,12 +434,12 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
       </Section>
       <Section title="Interaction">
         <Row label="Drag Price Scale" last>
-          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>Drag the right axis up/down</div>
+          <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Drag the right axis up/down</div>
         </Row>
       </Section>
       <Section title="Reset">
         <Row label="Double-click Axis" last>
-          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>Double-click price axis to reset</div>
+          <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Double-click price axis to reset</div>
         </Row>
       </Section>
     </div>
@@ -395,14 +448,14 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <div ref={ref} style={{
         width: 640, maxHeight: "84vh",
-        background: "rgba(7,13,10,0.99)", backdropFilter: "blur(32px)",
-        border: "1px solid rgba(57,91,67,0.45)", borderRadius: 18,
-        boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(183,255,90,0.05)",
+        background: T.modalBg, backdropFilter: "blur(32px)",
+        border: `1px solid ${T.divider}`, borderRadius: 18,
+        boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(96,165,250,0.04)",
         display: "flex", flexDirection: "column",
         overflow: "visible",
       }}>
@@ -411,47 +464,57 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "space-between",
           padding: "16px 20px",
-          borderBottom: "1px solid rgba(57,91,67,0.2)",
+          borderBottom: `1px solid ${T.divider}`,
           flexShrink: 0,
           borderRadius: "18px 18px 0 0",
-          background: "rgba(57,91,67,0.04)",
+          background: "rgba(255,255,255,0.02)",
         }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{
               width: 30, height: 30, borderRadius: 9,
-              background: "rgba(183,255,90,0.08)", border: "1px solid rgba(183,255,90,0.18)",
+              background: T.accentBg, border: `1px solid ${T.accentBorder}`,
               display: "flex", alignItems: "center", justifyContent: "center",
             }}>
-              <img src={icoSettingsUrl} alt="" draggable={false} style={{ width: 14, height: 14, display: "block", filter: "brightness(0) invert(1)", userSelect: "none", pointerEvents: "none" }} />
+              <img src={icoSettingsUrl} alt="" draggable={false} style={{
+                width: 14, height: 14, display: "block",
+                filter: "brightness(0) invert(1)",
+                userSelect: "none", pointerEvents: "none",
+              }} />
             </div>
             <div>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: "#F3FFF3" }}>Chart Settings</p>
-              <p style={{ margin: 0, fontSize: 10, color: "rgba(167,184,169,0.4)" }}>Customize appearance & scale</p>
+              <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.textHi }}>Chart Settings</p>
+              <p style={{ margin: 0, fontSize: 10, color: T.textDim }}>Customize appearance & scale</p>
             </div>
           </div>
           <button onClick={onClose}
             style={{
-              width: 30, height: 30, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-              background: "rgba(57,91,67,0.1)", border: "1px solid rgba(57,91,67,0.2)", cursor: "pointer",
-              transition: "background 0.12s",
+              width: 30, height: 30, borderRadius: 8,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: T.btnBg, border: `1px solid ${T.btnBorder}`,
+              cursor: "pointer", transition: "background 0.12s",
             }}
             onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.3)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.2)"; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.btnBg; (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; }}
           >
-            <X style={{ width: 13, height: 13, color: "rgba(167,184,169,0.6)" }} />
+            <X style={{ width: 13, height: 13, color: T.textMed }} />
           </button>
         </div>
 
         {/* Body: sidebar + content */}
         <div style={{ display: "flex", flex: 1, overflow: "hidden", borderRadius: "0 0 18px 18px" }}>
+
           {/* Sidebar */}
           <div style={{
-            width: 152, borderRight: "1px solid rgba(57,91,67,0.18)",
+            width: 152, borderRight: `1px solid ${T.divider}`,
             flexShrink: 0, paddingTop: 10, paddingBottom: 10,
-            background: "rgba(57,91,67,0.03)",
+            background: "rgba(255,255,255,0.02)",
             borderRadius: "0 0 0 18px",
           }}>
-            <p style={{ margin: "4px 14px 10px", fontSize: 9, fontWeight: 900, color: "rgba(167,184,169,0.2)", textTransform: "uppercase", letterSpacing: "0.14em" }}>Sections</p>
+            <p style={{
+              margin: "4px 14px 10px", fontSize: 9, fontWeight: 700,
+              color: T.textXDim,
+              textTransform: "uppercase", letterSpacing: "0.12em",
+            }}>Sections</p>
             {(["Symbol", "Canvas", "Scale"] as SidebarSection[]).map(s => (
               <NavItem key={s} label={s} active={section === s} onClick={() => setSection(s)} />
             ))}
@@ -461,28 +524,28 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
           <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", scrollbarWidth: "none" }}>
             {section === "Symbol" && symbolContent}
             {section === "Canvas" && canvasContent}
-            {section === "Scale" && scaleContent}
+            {section === "Scale"  && scaleContent}
           </div>
         </div>
 
         {/* Footer */}
         <div style={{
           padding: "12px 20px",
-          borderTop: "1px solid rgba(57,91,67,0.18)",
+          borderTop: `1px solid ${T.divider}`,
           display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
           flexShrink: 0,
           borderRadius: "0 0 18px 18px",
-          background: "rgba(57,91,67,0.03)",
+          background: "rgba(255,255,255,0.02)",
         }}>
           <button onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
             style={{
               padding: "7px 16px", borderRadius: 9,
-              background: "transparent", border: "1px solid rgba(57,91,67,0.3)",
-              color: "rgba(167,184,169,0.6)", fontSize: 11, fontWeight: 600, cursor: "pointer",
+              background: "transparent", border: `1px solid ${T.btnBorder}`,
+              color: T.textDim, fontSize: 11, fontWeight: 600, cursor: "pointer",
               transition: "all 0.12s",
             }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.6)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.9)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.3)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.6)"; }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.22)"; (e.currentTarget as HTMLButtonElement).style.color = T.textMed; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; (e.currentTarget as HTMLButtonElement).style.color = T.textDim; }}
           >
             Reset Defaults
           </button>
@@ -493,12 +556,12 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
             <button onClick={onClose}
               style={{
                 padding: "7px 20px", borderRadius: 9,
-                background: "rgba(183,255,90,0.1)", border: "1px solid rgba(183,255,90,0.3)",
-                color: "#B7FF5A", fontSize: 11, fontWeight: 800, cursor: "pointer",
+                background: T.accentBg, border: `1px solid ${T.accentBorder}`,
+                color: T.accent, fontSize: 11, fontWeight: 800, cursor: "pointer",
                 transition: "all 0.12s",
               }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.18)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "0 0 12px rgba(183,255,90,0.2)"; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(183,255,90,0.1)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(96,165,250,0.18)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 14px ${T.accentGlow}`; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.accentBg; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
             >
               Done
             </button>
