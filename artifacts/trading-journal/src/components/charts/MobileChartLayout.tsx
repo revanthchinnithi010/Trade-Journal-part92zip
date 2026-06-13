@@ -42,6 +42,7 @@ import { BrokerSelectModal, BrokerListContent } from "@/components/broker/Broker
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import * as sheetProfiler from "@/lib/sheetProfiler";
+import type { RenderStat, FpsResult } from "@/lib/sheetProfiler";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -3012,6 +3013,193 @@ function MiniControlBar({
 }
 
 
+// ── Profiler Debug Panel ───────────────────────────────────────────────────
+// Temporary debug overlay. Remove once profiling is complete.
+// Shows render counts + durations for MiniControlBar / MoreOptionsSheet /
+// ChartSettingsSheet, plus a 5-s FPS measurement.
+
+type PanelState =
+  | { phase: "idle" }
+  | { phase: "measuring"; renders: RenderStat[] }
+  | { phase: "done"; renders: RenderStat[]; fps: FpsResult };
+
+function ProfilerDebugPanel({ onClose }: { onClose: () => void }) {
+  const [state, setState] = useState<PanelState>({ phase: "idle" });
+
+  const run = useCallback(async () => {
+    // 1. Snapshot render stats immediately
+    const renders = sheetProfiler.getRenderStats();
+    // 2. Start FPS measurement (5 s)
+    setState({ phase: "measuring", renders });
+    const fps = await sheetProfiler.measureFps(5000);
+    setState({ phase: "done", renders, fps });
+  }, []);
+
+  const reset = useCallback(() => {
+    sheetProfiler.resetRenderStats();
+    setState({ phase: "idle" });
+  }, []);
+
+  const fpsColor = (state.phase === "done")
+    ? state.fps.fps >= 55 ? "#34d399" : state.fps.fps >= 30 ? "#f59e0b" : "#f87171"
+    : "#94a3b8";
+
+  return createPortal(
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 9999,
+      background: "rgba(0,0,0,0.82)",
+      display: "flex", flexDirection: "column",
+      fontFamily: "ui-monospace,SFMono-Regular,monospace",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "12px 14px 10px",
+        background: "rgba(10,12,20,0.99)",
+        borderBottom: "1px solid rgba(255,255,255,0.10)",
+        flexShrink: 0,
+      }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#34d399", letterSpacing: "0.04em" }}>
+          📊 Render Report
+        </span>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={reset} style={{
+            padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.14)",
+            color: "rgba(255,255,255,0.60)", cursor: "pointer",
+          }}>Reset Stats</button>
+          <button onClick={onClose} style={{
+            padding: "5px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600,
+            background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.30)",
+            color: "#f87171", cursor: "pointer",
+          }}>✕ Close</button>
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "12px 14px" }}>
+
+        {/* ── Dump button ── */}
+        {state.phase === "idle" && (
+          <button onClick={run} style={{
+            width: "100%", padding: "14px", borderRadius: 10, marginBottom: 16,
+            background: "rgba(96,165,250,0.12)", border: "1.5px solid rgba(96,165,250,0.35)",
+            color: "#60a5fa", fontSize: 13, fontWeight: 700, cursor: "pointer",
+            letterSpacing: "0.03em",
+          }}>
+            ▶ Dump Render Report + Measure FPS (5 s)
+          </button>
+        )}
+
+        {/* ── Measuring state ── */}
+        {state.phase === "measuring" && (
+          <div style={{
+            padding: "12px 14px", borderRadius: 10, marginBottom: 16,
+            background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.25)",
+            color: "#f59e0b", fontSize: 12, fontWeight: 600,
+            display: "flex", alignItems: "center", gap: 10,
+          }}>
+            <span style={{ fontSize: 18 }}>⏱</span>
+            Measuring FPS for 5 s — interact with the UI now…
+          </div>
+        )}
+
+        {/* ── FPS result ── */}
+        {state.phase === "done" && (
+          <div style={{
+            display: "grid", gridTemplateColumns: "1fr 1fr 1fr",
+            gap: 8, marginBottom: 16,
+          }}>
+            {[
+              { label: "FPS",            value: state.fps.fps.toFixed(1),          color: fpsColor },
+              { label: "Avg frame ms",   value: state.fps.avgFrameMs.toFixed(2),   color: "#94a3b8" },
+              { label: "Worst frame ms", value: state.fps.worstFrameMs.toFixed(2), color: state.fps.worstFrameMs > 50 ? "#f87171" : "#94a3b8" },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)",
+                borderRadius: 8, padding: "10px 12px", textAlign: "center",
+              }}>
+                <div style={{ fontSize: 20, fontWeight: 700, color }}>{value}</div>
+                <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 3, textTransform: "uppercase", letterSpacing: "0.08em" }}>{label}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── Re-run button after done ── */}
+        {state.phase === "done" && (
+          <button onClick={run} style={{
+            width: "100%", padding: "10px", borderRadius: 8, marginBottom: 16,
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)",
+            color: "rgba(255,255,255,0.50)", fontSize: 11, fontWeight: 600, cursor: "pointer",
+          }}>
+            ↺ Re-run (reset stats first for clean data)
+          </button>
+        )}
+
+        {/* ── Render stats table ── */}
+        {(state.phase === "measuring" || state.phase === "done") && state.renders.length > 0 && (
+          <>
+            <p style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.30)", textTransform: "uppercase", letterSpacing: "0.10em", margin: "0 0 8px" }}>
+              Render Stats (sorted by total ms)
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {state.renders.map((s, i) => {
+                const avgMs = s.renderCount ? s.totalMs / s.renderCount : 0;
+                const isSlow = avgMs > 4 || s.renderCount > 20;
+                return (
+                  <div key={i} style={{
+                    background: isSlow ? "rgba(248,113,113,0.07)" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${isSlow ? "rgba(248,113,113,0.22)" : "rgba(255,255,255,0.07)"}`,
+                    borderRadius: 8, padding: "9px 12px",
+                  }}>
+                    {/* Component + file */}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
+                      <div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: isSlow ? "#f87171" : "#e2e8f0" }}>{s.component}</span>
+                        <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", marginLeft: 6 }}>{s.file}:{s.line}</span>
+                      </div>
+                      <span style={{
+                        fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 4,
+                        background: isSlow ? "rgba(248,113,113,0.18)" : "rgba(255,255,255,0.07)",
+                        color: isSlow ? "#f87171" : "rgba(255,255,255,0.45)",
+                      }}>
+                        ×{s.renderCount}
+                      </span>
+                    </div>
+                    {/* Metrics row */}
+                    <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                      {[
+                        { k: "Avg ms",   v: avgMs.toFixed(2),        hot: avgMs > 4 },
+                        { k: "Max ms",   v: s.maxMs.toFixed(2),      hot: s.maxMs > 8 },
+                        { k: "Total ms", v: s.totalMs.toFixed(2),    hot: false },
+                        { k: "Last ms",  v: s.lastMs.toFixed(2),     hot: false },
+                      ].map(({ k, v, hot }) => (
+                        <div key={k}>
+                          <span style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{k} </span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: hot ? "#fbbf24" : "rgba(255,255,255,0.72)" }}>{v}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {(state.phase === "measuring" || state.phase === "done") && state.renders.length === 0 && (
+          <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 12, padding: "12px 0" }}>
+            No renders recorded yet. Interact with MiniControlBar, 3-dots, Chart Settings first, then tap Dump.
+          </div>
+        )}
+
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Props ──────────────────────────────────────────────────────────────────
 export interface MobileChartLayoutProps {
   activeKey:           string;
@@ -3100,6 +3288,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showSymbolPicker,  setShowSymbolPicker]  = useState(false);
   const [isFullscreen,      setIsFullscreen]      = useState(false);
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
+  const [showProfilerPanel, setShowProfilerPanel] = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
   const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
   const [slotIntervals,     setSlotIntervals]     = useState<string[]>(() => [interval, interval, interval]);
@@ -3235,6 +3424,22 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <AnimatedMeshBackground />
 
         <IndicatorTags topOffset={8} />
+
+        {/* ── Debug: Dump Render Report button ── */}
+        <button
+          onClick={() => setShowProfilerPanel(true)}
+          style={{
+            position: "absolute", bottom: 10, left: 10, zIndex: 60,
+            padding: "5px 10px", borderRadius: 8,
+            background: "rgba(16,185,129,0.18)", border: "1px solid rgba(16,185,129,0.45)",
+            color: "#34d399", fontSize: 10, fontWeight: 700,
+            cursor: "pointer", touchAction: "manipulation",
+            letterSpacing: "0.04em", lineHeight: 1,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+          }}
+        >
+          📊 Render
+        </button>
 
         {/* Inner absolutely-pinned container — CSS grid root in multi-chart mode.
             position:absolute + inset:0 gives explicit pixel dimensions so 1fr rows resolve. */}
@@ -3426,6 +3631,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           prefillDrawing={alertDrawing ?? undefined} onClose={closeAlertModal}
           onCreated={() => { if (alertDrawing) addAlertDrawingId(alertDrawing.id); closeAlertModal(); }}
         />
+      )}
+
+      {showProfilerPanel && (
+        <ProfilerDebugPanel onClose={() => setShowProfilerPanel(false)} />
       )}
     </div>
   );
