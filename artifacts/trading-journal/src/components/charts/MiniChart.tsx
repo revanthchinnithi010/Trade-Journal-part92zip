@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, memo, useMemo } from "react";
 import {
   createChart, CandlestickSeries, HistogramSeries,
-  CrosshairMode, type IChartApi, type ISeriesApi, type Time,
+  CrosshairMode, TickMarkType, type IChartApi, type ISeriesApi, type Time,
 } from "lightweight-charts";
 import { ChartContext } from "@/contexts/ChartContext";
 import { ChartBarsContext } from "@/contexts/ChartBarsContext";
@@ -188,35 +188,66 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
     const chart = createChart(container, {
       width:  container.clientWidth  || 400,
       height: container.clientHeight || 300,
-      layout: { background: { color: "#07110D" }, textColor: "#A7B8A9", fontSize: 10, attributionLogo: false },
+      layout: {
+        background: { color: "#07110D" },
+        textColor:  "#A7B8A9",
+        fontFamily: "'Inter','SF Pro Display',system-ui,sans-serif",
+        fontSize:   11,
+        attributionLogo: false,
+      },
       grid: {
         vertLines: { color: "rgba(13,28,22,0.7)" },
         horzLines: { color: "rgba(13,28,22,0.7)" },
       },
       crosshair: {
-        mode: CrosshairMode.Normal,
-        vertLine: { color: "rgba(183,255,90,0.3)", labelBackgroundColor: "#0D2A1A" },
-        horzLine: { color: "rgba(183,255,90,0.3)", labelBackgroundColor: "#0D2A1A" },
+        mode:     CrosshairMode.Normal,
+        vertLine: { color: "rgba(183,255,90,0.38)", labelBackgroundColor: "#0D2A1A" },
+        horzLine: { color: "rgba(183,255,90,0.38)", labelBackgroundColor: "#0D2A1A" },
       },
       rightPriceScale: {
         borderColor:    "rgba(57,91,67,0.35)",
-        scaleMargins:   { top: 0.06, bottom: 0.24 },
+        scaleMargins:   { top: 0.07, bottom: 0.25 },
         autoScale:      true,
         entireTextOnly: true,
       },
       timeScale: {
-        borderColor: "rgba(57,91,67,0.35)",
-        timeVisible: true, secondsVisible: false,
-        rightOffset: 4, barSpacing: 6, minBarSpacing: 2,
+        borderColor:    "rgba(57,91,67,0.35)",
+        timeVisible:    true,
+        secondsVisible: false,
+        rightOffset:    40,
+        barSpacing:     8,
+        minBarSpacing:  0.5,
+        fixLeftEdge:    false,
+        fixRightEdge:   false,
+        tickMarkFormatter: (time: number, type: TickMarkType) => {
+          const d    = new Date(time * 1000);
+          const hh   = String(d.getHours()).padStart(2, "0");
+          const min  = String(d.getMinutes()).padStart(2, "0");
+          const day  = d.getDate();
+          const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+          const mon  = MONTHS[d.getMonth()];
+          const yyyy = d.getFullYear();
+          switch (type) {
+            case TickMarkType.Year:       return String(yyyy);
+            case TickMarkType.Month:      return mon;
+            case TickMarkType.DayOfMonth: return `${day} ${mon}`;
+            case TickMarkType.Time:       return `${hh}:${min}`;
+            default:                      return `${hh}:${min}`;
+          }
+        },
       },
       handleScroll: {
-        mouseWheel: true, pressedMouseMove: true,
-        horzTouchDrag: true, vertTouchDrag: false,
+        mouseWheel:       false,
+        pressedMouseMove: true,
+        horzTouchDrag:    true,
+        vertTouchDrag:    false,
       },
+      kineticScroll: { mouse: false, touch: false },
       handleScale: {
-        mouseWheel: true, pinch: true,
-        axisPressedMouseMove: { price: false, time: true },
-        axisDoubleClickReset: { price: false, time: true },
+        mouseWheel:           true,
+        pinch:                true,
+        axisPressedMouseMove: { time: false, price: true },
+        axisDoubleClickReset: { time: true,  price: true },
       },
     });
 
@@ -258,7 +289,7 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
     if (!container) return;
 
     const PRICE_SCALE_W   = 60;
-    const DEFAULT_MARGINS = { top: 0.06, bottom: 0.24 };
+    const DEFAULT_MARGINS = { top: 0.07, bottom: 0.25 };
 
     let dragging    = false;
     let startY      = 0;
