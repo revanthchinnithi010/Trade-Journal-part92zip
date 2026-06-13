@@ -2439,6 +2439,19 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       } catch { /* ok */ }
       // Skip drawing currently under DOM transform (SVG handles move-drag visuals)
       const moveDragId = dragRef.current?.kind === "move" ? dragRef.current.id : null;
+      // Clip to chart plotting area only — exclude the date/time scale row at the bottom.
+      // chart.timeScale().height() returns the pixel height of the date-scale row so we
+      // subtract it to get the pure candlestick pane height. This prevents drawings from
+      // painting over the date scale, price scale labels, and other UI chrome below the chart.
+      let plotH = H;
+      try {
+        const tsH = (chartRef.current as any).timeScale().height?.() as number | undefined;
+        if (typeof tsH === "number" && tsH > 0) plotH = Math.max(1, H - tsH);
+      } catch { /* leave plotH = H as safe fallback */ }
+      // Also update the SVG clipPath rect height directly (zero React renders).
+      if (svgClipRectRef.current && svgClipRectRef.current.getAttribute("height") !== String(Math.round(plotH))) {
+        svgClipRectRef.current.setAttribute("height", String(Math.round(plotH)));
+      }
       const _rct = sheetProfiler.begin("DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
       renderDrawingsToCanvas(
         ctx, W, H,
@@ -2450,6 +2463,7 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         barsRef.current as OhlcBar[],
         dpr,
         moveDragId,
+        plotH,
       );
       sheetProfiler.end(_rct, "DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
     });
@@ -2458,6 +2472,11 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   // ── Direct SVG DOM refs — one per drawing g-wrapper, keyed by drawing id ───
   // Used to apply transform="translate(dx,dy)" for move-drag without any React renders.
   const svgGroupsRef   = useRef<Map<number, SVGGElement>>(new Map());
+
+  // ── SVG clipPath rect DOM ref ─────────────────────────────────────────────
+  // Updated directly from the canvas RAF (scheduleCanvasRender) to clip the SVG
+  // to the chart plotting area (excluding the date-scale row at the bottom).
+  const svgClipRectRef = useRef<SVGRectElement>(null);
 
   // ── Freehand tool state (brush / highlighter) ──────────────────────────────
   const freehandRef       = useRef<DrawingPoint[]>([]);
@@ -3236,6 +3255,12 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       toolType: drawing.toolType,
     };
     isDragDirty.current = false;
+    // Pre-seed dragLiveRef with the current (un-moved) points immediately so any canvas
+    // render that fires before the first pointermove (e.g. from a chart pan/autoscale event)
+    // uses the correct saved position. Without this, there is a one-frame window where the
+    // canvas still shows the drawing at its saved position while the React SVG re-render has
+    // already moved the anchor handles — creating a visible ghost trendline.
+    dragLiveRef.current = { id, points: startPts };
   }, [activeTool, drawings]);
 
   // ── Draw-mode pointer events ───────────────────────────────────────────────
@@ -3772,8 +3797,10 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         <defs>
           <clipPath id="drawing-clip">
             {/* Inset 4px on the left so endpoint circles (r≤3.5) never form a
-                partial arc on the panel border line. 4px is invisible on lines. */}
-            <rect x={4} y={0} width={Math.max(0, chartRight - 4)} height={H} />
+                partial arc on the panel border line. 4px is invisible on lines.
+                height is updated directly via svgClipRectRef in scheduleCanvasRender
+                to match the chart plotting area (excluding the date-scale row). */}
+            <rect ref={svgClipRectRef} x={4} y={0} width={Math.max(0, chartRight - 4)} height={H} />
           </clipPath>
         </defs>
         <g clipPath="url(#drawing-clip)">

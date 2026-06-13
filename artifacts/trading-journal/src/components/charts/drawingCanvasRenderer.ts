@@ -328,23 +328,33 @@ export function renderDrawingsToCanvas(
   bars: OhlcBar[],
   dpr: number,
   moveDragId: number | null = null, // drawing currently being move-dragged (SVG DOM transform handles it)
+  clipH: number = H,               // chart plotting area height (excludes date/time scale)
 ) {
   ctx.clearRect(0, 0, W * dpr, H * dpr);
   if (W <= 0 || H <= 0) return;
   ctx.save();
   ctx.scale(dpr, dpr);
-  // Clip to canvas bounds
+  // Clip to chart plotting area — excludes date scale at bottom and never overflows price scale.
+  // clipH is passed from the caller as H - chart.timeScale().height() so drawings never paint
+  // over the date scale or other UI regions outside the candlestick pane.
+  ctx.save();
   ctx.beginPath();
-  ctx.rect(0, 0, W, H);
+  ctx.rect(0, 0, W, clipH > 0 ? clipH : H);
   ctx.clip();
+
+  // Drawings being anchor-dragged: skip in the main loop and render AFTER so they always
+  // appear on top and are guaranteed to render exactly once at the live (dragged) position.
+  // This prevents the one-frame ghost that appears when the React SVG re-render (moving the
+  // anchor handles) races ahead of the canvas RAF (still showing the saved position).
+  const anchorDragId = (dragLive !== null && moveDragId === null) ? dragLive.id : null;
 
   for (const drawing of drawings) {
     if (!drawing.isVisible) continue;
     if (drawing.id === moveDragId) continue; // SVG DOM transform handles visual during move-drag
+    if (drawing.id === anchorDragId) continue; // rendered separately after the loop (live points)
 
     const isSelected = drawing.id === selectedId;
-    const live       = dragLive?.id === drawing.id ? dragLive : null;
-    const pts        = live ? live.points : drawing.points;
+    const pts        = drawing.points;
     const { style, toolType } = drawing;
     const col = style.color || "#B7FF5A";
     const sw  = style.thickness || 1;
@@ -757,5 +767,108 @@ export function renderDrawingsToCanvas(
     ctx.restore();
   }
 
-  ctx.restore();
+  // ── Anchor-drag drawing: render last with live points (guaranteed single render, on top) ──
+  if (anchorDragId !== null && dragLive !== null) {
+    const d = drawings.find(dr => dr.id === anchorDragId);
+    if (d && d.isVisible) {
+      const isSelected = d.id === selectedId;
+      const pts        = dragLive.points;
+      const { style, toolType } = d;
+      const col = style.color || "#B7FF5A";
+      const sw  = style.thickness || 1;
+      const op  = style.opacity ?? 1;
+      if (op > 0) {
+        const px = pts.map(toPx).filter(Boolean) as Px[];
+        ctx.save();
+        ctx.globalAlpha = op;
+        ctx.strokeStyle = col;
+        ctx.fillStyle   = col;
+        ctx.lineWidth   = sw;
+        ctx.lineCap     = "round";
+        ctx.lineJoin    = "round";
+        setDash(ctx, style.lineStyle || "solid");
+        if (isSelected && toolType !== "position_long" && toolType !== "position_short") {
+          ctx.shadowColor = col;
+          ctx.shadowBlur  = 8;
+        }
+        if (toolType === "position_long" || toolType === "position_short") {
+          renderPositionTool(ctx, { ...d, points: pts }, toPx, bars, barHalfWidth, W, isSelected);
+        } else {
+          // Re-use the full switch by calling a minimal inline version for the anchor-dragged drawing.
+          // Only the most common anchor-draggable types are listed here.
+          switch (toolType) {
+            case "trendline": {
+              if (px.length < 2) break;
+              const extL = style.extendLeft  ?? false;
+              const extR = style.extendRight ?? false;
+              let a = px[0], b = px[1];
+              if (extL && extR) [a, b] = extendBothEnds(px[0], px[1], W, H);
+              else if (extL)    [a, b] = extendLeft(px[0], px[1]);
+              else if (extR)    [a, b] = extendRight(px[0], px[1], W);
+              if (isSelected) {
+                ctx.save(); ctx.shadowBlur = 0; ctx.strokeStyle = col;
+                ctx.lineWidth = sw + 7; ctx.globalAlpha *= 0.2;
+                drawLine(ctx, a, b); ctx.restore();
+              }
+              drawLine(ctx, a, b);
+              if (!extL) dot(ctx, px[0].x, px[0].y, 3.5, col);
+              if (!extR) dot(ctx, px[1].x, px[1].y, 3.5, col);
+              break;
+            }
+            case "hline": {
+              if (px.length < 1) break;
+              ctx.beginPath(); ctx.moveTo(0, px[0].y); ctx.lineTo(W, px[0].y); ctx.stroke();
+              break;
+            }
+            case "hray": {
+              if (px.length < 1) break;
+              ctx.beginPath(); ctx.moveTo(px[0].x, px[0].y); ctx.lineTo(W, px[0].y); ctx.stroke();
+              break;
+            }
+            case "vline": {
+              if (px.length < 1) break;
+              ctx.beginPath(); ctx.moveTo(px[0].x, 0); ctx.lineTo(px[0].x, H); ctx.stroke();
+              break;
+            }
+            case "rect": {
+              if (px.length < 2) break;
+              const rx = Math.min(px[0].x, px[1].x), ry = Math.min(px[0].y, px[1].y);
+              const rw = Math.abs(px[1].x - px[0].x), rh = Math.abs(px[1].y - px[0].y);
+              if ((style.fillOpacity ?? 0) > 0) {
+                ctx.save(); ctx.shadowBlur = 0;
+                ctx.fillStyle = hexToRgba(col, style.fillOpacity ?? 0);
+                ctx.fillRect(rx, ry, rw, rh); ctx.restore();
+              }
+              ctx.strokeRect(rx, ry, rw, rh);
+              break;
+            }
+            case "ellipse": {
+              if (px.length < 2) break;
+              const cx = (px[0].x + px[1].x) / 2, cy = (px[0].y + px[1].y) / 2;
+              const erx = Math.abs(px[1].x - px[0].x) / 2, ery = Math.abs(px[1].y - px[0].y) / 2;
+              ctx.beginPath();
+              ctx.ellipse(cx, cy, Math.max(erx, 0.1), Math.max(ery, 0.1), 0, 0, Math.PI * 2);
+              if ((style.fillOpacity ?? 0) > 0) {
+                ctx.save(); ctx.shadowBlur = 0;
+                ctx.fillStyle = hexToRgba(col, style.fillOpacity ?? 0);
+                ctx.fill(); ctx.restore();
+              }
+              ctx.stroke();
+              break;
+            }
+            default: {
+              if (px.length >= 2) drawLine(ctx, px[0], px[px.length - 1]);
+              if (px.length >= 1) dot(ctx, px[0].x, px[0].y, 3.5, col);
+              if (px.length >= 2) dot(ctx, px[1].x, px[1].y, 3.5, col);
+              break;
+            }
+          }
+        }
+        ctx.restore();
+      }
+    }
+  }
+
+  ctx.restore(); // inner clip save
+  ctx.restore(); // outer dpr scale save
 }
