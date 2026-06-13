@@ -434,10 +434,12 @@ function FloatingDrawingPill({
 
 function BottomSheet({
   title, onClose, children,
+  onOpened,
   partialFraction: _ignored,
   maxHeight: _maxHeight,
 }: {
   title: string; onClose: () => void; children: React.ReactNode;
+  onOpened?: () => void;
   partialFraction?: number;
   maxHeight?: string;
 }) {
@@ -447,6 +449,11 @@ function BottomSheet({
   const scrollRef    = useRef<HTMLDivElement>(null);
   const onCloseRef   = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  const onOpenedRef  = useRef(onOpened);
+  useEffect(() => { onOpenedRef.current = onOpened; }, [onOpened]);
+  // Fires onOpened exactly once — on the initial open animation completing,
+  // not on subsequent half↔full drag transitions.
+  const openFiredRef = useRef(false);
 
   // ── NO React state for snap — all snap-driven styles via direct DOM ────────
   // This eliminates the React re-render burst that caused jank on transitions.
@@ -862,6 +869,12 @@ function BottomSheet({
         if (pending.restoreBlur) document.body.classList.remove("tj-sheet-drag");
         // 3. Switch overflow — layout is safe now that animation is complete
         if (pending.applyOverflow) applySnapDom(pending.applyOverflow);
+      }
+
+      // Fire onOpened once — only on the initial open animation, not on drag snaps
+      if (!openFiredRef.current) {
+        openFiredRef.current = true;
+        onOpenedRef.current?.();
       }
 
       // Report animation FPS to console (color-coded: green ≥55, yellow ≥40, red <40)
@@ -1890,6 +1903,59 @@ const ScaleTabContent = memo(function ScaleTabContent({ settings, h }: CSSSectio
   );
 });
 
+// ── Settings Skeleton ─────────────────────────────────────────────────────────
+// Zero-hook placeholder rendered during the 380ms opening animation.
+// Pure divs — no useState, no useEffect — renders in < 1ms.
+// Swapped out once onOpened fires (contentVisible becomes true).
+const SK_ROW_BG   = "rgba(255,255,255,0.07)";
+const SK_CTRL_BG  = "rgba(255,255,255,0.09)";
+const SK_SEC_BG   = "rgba(255,255,255,0.03)";
+const SK_TITLE_BG = "rgba(255,255,255,0.05)";
+const SK_DIV      = "1px solid rgba(255,255,255,0.04)";
+const SK_SEC_BDR  = "1px solid rgba(255,255,255,0.06)";
+
+const SkRow = memo(function SkRow({ w, ctrl, last }: { w: number; ctrl: number; last?: boolean }) {
+  return (
+    <div style={{
+      display:"flex", alignItems:"center", justifyContent:"space-between",
+      padding:"10px 14px",
+      borderBottom: last ? "none" : SK_DIV,
+    }}>
+      <div style={{ width: w, height: 10, borderRadius: 4, background: SK_ROW_BG }} />
+      <div style={{ width: ctrl, height: 22, borderRadius: 5, background: SK_CTRL_BG }} />
+    </div>
+  );
+});
+
+const SkSection = memo(function SkSection({ rows, last }: { rows: Array<[number,number]>; last?: boolean }) {
+  return (
+    <div style={{ marginBottom: last ? 0 : 20 }}>
+      <div style={{ width: 52, height: 7, borderRadius: 4, background: SK_TITLE_BG, marginBottom: 8 }} />
+      <div style={{ background: SK_SEC_BG, borderRadius: 10, border: SK_SEC_BDR, overflow:"hidden" }}>
+        {rows.map(([w, ctrl], i) => (
+          <SkRow key={i} w={w} ctrl={ctrl} last={i === rows.length - 1} />
+        ))}
+      </div>
+    </div>
+  );
+});
+
+const SKELETON_SECTIONS: Array<[Array<[number,number]>, boolean?]> = [
+  [[[110,28],[130,28],[90,28],[120,60]]],
+  [[[80,28],[100,28],[140,28]]],
+  [[[60,48]], true],
+];
+
+const SettingsSkeleton = memo(function SettingsSkeleton() {
+  return (
+    <div style={{ padding:"12px 14px 4px", overflowY:"hidden" }}>
+      {SKELETON_SECTIONS.map(([rows, last], i) => (
+        <SkSection key={i} rows={rows} last={last} />
+      ))}
+    </div>
+  );
+});
+
 // Shared helper primitives (ColorBox, Section, Row, …) are imported from
 // SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
 function ChartSettingsSheet({
@@ -1905,6 +1971,9 @@ function ChartSettingsSheet({
   useLayoutEffect(() => { _profCommitCSS(); });
   // ─────────────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
+  // contentVisible: false until BottomSheet opening animation completes.
+  // Skeleton is shown during the 380ms animation; real tab content mounts after.
+  const [contentVisible, setContentVisible] = useState(false);
   // settingsRef lets `p` read the latest settings without being in the dep array.
   // This makes `p` stable across settings changes — it only updates when `onChange`
   // changes (which is now useCallback'd in charts.tsx and never changes).
@@ -1958,10 +2027,12 @@ function ChartSettingsSheet({
   // contain renders from THIS open / THIS tab activation, not leaked from
   // other sheets or previous opens.
 
-  // Reset on initial mount (once)
-  const _mountResetDone = useRef(false);
-  if (!_mountResetDone.current) {
-    _mountResetDone.current = true;
+  // Reset when content first becomes visible (not on mount — content is deferred).
+  // Fires as a render-phase side-effect right before tab content mounts, so the
+  // profiler captures only the content-mount renders, not skeleton/sheet renders.
+  const _contentResetDone = useRef(false);
+  if (contentVisible && !_contentResetDone.current) {
+    _contentResetDone.current = true;
     sheetProfiler.resetRenderStats();
   }
 
@@ -2011,11 +2082,13 @@ function ChartSettingsSheet({
     console.groupEnd();
   }, []);
 
-  // Dump after initial open (mount-only)
+  // Dump 250ms after content becomes visible (animation has already finished,
+  // so all tab-content mounts will have been recorded by trackRender by then).
   useEffect(() => {
-    const t = setTimeout(() => _dumpReport("Open (tab: Candles)"), 250);
+    if (!contentVisible) return;
+    const t = setTimeout(() => _dumpReport(`Open — post-animation (tab: ${tab})`), 250);
     return () => clearTimeout(t);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contentVisible]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Dump after each tab switch.
   // _tabChangedFrom is a render-phase variable captured by this effect's closure
@@ -2029,7 +2102,7 @@ function ChartSettingsSheet({
   }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <BottomSheet title="Chart Settings" onClose={onClose}>
+    <BottomSheet title="Chart Settings" onClose={onClose} onOpened={() => setContentVisible(true)}>
 
       {/* ── Tab navigation ─────────────────────────────────────────────── */}
       <div style={{
@@ -2057,14 +2130,16 @@ function ChartSettingsSheet({
         })}
       </div>
 
-      {/* ── Candles tab ────────────────────────────────────────────────── */}
-      {tab === "Candles" && <CandlesTabContent settings={settings} h={h} />}
-
-      {/* ── Appearance tab ─────────────────────────────────────────────── */}
-      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
-
-      {/* ── Scale tab ──────────────────────────────────────────────────── */}
-      {tab === "Scale" && <ScaleTabContent settings={settings} h={h} />}
+      {/* ── Tab content: skeleton during animation, real content after ─── */}
+      {!contentVisible ? (
+        <SettingsSkeleton />
+      ) : (
+        <>
+          {tab === "Candles"     && <CandlesTabContent    settings={settings} h={h} />}
+          {tab === "Appearance"  && <AppearanceTabContent settings={settings} h={h} />}
+          {tab === "Scale"       && <ScaleTabContent      settings={settings} h={h} />}
+        </>
+      )}
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <div style={{

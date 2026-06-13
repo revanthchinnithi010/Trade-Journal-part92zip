@@ -202,8 +202,14 @@ export const Section = memo(function Section({ title, children }: { title: strin
 // Hover state removed — on touchscreen it causes pointless re-renders on every
 // finger contact. Color highlight is irrelevant on mobile.
 export const Row = memo(function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
-  const _c = sheetProfiler.trackRender("SettingsRow", "SettingsPanel.tsx", 135);
+  // Per-label render tracking: each row gets its own stats bucket in the profiler.
+  // Lets the dump report show "SettingsRow:Up Color" × N renders, not an aggregate.
+  const _c = sheetProfiler.trackRender(`SettingsRow:${label}`, "SettingsPanel.tsx", 204);
   useLayoutEffect(() => { _c(); });
+  // Per-row console log — visible in DevTools Profiler / console for re-render attribution.
+  // Fires on EVERY render (initial mount AND re-renders), so you can tell which rows
+  // are triggered by a given settings state change.
+  useLayoutEffect(() => { console.log("SettingsRow render", label); });
   return (
     <div
       style={{
