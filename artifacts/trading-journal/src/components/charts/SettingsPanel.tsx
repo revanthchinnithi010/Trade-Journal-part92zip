@@ -25,15 +25,15 @@ function _closeAllColorBoxes(exceptId?: symbol) {
   _colorBoxClosers.forEach((fn, id) => { if (id !== exceptId) fn(); });
 }
 
-// ── Color box trigger ─────────────────────────────────────────────────────────
-interface ColorBoxProps {
+// ── Color box trigger — exported for use in ChartSettingsSheet ───────────────
+export interface ColorBoxProps {
   value:    string;
   onChange: (v: string) => void;
   label?:   string;
   fallback?: string;
 }
 
-const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
+export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
   const safe  = safeColor(value, fallback);
   const [open, setOpen]     = useState(false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -81,8 +81,8 @@ const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#0
   );
 });
 
-// ── Setting row helpers ───────────────────────────────────────────────────────
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// ── Setting row helpers — exported for use in ChartSettingsSheet ─────────────
+export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{
@@ -101,7 +101,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
-function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
+export function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
   const [hovered, setHovered] = useState(false);
   return (
     <div
@@ -120,7 +120,7 @@ function Row({ label, children, last }: { label: string; children: React.ReactNo
   );
 }
 
-function ColorPair({ label, bull, bear, onBull, onBear, last }: {
+export function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   label: string; bull: string; bear: string;
   onBull: (v: string) => void; onBear: (v: string) => void; last?: boolean;
 }) {
@@ -139,7 +139,7 @@ function ColorPair({ label, bull, bear, onBull, onBear, last }: {
   );
 }
 
-function StyledSelect({ value, onChange, options }: {
+export function StyledSelect({ value, onChange, options }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
@@ -164,7 +164,7 @@ function StyledSelect({ value, onChange, options }: {
   );
 }
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+export function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       onClick={() => onChange(!checked)}
@@ -187,8 +187,27 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-// ── Sidebar nav item ──────────────────────────────────────────────────────────
-type SidebarSection = "Symbol" | "Canvas" | "Scale";
+export function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  return (
+    <div style={{ display: "flex", gap: 4 }}>
+      {[1, 2, 3].map(w => (
+        <button key={w} onClick={() => onChange(w)}
+          style={{
+            width: 30, height: 28, borderRadius: 7, cursor: "pointer", border: "none",
+            background: value === w ? "rgba(183,255,90,0.12)" : "rgba(57,91,67,0.1)",
+            outline: value === w ? "1.5px solid rgba(183,255,90,0.45)" : "1px solid rgba(57,91,67,0.25)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            transition: "all 0.12s",
+          }}>
+          <div style={{ width: "60%", height: w, background: value === w ? "#B7FF5A" : "rgba(167,184,169,0.5)", borderRadius: 1 }} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── Sidebar nav item (desktop only) ───────────────────────────────────────────
+export type SidebarSection = "Symbol" | "Canvas" | "Scale";
 
 function NavItem({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
@@ -212,8 +231,8 @@ function NavItem({ label, active, onClick }: { label: string; active: boolean; o
   );
 }
 
-// ── Save-as-default button with confirmation flash ────────────────────────────
-function SaveAsDefaultButton({ settings, onSaveAsDefault }: { settings: ChartSettings; onSaveAsDefault: (s: ChartSettings) => void }) {
+// ── Save-as-default button — exported for use in ChartSettingsSheet ───────────
+export function SaveAsDefaultButton({ settings, onSaveAsDefault }: { settings: ChartSettings; onSaveAsDefault: (s: ChartSettings) => void }) {
   const [saved, setSaved] = useState(false);
   const handleClick = () => {
     onSaveAsDefault(settings);
@@ -239,42 +258,19 @@ function SaveAsDefaultButton({ settings, onSaveAsDefault }: { settings: ChartSet
   );
 }
 
-// ── ThicknessRow — shared between desktop and embedded ────────────────────────
-function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return (
-    <div style={{ display: "flex", gap: 4 }}>
-      {[1, 2, 3].map(w => (
-        <button key={w} onClick={() => onChange(w)}
-          style={{
-            width: 30, height: 28, borderRadius: 7, cursor: "pointer", border: "none",
-            background: value === w ? "rgba(183,255,90,0.12)" : "rgba(57,91,67,0.1)",
-            outline: value === w ? "1.5px solid rgba(183,255,90,0.45)" : "1px solid rgba(57,91,67,0.25)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            transition: "all 0.12s",
-          }}>
-          <div style={{ width: "60%", height: w, background: value === w ? "#B7FF5A" : "rgba(167,184,169,0.5)", borderRadius: 1 }} />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// ── Main component ────────────────────────────────────────────────────────────
+// ── Desktop modal — unchanged, exactly as before ──────────────────────────────
 interface Props {
   settings: ChartSettings;
   onChange: (s: ChartSettings) => void;
   onSaveAsDefault?: (s: ChartSettings) => void;
   onClose:  () => void;
-  embedded?: boolean;
 }
 
-const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAsDefault, onClose, embedded }: Props) {
+const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAsDefault, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SidebarSection>("Symbol");
 
-  // Desktop-only: close on outside click. BottomSheet handles this in embedded mode.
   useEffect(() => {
-    if (embedded) return;
     const h = (e: MouseEvent) => {
       const target = e.target as Node;
       if (ref.current && !ref.current.contains(target)) {
@@ -285,80 +281,33 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
     };
     const id = setTimeout(() => document.addEventListener("mousedown", h), 80);
     return () => { clearTimeout(id); document.removeEventListener("mousedown", h); };
-  }, [onClose, embedded]);
+  }, [onClose]);
 
   const p = useCallback((patch: Partial<ChartSettings>) => onChange({ ...settings, ...patch }), [settings, onChange]);
 
-  // ── Section content — shared between desktop and embedded layouts ─────────
   const symbolContent = (
     <div>
       <Section title="Candles">
-        <ColorPair
-          label="Body"
-          bull={settings.upColor} bear={settings.downColor}
-          onBull={v => p({ upColor: v })} onBear={v => p({ downColor: v })}
-        />
-        <ColorPair
-          label="Borders"
-          bull={settings.upBorderColor} bear={settings.downBorderColor}
-          onBull={v => p({ upBorderColor: v })} onBear={v => p({ downBorderColor: v })}
-        />
-        <ColorPair
-          label="Wick"
-          bull={settings.upWickColor} bear={settings.downWickColor}
-          onBull={v => p({ upWickColor: v })} onBear={v => p({ downWickColor: v })}
-          last
-        />
+        <ColorPair label="Body" bull={settings.upColor} bear={settings.downColor} onBull={v => p({ upColor: v })} onBear={v => p({ downColor: v })} />
+        <ColorPair label="Borders" bull={settings.upBorderColor} bear={settings.downBorderColor} onBull={v => p({ upBorderColor: v })} onBear={v => p({ downBorderColor: v })} />
+        <ColorPair label="Wick" bull={settings.upWickColor} bear={settings.downWickColor} onBull={v => p({ upWickColor: v })} onBear={v => p({ downWickColor: v })} last />
       </Section>
-
       <Section title="Price Label">
-        <ColorPair
-          label="Background"
-          bull={settings.priceLabelBullColor ?? "#B7FF5A"}
-          bear={settings.priceLabelBearColor ?? "#ef4444"}
-          onBull={v => p({ priceLabelBullColor: v })}
-          onBear={v => p({ priceLabelBearColor: v })}
-        />
-        <Row label="Text Color">
-          <ColorBox
-            value={settings.priceLabelTextColor ?? "#ffffff"}
-            onChange={v => p({ priceLabelTextColor: v })}
-            label="Price Label Text"
-            fallback="#ffffff"
-          />
-        </Row>
-        <Row label="Line Color" last>
-          <ColorBox
-            value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"}
-            onChange={v => p({ priceLabelLineColor: v })}
-            label="Price Line"
-            fallback="rgba(255,255,255,0.4)"
-          />
-        </Row>
+        <ColorPair label="Background" bull={settings.priceLabelBullColor ?? "#B7FF5A"} bear={settings.priceLabelBearColor ?? "#ef4444"} onBull={v => p({ priceLabelBullColor: v })} onBear={v => p({ priceLabelBearColor: v })} />
+        <Row label="Text Color"><ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor: v })} label="Price Label Text" fallback="#ffffff" /></Row>
+        <Row label="Line Color" last><ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor: v })} label="Price Line" fallback="rgba(255,255,255,0.4)" /></Row>
       </Section>
-
       <Section title="Timezone">
         <Row label="Display Timezone" last>
           <StyledSelect value={settings.timezone} onChange={v => p({ timezone: v as ChartSettings["timezone"] })}
-            options={[
-              { value: "UTC",      label: "UTC" },
-              { value: "IST",      label: "IST (India)" },
-              { value: "Exchange", label: "Exchange" },
-              { value: "Local",    label: "Local Time" },
-            ]}
+            options={[{ value: "UTC", label: "UTC" }, { value: "IST", label: "IST (India)" }, { value: "Exchange", label: "Exchange" }, { value: "Local", label: "Local Time" }]}
           />
         </Row>
       </Section>
-
       <Section title="Price Precision">
         <Row label="Decimal Places" last>
           <StyledSelect value={settings.precision} onChange={v => p({ precision: v as ChartSettings["precision"] })}
-            options={[
-              { value: "2", label: "2 decimals" },
-              { value: "4", label: "4 decimals" },
-              { value: "5", label: "5 decimals" },
-              { value: "8", label: "8 decimals" },
-            ]}
+            options={[{ value: "2", label: "2 decimals" }, { value: "4", label: "4 decimals" }, { value: "5", label: "5 decimals" }, { value: "8", label: "8 decimals" }]}
           />
         </Row>
       </Section>
@@ -370,108 +319,52 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
       <Section title="Background">
         <Row label="Type">
           <StyledSelect value={settings.bgType} onChange={v => p({ bgType: v as ChartSettings["bgType"] })}
-            options={[
-              { value: "solid",    label: "Solid" },
-              { value: "gradient", label: "Gradient" },
-            ]}
+            options={[{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }]}
           />
         </Row>
-        <Row label="Color" last>
-          <ColorBox value={settings.bgColor} onChange={v => p({ bgColor: v })} label="Background Color" />
-        </Row>
+        <Row label="Color" last><ColorBox value={settings.bgColor} onChange={v => p({ bgColor: v })} label="Background Color" /></Row>
       </Section>
-
       <Section title="Grid Lines">
         <Row label="Display">
           <StyledSelect value={settings.gridStyle} onChange={v => p({ gridStyle: v as ChartSettings["gridStyle"], gridVisible: v !== "none" })}
-            options={[
-              { value: "both",       label: "Vertical + Horizontal" },
-              { value: "vertical",   label: "Vertical Only" },
-              { value: "horizontal", label: "Horizontal Only" },
-              { value: "none",       label: "None" },
-            ]}
+            options={[{ value: "both", label: "Vertical + Horizontal" }, { value: "vertical", label: "Vertical Only" }, { value: "horizontal", label: "Horizontal Only" }, { value: "none", label: "None" }]}
           />
         </Row>
-        <Row label="Color" last>
-          <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor: v })} label="Grid Color" />
-        </Row>
+        <Row label="Color" last><ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor: v })} label="Grid Color" /></Row>
       </Section>
-
       <Section title="Axis Borders">
-        <Row label="Visible">
-          <Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible: v })} />
-        </Row>
-        <Row label="Color" last>
-          <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor: v })} label="Axis Border Color" />
-        </Row>
+        <Row label="Visible"><Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible: v })} /></Row>
+        <Row label="Color" last><ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor: v })} label="Axis Border Color" /></Row>
       </Section>
-
       <Section title="Chart Panel Border">
-        <Row label="Visible">
-          <Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible: v })} />
-        </Row>
-        <Row label="Color">
-          <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor: v })} label="Panel Border Color" />
-        </Row>
-        <Row label="Thickness" last>
-          <ThicknessButtons
-            value={settings.panelBorderThickness ?? 1}
-            onChange={v => p({ panelBorderThickness: v })}
-          />
-        </Row>
+        <Row label="Visible"><Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible: v })} /></Row>
+        <Row label="Color"><ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor: v })} label="Panel Border Color" /></Row>
+        <Row label="Thickness" last><ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={v => p({ panelBorderThickness: v })} /></Row>
       </Section>
-
       <Section title="Crosshair">
-        <Row label="Color">
-          <ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor: v })} label="Crosshair Color" />
-        </Row>
+        <Row label="Color"><ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor: v })} label="Crosshair Color" /></Row>
         <Row label="Mode">
           <StyledSelect value={settings.crosshair} onChange={v => p({ crosshair: v as ChartSettings["crosshair"] })}
-            options={[
-              { value: "normal", label: "Normal" },
-              { value: "magnet", label: "Magnet" },
-            ]}
+            options={[{ value: "normal", label: "Normal" }, { value: "magnet", label: "Magnet" }]}
           />
         </Row>
         <Row label="Line Style">
           <StyledSelect value={settings.crosshairStyle} onChange={v => p({ crosshairStyle: v as ChartSettings["crosshairStyle"] })}
-            options={[
-              { value: "solid",  label: "Solid" },
-              { value: "dashed", label: "Dashed" },
-              { value: "dotted", label: "Dotted" },
-            ]}
+            options={[{ value: "solid", label: "Solid" }, { value: "dashed", label: "Dashed" }, { value: "dotted", label: "Dotted" }]}
           />
         </Row>
-        <Row label="Thickness" last>
-          <ThicknessButtons
-            value={settings.crosshairWidth ?? 1}
-            onChange={v => p({ crosshairWidth: v })}
-          />
-        </Row>
+        <Row label="Thickness" last><ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={v => p({ crosshairWidth: v })} /></Row>
       </Section>
-
       <Section title="Text">
-        <Row label="Color">
-          <ColorBox value={settings.textColor} onChange={v => p({ textColor: v })} label="Text Color" />
-        </Row>
+        <Row label="Color"><ColorBox value={settings.textColor} onChange={v => p({ textColor: v })} label="Text Color" /></Row>
         <Row label="Font Size" last>
           <StyledSelect value={String(settings.fontSize)} onChange={v => p({ fontSize: Number(v) })}
-            options={[
-              { value: "9",  label: "9px" },
-              { value: "10", label: "10px" },
-              { value: "11", label: "11px (default)" },
-              { value: "12", label: "12px" },
-              { value: "13", label: "13px" },
-              { value: "14", label: "14px" },
-            ]}
+            options={[{ value: "9", label: "9px" }, { value: "10", label: "10px" }, { value: "11", label: "11px (default)" }, { value: "12", label: "12px" }, { value: "13", label: "13px" }, { value: "14", label: "14px" }]}
           />
         </Row>
       </Section>
-
       <Section title="Scale Labels">
-        <Row label="Label Color" last>
-          <ColorBox value={settings.linesColor} onChange={v => p({ linesColor: v })} label="Scale Label Color" />
-        </Row>
+        <Row label="Label Color" last><ColorBox value={settings.linesColor} onChange={v => p({ linesColor: v })} label="Scale Label Color" /></Row>
       </Section>
     </div>
   );
@@ -481,114 +374,24 @@ const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAs
       <Section title="Price Scale Mode">
         <Row label="Scale Type">
           <StyledSelect value={settings.scaleMode} onChange={v => p({ scaleMode: v as ChartSettings["scaleMode"] })}
-            options={[
-              { value: "normal",  label: "Normal" },
-              { value: "log",     label: "Logarithmic" },
-              { value: "percent", label: "Percentage" },
-              { value: "indexed", label: "Indexed to 100" },
-            ]}
+            options={[{ value: "normal", label: "Normal" }, { value: "log", label: "Logarithmic" }, { value: "percent", label: "Percentage" }, { value: "indexed", label: "Indexed to 100" }]}
           />
         </Row>
-        <Row label="Auto Scale" last>
-          <Toggle
-            checked={settings.priceScaleAutoScale}
-            onChange={v => p({ priceScaleAutoScale: v })}
-          />
-        </Row>
+        <Row label="Auto Scale" last><Toggle checked={settings.priceScaleAutoScale} onChange={v => p({ priceScaleAutoScale: v })} /></Row>
       </Section>
-
       <Section title="Interaction">
         <Row label="Drag Price Scale" last>
-          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>
-            Drag the right axis up/down
-          </div>
+          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>Drag the right axis up/down</div>
         </Row>
       </Section>
-
       <Section title="Reset">
         <Row label="Double-click Axis" last>
-          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>
-            Double-click price axis to reset
-          </div>
+          <div style={{ fontSize: 11, color: "rgba(167,184,169,0.5)", fontStyle: "italic" }}>Double-click price axis to reset</div>
         </Row>
       </Section>
     </div>
   );
 
-  // ── Embedded mobile layout — used inside BottomSheet ─────────────────────
-  if (embedded) {
-    const TAB_LABELS: Record<SidebarSection, string> = {
-      Symbol: "Candles",
-      Canvas: "Appearance",
-      Scale:  "Scale",
-    };
-
-    return (
-      <div style={{ display: "flex", flexDirection: "column" }}>
-        {/* Horizontal tab pills — sticky so they stay visible while scrolling */}
-        <div style={{
-          display: "flex", gap: 7, padding: "8px 14px 12px",
-          position: "sticky", top: 0, zIndex: 2,
-          background: "rgba(14,21,16,0.97)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          flexShrink: 0,
-        }}>
-          {(["Symbol", "Canvas", "Scale"] as SidebarSection[]).map(s => {
-            const active = section === s;
-            return (
-              <button key={s} onClick={() => setSection(s)}
-                style={{
-                  padding: "7px 16px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-                  background: active ? "rgba(183,255,90,0.1)" : "rgba(57,91,67,0.08)",
-                  border: `1px solid ${active ? "rgba(183,255,90,0.4)" : "rgba(57,91,67,0.2)"}`,
-                  color: active ? "#B7FF5A" : "rgba(167,184,169,0.65)",
-                  cursor: "pointer", transition: "all 0.15s",
-                  outline: "none",
-                }}
-                onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.15)"; }}
-                onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.08)"; }}
-              >
-                {TAB_LABELS[s]}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Section content */}
-        <div style={{ padding: "12px 14px 4px" }}>
-          {section === "Symbol" && symbolContent}
-          {section === "Canvas" && canvasContent}
-          {section === "Scale" && scaleContent}
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: "12px 14px 8px",
-          borderTop: "1px solid rgba(57,91,67,0.18)",
-          display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-          flexShrink: 0,
-        }}>
-          <button onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
-            style={{
-              padding: "8px 16px", borderRadius: 9,
-              background: "transparent", border: "1px solid rgba(57,91,67,0.3)",
-              color: "rgba(167,184,169,0.6)", fontSize: 12, fontWeight: 600, cursor: "pointer",
-              transition: "all 0.12s",
-            }}
-            onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.6)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.9)"; }}
-            onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(57,91,67,0.3)"; (e.currentTarget as HTMLButtonElement).style.color = "rgba(167,184,169,0.6)"; }}
-          >
-            Reset Defaults
-          </button>
-          {onSaveAsDefault && (
-            <SaveAsDefaultButton settings={settings} onSaveAsDefault={onSaveAsDefault} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Desktop modal layout ──────────────────────────────────────────────────
   return (
     <div style={{
       position: "fixed", inset: 0, zIndex: 1000,

@@ -20,7 +20,9 @@ import IndicatorRenderer from "./IndicatorRenderer";
 import CustomIndicatorRenderer from "./CustomIndicatorRenderer";
 import IndicatorTags from "./IndicatorTags";
 import IndicatorsPanel from "./IndicatorsPanel";
-import SettingsPanel from "./SettingsPanel";
+import SettingsPanel, {
+  ColorBox, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton,
+} from "./SettingsPanel";
 import { AlertSheetContent } from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
 import { tfLabel } from "./TFDropdown";
@@ -28,6 +30,7 @@ import { fmtPrice, useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useSymbolTick, getSymbolTick } from "@/store/tickStore";
 import { sheetDragState } from "@/lib/sheetDragState";
 import type { ChartSettings } from "./chartSettingsTypes";
+import { DEFAULT_CHART_SETTINGS } from "./chartSettingsTypes";
 import { type OHLCBar, type ChartType, useChartStore } from "@/store/chartStore";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import type { Drawing, ToolType, DrawingStyle } from "@/types/drawing";
@@ -1672,8 +1675,11 @@ function MoreOptionsSheet({
 }
 
 // ── Chart Settings Sheet ───────────────────────────────────────────────────
-// Wraps the existing SettingsPanel in the standard BottomSheet shell.
-// embedded=true suppresses SettingsPanel's own overlay/header/backdrop.
+// Component tree: ChartSettingsSheet → BottomSheet → content directly.
+// Identical depth to DrawingToolsSheet → BottomSheet → content.
+// No intermediate wrapper component. All content is inline here.
+// Shared helper primitives (ColorBox, Section, Row, …) are imported from
+// SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
 function ChartSettingsSheet({
   settings, onChange, onSaveAsDefault, onClose,
 }: {
@@ -1682,15 +1688,217 @@ function ChartSettingsSheet({
   onSaveAsDefault?: (s: ChartSettings) => void;
   onClose: () => void;
 }) {
+  const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
+  const p = useCallback(
+    (patch: Partial<ChartSettings>) => onChange({ ...settings, ...patch }),
+    [settings, onChange],
+  );
+
   return (
     <BottomSheet title="Chart Settings" onClose={onClose}>
-      <SettingsPanel
-        settings={settings}
-        onChange={onChange}
-        onSaveAsDefault={onSaveAsDefault}
-        onClose={onClose}
-        embedded
-      />
+
+      {/* ── Tab navigation ─────────────────────────────────────────────── */}
+      <div style={{
+        display:"flex", gap:7, padding:"8px 14px 12px",
+        position:"sticky", top:0, zIndex:2, background:SHEET_BG,
+        borderBottom:`1px solid ${DIVIDER}`, flexShrink:0,
+      }}>
+        {(["Candles","Appearance","Scale"] as const).map(t => {
+          const active = tab === t;
+          return (
+            <button key={t} onClick={() => setTab(t)}
+              style={{
+                padding:"7px 16px", borderRadius:20, fontSize:12, fontWeight:600,
+                background: active ? "rgba(183,255,90,0.10)" : BTN_BG,
+                border:`1px solid ${active ? "rgba(183,255,90,0.40)" : BTN_BORDER}`,
+                color: active ? "#B7FF5A" : TEXT_MED,
+                cursor:"pointer", outline:"none", transition:"all 0.15s",
+              }}
+              onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.15)"; }}
+              onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = BTN_BG; }}
+            >
+              {t}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── Candles tab ────────────────────────────────────────────────── */}
+      {tab === "Candles" && (
+        <div style={{ padding:"12px 14px 4px" }}>
+          <Section title="Candles">
+            <ColorPair label="Body"
+              bull={settings.upColor} bear={settings.downColor}
+              onBull={v => p({ upColor:v })} onBear={v => p({ downColor:v })} />
+            <ColorPair label="Borders"
+              bull={settings.upBorderColor} bear={settings.downBorderColor}
+              onBull={v => p({ upBorderColor:v })} onBear={v => p({ downBorderColor:v })} />
+            <ColorPair label="Wick"
+              bull={settings.upWickColor} bear={settings.downWickColor}
+              onBull={v => p({ upWickColor:v })} onBear={v => p({ downWickColor:v })} last />
+          </Section>
+
+          <Section title="Price Label">
+            <ColorPair label="Background"
+              bull={settings.priceLabelBullColor ?? "#B7FF5A"}
+              bear={settings.priceLabelBearColor ?? "#ef4444"}
+              onBull={v => p({ priceLabelBullColor:v })}
+              onBear={v => p({ priceLabelBearColor:v })} />
+            <Row label="Text Color">
+              <ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor:v })} label="Price Label Text" fallback="#ffffff" />
+            </Row>
+            <Row label="Line Color" last>
+              <ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor:v })} label="Price Line" fallback="rgba(255,255,255,0.4)" />
+            </Row>
+          </Section>
+
+          <Section title="Timezone">
+            <Row label="Display Timezone" last>
+              <StyledSelect value={settings.timezone} onChange={v => p({ timezone:v as ChartSettings["timezone"] })}
+                options={[{value:"UTC",label:"UTC"},{value:"IST",label:"IST (India)"},{value:"Exchange",label:"Exchange"},{value:"Local",label:"Local Time"}]} />
+            </Row>
+          </Section>
+
+          <Section title="Price Precision">
+            <Row label="Decimal Places" last>
+              <StyledSelect value={settings.precision} onChange={v => p({ precision:v as ChartSettings["precision"] })}
+                options={[{value:"2",label:"2 decimals"},{value:"4",label:"4 decimals"},{value:"5",label:"5 decimals"},{value:"8",label:"8 decimals"}]} />
+            </Row>
+          </Section>
+        </div>
+      )}
+
+      {/* ── Appearance tab ─────────────────────────────────────────────── */}
+      {tab === "Appearance" && (
+        <div style={{ padding:"12px 14px 4px" }}>
+          <Section title="Background">
+            <Row label="Type">
+              <StyledSelect value={settings.bgType} onChange={v => p({ bgType:v as ChartSettings["bgType"] })}
+                options={[{value:"solid",label:"Solid"},{value:"gradient",label:"Gradient"}]} />
+            </Row>
+            <Row label="Color" last>
+              <ColorBox value={settings.bgColor} onChange={v => p({ bgColor:v })} label="Background Color" />
+            </Row>
+          </Section>
+
+          <Section title="Grid Lines">
+            <Row label="Display">
+              <StyledSelect value={settings.gridStyle}
+                onChange={v => p({ gridStyle:v as ChartSettings["gridStyle"], gridVisible:v !== "none" })}
+                options={[{value:"both",label:"Vertical + Horizontal"},{value:"vertical",label:"Vertical Only"},{value:"horizontal",label:"Horizontal Only"},{value:"none",label:"None"}]} />
+            </Row>
+            <Row label="Color" last>
+              <ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor:v })} label="Grid Color" />
+            </Row>
+          </Section>
+
+          <Section title="Axis Borders">
+            <Row label="Visible">
+              <Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible:v })} />
+            </Row>
+            <Row label="Color" last>
+              <ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor:v })} label="Axis Border Color" />
+            </Row>
+          </Section>
+
+          <Section title="Chart Panel Border">
+            <Row label="Visible">
+              <Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible:v })} />
+            </Row>
+            <Row label="Color">
+              <ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor:v })} label="Panel Border Color" />
+            </Row>
+            <Row label="Thickness" last>
+              <ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={v => p({ panelBorderThickness:v })} />
+            </Row>
+          </Section>
+
+          <Section title="Crosshair">
+            <Row label="Color">
+              <ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor:v })} label="Crosshair Color" />
+            </Row>
+            <Row label="Mode">
+              <StyledSelect value={settings.crosshair} onChange={v => p({ crosshair:v as ChartSettings["crosshair"] })}
+                options={[{value:"normal",label:"Normal"},{value:"magnet",label:"Magnet"}]} />
+            </Row>
+            <Row label="Line Style">
+              <StyledSelect value={settings.crosshairStyle} onChange={v => p({ crosshairStyle:v as ChartSettings["crosshairStyle"] })}
+                options={[{value:"solid",label:"Solid"},{value:"dashed",label:"Dashed"},{value:"dotted",label:"Dotted"}]} />
+            </Row>
+            <Row label="Thickness" last>
+              <ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={v => p({ crosshairWidth:v })} />
+            </Row>
+          </Section>
+
+          <Section title="Text">
+            <Row label="Color">
+              <ColorBox value={settings.textColor} onChange={v => p({ textColor:v })} label="Text Color" />
+            </Row>
+            <Row label="Font Size" last>
+              <StyledSelect value={String(settings.fontSize)} onChange={v => p({ fontSize:Number(v) })}
+                options={[{value:"9",label:"9px"},{value:"10",label:"10px"},{value:"11",label:"11px (default)"},{value:"12",label:"12px"},{value:"13",label:"13px"},{value:"14",label:"14px"}]} />
+            </Row>
+          </Section>
+
+          <Section title="Scale Labels">
+            <Row label="Label Color" last>
+              <ColorBox value={settings.linesColor} onChange={v => p({ linesColor:v })} label="Scale Label Color" />
+            </Row>
+          </Section>
+        </div>
+      )}
+
+      {/* ── Scale tab ──────────────────────────────────────────────────── */}
+      {tab === "Scale" && (
+        <div style={{ padding:"12px 14px 4px" }}>
+          <Section title="Price Scale Mode">
+            <Row label="Scale Type">
+              <StyledSelect value={settings.scaleMode} onChange={v => p({ scaleMode:v as ChartSettings["scaleMode"] })}
+                options={[{value:"normal",label:"Normal"},{value:"log",label:"Logarithmic"},{value:"percent",label:"Percentage"},{value:"indexed",label:"Indexed to 100"}]} />
+            </Row>
+            <Row label="Auto Scale" last>
+              <Toggle checked={settings.priceScaleAutoScale} onChange={v => p({ priceScaleAutoScale:v })} />
+            </Row>
+          </Section>
+
+          <Section title="Interaction">
+            <Row label="Drag Price Scale" last>
+              <span style={{ fontSize:11, color:"rgba(167,184,169,0.5)", fontStyle:"italic" }}>Drag the right axis up/down</span>
+            </Row>
+          </Section>
+
+          <Section title="Reset">
+            <Row label="Double-click Axis" last>
+              <span style={{ fontSize:11, color:"rgba(167,184,169,0.5)", fontStyle:"italic" }}>Double-click price axis to reset</span>
+            </Row>
+          </Section>
+        </div>
+      )}
+
+      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      <div style={{
+        padding:"12px 14px 8px",
+        borderTop:`1px solid rgba(57,91,67,0.18)`,
+        display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
+        flexShrink:0,
+      }}>
+        <button
+          onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
+          style={{
+            padding:"8px 16px", borderRadius:9, background:"transparent",
+            border:"1px solid rgba(57,91,67,0.3)", color:"rgba(167,184,169,0.6)",
+            fontSize:12, fontWeight:600, cursor:"pointer",
+          }}
+          onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(57,91,67,0.6)"; (e.currentTarget as HTMLButtonElement).style.color="rgba(167,184,169,0.9)"; }}
+          onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(57,91,67,0.3)"; (e.currentTarget as HTMLButtonElement).style.color="rgba(167,184,169,0.6)"; }}
+        >
+          Reset Defaults
+        </button>
+        {onSaveAsDefault && (
+          <SaveAsDefaultButton settings={settings} onSaveAsDefault={onSaveAsDefault} />
+        )}
+      </div>
+
     </BottomSheet>
   );
 }
