@@ -1031,6 +1031,23 @@ export default function Charts() {
 
   const [activeChartSlot, setActiveChartSlot] = useState(0);
 
+  // Per-slot symbol + interval tracking for secondary chart panels
+  const [slotSymbols,   setSlotSymbols]   = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
+  const [slotIntervals, setSlotIntervals] = useState<string[]>(() => [interval, interval, interval]);
+
+  // Seed slot symbols once from watchlist (excluding the primary symbol)
+  const slotInitRef = useRef(false);
+  useEffect(() => {
+    if (slotInitRef.current || watchlistItems.length === 0) return;
+    slotInitRef.current = true;
+    const candidates = watchlistItems.filter(w => w.symbol !== activeKey);
+    setSlotSymbols([
+      candidates[0]?.symbol ?? "ETHUSD",
+      candidates[1]?.symbol ?? "SOLUSD",
+      candidates[2]?.symbol ?? "DOGEUSD",
+    ]);
+  }, [watchlistItems.length]); // eslint-disable-line
+
   const [syncTF, setSyncTF] = useState<boolean>(() => localStorage.getItem("tv_sync_tf") === "1");
 
   // ── Bar Replay state ──────────────────────────────────────────────────────
@@ -1868,7 +1885,7 @@ export default function Charts() {
                     </CustomChart>
                   </div>
 
-                  {/* Extra MiniChart slots */}
+                  {/* Extra MiniChart slots — full engine with DrawingOverlay + indicators */}
                   {Array.from({ length: layoutCount - 1 }).map((_, i) => (
                     <div
                       key={i}
@@ -1877,16 +1894,29 @@ export default function Charts() {
                         position: "relative", overflow: "hidden", minHeight: 0,
                         cursor: "pointer",
                         boxShadow: activeChartSlot === i + 1
-                          ? "inset 0 0 0 2px rgba(183,255,90,0.45)"
+                          ? "inset 0 0 0 2px rgba(56,189,248,0.45)"
                           : "inset 0 0 0 1px rgba(255,255,255,0.05)",
                         transition: "box-shadow 0.15s",
                       }}
                     >
                       <MiniChart
-                        defaultSymbol={watchlistItems.filter(w => w.symbol !== activeKey)[i]?.symbol ?? ["ETHUSD", "SOLUSD", "DOGEUSD"][i] ?? "ETHUSD"}
+                        defaultSymbol={slotSymbols[i] ?? "ETHUSD"}
                         defaultInterval={interval}
                         syncedInterval={syncTF ? interval : undefined}
-                      />
+                        controlledInterval={syncTF ? undefined : slotIntervals[i]}
+                        controlledSymbol={slotSymbols[i]}
+                        onSymbolChange={sym => setSlotSymbols(prev => { const n = [...prev]; n[i] = sym; return n; })}
+                        onIntervalChange={iv => setSlotIntervals(prev => { const n = [...prev]; n[i] = iv; return n; })}
+                      >
+                        <DrawingOverlay
+                          symbol={slotSymbols[i] ?? "ETHUSD"}
+                          timeframe={syncTF ? interval : (slotIntervals[i] ?? interval)}
+                          onDrawingAlert={handleDrawingAlert}
+                          alertDrawingIds={alertDrawingIds}
+                        />
+                        <IndicatorRenderer />
+                        <CustomIndicatorRenderer />
+                      </MiniChart>
                     </div>
                   ))}
                 </>

@@ -2843,6 +2843,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
   const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
+  const [slotIntervals,     setSlotIntervals]     = useState<string[]>(() => [interval, interval, interval]);
   const slotInitRef = useRef(false);
 
   // One-time init: seed slot symbols from watchlist when it first loads
@@ -2884,17 +2885,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleCloseDrawingSheet = useCallback(() => setShowDrawingSheet(false), []);
   const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false), []);
 
-  // ── Prev / Next symbol ──
-  const handlePrev = useCallback(() => {
-    const idx = watchlistItems.findIndex(i => i.symbol === activeKey);
-    if (idx > 0) selectSymbol(watchlistItems[idx - 1].symbol);
-  }, [watchlistItems, activeKey, selectSymbol]);
-
-  const handleNext = useCallback(() => {
-    const idx = watchlistItems.findIndex(i => i.symbol === activeKey);
-    if (idx >= 0 && idx < watchlistItems.length - 1) selectSymbol(watchlistItems[idx + 1].symbol);
-  }, [watchlistItems, activeKey, selectSymbol]);
-
   // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
   const handleSelectSymbol = useCallback((sym: string) => {
     if (activeChartSlot === 0 || layoutCount <= 1) {
@@ -2908,10 +2898,50 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     }
   }, [activeChartSlot, layoutCount, selectSymbol]);
 
-  // Derive the symbol/badge shown in the shared mini control bar for the active slot
+  // Routes TF selection to the main chart (slot 0) or to a secondary slot's interval
+  const handleSelectInterval = useCallback((tf: string) => {
+    if (activeChartSlot === 0 || layoutCount <= 1) {
+      selectInterval(tf);
+    } else {
+      setSlotIntervals(prev => {
+        const next = [...prev];
+        next[activeChartSlot - 1] = tf;
+        return next;
+      });
+    }
+  }, [activeChartSlot, layoutCount, selectInterval]);
+
+  // ── Prev / Next symbol — routes to the active slot ──
+  const handlePrev = useCallback(() => {
+    if (activeChartSlot > 0 && layoutCount > 1) {
+      const curSym = slotSymbols[activeChartSlot - 1] ?? activeKey;
+      const idx = watchlistItems.findIndex(i => i.symbol === curSym);
+      if (idx > 0) handleSelectSymbol(watchlistItems[idx - 1].symbol);
+    } else {
+      const idx = watchlistItems.findIndex(i => i.symbol === activeKey);
+      if (idx > 0) selectSymbol(watchlistItems[idx - 1].symbol);
+    }
+  }, [watchlistItems, activeKey, activeChartSlot, layoutCount, slotSymbols, handleSelectSymbol, selectSymbol]);
+
+  const handleNext = useCallback(() => {
+    if (activeChartSlot > 0 && layoutCount > 1) {
+      const curSym = slotSymbols[activeChartSlot - 1] ?? activeKey;
+      const idx = watchlistItems.findIndex(i => i.symbol === curSym);
+      if (idx >= 0 && idx < watchlistItems.length - 1) handleSelectSymbol(watchlistItems[idx + 1].symbol);
+    } else {
+      const idx = watchlistItems.findIndex(i => i.symbol === activeKey);
+      if (idx >= 0 && idx < watchlistItems.length - 1) selectSymbol(watchlistItems[idx + 1].symbol);
+    }
+  }, [watchlistItems, activeKey, activeChartSlot, layoutCount, slotSymbols, handleSelectSymbol, selectSymbol]);
+
+  // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
   const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
     ? activeKey
     : (slotSymbols[activeChartSlot - 1] ?? activeKey);
+
+  const activeSlotInterval = (activeChartSlot === 0 || layoutCount <= 1)
+    ? interval
+    : (slotIntervals[activeChartSlot - 1] ?? interval);
   const activeSlotBadge = (activeChartSlot === 0 || layoutCount <= 1)
     ? badge
     : (watchlistItems.find(i => i.symbol === activeSlotSymbol)?.badge
@@ -2990,7 +3020,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
                 </CustomChart>
               </div>
 
-              {/* Extra MiniChart slots */}
+              {/* Extra MiniChart slots — full engine with DrawingOverlay + indicators */}
               {Array.from({ length: layoutCount - 1 }).map((_, i) => (
                 <div
                   key={i}
@@ -3008,9 +3038,19 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
                     defaultSymbol={slotSymbols[i] ?? "ETHUSD"}
                     defaultInterval={interval}
                     syncedInterval={syncTF ? interval : undefined}
+                    controlledInterval={syncTF ? undefined : slotIntervals[i]}
                     headerless={true}
                     controlledSymbol={slotSymbols[i]}
-                  />
+                  >
+                    <DrawingOverlay
+                      symbol={slotSymbols[i] ?? "ETHUSD"}
+                      timeframe={syncTF ? interval : (slotIntervals[i] ?? interval)}
+                      onDrawingAlert={handleDrawingAlert}
+                      alertDrawingIds={alertDrawingIds}
+                    />
+                    <IndicatorRenderer />
+                    <CustomIndicatorRenderer />
+                  </MiniChart>
                 </div>
               ))}
             </>
@@ -3026,7 +3066,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <MiniControlBar
           activeKey={activeSlotSymbol}
           badge={activeSlotBadge}
-          interval={interval}
+          interval={activeSlotInterval}
           watchlistItems={watchlistItems}
           onSelectSymbol={handleSelectSymbol}
           onTF={() => setShowTFSheet(true)}
@@ -3046,7 +3086,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {/* ── Sheets & modals ── */}
       {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
       {showBrokerSheet  && <BrokerSheet onClose={() => setShowBrokerSheet(false)} />}
-      {showTFSheet      && <TFSheet interval={interval} onSelect={selectInterval} onClose={() => setShowTFSheet(false)} />}
+      {showTFSheet      && <TFSheet interval={activeSlotInterval} onSelect={handleSelectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartType ?? "candles"} onSelect={t => setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
       {showAuthModal    && <BrokerAuthModal />}

@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState, useCallback, memo } from "react";
+import { useEffect, useRef, useState, useCallback, memo, useMemo } from "react";
 import {
   createChart, CandlestickSeries, HistogramSeries,
   CrosshairMode, type IChartApi, type ISeriesApi, type Time,
 } from "lightweight-charts";
+import { ChartContext } from "@/contexts/ChartContext";
+import { ChartBarsContext } from "@/contexts/ChartBarsContext";
+import type { OHLCBar } from "@/store/chartStore";
 import { ChevronDown, Search, Link2, Unlink2 } from "lucide-react";
 import { useLiveMarketContext, fmtPrice } from "@/contexts/LiveMarketContext";
 import { useTickStore, useSymbolTick } from "@/store/tickStore";
@@ -94,22 +97,33 @@ function MiniSymbolPicker({ onSelect, onClose }: { onSelect: (s: string) => void
 
 // ── MiniChart ─────────────────────────────────────────────────────────────────
 export interface MiniChartProps {
-  defaultSymbol:     string;
-  defaultInterval:   string;
+  defaultSymbol:       string;
+  defaultInterval:     string;
   /** When provided, overrides internal interval (timeframe sync mode) */
-  syncedInterval?:   string;
+  syncedInterval?:     string;
   /** When true, hides the symbol/TF header — parent controls symbol via controlledSymbol */
-  headerless?:       boolean;
+  headerless?:         boolean;
   /** When provided, parent controls the displayed symbol (e.g. from the shared mini control bar) */
-  controlledSymbol?: string;
+  controlledSymbol?:   string;
+  /** When provided, parent controls the displayed interval (active-slot TF routing) */
+  controlledInterval?: string;
+  /** DrawingOverlay, IndicatorRenderer, etc. — rendered over the chart via ChartContext */
+  children?:           React.ReactNode;
+  /** Called whenever symbol changes (via header picker, controlledSymbol, etc.) */
+  onSymbolChange?:     (sym: string) => void;
+  /** Called whenever interval changes (via header pills, controlledInterval, etc.) */
+  onIntervalChange?:   (iv: string) => void;
 }
 
-const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, syncedInterval, headerless, controlledSymbol }: MiniChartProps) {
+const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, syncedInterval, headerless, controlledSymbol, controlledInterval, children, onSymbolChange, onIntervalChange }: MiniChartProps) {
   const [symbol,     setSymbol]     = useState(defaultSymbol);
   const [interval,   setInterval]   = useState(syncedInterval ?? defaultInterval);
   const [showPicker, setShowPicker] = useState(false);
   const [loading,    setLoading]    = useState(true);
   const [livePrice,  setLivePrice]  = useState<number | null>(null);
+
+  // Provided to children (DrawingOverlay, IndicatorRenderer, etc.) via context
+  const [chartCtx, setChartCtx] = useState<{ chart: IChartApi | null; candle: ISeriesApi<"Candlestick"> | null }>({ chart: null, candle: null });
 
   const { subscribeToMessages } = useLiveMarketContext();
   const ticks = useTickStore(s => s.ticks);
@@ -125,6 +139,12 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
   symRef.current = symbol;
   ivRef.current  = interval;
 
+  // Stable ChartBarsContext value — barsRef never changes identity
+  const chartBarsCtxValue = useMemo(() => ({
+    barsRef: barsRef as unknown as React.MutableRefObject<OHLCBar[]>,
+    replayBarCount: 0,
+  }), []); // eslint-disable-line
+
   // When syncedInterval changes from parent, override local interval
   useEffect(() => {
     if (syncedInterval && syncedInterval !== interval) {
@@ -138,6 +158,17 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
       setSymbol(controlledSymbol);
     }
   }, [controlledSymbol]); // eslint-disable-line
+
+  // When controlledInterval changes from parent (active-slot TF routing), sync internal state
+  useEffect(() => {
+    if (controlledInterval && controlledInterval !== ivRef.current) {
+      setInterval(controlledInterval);
+    }
+  }, [controlledInterval]); // eslint-disable-line
+
+  // Notify parent whenever symbol or interval changes (allows parent to track per-slot state)
+  useEffect(() => { onSymbolChange?.(symbol); }, [symbol]); // eslint-disable-line
+  useEffect(() => { onIntervalChange?.(interval); }, [interval]); // eslint-disable-line
 
   // Entry from watchlist or catalog fallback
   const entry = items.find(i => i.symbol === symbol) ?? {
@@ -204,6 +235,7 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
     chartRef.current = chart;
     mainRef.current  = main;
     volRef.current   = vol;
+    setChartCtx({ chart, candle: main });
     console.log("[MiniChart] Chart mounted", defaultSymbol);
 
     const ro = new ResizeObserver(entries => {
@@ -216,6 +248,7 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
       ro.disconnect();
       chart.remove();
       chartRef.current = null; mainRef.current = null; volRef.current = null;
+      setChartCtx({ chart: null, candle: null });
     };
   }, []); // eslint-disable-line
 
@@ -437,6 +470,16 @@ const MiniChart = memo(function MiniChart({ defaultSymbol, defaultInterval, sync
           <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5, background: "rgba(7,17,13,0.35)" }}>
             <div style={{ width: 22, height: 22, borderRadius: "50%", border: "2.5px solid rgba(183,255,90,0.2)", borderTopColor: "#B7FF5A", animation: "spin 0.8s linear infinite" }} />
           </div>
+        )}
+        {/* Full-slot overlays: DrawingOverlay, IndicatorRenderer, etc.
+            Rendered inside the chart canvas div so absolute positioning works correctly.
+            ChartContext + ChartBarsContext give overlays access to this slot's chart instance. */}
+        {children && chartCtx.chart && (
+          <ChartContext.Provider value={chartCtx}>
+            <ChartBarsContext.Provider value={chartBarsCtxValue}>
+              {children}
+            </ChartBarsContext.Provider>
+          </ChartContext.Provider>
         )}
       </div>
     </div>
