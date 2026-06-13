@@ -179,6 +179,7 @@ type OhlcBar = { time: number; open: number; high: number; low: number; close: n
 const DrawingShape = memo(function DrawingShape({
   drawing, toPx, W, H, isPreview, onErase,
   cursorMode, isSelected, onBodyDown, onAnchorDown, hasAlert, bars, barHalfWidth, canvasOnly,
+  onPnlFoRef, onPnlLineRef,
 }: {
   drawing:       Drawing;
   toPx:          (pt: DrawingPoint) => Px | null;
@@ -194,6 +195,9 @@ const DrawingShape = memo(function DrawingShape({
   bars?:         OhlcBar[];
   barHalfWidth?: number;
   canvasOnly?:   boolean;
+  // DOM refs for zero-React P&L label position sync on chart pan/zoom
+  onPnlFoRef?:   (el: SVGForeignObjectElement | null) => void;
+  onPnlLineRef?: (el: SVGLineElement | null) => void;
 }) {
   const { style, toolType, points } = drawing;
   const dash = dashArray(style.lineStyle);
@@ -1111,12 +1115,15 @@ const DrawingShape = memo(function DrawingShape({
 
               return (
                 <g style={{ pointerEvents: "none" }}>
+                  {/* ref registered so scheduleCanvasRender can update x1/y1/x2/y2 on pan/zoom */}
                   <line
+                    ref={onPnlLineRef}
                     x1={lineX1} y1={lineY1} x2={lineX2} y2={lineY2}
                     stroke="rgba(255,255,255,0.28)" strokeWidth={1.5}
                     strokeDasharray="6 6" strokeLinecap="round" opacity={0.8}
                   />
-                  <foreignObject x={LBL_X} y={LBL_Y} width={LBL_W} height={LBL_H}
+                  {/* ref registered so scheduleCanvasRender can update x/y on pan/zoom */}
+                  <foreignObject ref={onPnlFoRef} x={LBL_X} y={LBL_Y} width={LBL_W} height={LBL_H}
                     pointerEvents="none" style={{ overflow: "visible" }}>
                     <div style={{
                       background: "rgba(20,24,27,0.92)", border: `2px solid ${borderClr}`,
@@ -2466,12 +2473,83 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         plotH,
       );
       sheetProfiler.end(_rct, "DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
+
+      // ── Zero-React P&L label position sync ──────────────────────────────────
+      // The P&L foreignObject and measurement line live in SVG. SVG is only updated
+      // when React renders, but this RAF fires on every pan/zoom without React renders.
+      // For every RUNNING position tool that has a registered foreignObject ref,
+      // recompute the label position from live chart coords and write it directly to
+      // the DOM — keeping the label attached to the position box at 60fps.
+      for (const [drawingId, fo] of pnlFoRefs.current) {
+        const d = drawingsRef.current.find(dr => dr.id === drawingId);
+        if (!d || d.points.length < 2 || !toPxRef.current) continue;
+
+        const pts = d.points;
+        const entPx = toPxRef.current({ time: pts[0].time, price: pts[0].price });
+        const tpPx  = toPxRef.current(pts[1]);
+        if (!entPx || !tpPx) continue;
+
+        const rawL  = Math.min(entPx.x, tpPx.x);
+        const rawR  = Math.max(entPx.x, tpPx.x);
+        const zoneW = rawR - rawL;
+        const ELX   = zoneW < 20 ? entPx.x - 120 : rawL - bhw;
+        const ERX   = zoneW < 20 ? entPx.x + 120 : rawR;
+
+        const allBars       = barsRef.current as OhlcBar[];
+        const toolLeftTime  = Math.min(pts[0].time, pts[1].time);
+        const toolRightTime = Math.max(pts[0].time, pts[1].time);
+        // Slice bars that fall within the drawing's time range
+        const barsInRange   = allBars.filter(b => b.time >= toolLeftTime && b.time <= toolRightTime);
+        if (!barsInRange.length) continue;
+
+        // The foreignObject is only registered while tradeStatus === "RUNNING",
+        // so lastActiveBar = the last bar in range (no TP/SL cap needed here).
+        const lastBar   = barsInRange[barsInRange.length - 1];
+        const lastBarPx = toPxRef.current({ time: lastBar.time, price: lastBar.close });
+        if (!lastBarPx) continue;
+
+        // profitSplitX: X at entry price at the last bar's time, clamped to zone bounds
+        const entryPrice    = pts[0].price;
+        const sp            = toPxRef.current({ time: lastBar.time, price: entryPrice });
+        const profitSplitX  = sp ? Math.min(ERX, Math.max(ELX, sp.x)) : ELX;
+        const activeFillEndX = Math.min(W, profitSplitX + bhw);
+
+        // Measurement line endpoints
+        const lineX1 = ELX + bhw;
+        const lineY1 = entPx.y;
+        const lineX2 = activeFillEndX;
+        const lineY2 = lastBarPx.y;
+
+        // Label position (mirrors DrawingShape's livePnlOverlay computation)
+        const LBL_W = 150;
+        const LBL_H = 72;
+        const lblX  = Math.round(Math.min(lineX2 + 10, W - LBL_W - 4));
+        const lblY  = Math.round(lineY2 - LBL_H / 2);
+
+        fo.setAttribute("x", String(lblX));
+        fo.setAttribute("y", String(lblY));
+
+        const ln = pnlLineRefs.current.get(drawingId);
+        if (ln) {
+          ln.setAttribute("x1", String(Math.round(lineX1)));
+          ln.setAttribute("y1", String(Math.round(lineY1)));
+          ln.setAttribute("x2", String(Math.round(lineX2)));
+          ln.setAttribute("y2", String(Math.round(lineY2)));
+        }
+      }
     });
-  }, []); // stable — dragRef/dragLiveRef/barsRef/drawingsRef/etc. are all mutable refs
+  }, []); // stable — dragRef/dragLiveRef/barsRef/drawingsRef/pnlFoRefs/pnlLineRefs are all mutable refs
 
   // ── Direct SVG DOM refs — one per drawing g-wrapper, keyed by drawing id ───
   // Used to apply transform="translate(dx,dy)" for move-drag without any React renders.
   const svgGroupsRef   = useRef<Map<number, SVGGElement>>(new Map());
+
+  // ── P&L label DOM refs — keyed by drawing id ─────────────────────────────
+  // Registered by DrawingShape via onPnlFoRef/onPnlLineRef prop callbacks.
+  // scheduleCanvasRender updates their SVG attributes on every pan/zoom frame
+  // so the label stays attached to the position box without any React renders.
+  const pnlFoRefs   = useRef<Map<number, SVGForeignObjectElement>>(new Map());
+  const pnlLineRefs = useRef<Map<number, SVGLineElement>>(new Map());
 
   // ── SVG clipPath rect DOM ref ─────────────────────────────────────────────
   // Updated directly from the canvas RAF (scheduleCanvasRender) to clip the SVG
@@ -3857,6 +3935,14 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
                   bars={candleBars}
                   barHalfWidth={barHalfWidth}
                   canvasOnly={!isMoveDrag}
+                  onPnlFoRef={el => {
+                    if (el) pnlFoRefs.current.set(d.id, el);
+                    else    pnlFoRefs.current.delete(d.id);
+                  }}
+                  onPnlLineRef={el => {
+                    if (el) pnlLineRefs.current.set(d.id, el);
+                    else    pnlLineRefs.current.delete(d.id);
+                  }}
                 />
               </g>
             );
