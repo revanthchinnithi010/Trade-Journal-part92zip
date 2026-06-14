@@ -58,45 +58,73 @@ function useFavorites() {
 }
 
 interface SymbolRowProps {
-  sym:       SymbolInfo;
-  active:    boolean;
-  isFav:     boolean;
-  price:     number | null;
-  changePct: number | null;
-  flashDir:  "up" | "down" | null;
-  flashKey:  number;
-  broker:    BrokerName;
-  onSelect:  () => void;
-  onFav:     () => void;
+  sym:      SymbolInfo;
+  active:   boolean;
+  isFav:    boolean;
+  broker:   BrokerName;
+  onSelect: () => void;
+  onFav:    () => void;
 }
 
+/**
+ * Each row subscribes to its OWN symbol's tick — zero re-renders from
+ * ticks of other symbols.  The parent list never needs to touch tick state.
+ */
 const SymbolRow = memo(function SymbolRow({
-  sym, active, isFav, price, changePct, flashDir, flashKey,
-  broker, onSelect, onFav,
+  sym, active, isFav, broker, onSelect, onFav,
 }: SymbolRowProps) {
-  const cfg       = BROKER_CONFIG[broker];
-  const badge     = getBadge(sym);
-  const label     = getLabel(sym);
-  const isPos     = (changePct ?? 0) >= 0;
-  const priceStr  = price !== null ? fmtPrice(price, sym.symbol) : "—";
-  const pctStr    = changePct !== null ? `${isPos ? "+" : ""}${changePct.toFixed(2)}%` : "";
+  const cfg = BROKER_CONFIG[broker];
 
-  const rowRef  = useRef<HTMLDivElement>(null);
-  const prevKey = useRef(flashKey);
+  // ── Per-row tick subscription (only this row re-renders on its own tick) ──
+  const tick = useTickStore(useCallback(
+    (s) => s.ticks[sym.symbol],
+    [sym.symbol],
+  ));
+
+  const price     = tick?.price     ?? null;
+  const changePct = tick?.changePct ?? null;
+  const flashDir  = tick?.flashDir  ?? null;
+  const flashKey  = tick?.flashKey  ?? 0;
+
+  const badge    = getBadge(sym);
+  const label    = getLabel(sym);
+  const isPos    = (changePct ?? 0) >= 0;
+  const priceStr = price !== null ? fmtPrice(price, sym.symbol) : "—";
+  const pctStr   = changePct !== null ? `${isPos ? "+" : ""}${changePct.toFixed(2)}%` : "";
+
+  // ── Flash animation (DOM mutation — no setState) ──────────────────────────
+  const rowRef      = useRef<HTMLDivElement>(null);
+  const prevKey     = useRef(flashKey);
+  const rafRef      = useRef<number>(0);
 
   useEffect(() => {
     if (flashKey === prevKey.current || !flashDir || !rowRef.current) return;
     prevKey.current = flashKey;
     const el  = rowRef.current;
     const clr = flashDir === "up" ? "rgba(183,255,90,0.14)" : "rgba(239,68,68,0.14)";
-    el.style.background   = clr;
-    el.style.transition   = "none";
-    const raf = requestAnimationFrame(() => {
+    cancelAnimationFrame(rafRef.current);
+    el.style.background = clr;
+    el.style.transition = "none";
+    rafRef.current = requestAnimationFrame(() => {
       el.style.transition = "background 0.6s ease";
       el.style.background = active ? "rgba(183,255,90,0.06)" : "transparent";
     });
-    return () => cancelAnimationFrame(raf);
+    return () => cancelAnimationFrame(rafRef.current);
   }, [flashKey, flashDir, active]);
+
+  // ── Optimistic star visual (fills instantly on pointer-down) ─────────────
+  const [visualFav, setVisualFav] = useState(isFav);
+  // Keep in sync when parent favs set changes (e.g. hydration, tab switch)
+  useEffect(() => { setVisualFav(isFav); }, [isFav]);
+
+  const handleStarDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    // Flip visual immediately — zero latency
+    setVisualFav(v => !v);
+    // Tell parent — will confirm or revert on next render cycle
+    onFav();
+  }, [onFav]);
 
   return (
     <div
@@ -123,13 +151,13 @@ const SymbolRow = memo(function SymbolRow({
     >
       {/* Badge */}
       <div style={{
-        width:          34, height: 34, borderRadius: 9, flexShrink: 0,
-        background:     cfg.badgeBg,
-        border:         `1px solid ${cfg.color}22`,
-        display:        "flex", alignItems: "center", justifyContent: "center",
-        fontSize:       9, fontWeight: 900, color: cfg.color,
-        letterSpacing:  "0.02em",
-        textTransform:  "uppercase",
+        width:         34, height: 34, borderRadius: 9, flexShrink: 0,
+        background:    cfg.badgeBg,
+        border:        `1px solid ${cfg.color}22`,
+        display:       "flex", alignItems: "center", justifyContent: "center",
+        fontSize:      9, fontWeight: 900, color: cfg.color,
+        letterSpacing: "0.02em",
+        textTransform: "uppercase",
       }}>
         {badge.slice(0, 4)}
       </div>
@@ -137,18 +165,18 @@ const SymbolRow = memo(function SymbolRow({
       {/* Name column */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <p style={{
-          margin:        0, fontSize: 12, fontWeight: 700,
-          color:         "#F3FFF3",
-          overflow:      "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          lineHeight:    1.2,
+          margin:       0, fontSize: 12, fontWeight: 700,
+          color:        "#F3FFF3",
+          overflow:     "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          lineHeight:   1.2,
         }}>
           {label}
         </p>
         <p style={{
-          margin:       0, fontSize: 9.5,
-          color:        "rgba(167,184,169,0.45)",
-          lineHeight:   1.3, marginTop: 1,
-          overflow:     "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          margin:             0, fontSize: 9.5,
+          color:              "rgba(167,184,169,0.45)",
+          lineHeight:         1.3, marginTop: 1,
+          overflow:           "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
           fontVariantNumeric: "tabular-nums",
         }}>
           {sym.symbol}
@@ -177,23 +205,25 @@ const SymbolRow = memo(function SymbolRow({
         )}
       </div>
 
-      {/* Favorite star */}
+      {/* Favorite star — fires on pointerDown for zero tap-delay */}
       <button
-        onClick={e => { e.stopPropagation(); onFav(); }}
-        title={isFav ? "Remove from favorites" : "Add to favorites"}
+        onPointerDown={handleStarDown}
+        title={visualFav ? "Remove from favorites" : "Add to favorites"}
         style={{
-          width:   24, height: 24, border: "none", background: "transparent",
-          cursor:  "pointer", flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          padding: 0, marginLeft: 2,
+          width:       28, height: 28, border: "none", background: "transparent",
+          cursor:      "pointer", flexShrink: 0,
+          display:     "flex", alignItems: "center", justifyContent: "center",
+          padding:     0, marginLeft: 2,
+          // Eliminates 300ms tap-delay on touch without needing JS tricks
+          touchAction: "manipulation",
         }}
       >
         <Star
           style={{
-            width:  12, height: 12,
-            color:  isFav ? "#F59E0B" : "rgba(167,184,169,0.2)",
-            fill:   isFav ? "#F59E0B" : "none",
-            transition: "color 0.15s, fill 0.15s",
+            width:      12, height: 12,
+            color:      visualFav ? "#F59E0B" : "rgba(167,184,169,0.2)",
+            fill:       visualFav ? "#F59E0B" : "none",
+            transition: "color 0.1s, fill 0.1s",
           }}
         />
       </button>
@@ -212,7 +242,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
   onSelect,
   onClose,
 }: BrokerWatchlistProps) {
-  const ticks = useTickStore(s => s.ticks);
+  // ── No tick subscription here — rows handle their own ticks ──────────────
   const {
     activeBroker, setActiveBroker,
     symbolCatalog, catalogLoaded,
@@ -245,20 +275,45 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
     );
   }, [symbols, search]);
 
-  const favorited = useMemo(() =>
-    filtered.filter(s => favs.has(s.symbol)),
-    [filtered, favs],
-  );
-  const unfavorited = useMemo(() =>
-    filtered.filter(s => !favs.has(s.symbol)),
-    [filtered, favs],
-  );
+  const favorited   = useMemo(() => filtered.filter(s =>  favs.has(s.symbol)), [filtered, favs]);
+  const unfavorited = useMemo(() => filtered.filter(s => !favs.has(s.symbol)), [filtered, favs]);
 
   const handleSelect = useCallback((symbol: string) => {
     setActiveBroker(broker);
     setActiveSymbol(symbol);
     onSelect(symbol);
   }, [broker, setActiveBroker, setActiveSymbol, onSelect]);
+
+  // ── Stable per-symbol callbacks — never recreated for the same symbol ─────
+  // These refs are keyed by symbol so SymbolRow memo sees the same function
+  // reference across renders (as long as broker/handleSelect don't change).
+  const selectCbCache = useRef<Map<string, () => void>>(new Map());
+  const favCbCache    = useRef<Map<string, () => void>>(new Map());
+
+  // When broker or handleSelect changes, clear both caches so callbacks
+  // pointing to the old broker/handler are rebuilt.
+  const prevBrokerRef        = useRef(broker);
+  const prevHandleSelectRef  = useRef(handleSelect);
+  if (prevBrokerRef.current !== broker || prevHandleSelectRef.current !== handleSelect) {
+    prevBrokerRef.current       = broker;
+    prevHandleSelectRef.current = handleSelect;
+    selectCbCache.current.clear();
+    favCbCache.current.clear();
+  }
+
+  const getSelectCb = useCallback((symbol: string) => {
+    if (!selectCbCache.current.has(symbol)) {
+      selectCbCache.current.set(symbol, () => handleSelect(symbol));
+    }
+    return selectCbCache.current.get(symbol)!;
+  }, [handleSelect]);
+
+  const getFavCb = useCallback((symbol: string) => {
+    if (!favCbCache.current.has(symbol)) {
+      favCbCache.current.set(symbol, () => toggleFav(symbol));
+    }
+    return favCbCache.current.get(symbol)!;
+  }, [toggleFav]);
 
   const switchBroker = useCallback((b: BrokerName) => {
     setActiveBroker(b);
@@ -279,10 +334,10 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
     }}>
       {/* ── Header ── */}
       <div style={{
-        display:    "flex", alignItems: "center",
-        padding:    "10px 12px 8px",
+        display:      "flex", alignItems: "center",
+        padding:      "10px 12px 8px",
         borderBottom: "1px solid rgba(255,255,255,0.06)",
-        flexShrink: 0, gap: 8,
+        flexShrink:   0, gap: 8,
       }}>
         <span style={{ fontSize: 12, fontWeight: 700, color: "#F3FFF3", flex: 1 }}>
           Watchlist
@@ -300,11 +355,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
       </div>
 
       {/* ── Broker tabs ── */}
-      <div style={{
-        display: "flex", gap: 3,
-        padding: "8px 10px 0",
-        flexShrink: 0,
-      }}>
+      <div style={{ display: "flex", gap: 3, padding: "8px 10px 0", flexShrink: 0 }}>
         {(["delta", "ctrader"] as BrokerName[]).map(b => {
           const bc  = BROKER_CONFIG[b];
           const act = b === broker;
@@ -313,12 +364,12 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
               key={b}
               onClick={() => switchBroker(b)}
               style={{
-                flex:        1, height: 28, borderRadius: 8, border: "none",
-                background:  act ? `${bc.color}1A` : "rgba(255,255,255,0.04)",
-                cursor:      "pointer", fontSize: 11, fontWeight: act ? 800 : 500,
-                color:       act ? bc.color : "rgba(167,184,169,0.5)",
-                transition:  "all 0.15s",
-                boxShadow:   act ? `0 0 0 1px ${bc.color}44` : "0 0 0 1px rgba(255,255,255,0.06)",
+                flex:       1, height: 28, borderRadius: 8, border: "none",
+                background: act ? `${bc.color}1A` : "rgba(255,255,255,0.04)",
+                cursor:     "pointer", fontSize: 11, fontWeight: act ? 800 : 500,
+                color:      act ? bc.color : "rgba(167,184,169,0.5)",
+                transition: "all 0.15s",
+                boxShadow:  act ? `0 0 0 1px ${bc.color}44` : "0 0 0 1px rgba(255,255,255,0.06)",
               }}
             >
               {bc.label}
@@ -341,14 +392,14 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
             onChange={e => setSearch(e.target.value)}
             placeholder={`Search ${cfg.label}…`}
             style={{
-              width:           "100%", height: 32,
-              paddingLeft:     28, paddingRight: search ? 28 : 10,
-              borderRadius:    8, border: "1px solid rgba(255,255,255,0.08)",
-              background:      "rgba(255,255,255,0.04)",
-              color:           "#F3FFF3", fontSize: 11.5,
-              outline:         "none",
-              fontFamily:      "inherit",
-              boxSizing:       "border-box",
+              width:        "100%", height: 32,
+              paddingLeft:  28, paddingRight: search ? 28 : 10,
+              borderRadius: 8, border: "1px solid rgba(255,255,255,0.08)",
+              background:   "rgba(255,255,255,0.04)",
+              color:        "#F3FFF3", fontSize: 11.5,
+              outline:      "none",
+              fontFamily:   "inherit",
+              boxSizing:    "border-box",
             }}
           />
           {search && (
@@ -370,8 +421,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
       {/* ── Stats bar ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 8,
-        padding: "2px 12px 6px",
-        flexShrink: 0,
+        padding: "2px 12px 6px", flexShrink: 0,
       }}>
         <span style={{ fontSize: 9.5, color: "rgba(167,184,169,0.35)", fontWeight: 600 }}>
           {filtered.length} symbol{filtered.length !== 1 ? "s" : ""}
@@ -408,64 +458,45 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
           </div>
         ) : (
           <>
-            {/* Favorites section */}
             {favorited.length > 0 && (
               <>
                 <div style={{
-                  padding: "5px 12px 2px",
-                  fontSize: 9, fontWeight: 700, color: "#F59E0B",
+                  padding:       "5px 12px 2px",
+                  fontSize:      9, fontWeight: 700, color: "#F59E0B",
                   letterSpacing: "0.1em", textTransform: "uppercase",
-                  display: "flex", alignItems: "center", gap: 4,
+                  display:       "flex", alignItems: "center", gap: 4,
                 }}>
                   <Star style={{ width: 9, height: 9, fill: "#F59E0B" }} />
                   Favorites
                 </div>
-                {favorited.map(sym => {
-                  const tick = ticks[sym.symbol];
-                  return (
-                    <SymbolRow
-                      key={`fav-${sym.symbol}`}
-                      sym={sym}
-                      active={sym.symbol === activeSymbol}
-                      isFav={true}
-                      price={tick?.price ?? null}
-                      changePct={tick?.changePct ?? null}
-                      flashDir={tick?.flashDir ?? null}
-                      flashKey={tick?.flashKey ?? 0}
-                      broker={broker}
-                      onSelect={() => handleSelect(sym.symbol)}
-                      onFav={() => toggleFav(sym.symbol)}
-                    />
-                  );
-                })}
+                {favorited.map(sym => (
+                  <SymbolRow
+                    key={`fav-${sym.symbol}`}
+                    sym={sym}
+                    active={sym.symbol === activeSymbol}
+                    isFav={true}
+                    broker={broker}
+                    onSelect={getSelectCb(sym.symbol)}
+                    onFav={getFavCb(sym.symbol)}
+                  />
+                ))}
                 {unfavorited.length > 0 && (
-                  <div style={{
-                    height: 1, margin: "4px 12px",
-                    background: "rgba(255,255,255,0.06)",
-                  }} />
+                  <div style={{ height: 1, margin: "4px 12px", background: "rgba(255,255,255,0.06)" }} />
                 )}
               </>
             )}
 
-            {/* All symbols */}
-            {unfavorited.map(sym => {
-              const tick = ticks[sym.symbol];
-              return (
-                <SymbolRow
-                  key={sym.symbol}
-                  sym={sym}
-                  active={sym.symbol === activeSymbol}
-                  isFav={false}
-                  price={tick?.price ?? null}
-                  changePct={tick?.changePct ?? null}
-                  flashDir={tick?.flashDir ?? null}
-                  flashKey={tick?.flashKey ?? 0}
-                  broker={broker}
-                  onSelect={() => handleSelect(sym.symbol)}
-                  onFav={() => toggleFav(sym.symbol)}
-                />
-              );
-            })}
+            {unfavorited.map(sym => (
+              <SymbolRow
+                key={sym.symbol}
+                sym={sym}
+                active={sym.symbol === activeSymbol}
+                isFav={false}
+                broker={broker}
+                onSelect={getSelectCb(sym.symbol)}
+                onFav={getFavCb(sym.symbol)}
+              />
+            ))}
           </>
         )}
 
