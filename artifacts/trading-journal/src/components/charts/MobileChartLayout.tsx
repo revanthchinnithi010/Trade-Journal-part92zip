@@ -4172,7 +4172,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       )}
 
       {showReactProfiler && (
-        <ReactProfilerPanel onClose={() => setShowReactProfiler(false)} />
+        <ReactProfilerPanel
+          onClose={() => setShowReactProfiler(false)}
+          onStartCapture={() => { rpStore.clearStats(); setShowSettings(true); }}
+        />
       )}
     </div>
   );

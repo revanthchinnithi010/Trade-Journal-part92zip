@@ -56,13 +56,13 @@ export default function ReactProfilerPanel({ onClose, onStartCapture }: Props) {
 
         {/* ── Header ── */}
         <div style={{
-          display: "flex", alignItems: "center", gap: 10,
-          padding: "14px 18px",
+          display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8,
+          padding: "12px 14px",
           borderBottom: "1px solid rgba(255,255,255,0.07)",
           flexShrink: 0,
         }}>
-          <span style={{ fontSize: 14, color: "#a78bfa", fontWeight: 800 }}>⚛ React Profiler</span>
-          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", flex: 1 }}>
+          <span style={{ fontSize: 13, color: "#a78bfa", fontWeight: 800, whiteSpace: "nowrap" }}>⚛ React Profiler</span>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", flex: 1, minWidth: 80 }}>
             {stats.length === 0
               ? "Press Start Capture to begin"
               : `${stats.length} component${stats.length > 1 ? "s" : ""} tracked`}
@@ -71,9 +71,11 @@ export default function ReactProfilerPanel({ onClose, onStartCapture }: Props) {
             <button
               onClick={onStartCapture}
               style={{
-                padding: "5px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
-                background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.35)",
-                color: "#34d399", cursor: "pointer",
+                padding: "7px 14px", borderRadius: 7, fontSize: 11, fontWeight: 800,
+                background: "#059669", border: "1px solid #34d399",
+                color: "#fff", cursor: "pointer", whiteSpace: "nowrap",
+                minWidth: 120, flexShrink: 0,
+                boxShadow: "0 0 10px rgba(52,211,153,0.3)",
               }}
             >
               ▶ Start Capture
@@ -82,9 +84,9 @@ export default function ReactProfilerPanel({ onClose, onStartCapture }: Props) {
           <button
             onClick={() => rpStore.clearStats()}
             style={{
-              padding: "5px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
+              padding: "7px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
               background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.3)",
-              color: "#f87171", cursor: "pointer",
+              color: "#f87171", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
             }}
           >
             Clear
@@ -92,9 +94,9 @@ export default function ReactProfilerPanel({ onClose, onStartCapture }: Props) {
           <button
             onClick={onClose}
             style={{
-              padding: "5px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
+              padding: "7px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
               background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.12)",
-              color: "rgba(255,255,255,0.6)", cursor: "pointer",
+              color: "rgba(255,255,255,0.6)", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
             }}
           >
             ✕ Close
