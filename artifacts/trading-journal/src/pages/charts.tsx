@@ -1,7 +1,9 @@
 import {
-  memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo,
+  memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, Profiler,
 } from "react";
 import * as sheetProfiler from "@/lib/sheetProfiler";
+import * as rpStore from "@/lib/reactProfilerStore";
+import ReactProfilerPanel from "@/components/charts/ReactProfilerPanel";
 import html2canvas from "html2canvas";
 import {
   ChevronDown, ChevronUp,
@@ -973,6 +975,7 @@ export default function Charts() {
   const [bottomTab,       setBottomTab]       = useState<BottomTab>("Positions");
   const [isFullscreen,    setIsFullscreen]    = useState(false);
   const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
+  const [showReactProfiler, setShowReactProfiler]   = useState(false);
   const [showPicker,    setShowPicker]    = useState(false);
   const [showAlertCenter, setShowAlertCenter] = useState(false);
   const [showQuickAlert, setShowQuickAlert] = useState(false);
@@ -1856,7 +1859,7 @@ export default function Charts() {
               </div>
             )}
 
-            {/* ── Debug: Run Performance Test button ── */}
+            {/* ── Debug buttons ── */}
             <button
               onClick={() => setShowBenchmarkPanel(true)}
               style={{
@@ -1870,6 +1873,20 @@ export default function Charts() {
               }}
             >
               ⚡ Perf
+            </button>
+            <button
+              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); }}
+              style={{
+                position: "absolute", bottom: 10, left: 88, zIndex: 60,
+                padding: "5px 11px", borderRadius: 8,
+                background: "rgba(167,139,250,0.18)", border: "1px solid rgba(167,139,250,0.45)",
+                color: "#a78bfa", fontSize: 10, fontWeight: 700,
+                cursor: "pointer", touchAction: "manipulation",
+                letterSpacing: "0.04em", lineHeight: 1,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+              }}
+            >
+              ⚛ React
             </button>
 
             {/* ── Panel border overlay — rendered above chart canvas, no pointer events ── */}
@@ -1993,11 +2010,13 @@ export default function Charts() {
               )}
 
               {showSettings && (
-                <SettingsPanel
-                  settings={chartSettings}
-                  onChange={handleSettings}
-                  onSaveAsDefault={handleSaveAsDefault}
-                  onClose={() => setShowSettings(false)} />
+                <Profiler id="SettingsPanel" onRender={rpStore.onRender}>
+                  <SettingsPanel
+                    settings={chartSettings}
+                    onChange={handleSettings}
+                    onSaveAsDefault={handleSaveAsDefault}
+                    onClose={() => setShowSettings(false)} />
+                </Profiler>
               )}
 
               {showBuySell && (
@@ -2209,6 +2228,11 @@ export default function Charts() {
       {/* ── Performance Benchmark Panel ── */}
       {showBenchmarkPanel && (
         <PerfBenchmarkPanel onClose={() => setShowBenchmarkPanel(false)} />
+      )}
+
+      {/* ── React Profiler Panel ── */}
+      {showReactProfiler && (
+        <ReactProfilerPanel onClose={() => setShowReactProfiler(false)} />
       )}
 
       {/* ── Modals ── */}

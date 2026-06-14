@@ -1,7 +1,8 @@
 import {
-  memo, useRef, useEffect, useLayoutEffect, useState, useCallback,
+  memo, useRef, useEffect, useLayoutEffect, useState, useCallback, Profiler,
 } from "react";
 import * as sheetProfiler from "@/lib/sheetProfiler";
+import * as rpStore from "@/lib/reactProfilerStore";
 import { X, ChevronDown } from "lucide-react";
 import icoSettingsUrl from "@assets/setting1_1780282162661.svg";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
@@ -130,7 +131,7 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
 //
 // One-at-a-time: registers in the same _colorBoxClosers registry so tapping a
 // new swatch automatically collapses any other open picker.
-export const ColorSwatch = memo(function ColorSwatch({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
+const _ColorSwatchImpl = memo(function ColorSwatchImpl({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
   const _c = sheetProfiler.trackRender("ColorSwatch", "SettingsPanel.tsx", 120);
   useLayoutEffect(() => { _c(); });
   const safe = safeColor(value, fallback);
@@ -170,6 +171,12 @@ export const ColorSwatch = memo(function ColorSwatch({ value, onChange, label, f
     </>
   );
 });
+
+export const ColorSwatch = (props: ColorBoxProps) => (
+  <Profiler id="ColorSwatch" onRender={rpStore.onRender}>
+    <_ColorSwatchImpl {...props} />
+  </Profiler>
+);
 
 // ── Section container ─────────────────────────────────────────────────────────
 export const Section = memo(function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -246,7 +253,7 @@ export const ColorPair = memo(function ColorPair({ label, bull, bear, onBull, on
 // ── Styled select ─────────────────────────────────────────────────────────────
 // StyledSelect: memo'd. Requires stable `options` arrays (define at module scope,
 // never inline in JSX) and stable `onChange` from the h-handler object.
-export const StyledSelect = memo(function StyledSelect({ value, onChange, options }: {
+const _StyledSelectImpl = memo(function StyledSelectImpl({ value, onChange, options }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
@@ -282,6 +289,12 @@ export const StyledSelect = memo(function StyledSelect({ value, onChange, option
     </div>
   );
 });
+
+export const StyledSelect = (props: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) => (
+  <Profiler id="StyledSelect" onRender={rpStore.onRender}>
+    <_StyledSelectImpl {...props} />
+  </Profiler>
+);
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
 // Toggle: memo'd with stable onChange from h-handler — only re-renders when

@@ -1,6 +1,8 @@
-import { memo, useState, useCallback, useRef, useEffect, useMemo, useLayoutEffect } from "react";
+import { memo, useState, useCallback, useRef, useEffect, useMemo, useLayoutEffect, Profiler } from "react";
 import { useLocation } from "wouter";
 import { createPortal } from "react-dom";
+import * as rpStore from "@/lib/reactProfilerStore";
+import ReactProfilerPanel from "@/components/charts/ReactProfilerPanel";
 import {
   X, ChevronDown, ChevronLeft, ChevronRight,
   Pencil, Plug, MoreHorizontal, Maximize2, Minimize2,
@@ -2014,9 +2016,9 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
       </div>
 
       {/* ── Tab content — rendered immediately on mount, same as DrawingToolsSheet ── */}
-      {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
-      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
-      {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
+      {tab === "Candles"    && <Profiler id="CandlesTabContent"    onRender={rpStore.onRender}><CandlesTabContent    settings={settings} h={h} /></Profiler>}
+      {tab === "Appearance" && <Profiler id="AppearanceTabContent" onRender={rpStore.onRender}><AppearanceTabContent settings={settings} h={h} /></Profiler>}
+      {tab === "Scale"      && <Profiler id="ScaleTabContent"      onRender={rpStore.onRender}><ScaleTabContent      settings={settings} h={h} /></Profiler>}
 
       {/* ── Footer ── */}
       <div style={{
@@ -3731,6 +3733,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
   const [showProfilerPanel,  setShowProfilerPanel]  = useState(false);
   const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
+  const [showReactProfiler, setShowReactProfiler]   = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
   const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
   const [slotIntervals,     setSlotIntervals]     = useState<string[]>(() => [interval, interval, interval]);
@@ -3953,6 +3956,21 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           ⚡ Perf
         </button>
 
+        <button
+          onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); }}
+          style={{
+            position: "absolute", bottom: 10, left: 92, zIndex: 60,
+            padding: "5px 10px", borderRadius: 8,
+            background: "rgba(167,139,250,0.18)", border: "1px solid rgba(167,139,250,0.45)",
+            color: "#a78bfa", fontSize: 10, fontWeight: 700,
+            cursor: "pointer", touchAction: "manipulation",
+            letterSpacing: "0.04em", lineHeight: 1,
+            boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+          }}
+        >
+          ⚛ React
+        </button>
+
         {/* Inner absolutely-pinned container — CSS grid root in multi-chart mode.
             position:absolute + inset:0 gives explicit pixel dimensions so 1fr rows resolve. */}
         <div style={{
@@ -4127,7 +4145,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       />
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
-      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} />}
+      {showSettings    && <Profiler id="ChartSettingsSheet" onRender={rpStore.onRender}><ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} /></Profiler>}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
       <SymbolPickerSheet
@@ -4151,6 +4169,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       {showBenchmarkPanel && (
         <PerfBenchmarkPanel onClose={() => setShowBenchmarkPanel(false)} />
+      )}
+
+      {showReactProfiler && (
+        <ReactProfilerPanel onClose={() => setShowReactProfiler(false)} />
       )}
     </div>
   );
