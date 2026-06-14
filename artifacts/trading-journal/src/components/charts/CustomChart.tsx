@@ -2500,10 +2500,113 @@ const CustomChart = memo(function CustomChart({
     const onPageHide = () => {
       cancelIg();
       pressCount = 0;
+      touchCount = 0;
       if (momentumRaf !== null) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
     };
     window.addEventListener('blur',               onPageHide);
     document.addEventListener('visibilitychange', onPageHide);
+
+    // ── Orientation-change / resize full recovery ─────────────────────────────
+    // ROOT CAUSE of "chart stuck after rotation":
+    //
+    //   1. iOS does NOT reliably fire pointercancel during orientation change,
+    //      so ig / pressCount / touchCount can remain set from the pre-rotation
+    //      session. The next pointerdown enters the stale-state guard but the
+    //      guard only fires when ig.pointerId ≠ new pointerId — on some OS versions
+    //      the pointer ID is recycled and the guard silently skips.
+    //
+    //   2. We stopPropagation touchmove during CHART_PAN, so LWC receives touchstart
+    //      but never the matching touchcancel. LWC's internal "touch active" flag
+    //      stays set and its internal pane-interaction state machine is stuck.
+    //
+    //   3. chart.applyOptions({width,height}) fires async via ResizeObserver. Until
+    //      that callback runs, LWC's internal canvas coordinate system is the
+    //      pre-rotation size. Touches fall in the wrong internal zones (e.g. the
+    //      new bottom 35px maps to the old middle of the chart).
+    //
+    // Fix: intercept orientationchange AND resize INSIDE this closure (where both
+    // the gesture state variables and chartRef live). Immediately reset every
+    // piece of mutable state to IDLE and force LWC to update its coordinate
+    // system with three resize passes (covers fast reflows + slow CSS transitions).
+    //
+    // This runs in addition to the measureRobust() in useEffect([chartCtx]) which
+    // handles the price-scale DOM measurement — both are needed.
+    const resetAllGestureState = () => {
+      // Release crosshair lock BEFORE cancelIg so drawCanvasCrosshair uses fresh
+      // state (cancelling ig does not touch crosshairLocked / lockedCrosshair*).
+      if (crosshairLocked) {
+        crosshairLocked         = false;
+        lockedCrosshairPos      = null;
+        lockedFutureCrossPixel  = null;
+        lockedCrosshairPixel    = null;
+        crosshairDragAnchor     = null;
+        try { chartRef.current?.clearCrosshairPosition(); } catch { /* ok */ }
+        drawCanvasCrosshair(null, 0);
+      }
+      cancelIg();          // clears ig, longPressTimer, hRafId, vRafId
+      pressCount = 0;
+      touchCount = 0;
+      if (momentumRaf !== null) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
+      activatePanRange(null); // clear any locked vertical pan range
+    };
+
+    const resizeLwcNow = () => {
+      if (chartDisposed) return;
+      const ch = chartRef.current;
+      const ct = containerRef.current;
+      if (!ch || !ct) return;
+      const w = ct.clientWidth;
+      const h = ct.clientHeight;
+      if (w > 0 && h > 0) {
+        try { ch.applyOptions({ width: w, height: h }); } catch { /* ok */ }
+      }
+    };
+
+    const onOrientationReset = () => {
+      resetAllGestureState();
+      // Three-pass resize so LWC's coordinate system is correct regardless of
+      // how long the browser's orientation animation takes:
+      //   pass 1 — immediate (catches instantaneous reflow on Android)
+      //   pass 2 — next animation frame (post-paint; LWC DOM settled)
+      //   pass 3 — 300 ms safety (iOS rotation animation ~250 ms)
+      resizeLwcNow();
+      requestAnimationFrame(resizeLwcNow);
+      setTimeout(resizeLwcNow, 300);
+    };
+    window.addEventListener('orientationchange', onOrientationReset);
+    window.addEventListener('resize',            onOrientationReset);
+
+    // ── DEV diagnostics — event trace for interaction debugging ──────────────
+    // Logs the 6 key events with gesture state snapshots so stuck-state bugs
+    // can be reproduced from console output. Compiled away in production.
+    let diagEnabled = import.meta.env.DEV;
+    const diagLog = (label: string, extra?: Record<string, unknown>) => {
+      if (!diagEnabled) return;
+      console.debug(`[chart-diag] ${label}`, {
+        ig:         ig ? `${ig.mode}/${ig.pointerId}` : 'null',
+        pressCount,
+        touchCount,
+        momentum:   momentumRaf !== null,
+        locked:     crosshairLocked,
+        ...extra,
+      });
+    };
+    // Window-level listeners so we catch events that never reach the container
+    // (e.g. after pointer capture is released, or during rotation).
+    const diagPointerDown   = (e: PointerEvent) => diagLog('pointerdown',   { pid: e.pointerId, type: e.pointerType, x: Math.round(e.clientX), y: Math.round(e.clientY) });
+    const diagPointerUp     = (e: PointerEvent) => diagLog('pointerup',     { pid: e.pointerId });
+    const diagPointerCancel = (e: PointerEvent) => diagLog('pointercancel', { pid: e.pointerId });
+    const diagTouchStart    = (e: TouchEvent)   => diagLog('touchstart',    { touches: e.touches.length });
+    const diagTouchEnd      = (e: TouchEvent)   => diagLog('touchend',      { touches: e.touches.length });
+    const diagTouchCancel   = (e: TouchEvent)   => diagLog('touchcancel',   { touches: e.touches.length });
+    if (diagEnabled) {
+      window.addEventListener('pointerdown',   diagPointerDown,   { capture: true, passive: true });
+      window.addEventListener('pointerup',     diagPointerUp,     { capture: true, passive: true });
+      window.addEventListener('pointercancel', diagPointerCancel, { capture: true, passive: true });
+      window.addEventListener('touchstart',    diagTouchStart,    { capture: true, passive: true });
+      window.addEventListener('touchend',      diagTouchEnd,      { capture: true, passive: true });
+      window.addEventListener('touchcancel',   diagTouchCancel,   { capture: true, passive: true });
+    }
 
     container.addEventListener('pointerdown',   onDown,          { capture: true });
     container.addEventListener('pointermove',   onMove,          { capture: true });
@@ -2524,6 +2627,17 @@ const CustomChart = memo(function CustomChart({
       cancelIg();
       window.removeEventListener('blur',               onPageHide);
       document.removeEventListener('visibilitychange', onPageHide);
+      window.removeEventListener('orientationchange', onOrientationReset);
+      window.removeEventListener('resize',            onOrientationReset);
+      if (diagEnabled) {
+        window.removeEventListener('pointerdown',   diagPointerDown,   { capture: true });
+        window.removeEventListener('pointerup',     diagPointerUp,     { capture: true });
+        window.removeEventListener('pointercancel', diagPointerCancel, { capture: true });
+        window.removeEventListener('touchstart',    diagTouchStart,    { capture: true });
+        window.removeEventListener('touchend',      diagTouchEnd,      { capture: true });
+        window.removeEventListener('touchcancel',   diagTouchCancel,   { capture: true });
+        diagEnabled = false;
+      }
       activatePanRange(null); // clear any locked range so indicator series restore auto-scale
       // Flush any pending viewport save before chart is torn down
       chart.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange);
