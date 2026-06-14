@@ -84,31 +84,12 @@ const CHARTS_NODE = (
   </Suspense>
 );
 
-/** Preload all broker PNG images at app startup using img.decode() so they
- *  are in the browser memory cache before any modal opens. */
-const BROKER_IMAGE_URLS = ["/broker-delta.png", "/broker-ctrader.png", "/broker-mt5.png"];
-const _brokerImageCache = new Map<string, HTMLImageElement>();
-
-function preloadBrokerImages() {
-  for (const url of BROKER_IMAGE_URLS) {
-    if (_brokerImageCache.has(url)) continue;
-    const img = new Image();
-    img.src = url;
-    img.decoding = "async";
-    img.decode().then(() => {
-      _brokerImageCache.set(url, img);
-    }).catch(() => { /* network unavailable — SVG fallback handles it */ });
-  }
-}
-
 function Router() {
   useEffect(() => {
     // Eagerly trigger the Charts lazy-import after the initial render so the
     // module is in the browser cache before the user taps the Charts tab.
     // This eliminates the dynamic-import round-trip (~50-200ms) on first visit.
     const id = setTimeout(() => { import("@/pages/charts").catch(() => {}); }, 80);
-    // Preload broker images in the background so modal opens instantly.
-    preloadBrokerImages();
     return () => clearTimeout(id);
   }, []);
 
