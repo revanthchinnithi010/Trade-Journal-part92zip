@@ -1659,11 +1659,6 @@ function MoreOptionsSheet({
       action: () => { onObjectTree(); onClose(); },
     },
     {
-      icon: <Settings2 style={{ width:22, height:22 }} />,
-      label: "Chart Settings", accent: TEXT_MED,
-      action: () => { onSettings(); onClose(); },
-    },
-    {
       icon: <Camera style={{ width:22, height:22 }} />,
       label: "Screenshot", accent: TEXT_MED,
       action: () => { onScreenshot(); onClose(); },
@@ -3074,13 +3069,13 @@ function MiniWatchlistPopup({
 // own props change — i.e. symbol/interval/watchlist/fullscreen/broker status.
 const MiniControlBar = memo(function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
-  onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
+  onSelectSymbol, onTF, onDraw, onBroker, onMore, onSettings, onPrev, onNext, onFullscreen, isFullscreen,
   brokerConnected,
 }: {
   activeKey: string; badge: string; interval: string;
   watchlistItems: { symbol: string; badge?: string }[];
   onSelectSymbol: (key: string) => void; onTF: () => void; onDraw: () => void;
-  onBroker: () => void; onMore: () => void;
+  onBroker: () => void; onMore: () => void; onSettings: () => void;
   onPrev: () => void; onNext: () => void;
   onFullscreen: () => void; isFullscreen: boolean;
   brokerConnected: boolean;
@@ -3098,7 +3093,7 @@ const MiniControlBar = memo(function MiniControlBar({
   useLayoutEffect(() => {
     const current: Record<string, unknown> = {
       activeKey, badge, interval, watchlistItems,
-      onSelectSymbol, onTF, onDraw, onBroker, onMore,
+      onSelectSymbol, onTF, onDraw, onBroker, onMore, onSettings,
       onPrev, onNext, onFullscreen, isFullscreen, brokerConnected,
     };
     const changedProps = Object.entries(current)
@@ -3262,6 +3257,11 @@ const MiniControlBar = memo(function MiniControlBar({
         {/* More options */}
         <CtrlBtn onClick={onMore}>
           <MoreHorizontal style={{ width:17, height:17, color: GL_TEAL }} />
+        </CtrlBtn>
+
+        {/* Chart settings */}
+        <CtrlBtn onClick={onSettings}>
+          <Settings2 style={{ width:17, height:17, color: GL_TEAL }} />
         </CtrlBtn>
 
         {divider}
@@ -3678,6 +3678,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleOpenDrawingSheet = useCallback(() => setShowDrawingSheet(true),  []);
   const handleOpenBrokerSheet  = useCallback(() => setShowBrokerSheet(true),   []);
   const handleOpenMoreSheet    = useCallback(() => setShowMoreSheet(true),     []);
+  const handleOpenSettings     = useCallback(() => setShowSettings(true),      []);
 
   // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
   const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
@@ -3853,6 +3854,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onDraw={handleOpenDrawingSheet}
           onBroker={handleOpenBrokerSheet}
           onMore={handleOpenMoreSheet}
+          onSettings={handleOpenSettings}
           onPrev={handlePrev}
           onNext={handleNext}
           onFullscreen={handleFullscreen}
