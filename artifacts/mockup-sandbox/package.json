@@ -4,6 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
+    "predev": "bash ../../scripts/ensure-install.sh",
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",

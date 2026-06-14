@@ -1,11 +1,13 @@
 #!/bin/bash
-# Ensures workspace-root node_modules exist before any artifact dev server starts.
-# Safe to call repeatedly — exits immediately if deps are already present.
+# Ensures workspace-root node_modules are fully installed before any artifact dev server starts.
+# Uses a sentinel file so a broken/partial install is retried on next startup.
 WORKSPACE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SENTINEL="$WORKSPACE_ROOT/node_modules/.install-complete"
 
-if [ ! -d "$WORKSPACE_ROOT/node_modules" ]; then
-  echo "[ensure-install] node_modules missing — installing workspace dependencies..."
+if [ ! -f "$SENTINEL" ]; then
+  echo "[ensure-install] node_modules missing or incomplete — installing workspace dependencies..."
   cd "$WORKSPACE_ROOT"
-  pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+  pnpm install 2>/dev/null || pnpm install
+  touch "$SENTINEL"
   echo "[ensure-install] install complete"
 fi
