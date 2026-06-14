@@ -1875,7 +1875,7 @@ export default function Charts() {
               ⚡ Perf
             </button>
             <button
-              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); }}
+              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); setShowSettings(true); }}
               style={{
                 position: "absolute", bottom: 10, left: 88, zIndex: 60,
                 padding: "5px 11px", borderRadius: 8,
