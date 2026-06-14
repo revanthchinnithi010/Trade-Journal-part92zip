@@ -28,14 +28,32 @@ export interface FeedManagerStats {
  * as the Delta India catalog is fetched and cTrader connects.
  */
 
-// Delta Exchange India perpetuals all use the "xyzUSD" format (e.g. BTCUSD, ETHUSD).
-// This matches what the REST history API and WS ticker both use.
+// Broker-aware static symbol routing.
+// Forex / Metals / Indices / Commodities → cTrader (Fusion Markets)
+// Crypto perpetuals → Delta Exchange India (USDT-quoted; also legacy USD-suffix aliases)
 const STATIC_SYMBOL_ROUTING: Record<string, string> = {
-  // Forex / Metals / Indices → Finnhub / cTrader
-  NAS100: "finnhub", US30:    "finnhub", XAUUSD: "finnhub",
-  EURUSD: "finnhub", GBPJPY:  "finnhub", USOIL:  "finnhub", UKOIL: "finnhub",
-  // Delta perpetuals (xyzUSD format — confirmed from Delta India products API)
-  BTCUSD:  "delta", ETHUSD:  "delta", SOLUSD:  "delta",
+  // ── Forex ──────────────────────────────────────────────────────────────────
+  EURUSD: "ctrader", GBPUSD: "ctrader", USDJPY: "ctrader",
+  AUDUSD: "ctrader", USDCAD: "ctrader", USDCHF: "ctrader",
+  EURGBP: "ctrader", GBPJPY: "ctrader", EURJPY: "ctrader",
+  EURAUD: "ctrader", GBPAUD: "ctrader", NZDUSD: "ctrader",
+  USDSGD: "ctrader", USDHKD: "ctrader",
+  // ── Metals ─────────────────────────────────────────────────────────────────
+  XAUUSD: "ctrader", XAGUSD: "ctrader",
+  // ── Indices ────────────────────────────────────────────────────────────────
+  US30: "ctrader", NAS100: "ctrader", SPX500: "ctrader",
+  GER40: "ctrader", UK100:  "ctrader", JP225:  "ctrader",
+  AUS200: "ctrader", STOXX50: "ctrader",
+  // ── Commodities ────────────────────────────────────────────────────────────
+  USOIL: "ctrader", UKOIL: "ctrader", NGAS: "ctrader",
+  // ── Crypto perpetuals (USDT-quoted, Delta Exchange India) ──────────────────
+  BTCUSDT: "delta", ETHUSDT: "delta", SOLUSDT: "delta",
+  BNBUSDT: "delta", XRPUSDT: "delta", DOGEUSDT: "delta",
+  ADAUSDT: "delta", AVAXUSDT: "delta", DOTUSDT: "delta",
+  PEPEUSDT: "delta", LINKUSDT: "delta", UNIUSDT: "delta",
+  NEARUSDT: "delta", ATOMUSDT: "delta", LTCUSDT: "delta",
+  // ── Legacy USD-suffix aliases (backward compat for old watchlist entries) ──
+  BTCUSD: "delta", ETHUSD: "delta", SOLUSD: "delta",
   DOGEUSD: "delta", PEPEUSD: "delta",
 };
 
@@ -138,9 +156,17 @@ export class MarketFeedManager extends EventEmitter {
     }
 
     if (!providerName) return false;
-    const provider = this.providers.get(providerName);
-    if (!provider) return false;
+
+    // Always record the intent — even if the provider isn't live yet.
+    // When enableCTrader() / enableDelta() runs later it checks
+    // subscribedSymbols to re-subscribe queued symbols.
     this.subscribedSymbols.add(symbol);
+
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      logger.debug({ symbol, providerName }, "MarketFeedManager: provider not yet active — subscription queued");
+      return false;
+    }
     provider.subscribe(symbol);
     this.emit("subscription_update", { symbol, action: "subscribed", provider: providerName, subscriptions: this.getSubscriptions() });
     return true;
@@ -245,12 +271,21 @@ export class MarketFeedManager extends EventEmitter {
     this.providers.set("ctrader", provider);
 
     for (const sym of provider.supportedSymbols) {
-      if (!this.symbolRouting.has(sym)) this.symbolRouting.set(sym, "ctrader");
+      // Override any "finnhub" placeholder routes — Finnhub is disabled in prod
+      // so these symbols would never receive ticks unless rerouted to ctrader.
+      // Delta routes are never overridden.
+      const current = this.symbolRouting.get(sym);
+      if (!current || current === "finnhub") {
+        this.symbolRouting.set(sym, "ctrader");
+      }
       if (this.subscribedSymbols.has(sym)) provider.subscribe(sym);
     }
 
     provider.connect();
-    logger.info({ symbols: provider.supportedSymbols }, "MarketFeedManager: cTrader provider enabled");
+    logger.info(
+      { symbols: provider.supportedSymbols, overrodeCount: provider.supportedSymbols.length },
+      "MarketFeedManager: cTrader provider enabled — Forex/Indices/Commodities routed",
+    );
   }
 
   disableCTrader(): void {
@@ -261,6 +296,39 @@ export class MarketFeedManager extends EventEmitter {
       logger.info("MarketFeedManager: cTrader provider disabled");
       this.emit("provider_status", { provider: "ctrader", status: "disconnected" });
     }
+  }
+
+  getDiagnostics() {
+    const allTicks = this.getAllLatestTicks();
+    const now      = Date.now();
+
+    const perSymbol: Record<string, {
+      provider:     string | undefined;
+      subscribed:   boolean;
+      lastTickAt:   number | null;
+      lastPrice:    number | null;
+      lastTickAgo:  number | null;
+    }> = {};
+
+    for (const sym of this.symbolRouting.keys()) {
+      const tick = allTicks[sym];
+      perSymbol[sym] = {
+        provider:    this.symbolRouting.get(sym),
+        subscribed:  this.subscribedSymbols.has(sym),
+        lastTickAt:  tick?.timestamp ?? null,
+        lastPrice:   tick?.price    ?? null,
+        lastTickAgo: tick ? now - tick.timestamp : null,
+      };
+    }
+
+    return {
+      providers:     this.getProviderStats(),
+      symbolRouting: Object.fromEntries(this.symbolRouting.entries()),
+      subscriptions: [...this.subscribedSymbols],
+      perSymbol,
+      totalTicks:    this.totalTicks,
+      ts:            now,
+    };
   }
 
   stop(): void {

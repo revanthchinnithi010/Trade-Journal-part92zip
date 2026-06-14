@@ -56,6 +56,7 @@ export class MarketDataService extends EventEmitter {
   disableCTrader(): void                                 { this.feedManager.disableCTrader(); }
 
   getSymbolService()                                     { return this.feedManager.symbolService; }
+  getDiagnostics()                                       { return this.feedManager.getDiagnostics(); }
 
   stop(): void { this.feedManager.stop(); }
 }

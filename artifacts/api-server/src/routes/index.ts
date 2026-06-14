@@ -28,6 +28,7 @@ import { brokerMT5Router } from "./broker_mt5.js";
 import { brokerConnectionRouter } from "./broker_connection.js";
 import { myIpRouter } from "./my_ip.js";
 import { createSymbolsRouter } from "./symbols.js";
+import { createFeedDiagnosticsRouter } from "./feed_diagnostics.js";
 import type { AlertEngine } from "../services/AlertEngine.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
@@ -85,6 +86,7 @@ export function createRouter(deps: {
   router.use(brokerConnectionRouter);
   router.use(myIpRouter);
   router.use(createSymbolsRouter(deps.marketData));
+  router.use(createFeedDiagnosticsRouter(deps.marketData));
 
   return router;
 }

@@ -48,6 +48,7 @@ import AlertCenterModal from "@/components/charts/AlertCenterModal";
 import MiniChart from "@/components/charts/MiniChart";
 import ChartContextMenu from "@/components/charts/ChartContextMenu";
 import ReplayControls from "@/components/charts/ReplayControls";
+import { FeedDiagnostics } from "@/components/charts/FeedDiagnostics";
 import { useChartStore, type ChartType, type OHLCBar } from "@/store/chartStore";
 import { useDrawingStore } from "@/store/drawingStore";
 import { useAlertStore } from "@/store/alertStore";
@@ -1817,6 +1818,9 @@ export default function Charts() {
             {/* ── Applied indicator tags (top-left, TradingView style) ── */}
             {/* topOffset pushes tags below the floating symbol panel (≈72px) in single-chart mode */}
             <IndicatorTags topOffset={layoutCount === 1 ? 72 : 8} />
+
+            {/* ── Feed diagnostics overlay (bottom-left corner) ── */}
+            {layoutCount === 1 && <FeedDiagnostics symbol={activeKey} />}
 
             {/* ── Floating symbol info overlay — glassmorphism panel above candles ── */}
             {layoutCount === 1 && (

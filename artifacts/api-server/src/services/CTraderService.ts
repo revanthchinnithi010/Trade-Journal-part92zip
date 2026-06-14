@@ -178,9 +178,24 @@ export class CTraderService extends EventEmitter {
   // symbol name → latest tick
   readonly ticks = new Map<string, CTraderTick>();
 
-  private readonly TARGET_SYMBOLS = ["EURUSD", "GBPUSD", "XAUUSD", "US30", "NAS100", "USOIL"];
+  private readonly TARGET_SYMBOLS = [
+    // Forex
+    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
+    "EURGBP", "GBPJPY", "EURJPY",
+    // Metals
+    "XAUUSD", "XAGUSD",
+    // Indices
+    "US30", "NAS100", "SPX500", "GER40", "UK100",
+    // Commodities
+    "USOIL", "UKOIL",
+  ];
+
   private readonly SYMBOL_DIGITS_FALLBACK: Record<string, number> = {
-    EURUSD: 5, GBPUSD: 5, XAUUSD: 2, US30: 2, NAS100: 2, USOIL: 3,
+    EURUSD: 5, GBPUSD: 5, USDJPY: 3, AUDUSD: 5, USDCAD: 5, USDCHF: 5,
+    EURGBP: 5, GBPJPY: 3, EURJPY: 3,
+    XAUUSD: 2, XAGUSD: 3,
+    US30: 1, NAS100: 1, SPX500: 1, GER40: 1, UK100: 1,
+    USOIL: 3, UKOIL: 3,
   };
 
   get isConnected() { return this.state === "subscribed"; }
@@ -287,9 +302,15 @@ export class CTraderService extends EventEmitter {
     this.clearTimers();
     this.state = "connecting";
     this.rxBuf = Buffer.alloc(0);
-    logger.info("CTraderService: connecting to live.ctraderapi.com:5036");
 
-    const sock = tls.connect({ host: "live.ctraderapi.com", port: 5036, rejectUnauthorized: true });
+    // Configurable endpoint: CTRADER_ENV=demo uses demo.ctraderapi.com:5035
+    // Override with CTRADER_API_HOST / CTRADER_API_PORT env vars as needed.
+    const env  = (process.env["CTRADER_ENV"] ?? "live").toLowerCase();
+    const host = process.env["CTRADER_API_HOST"] ?? (env === "demo" ? "demo.ctraderapi.com" : "live.ctraderapi.com");
+    const port = Number(process.env["CTRADER_API_PORT"] ?? (env === "demo" ? "5035" : "5036"));
+    logger.info({ host, port, env }, "CTraderService: connecting");
+
+    const sock = tls.connect({ host, port, rejectUnauthorized: true });
     this.socket = sock;
 
     sock.on("secureConnect", () => {
