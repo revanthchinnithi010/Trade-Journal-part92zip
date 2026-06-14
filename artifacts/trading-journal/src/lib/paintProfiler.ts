@@ -278,21 +278,7 @@ function _printReport() {
   const worstFrame    = _frames.reduce((m, f) => Math.max(m, f.gapMs), 0);
   const avgFrame      = totalFrames > 0 ? _frames.reduce((s, f) => s + f.gapMs, 0) / totalFrames : 0;
 
-  const report: PaintReport = {
-    captureStartMs:  _captureStart,
-    mountLatencyMs:  _mountMarkTime,
-    firstFrameMs:    _firstFrameTime,
-    compositeEstMs:  _compositeEst,
-    rasterEstMs:     _rasterEst,
-    totalFrames,
-    droppedFrames:   dropped,
-    longFrames:      long,
-    worstFrameMs:    worstFrame,
-    avgFrameMs:      avgFrame,
-    longTasks:       _longTasks,
-    cssAudit:        _cssAudit,
-    frames:          _frames,
-  };
+  const report: PaintReport = _buildReport();
 
   // ── Header ────────────────────────────────────────────────────────────────
   console.group(
@@ -391,6 +377,31 @@ function _printReport() {
   // Expose full report on window for further inspection
   (window as unknown as Record<string, unknown>).__tjPaintLastReport = report;
   console.log("%c[PaintProfiler] Full report object → window.__tjPaintLastReport", "color:#94a3b8;font-size:10px");
+}
+
+// ── Report builder (shared by printReport + startCaptureAsync) ───────────────
+
+function _buildReport(): PaintReport {
+  const totalFrames = _frames.length;
+  const dropped     = _frames.filter(f => f.isDropped).length;
+  const long        = _frames.filter(f => f.isLong).length;
+  const worstFrame  = _frames.reduce((m, f) => Math.max(m, f.gapMs), 0);
+  const avgFrame    = totalFrames > 0 ? _frames.reduce((s, f) => s + f.gapMs, 0) / totalFrames : 0;
+  return {
+    captureStartMs:  _captureStart,
+    mountLatencyMs:  _mountMarkTime,
+    firstFrameMs:    _firstFrameTime,
+    compositeEstMs:  _compositeEst,
+    rasterEstMs:     _rasterEst,
+    totalFrames,
+    droppedFrames:   dropped,
+    longFrames:      long,
+    worstFrameMs:    worstFrame,
+    avgFrameMs:      avgFrame,
+    longTasks:       [..._longTasks],
+    cssAudit:        [..._cssAudit],
+    frames:          [..._frames],
+  };
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -492,6 +503,39 @@ export function cssAudit(): CssAuditEntry[] {
 
 /** Prints the last capture report without re-capturing. */
 export function report(): void { _printReport(); }
+
+/**
+ * Like startCapture() but returns a Promise<PaintReport> that resolves when
+ * the capture window ends. Used by the automated perf test runner.
+ */
+export function startCaptureAsync(durationMs = 2500): Promise<PaintReport> {
+  return new Promise<PaintReport>(resolve => {
+    _reset();
+    _captureStart = performance.now();
+
+    try {
+      performance.clearMarks("tj_paint_sheet_trigger");
+      performance.mark("tj_paint_sheet_trigger");
+    } catch { /* */ }
+
+    _capturing = true;
+    _startObservers();
+    _prevRafTs = null;
+    _rafId = requestAnimationFrame(_rafLoop);
+
+    _autoStopTimer = setTimeout(() => {
+      _stopCapture();
+      const report = _buildReport();
+      (window as unknown as Record<string, unknown>).__tjPaintLastReport = report;
+      resolve(report);
+    }, durationMs);
+
+    console.log(
+      `%c[PaintProfiler] ▶ Async capture started (${durationMs} ms window).`,
+      "color:#34d399;font-weight:bold;font-size:12px",
+    );
+  });
+}
 
 /** Returns current frame data for inspection. */
 export function getFrames(): FrameRecord[] { return [..._frames]; }

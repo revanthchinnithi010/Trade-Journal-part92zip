@@ -44,6 +44,8 @@ import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import * as sheetProfiler from "@/lib/sheetProfiler";
 import type { RenderStat, FpsResult } from "@/lib/sheetProfiler";
 import * as paintProfiler from "@/lib/paintProfiler";
+import { usePerfFlag } from "@/hooks/usePerfFlag";
+import "@/lib/perfTestRunner";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -216,6 +218,8 @@ const GL_DIV             = "linear-gradient(180deg,transparent,rgba(255,255,255,
 
 // ── Animated mesh gradient background ──────────────────────────────────────
 function AnimatedMeshBackground() {
+  const _disableMesh = usePerfFlag("PERF_DISABLE_MESH_BLOBS");
+  if (_disableMesh) return null;
   return (
     <div
       aria-hidden
@@ -261,6 +265,18 @@ function AnimatedMeshBackground() {
         }}
       />
     </div>
+  );
+}
+
+// ── Perf flag CSS override — backdrop-filter ─────────────────────────────────
+// Injected into <head> when PERF_DISABLE_BACKDROP_BLUR is active so the test
+// runner can zero-out all backdrop-filter paint cost without touching every
+// individual inline style.
+function PerfOverrideCss() {
+  const noBlur = usePerfFlag("PERF_DISABLE_BACKDROP_BLUR");
+  if (!noBlur) return null;
+  return (
+    <style>{`* { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }`}</style>
   );
 }
 
@@ -436,11 +452,13 @@ function FloatingDrawingPill({
 function BottomSheet({
   title, onClose, children,
   onOpened,
+  noShadow,
   partialFraction: _ignored,
   maxHeight: _maxHeight,
 }: {
   title: string; onClose: () => void; children: React.ReactNode;
   onOpened?: () => void;
+  noShadow?: boolean;
   partialFraction?: number;
   maxHeight?: string;
 }) {
@@ -925,7 +943,7 @@ function BottomSheet({
           borderRadius:"24px 24px 0 0",
           paddingBottom:"max(env(safe-area-inset-bottom,12px),12px)",
           display:"flex", flexDirection:"column",
-          boxShadow:`${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
+          boxShadow: noShadow ? "none" : `${NEON_GLOW}, 0 -32px 80px rgba(0,0,0,0.85)`,
           willChange:"transform",
           contain:"layout style",
           // Initial position — JS immediately overrides in opening useEffect
@@ -1918,6 +1936,8 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
 
   useEffect(() => { paintProfiler.onSheetMounted(); }, []);
 
+  const noShadow = usePerfFlag("PERF_DISABLE_SHEET_SHADOW");
+
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
 
   // settingsRef lets `p` read the latest settings without being in the dep array.
@@ -1965,7 +1985,7 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   }), [p]);
 
   return (
-    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh">
+    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh" noShadow={noShadow}>
 
       {/* ── Tab navigation — plain div, no sticky, matches DrawingToolsSheet ── */}
       <div style={{
@@ -3479,6 +3499,14 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false),  []);
   const handleOpenSettings      = useCallback(() => { paintProfiler.startCapture(); setShowSettings(true); }, []);
 
+  // Expose open/close handles so perfTestRunner can programmatically drive the sheet
+  useEffect(() => {
+    const w = window as unknown as Record<string, unknown>;
+    w.__tjOpenSettings  = handleOpenSettings;
+    w.__tjCloseSettings = handleCloseSettings;
+    return () => { delete w.__tjOpenSettings; delete w.__tjCloseSettings; };
+  }, [handleOpenSettings, handleCloseSettings]);
+
   // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
   const handleSelectSymbol = useCallback((sym: string) => {
     console.log(`[ChartSelect] Symbol Change Target: slot=${activeChartSlot}  sym=${sym}  Mini Control Bar Target: slot=${activeChartSlot}`);
@@ -3572,6 +3600,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   return (
     <div ref={containerRef} style={{ height:"100%", background:"#08090f", display:"flex", flexDirection:"column", touchAction:"none" }}>
+      <PerfOverrideCss />
 
       {/* ── Chart area ── */}
       <div ref={chartAreaRef} style={{ flex:1, minHeight:0, position:"relative", overflow:"hidden", touchAction:"none" }}>
