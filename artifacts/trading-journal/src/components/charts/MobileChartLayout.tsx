@@ -1898,62 +1898,13 @@ const ScaleTabContent = memo(function ScaleTabContent({ settings, h }: CSSSectio
   );
 });
 
-// ── Settings Skeleton ─────────────────────────────────────────────────────────
-// Zero-hook placeholder rendered during the 380ms opening animation.
-// Pure divs — no useState, no useEffect — renders in < 1ms.
-// Swapped out once onOpened fires (contentVisible becomes true).
-const SK_ROW_BG   = "rgba(255,255,255,0.07)";
-const SK_CTRL_BG  = "rgba(255,255,255,0.09)";
-const SK_SEC_BG   = "rgba(255,255,255,0.03)";
-const SK_TITLE_BG = "rgba(255,255,255,0.05)";
-const SK_DIV      = "1px solid rgba(255,255,255,0.04)";
-const SK_SEC_BDR  = "1px solid rgba(255,255,255,0.06)";
-
-const SkRow = memo(function SkRow({ w, ctrl, last }: { w: number; ctrl: number; last?: boolean }) {
-  return (
-    <div style={{
-      display:"flex", alignItems:"center", justifyContent:"space-between",
-      padding:"10px 14px",
-      borderBottom: last ? "none" : SK_DIV,
-    }}>
-      <div style={{ width: w, height: 10, borderRadius: 4, background: SK_ROW_BG }} />
-      <div style={{ width: ctrl, height: 22, borderRadius: 5, background: SK_CTRL_BG }} />
-    </div>
-  );
-});
-
-const SkSection = memo(function SkSection({ rows, last }: { rows: Array<[number,number]>; last?: boolean }) {
-  return (
-    <div style={{ marginBottom: last ? 0 : 20 }}>
-      <div style={{ width: 52, height: 7, borderRadius: 4, background: SK_TITLE_BG, marginBottom: 8 }} />
-      <div style={{ background: SK_SEC_BG, borderRadius: 10, border: SK_SEC_BDR, overflow:"hidden" }}>
-        {rows.map(([w, ctrl], i) => (
-          <SkRow key={i} w={w} ctrl={ctrl} last={i === rows.length - 1} />
-        ))}
-      </div>
-    </div>
-  );
-});
-
-const SKELETON_SECTIONS: Array<[Array<[number,number]>, boolean?]> = [
-  [[[110,28],[130,28],[90,28],[120,60]]],
-  [[[80,28],[100,28],[140,28]]],
-  [[[60,48]], true],
-];
-
-const SettingsSkeleton = memo(function SettingsSkeleton() {
-  return (
-    <div style={{ padding:"12px 14px 4px", overflowY:"hidden" }}>
-      {SKELETON_SECTIONS.map(([rows, last], i) => (
-        <SkSection key={i} rows={rows} last={last} />
-      ))}
-    </div>
-  );
-});
 
 // Shared helper primitives (ColorBox, Section, Row, …) are imported from
 // SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
-function ChartSettingsSheet({
+// Architecture mirrors DrawingToolsSheet exactly:
+//   memo() wrapper · immediate content mount · no skeleton · no onOpened deferral
+//   plain div tab bar (no sticky) · explicit transition properties · maxHeight="80vh"
+const ChartSettingsSheet = memo(function ChartSettingsSheet({
   settings, onChange, onSaveAsDefault, onClose,
 }: {
   settings: ChartSettings;
@@ -1961,17 +1912,13 @@ function ChartSettingsSheet({
   onSaveAsDefault?: (s: ChartSettings) => void;
   onClose: () => void;
 }) {
-  // ── Profiler: always-on render tracking ──────────────────────────────────
   const _profCommitCSS = sheetProfiler.trackRender("ChartSettingsSheet", "MobileChartLayout.tsx", 1690);
   useLayoutEffect(() => { _profCommitCSS(); });
-  // ─────────────────────────────────────────────────────────────────────────
+
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
-  // contentVisible: false until BottomSheet opening animation completes.
-  // Skeleton is shown during the 380ms animation; real tab content mounts after.
-  const [contentVisible, setContentVisible] = useState(false);
+
   // settingsRef lets `p` read the latest settings without being in the dep array.
-  // This makes `p` stable across settings changes — it only updates when `onChange`
-  // changes (which is now useCallback'd in charts.tsx and never changes).
+  // Makes `p` stable across settings changes — only updates when `onChange` changes.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const p = useCallback(
@@ -1979,10 +1926,8 @@ function ChartSettingsSheet({
     [onChange],
   );
 
-  // Per-field stable handlers — created once on mount (p is stable so this
-  // useMemo runs once and never again). Each handler is a fixed function reference.
-  // memo'd children (ColorBox, ColorPair, Toggle, ThicknessButtons, StyledSelect)
-  // receive these and will bail out on settings changes that don't affect them.
+  // Per-field stable handlers — created once on mount (p is stable).
+  // memo'd children bail out on settings changes that don't affect them.
   const h = useMemo(() => ({
     upColor:            (v: string)  => p({ upColor: v }),
     downColor:          (v: string)  => p({ downColor: v }),
@@ -2016,93 +1961,12 @@ function ChartSettingsSheet({
     priceScaleAuto:     (v: boolean) => p({ priceScaleAutoScale: v }),
   }), [p]);
 
-  // ── Render-phase stat resets ───────────────────────────────────────────────
-  // These fire SYNCHRONOUSLY during ChartSettingsSheet's own render, BEFORE any
-  // child component's trackRender() call executes. This guarantees stats only
-  // contain renders from THIS open / THIS tab activation, not leaked from
-  // other sheets or previous opens.
-
-  // Reset when content first becomes visible (not on mount — content is deferred).
-  // Fires as a render-phase side-effect right before tab content mounts, so the
-  // profiler captures only the content-mount renders, not skeleton/sheet renders.
-  const _contentResetDone = useRef(false);
-  if (contentVisible && !_contentResetDone.current) {
-    _contentResetDone.current = true;
-    sheetProfiler.resetRenderStats();
-  }
-
-  // Reset on tab change — fires before new tab content renders its children
-  const _prevTabRef = useRef<typeof tab>(tab);
-  const _tabChangedFrom = _prevTabRef.current !== tab ? _prevTabRef.current : null;
-  if (_prevTabRef.current !== tab) {
-    _prevTabRef.current = tab;
-    sheetProfiler.resetRenderStats();
-  }
-
-  // ── Report dump ────────────────────────────────────────────────────────────
-  const _dumpReport = useCallback((phase: string) => {
-    const stats = sheetProfiler.getRenderStats();
-    // On initial open, renderCount per component == number of mounted instances
-    // (each mounts and renders exactly once). After tab switch same rule applies
-    // for the new tab's components.
-    const cpCount = stats.find(s => s.component === "ColorPicker")?.renderCount ?? 0;
-    const csCount = stats.find(s => s.component === "ColorSwatch")?.renderCount ?? 0;
-    const srCount = stats.find(s => s.component === "SettingsRow")?.renderCount ?? 0;
-    const rows = stats.map(s => ({
-      "Component":    s.component,
-      "Render Count": s.renderCount,
-      "Avg ms":       s.renderCount ? (s.totalMs / s.renderCount).toFixed(3) : "—",
-      "Max ms":       s.maxMs.toFixed(3),
-      "Total ms":     s.totalMs.toFixed(3),
-      "File":         s.file.split("/").pop() ?? s.file,
-      "Line":         s.line > 0 ? String(s.line) : "—",
-    }));
-    console.group(
-      `%c[ChartSettingsSheet] ── ${phase} ─── Render Report ──`,
-      "color:#f59e0b;font-weight:bold;font-size:14px",
-    );
-    if (rows.length) {
-      console.log(
-        `%c🔴 MOST EXPENSIVE: ${rows[0]["Component"]} — ${rows[0]["Total ms"]} ms total · ${rows[0]["Render Count"]} render(s) · avg ${rows[0]["Avg ms"]} ms/render`,
-        "color:#f87171;font-weight:bold;font-size:12px",
-      );
-      console.table(rows);
-      console.log(
-        `%c  ↳ ColorPickers (eager, target=0): ${cpCount}  ·  ColorSwatches (lazy, target=N): ${csCount}  ·  SettingsRows: ${srCount}  ·  Hidden tabs: 0`,
-        cpCount === 0 ? "color:#4ade80;font-size:11px;font-weight:bold" : "color:#f87171;font-size:11px;font-weight:bold",
-      );
-    } else {
-      console.log("No renders captured — trackRender() may not have fired yet.");
-    }
-    console.groupEnd();
-  }, []);
-
-  // Dump 250ms after content becomes visible (animation has already finished,
-  // so all tab-content mounts will have been recorded by trackRender by then).
-  useEffect(() => {
-    if (!contentVisible) return;
-    const t = setTimeout(() => _dumpReport(`Open — post-animation (tab: ${tab})`), 250);
-    return () => clearTimeout(t);
-  }, [contentVisible]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Dump after each tab switch.
-  // _tabChangedFrom is a render-phase variable captured by this effect's closure
-  // from the render where tab changed — it correctly holds the PREVIOUS tab name.
-  useEffect(() => {
-    if (_tabChangedFrom === null) return; // null on initial mount, skip
-    const from = _tabChangedFrom;
-    const to = tab;
-    const t = setTimeout(() => _dumpReport(`Tab Switch: ${from} → ${to}`), 250);
-    return () => clearTimeout(t);
-  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
-
   return (
-    <BottomSheet title="Chart Settings" onClose={onClose} onOpened={() => setContentVisible(true)}>
+    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh">
 
-      {/* ── Tab navigation ─────────────────────────────────────────────── */}
+      {/* ── Tab navigation — plain div, no sticky, matches DrawingToolsSheet ── */}
       <div style={{
         display:"flex", gap:7, padding:"8px 14px 12px",
-        position:"sticky", top:0, zIndex:2, background:SHEET_BG,
         borderBottom:`1px solid ${DIVIDER}`, flexShrink:0,
       }}>
         {(["Candles","Appearance","Scale"] as const).map(t => {
@@ -2114,7 +1978,8 @@ function ChartSettingsSheet({
                 background: active ? ACCENT_BG : BTN_BG,
                 border:`1px solid ${active ? ACCENT_BORDER : BTN_BORDER}`,
                 color: active ? ACCENT : TEXT_MED,
-                cursor:"pointer", outline:"none", transition:"all 0.15s",
+                cursor:"pointer", outline:"none",
+                transition:"background 0.15s, border-color 0.15s, color 0.15s",
               }}
               onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }}
               onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = BTN_BG; }}
@@ -2125,18 +1990,12 @@ function ChartSettingsSheet({
         })}
       </div>
 
-      {/* ── Tab content: skeleton during animation, real content after ─── */}
-      {!contentVisible ? (
-        <SettingsSkeleton />
-      ) : (
-        <>
-          {tab === "Candles"     && <CandlesTabContent    settings={settings} h={h} />}
-          {tab === "Appearance"  && <AppearanceTabContent settings={settings} h={h} />}
-          {tab === "Scale"       && <ScaleTabContent      settings={settings} h={h} />}
-        </>
-      )}
+      {/* ── Tab content — rendered immediately on mount, same as DrawingToolsSheet ── */}
+      {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
+      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
+      {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
 
-      {/* ── Footer ─────────────────────────────────────────────────────── */}
+      {/* ── Footer ── */}
       <div style={{
         padding:"12px 14px 8px",
         borderTop:`1px solid ${DIVIDER}`,
@@ -2162,7 +2021,7 @@ function ChartSettingsSheet({
 
     </BottomSheet>
   );
-}
+});
 
 // ── Mini Control Bar ───────────────────────────────────────────────────────
 // ── DrawingMiniBar — replaces MiniControlBar when a drawing is selected ───
