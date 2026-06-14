@@ -16,6 +16,16 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
     const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
     const redirectUri = `${proto}://${host}/api/ctrader/callback`;
+    logger.info({
+      "x-forwarded-proto": req.headers["x-forwarded-proto"] ?? "(not set)",
+      "x-forwarded-host": req.headers["x-forwarded-host"] ?? "(not set)",
+      "x-forwarded-for": req.headers["x-forwarded-for"] ?? "(not set)",
+      "req.protocol": req.protocol,
+      "req.hostname": req.hostname,
+      "resolved_proto": proto,
+      "resolved_host": host,
+      "redirect_uri": redirectUri,
+    }, "ctrader/config: redirect_uri debug");
 
     let authUrl: string | null = null;
     if (configured) {
