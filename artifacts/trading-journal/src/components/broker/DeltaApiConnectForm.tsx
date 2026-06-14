@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Eye, EyeOff, Key, Lock, Tag, Loader2, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Eye, EyeOff, Key, Lock, Tag, Loader2, CheckCircle2, XCircle, ExternalLink, Zap } from "lucide-react";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 
@@ -22,9 +22,71 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
   const [status, setStatus] = useState<FormStatus>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [balanceInfo, setBalanceInfo] = useState<string | null>(null);
+  const [hasImported, setHasImported] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/credentials/status", { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { ok: boolean; status?: Record<string, boolean> }) => {
+        if (d.ok && d.status?.DELTA_API_KEY && d.status?.DELTA_API_SECRET) {
+          setHasImported(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const isLoading = status === "connecting";
   const canSubmit = apiKey.trim().length > 0 && apiSecret.trim().length > 0 && !isLoading;
+
+  async function handleConnectImported() {
+    setStatus("connecting");
+    setErrorMsg("");
+    setBalanceInfo(null);
+    try {
+      const res = await fetch("/api/credentials/connect/delta", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json() as {
+        ok: boolean; accountId?: number; apiToken?: string;
+        error?: string; usdtBalance?: string; envName?: string;
+      };
+      if (!data.ok || !data.accountId || !data.apiToken) {
+        const msg = data.error ?? "Connection failed — check imported credentials";
+        setStatus("error");
+        setErrorMsg(msg);
+        onError(msg);
+        return;
+      }
+      try { localStorage.setItem(`${LS_TOKEN_PREFIX}${data.accountId}`, data.apiToken); } catch { /* ignore */ }
+      if (data.usdtBalance !== undefined) {
+        setBalanceInfo(`USDT Balance: ${parseFloat(data.usdtBalance).toFixed(2)}${data.envName ? ` · ${data.envName}` : ""}`);
+      }
+      setStatus("success");
+      await loadAccounts();
+      const account: BrokerAccount = {
+        id: data.accountId,
+        broker_id: "delta",
+        label: "Delta Exchange",
+        is_active: true,
+        api_token: data.apiToken,
+        created_at: new Date().toISOString(),
+      };
+      connect(account);
+      try {
+        await fetch("/api/broker/delta/ws/start", {
+          method: "POST", credentials: "include",
+          headers: { "X-Broker-Account-Id": String(data.accountId), "X-Broker-Token": data.apiToken },
+        });
+      } catch { /* non-fatal */ }
+      setTimeout(() => { onSuccess(); }, 1200);
+    } catch (err) {
+      const msg = `Network error: ${String(err)}`;
+      setStatus("error");
+      setErrorMsg(msg);
+      onError(msg);
+    }
+  }
 
   async function handleConnect(e: React.FormEvent) {
     e.preventDefault();
@@ -133,6 +195,44 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
 
   return (
     <form onSubmit={handleConnect} className="flex flex-col gap-4" autoComplete="off">
+      {/* One-click connect when credentials are already imported */}
+      {hasImported && (
+        <div style={{
+          padding: "14px 16px", borderRadius: 12,
+          background: "rgba(0,255,180,0.05)", border: "1px solid rgba(0,255,180,0.2)",
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Zap size={14} style={{ color: "#00FFB4", flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#00FFB4", margin: 0 }}>Imported credentials found</p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "2px 0 0" }}>
+                Connect instantly using your saved API key & secret.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleConnectImported}
+            disabled={isLoading}
+            style={{
+              width: "100%", padding: "10px 0", borderRadius: 9, fontSize: 13, fontWeight: 700,
+              background: isLoading ? "rgba(0,255,180,0.1)" : "linear-gradient(135deg, #00FFB4 0%, #00CC96 100%)",
+              color: isLoading ? "rgba(0,255,180,0.5)" : "#0B1017",
+              border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            {isLoading ? <><Loader2 size={14} className="animate-spin" /> Connecting…</> : <>Connect with Imported Key</>}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>or enter manually below</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col gap-1.5">
         <label className="text-xs font-medium tracking-wide" style={{ color: "rgba(255,255,255,0.5)" }}>
           API KEY

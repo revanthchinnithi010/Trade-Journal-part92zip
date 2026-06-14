@@ -7,6 +7,7 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight, Filter, Download,
   Link2, Unlink, Signal, ExternalLink, Copy, Server, BarChart3,
 } from "lucide-react";
+import { CredentialImportModal, ConnectionStatusPanel } from "@/components/broker/CredentialImportModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrencyFormatter } from "@/store/currencyStore";
@@ -1059,6 +1060,8 @@ export default function Brokers() {
   const [fusionConnected, setFusionConnected] = useState(false);
   const [growwConnected, setGrowwConnected] = useState(false);
   const [tradeFilter, setTradeFilter] = useState<BrokerName | "all">("all");
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [statusKey, setStatusKey] = useState(0);
 
   const filteredTrades = SAMPLE_SYNCED_TRADES.filter(
     t => tradeFilter === "all" || t.broker === tradeFilter
@@ -1070,6 +1073,18 @@ export default function Brokers() {
 
   return (
     <div className="space-y-6 pb-12">
+      {showImportModal && (
+        <CredentialImportModal
+          onClose={() => setShowImportModal(false)}
+          onImported={() => { setStatusKey(k => k + 1); setShowImportModal(false); }}
+        />
+      )}
+
+      {/* Connection Status Panel */}
+      <div key={statusKey}>
+        <ConnectionStatusPanel onImport={() => setShowImportModal(true)} />
+      </div>
+
       {/* Page Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
