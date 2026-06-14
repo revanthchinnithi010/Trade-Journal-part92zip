@@ -503,18 +503,11 @@ function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObjec
     <div
       ref={wrapRef}
       style={{
-        position:       "absolute",
-        top:            8,
-        left:           8,
-        zIndex:         3,
         display:        "flex",
         alignItems:     "center",
-        gap:            5,
-        padding:        "3px 8px",
-        borderRadius:   4,
-        background:     "rgba(0,0,0,0.52)",
-        border:         "1px solid rgba(255,255,255,0.08)",
-        pointerEvents:  "none",
+        gap:            4,
+        marginLeft:     8,
+        flexShrink:     0,
         opacity:        0.45,
         transition:     "opacity 0.4s",
         userSelect:     "none",
@@ -539,6 +532,7 @@ function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObjec
           color:        "rgba(255,255,255,0.75)",
           letterSpacing: "0.02em",
           lineHeight:   1,
+          whiteSpace:   "nowrap",
         }}
       >
         0 t/s
@@ -3200,7 +3194,7 @@ const CustomChart = memo(function CustomChart({
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: "50%", border: "1.5px solid rgba(255,255,255,0.4)", borderTopColor: "rgba(255,255,255,0.85)", animation: "spin 0.7s linear infinite" }} />
             Loading history…
           </div>
-          {/* ── Symbol · Timeframe overlay — top-left, transparent, pointer-events:none ── */}
+          {/* ── Symbol · Timeframe · TickRate overlay — top-left, flex row, pointer-events:none ── */}
           <div style={{
             position:      "absolute",
             top:           8,
@@ -3208,31 +3202,39 @@ const CustomChart = memo(function CustomChart({
             pointerEvents: "none",
             zIndex:        5,
             display:       "flex",
-            alignItems:    "baseline",
-            gap:           5,
+            alignItems:    "center",
+            minWidth:      0,
+            maxWidth:      "calc(100% - 120px)",
             userSelect:    "none",
           }}>
             <span style={{
-              fontSize:    12,
-              fontWeight:  600,
-              color:       "rgba(255,255,255,0.82)",
+              fontSize:      12,
+              fontWeight:    600,
+              color:         "rgba(255,255,255,0.82)",
               letterSpacing: "0.02em",
-              lineHeight:  1,
+              lineHeight:    1,
+              overflow:      "hidden",
+              textOverflow:  "ellipsis",
+              whiteSpace:    "nowrap",
+              flexShrink:    1,
+              minWidth:      0,
             }}>
               {SYMBOL_CATALOG[symbol]?.badge ?? symbol}
             </span>
             <span style={{
-              fontSize:    10,
-              fontWeight:  500,
-              color:       "rgba(255,255,255,0.38)",
+              fontSize:      10,
+              fontWeight:    500,
+              color:         "rgba(255,255,255,0.38)",
               letterSpacing: "0.01em",
-              lineHeight:  1,
+              lineHeight:    1,
+              flexShrink:    0,
+              whiteSpace:    "nowrap",
+              marginLeft:    5,
             }}>
               · {fmtIntervalLabel(interval)}
             </span>
+            <TickRateOverlay tickCountRef={tickCountRef} />
           </div>
-
-          <TickRateOverlay tickCountRef={tickCountRef} />
           <LivePriceBox
             chart={chartCtx?.chart ?? null}
             series={chartCtx?.candle ?? null}
