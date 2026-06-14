@@ -1,12 +1,15 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import {
   User, Settings, Palette, Download, LogOut,
-  X, Camera, Eye, EyeOff, ChevronRight,
+  X, Camera, Eye, EyeOff, ChevronRight, ChevronLeft,
+  Sun, Moon, Monitor, Check,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTheme } from "@/contexts/ThemeContext";
+import type { ThemeMode } from "@/contexts/ThemeContext";
 
 export interface ProfileData {
   name: string;
@@ -50,6 +53,109 @@ const MENU_ITEMS = [
   { icon: LogOut,   label: "Sign Out",    action: "signout",    danger: true  },
 ];
 
+const THEME_OPTIONS: { mode: ThemeMode; label: string; sub: string; Icon: React.ElementType }[] = [
+  { mode: "light",  label: "Light",          sub: "Always use light theme",   Icon: Sun     },
+  { mode: "dark",   label: "Dark",           sub: "Always use dark theme",    Icon: Moon    },
+  { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor },
+];
+
+interface AppearancePanelProps {
+  onBack: () => void;
+}
+
+function AppearancePanel({ onBack }: AppearancePanelProps) {
+  const { themeMode, setThemeMode } = useTheme();
+
+  return (
+    <div>
+      {/* Header */}
+      <div
+        className="flex items-center gap-2 px-3 py-3"
+        style={{ borderBottom: "1px solid var(--surface-divider)" }}
+      >
+        <button
+          onClick={onBack}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-white transition-colors"
+          style={{ background: "var(--surface-btn-hover)" }}
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div
+            className="w-6 h-6 rounded-md flex items-center justify-center"
+            style={{ background: "rgba(165,180,252,0.12)", border: "1px solid rgba(165,180,252,0.20)" }}
+          >
+            <Palette className="w-3 h-3" style={{ color: "#a5b4fc" }} />
+          </div>
+          <span className="text-[13px] font-semibold text-white/90">Appearance</span>
+        </div>
+      </div>
+
+      {/* Theme Mode section */}
+      <div className="p-2">
+        <p
+          className="text-[9px] font-bold uppercase tracking-[0.12em] px-2 pt-1 pb-2"
+          style={{ color: "rgba(148,163,184,0.45)" }}
+        >
+          Theme Mode
+        </p>
+        <div className="space-y-0.5">
+          {THEME_OPTIONS.map(({ mode, label, sub, Icon }) => {
+            const active = themeMode === mode;
+            return (
+              <button
+                key={mode}
+                onClick={() => setThemeMode(mode)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-100 group text-left"
+                style={{
+                  background: active ? "rgba(165,180,252,0.10)" : "transparent",
+                  border:     active ? "1px solid rgba(165,180,252,0.22)" : "1px solid transparent",
+                }}
+                onMouseEnter={e => {
+                  if (!active) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)";
+                }}
+                onMouseLeave={e => {
+                  if (!active) (e.currentTarget as HTMLElement).style.background = "transparent";
+                }}
+              >
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                  style={{
+                    background: active ? "rgba(165,180,252,0.18)" : "var(--surface-btn-hover)",
+                    border:     active ? "1px solid rgba(165,180,252,0.30)" : "1px solid var(--surface-btn-border)",
+                  }}
+                >
+                  <Icon
+                    className="w-3.5 h-3.5"
+                    style={{ color: active ? "#a5b4fc" : "hsl(var(--muted-foreground))" }}
+                  />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className="text-[12px] font-medium leading-tight"
+                    style={{ color: active ? "#e0e7ff" : "hsl(var(--foreground))" }}
+                  >
+                    {label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground/60 leading-tight mt-0.5">{sub}</p>
+                </div>
+                {active && (
+                  <div
+                    className="w-4.5 h-4.5 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: "#a5b4fc", width: 18, height: 18 }}
+                  >
+                    <Check className="w-2.5 h-2.5 text-[#1e1b4b]" style={{ strokeWidth: 3 }} />
+                  </div>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 interface DropdownProps {
   profile: ProfileData;
   onUpdate: (p: Partial<ProfileData>) => void;
@@ -60,6 +166,7 @@ interface DropdownProps {
 export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: DropdownProps) {
   const [, navigate] = useLocation();
   const [showModal, setShowModal] = useState(false);
+  const [panel, setPanel] = useState<"menu" | "appearance">("menu");
   const dropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,9 +184,15 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
     return () => document.removeEventListener("mousedown", onDown);
   }, [onClose, showModal, anchorRef]);
 
+  // Reset to menu view when dropdown opens
+  useEffect(() => {
+    setPanel("menu");
+  }, []);
+
   function handleAction(action: string) {
     if (action === "settings")   { navigate("/settings"); onClose(); return; }
     if (action === "profile")    { setShowModal(true); return; }
+    if (action === "appearance") { setPanel("appearance"); return; }
     if (action === "export") {
       const data = JSON.stringify({
         profile: { name: profile.name, email: profile.email },
@@ -104,7 +217,7 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
     <>
       <div
         ref={dropRef}
-        className="dropdown-in absolute top-[calc(100%+10px)] right-0 w-[230px] rounded-2xl overflow-hidden z-50"
+        className="dropdown-in absolute top-[calc(100%+10px)] right-0 w-[248px] rounded-2xl overflow-hidden z-50"
         style={{
           background:          "var(--surface-header)",
           backdropFilter:      "blur(24px)",
@@ -113,57 +226,63 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
           boxShadow:           "0 24px 64px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset",
         }}
       >
-        <div
-          className="flex items-center gap-3 p-3.5"
-          style={{ borderBottom: "1px solid var(--surface-divider)" }}
-        >
-          <div
-            className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
-            style={{
-              background:  "var(--surface-avatar-bg)",
-              border:      "1.5px solid var(--surface-avatar-border)",
-              boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
-            }}
-          >
-            {profile.avatarDataUrl
-              ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
-              : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
-            }
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
-            <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
-          </div>
-        </div>
-
-        <div className="p-1.5 space-y-0.5">
-          {MENU_ITEMS.map((item, i) => (
-            <div key={item.action}>
-              {i === MENU_ITEMS.length - 1 && (
-                <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
-              )}
-              <button
-                onClick={() => handleAction(item.action)}
-                className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-100 group"
-                style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
-                  e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = "transparent";
-                  e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
+        {panel === "appearance" ? (
+          <AppearancePanel onBack={() => setPanel("menu")} />
+        ) : (
+          <>
+            <div
+              className="flex items-center gap-3 p-3.5"
+              style={{ borderBottom: "1px solid var(--surface-divider)" }}
+            >
+              <div
+                className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
+                style={{
+                  background:  "var(--surface-avatar-bg)",
+                  border:      "1.5px solid var(--surface-avatar-border)",
+                  boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
                 }}
               >
-                <item.icon className="w-3.5 h-3.5 shrink-0" />
-                <span>{item.label}</span>
-                {!item.danger && (
-                  <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
-                )}
-              </button>
+                {profile.avatarDataUrl
+                  ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
+                  : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
+                }
+              </div>
+              <div className="min-w-0">
+                <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
+                <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
+              </div>
             </div>
-          ))}
-        </div>
+
+            <div className="p-1.5 space-y-0.5">
+              {MENU_ITEMS.map((item, i) => (
+                <div key={item.action}>
+                  {i === MENU_ITEMS.length - 1 && (
+                    <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
+                  )}
+                  <button
+                    onClick={() => handleAction(item.action)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-100 group"
+                    style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
+                      e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "transparent";
+                      e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
+                    }}
+                  >
+                    <item.icon className="w-3.5 h-3.5 shrink-0" />
+                    <span>{item.label}</span>
+                    {!item.danger && (
+                      <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </div>
 
       {showModal && (

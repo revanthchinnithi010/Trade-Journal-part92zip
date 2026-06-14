@@ -392,20 +392,22 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               </div>
             )}
 
-            {/* Right: Theme Toggle + Bell + Profile */}
+            {/* Right: Theme Toggle (desktop only) + Bell + Profile */}
             <div className="flex items-center gap-2 shrink-0">
 
-              {/* Theme Toggle */}
-              <button
-                onClick={toggleTheme}
-                className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground transition-all duration-200"
-                style={{ border: "1px solid var(--surface-btn-border)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
-                title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
-              >
-                {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-              </button>
+              {/* Theme Toggle — hidden on mobile (use Profile → Appearance instead) */}
+              {!isMobile && (
+                <button
+                  onClick={toggleTheme}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground transition-all duration-200"
+                  style={{ border: "1px solid var(--surface-btn-border)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  title={theme === "dark" ? "Switch to Light Mode" : "Switch to Dark Mode"}
+                >
+                  {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                </button>
+              )}
 
               {/* Currency Toggle */}
               <button
