@@ -1897,11 +1897,12 @@ const ScaleTabContent = memo(function ScaleTabContent({ settings, h }: CSSSectio
 });
 
 
-// Shared helper primitives (ColorBox, Section, Row, …) are imported from
-// SettingsPanel — BottomSheet itself provides snap, drag, spring, backdrop.
-// Architecture mirrors DrawingToolsSheet exactly:
-//   memo() wrapper · immediate content mount · no skeleton · no onOpened deferral
-//   plain div tab bar (no sticky) · explicit transition properties · maxHeight="80vh"
+// ── ChartSettingsSheet — full-screen slide-up modal (mobile-optimised) ────────
+// Replaces BottomSheet: no snap points, no drag, no height animation.
+// Open:  mount at translateY(100%), rAF flips to translateY(0) — 160ms transform.
+// Close: flip to translateY(100%), wait 165ms, then call onClose to unmount.
+// No backdrop blur (too expensive on mobile GPU).
+// Sticky header + sticky tab bar. Scrollable content. Safe-area aware.
 const ChartSettingsSheet = memo(function ChartSettingsSheet({
   settings, onChange, onSaveAsDefault, onClose,
 }: {
@@ -1912,8 +1913,33 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
 }) {
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
 
+  // ── Open / close animation state ──────────────────────────────────────────
+  // visible: false → translateY(100%) on mount, then rAF flips to true → translateY(0)
+  const [visible, setVisible] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setVisible(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
+  // Lock body scroll while open
+  useLayoutEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const handleClose = useCallback(() => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    const t = setTimeout(() => onClose(), 165);
+    return () => clearTimeout(t);
+  }, [onClose]);
+
   // settingsRef lets `p` read the latest settings without being in the dep array.
-  // Makes `p` stable across settings changes — only updates when `onChange` changes.
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const p = useCallback(
@@ -1922,7 +1948,6 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   );
 
   // Per-field stable handlers — created once on mount (p is stable).
-  // memo'd children bail out on settings changes that don't affect them.
   const h = useMemo(() => ({
     upColor:            (v: string)  => p({ upColor: v }),
     downColor:          (v: string)  => p({ downColor: v }),
@@ -1956,28 +1981,117 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
     priceScaleAuto:     (v: boolean) => p({ priceScaleAutoScale: v }),
   }), [p]);
 
-  return (
-    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh">
+  const slideY = (visible && !closing) ? "translateY(0)" : "translateY(100%)";
 
-      {/* ── Tab navigation — plain div, no sticky, matches DrawingToolsSheet ── */}
+  return createPortal(
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 2000,
+        background: "rgba(10,12,16,0.99)",
+        display: "flex",
+        flexDirection: "column",
+        transform: slideY,
+        transition: "transform 160ms cubic-bezier(0.4,0,0.2,1)",
+        willChange: "transform",
+        paddingTop: "env(safe-area-inset-top, 0px)",
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        overscrollBehavior: "contain",
+      }}
+    >
+      {/* ── Sticky header ── */}
       <div style={{
-        display:"flex", gap:7, padding:"8px 14px 12px",
-        borderBottom:`1px solid ${DIVIDER}`, flexShrink:0,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "0 4px 0 2px",
+        height: 52,
+        flexShrink: 0,
+        borderBottom: `1px solid ${DIVIDER}`,
+        background: "rgba(10,12,16,0.99)",
+      }}>
+        <button
+          onClick={handleClose}
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "8px 10px", borderRadius: 10,
+            background: "transparent", border: "none",
+            color: ACCENT, cursor: "pointer",
+            fontSize: 14, fontWeight: 600,
+            touchAction: "manipulation",
+          }}
+          onPointerDown={e => { (e.currentTarget as HTMLElement).style.opacity = "0.65"; }}
+          onPointerUp={e   => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+          onPointerCancel={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+        >
+          <ChevronLeft style={{ width: 18, height: 18, strokeWidth: 2.5 }} />
+          <span>Back</span>
+        </button>
+
+        <span style={{
+          position: "absolute", left: "50%", transform: "translateX(-50%)",
+          fontSize: 15, fontWeight: 700, color: TEXT_HI,
+          pointerEvents: "none", whiteSpace: "nowrap",
+        }}>
+          Chart Settings
+        </span>
+
+        <button
+          onClick={handleClose}
+          style={{
+            padding: "8px 14px", borderRadius: 10,
+            background: ACCENT_BG,
+            border: `1px solid ${ACCENT_BORDER}`,
+            color: ACCENT, fontSize: 13, fontWeight: 700,
+            cursor: "pointer", touchAction: "manipulation",
+          }}
+          onPointerDown={e => { (e.currentTarget as HTMLElement).style.opacity = "0.7"; }}
+          onPointerUp={e   => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+          onPointerCancel={e => { (e.currentTarget as HTMLElement).style.opacity = "1"; }}
+        >
+          Done
+        </button>
+      </div>
+
+      {/* ── Sticky tab bar ── */}
+      <div style={{
+        display: "flex",
+        gap: 8,
+        padding: "10px 14px",
+        borderBottom: `1px solid ${DIVIDER}`,
+        flexShrink: 0,
+        background: "rgba(10,12,16,0.99)",
       }}>
         {(["Candles","Appearance","Scale"] as const).map(t => {
           const active = tab === t;
           return (
-            <button key={t} onClick={() => setTab(t)}
+            <button
+              key={t}
+              onClick={() => setTab(t)}
               style={{
-                padding:"7px 16px", borderRadius:20, fontSize:12, fontWeight:600,
+                flex: 1,
+                padding: "9px 0",
+                borderRadius: 10,
+                fontSize: 13,
+                fontWeight: 600,
                 background: active ? ACCENT_BG : BTN_BG,
-                border:`1px solid ${active ? ACCENT_BORDER : BTN_BORDER}`,
+                border: `1px solid ${active ? ACCENT_BORDER : BTN_BORDER}`,
                 color: active ? ACCENT : TEXT_MED,
-                cursor:"pointer", outline:"none",
-                transition:"background 0.15s, border-color 0.15s, color 0.15s",
+                cursor: "pointer",
+                outline: "none",
+                touchAction: "manipulation",
+                transition: "background 0.12s, border-color 0.12s, color 0.12s",
               }}
-              onTouchStart={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"; }}
-              onTouchEnd={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = BTN_BG; }}
+              onPointerDown={e => {
+                if (!active) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.09)";
+              }}
+              onPointerUp={e => {
+                if (!active) (e.currentTarget as HTMLElement).style.background = BTN_BG;
+              }}
+              onPointerCancel={e => {
+                if (!active) (e.currentTarget as HTMLElement).style.background = BTN_BG;
+              }}
             >
               {t}
             </button>
@@ -1985,27 +2099,51 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
         })}
       </div>
 
-      {/* ── Tab content — only active tab is mounted (lazy + unmount on switch) ── */}
-      {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
-      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
-      {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
+      {/* ── Scrollable content — only active tab mounted ── */}
+      <div style={{
+        flex: 1,
+        overflowY: "auto",
+        overscrollBehavior: "contain",
+        WebkitOverflowScrolling: "touch" as never,
+      }}>
+        {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
+        {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
+        {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
+      </div>
 
       {/* ── Footer ── */}
       <div style={{
-        padding:"12px 14px 8px",
-        borderTop:`1px solid ${DIVIDER}`,
-        display:"flex", justifyContent:"space-between", alignItems:"center", gap:8,
-        flexShrink:0,
+        padding: "12px 14px",
+        borderTop: `1px solid ${DIVIDER}`,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        gap: 8,
+        flexShrink: 0,
+        background: "rgba(10,12,16,0.99)",
       }}>
         <button
           onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
           style={{
-            padding:"8px 16px", borderRadius:9, background:"transparent",
-            border:`1px solid ${BTN_BORDER}`, color:TEXT_DIM,
-            fontSize:12, fontWeight:600, cursor:"pointer",
+            padding: "9px 18px", borderRadius: 10,
+            background: "transparent",
+            border: `1px solid ${BTN_BORDER}`,
+            color: TEXT_DIM,
+            fontSize: 13, fontWeight: 600, cursor: "pointer",
+            touchAction: "manipulation",
           }}
-          onTouchStart={e => { (e.currentTarget as HTMLButtonElement).style.borderColor="rgba(255,255,255,0.22)"; (e.currentTarget as HTMLButtonElement).style.color=TEXT_MED; }}
-          onTouchEnd={e => { (e.currentTarget as HTMLButtonElement).style.borderColor=BTN_BORDER; (e.currentTarget as HTMLButtonElement).style.color=TEXT_DIM; }}
+          onPointerDown={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = "rgba(255,255,255,0.22)";
+            (e.currentTarget as HTMLElement).style.color = TEXT_MED;
+          }}
+          onPointerUp={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = BTN_BORDER;
+            (e.currentTarget as HTMLElement).style.color = TEXT_DIM;
+          }}
+          onPointerCancel={e => {
+            (e.currentTarget as HTMLElement).style.borderColor = BTN_BORDER;
+            (e.currentTarget as HTMLElement).style.color = TEXT_DIM;
+          }}
         >
           Reset Defaults
         </button>
@@ -2013,8 +2151,8 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
           <SaveAsDefaultButton settings={settings} onSaveAsDefault={onSaveAsDefault} />
         )}
       </div>
-
-    </BottomSheet>
+    </div>,
+    document.body,
   );
 });
 
