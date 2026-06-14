@@ -30,6 +30,7 @@ import { ChartBarsContext } from "@/contexts/ChartBarsContext";
 import type { ChartSettings } from "@/components/charts/chartSettingsTypes";
 import { chartApiRef } from "@/lib/chartApiRef";
 import { sheetDragState } from "@/lib/sheetDragState";
+import { getCachedCandles, setCachedCandles } from "@/lib/candleCache";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1213,6 +1214,8 @@ const CustomChart = memo(function CustomChart({
     const container = containerRef.current;
     if (!container) return;
 
+    performance.mark("tj:lwc:init:start");
+
     const chart = createChart(container, {
       width:  container.clientWidth  || 800,
       height: container.clientHeight || 600,
@@ -1316,6 +1319,12 @@ const CustomChart = memo(function CustomChart({
     chartRef.current  = chart;
     mainRef.current   = main;
     chartApiRef.current = chart;
+
+    performance.mark("tj:lwc:init:end");
+    try {
+      const m = performance.measure("LWC init", "tj:lwc:init:start", "tj:lwc:init:end");
+      console.debug(`[PERF] LWC createChart: ${m.duration.toFixed(1)} ms`);
+    } catch { /* ok — Safari < 16.4 throws if marks are missing */ }
 
     // Provide context (candle = main candlestick series for price↔coord mapping)
     setChartCtx({ chart, candle: main });
@@ -2889,8 +2898,119 @@ const CustomChart = memo(function CustomChart({
   }, [indicators, fillIndicator]);
 
   // ── Load candles from API ─────────────────────────────────────────────────
+  // ── Apply a bar array to the chart (shared by cache-hit and fetch-success) ──
+  // Extracted here so loadCandles can call it twice: once for cached bars
+  // (instant) and once for fresh server bars (background update).
+  const applyBarArray = useCallback((
+    bars: OHLCBar[],
+    sym:  string,
+    iv:   string,
+  ) => {
+    barsRef.current = bars;
+
+    // Reset infinite-history state for this new symbol/interval
+    oldestBarTimeRef.current  = bars[0]?.time ?? null;
+    hasMoreHistoryRef.current = true;
+    isLoadingMoreRef.current  = false;
+
+    const oldSeries = mainRef.current;
+    const chart     = chartRef.current;
+    if (!oldSeries || !chart) return;
+
+    priceLineRef.current = null;
+    try { chart.removeSeries(oldSeries); } catch { /* HMR double-unmount */ }
+
+    const cs = makeSeries(chart, ctRef.current);
+    mainRef.current = cs;
+
+    try {
+      chart.priceScale("right").applyOptions({
+        scaleMargins: { top: 0.07, bottom: 0.25 },
+        autoScale:    true,
+      });
+    } catch { }
+
+    applyBars(cs, ctRef.current, bars);
+
+    const lastClose = bars[bars.length - 1]?.close ?? 1;
+    const fmt       = pricePrecision(lastClose);
+    try { cs.applyOptions({ priceFormat: { type: 'price', precision: fmt.precision, minMove: fmt.minMove } }); } catch { }
+
+    const last = bars[bars.length - 1];
+    if (last) {
+      livePxRef.current = last.close;
+      tickDataRef.current = { price: last.close, open: last.open };
+      setLivePrice(last.close);
+      setLiveOpen(last.open);
+      doUpdatePriceLine(last.close, sym, cs);
+      if (tradeAggRef.current) tradeAggRef.current.seed(last);
+    }
+
+    for (const [key, s] of Object.entries(emaRefs.current) as [keyof IndicatorState, ISeriesApi<"Line">][]) {
+      fillIndicator(s, key, bars);
+    }
+
+    activatePanRange(null);
+
+    const lastBarIdx = bars.length - 1;
+    const vpKey      = `tv_vp_${sym}_${iv}`;
+    const defaultRange = {
+      from: Math.max(0, lastBarIdx - DEFAULT_VISIBLE_BARS + 1),
+      to:   lastBarIdx + MIN_FUTURE_BARS,
+    };
+    try {
+      const saved = JSON.parse(localStorage.getItem(vpKey) ?? "null") as
+        { from: number; to: number; priceMin?: number; priceMax?: number } | null;
+      if (saved && typeof saved.from === "number" && typeof saved.to === "number") {
+        const wasNearRealtime = saved.to >= lastBarIdx - 5;
+        if (wasNearRealtime) {
+          const savedWidth   = saved.to - saved.from;
+          const adjustedTo   = lastBarIdx + MIN_FUTURE_BARS;
+          const adjustedFrom = adjustedTo - savedWidth;
+          chart.timeScale().setVisibleLogicalRange({ from: Math.max(0, adjustedFrom), to: adjustedTo });
+        } else {
+          const savedAge = lastBarIdx - saved.to;
+          if (savedAge > DEFAULT_VISIBLE_BARS * 3) {
+            chart.timeScale().setVisibleLogicalRange(defaultRange);
+          } else {
+            chart.timeScale().setVisibleLogicalRange({ from: saved.from, to: saved.to });
+          }
+        }
+        if (typeof saved.priceMin === "number" && typeof saved.priceMax === "number") {
+          activatePanRange({ lo: saved.priceMin, hi: saved.priceMax });
+          cs.applyOptions({
+            autoscaleInfoProvider: () => ({
+              priceRange: { minValue: saved.priceMin!, maxValue: saved.priceMax! },
+            }),
+          });
+        }
+      } else {
+        chart.timeScale().setVisibleLogicalRange(defaultRange);
+      }
+    } catch {
+      chart.timeScale().setVisibleLogicalRange(defaultRange);
+    }
+
+    nearRealtimeRef.current = true;
+    setChartCtx({ chart, candle: cs });
+  }, [setLivePrice, doUpdatePriceLine, fillIndicator]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const loadCandles = useCallback(async (sym: string, iv: string) => {
-    setBarsLoaded(false);
+    performance.mark("tj:candles:start");
+
+    // ── Fast path: show cached bars instantly ──────────────────────────────
+    // If we have bars from a previous load of this sym+iv, display them
+    // immediately so the chart is usable while the fresh fetch runs in the
+    // background. This makes symbol/interval switches feel instant.
+    const cached = getCachedCandles(sym, iv);
+    if (cached && cached.length > 0) {
+      applyBarArray(cached, sym, iv);
+      setBarsLoaded(true);
+      // Don't return — still fetch fresh data below to update trailing candles.
+    } else {
+      setBarsLoaded(false);
+    }
+
     try {
       const resp = await fetch(`${BASE}/api/candles/${sym}/${iv}`);
       if (!resp.ok || !mountedRef.current) return;
@@ -2898,164 +3018,33 @@ const CustomChart = memo(function CustomChart({
       if (!mountedRef.current || !Array.isArray(raw) || raw.length === 0) return;
 
       const bars = [...new Map(raw.map(b => [b.time, b])).values()].sort((a, b) => a.time - b.time);
-      barsRef.current = bars;
 
-      // Reset infinite-history state for this new symbol/interval
-      oldestBarTimeRef.current  = bars[0]?.time ?? null;
-      hasMoreHistoryRef.current = true;
-      isLoadingMoreRef.current  = false;
+      // Cache the fresh bars for future instant loads
+      setCachedCandles(sym, iv, bars);
 
-      const oldSeries = mainRef.current;
-      const chart     = chartRef.current;
-      if (!oldSeries || !chart) return;
-
-      // ── Nuclear series teardown + recreation on every symbol load ──────────
-      // LWC caches internal coordinate transforms directly on the series object:
-      // Y-axis transform matrix, pan offsets, zoom offsets, autoscaleInfoProvider
-      // closure, and momentum state. Patching options (autoscaleInfoProvider,
-      // scaleMargins, autoScale) on the EXISTING series is not enough — the
-      // cached transforms are internal to LWC and cannot be cleared via the
-      // public API. The only guaranteed clean-slate is to REMOVE the old series
-      // and ADD a brand-new one, which is exactly what the chart-type switcher
-      // already does successfully. This ensures BTC→EURUSD→PEPE→GOLD all render
-      // at the correct scale with no inherited transforms from a previous symbol.
-      priceLineRef.current = null;                        // detach price line first
-      try { chart.removeSeries(oldSeries); } catch { /* series may already be gone on HMR */ }
-
-      const cs = makeSeries(chart, ctRef.current);        // fresh series — zero state
-      mainRef.current = cs;
-      // NOTE: setChartCtx is called AFTER applyBars + fitContent (see below).
-      // Updating DrawingOverlay's context before the series has data causes
-      // priceToCoordinate to return null for every point, collapsing position tools
-      // to the left edge for one render frame ("shift left on refresh" bug).
-
-      // Reset price scale to defaults + autoScale on the chart level
       try {
-        chart.priceScale("right").applyOptions({
-          scaleMargins: { top: 0.07, bottom: 0.25 },
-          autoScale:    true,
-        });
-      } catch { }
+        const m = performance.measure("candles fetch+apply", "tj:candles:start");
+        console.debug(`[PERF] candles ${sym}/${iv}: ${m.duration.toFixed(0)} ms (${bars.length} bars${cached ? ", cache-hit shortcut" : ""})`);
+      } catch { /* ok */ }
 
-      // Load new data onto the clean series
-      applyBars(cs, ctRef.current, bars);
+      // Only re-apply bars if they differ from what was already shown from cache.
+      // Comparing the last bar's time+close is enough: if the most-recent candle
+      // hasn't changed, the user would see a needless series teardown flash.
+      const lastCached = cached?.[cached.length - 1];
+      const lastFresh  = bars[bars.length - 1];
+      const sameData   = lastCached && lastFresh &&
+                         lastCached.time  === lastFresh.time &&
+                         lastCached.close === lastFresh.close &&
+                         lastCached.high  === lastFresh.high;
 
-      // Dynamic precision for this symbol's price range
-      const lastClose = bars[bars.length - 1]?.close ?? 1;
-      const fmt       = pricePrecision(lastClose);
-      try { cs.applyOptions({ priceFormat: { type: 'price', precision: fmt.precision, minMove: fmt.minMove } }); } catch { }
-
-      // Do NOT call fitContent() here — it zooms all the way out to show every
-      // historical bar, which is the opposite of what the user wants on load.
-      // Instead we set the viewport explicitly below (TradingView-style default).
-
-      const last = bars[bars.length - 1];
-      if (last) {
-        livePxRef.current = last.close;
-        // Seed the zero-latency tick ref so the RAF loop has the initial price
-        // immediately — before the first WS candle_update arrives.
-        tickDataRef.current = { price: last.close, open: last.open };
-        setLivePrice(last.close);
-        setLiveOpen(last.open);
-        doUpdatePriceLine(last.close, sym, cs);
-        // Seed the real-time trade aggregator so the live bar continues
-        // exactly from where the historical REST data ended.
-        if (tradeAggRef.current) {
-          tradeAggRef.current.seed(last);
-        }
+      if (!sameData) {
+        applyBarArray(bars, sym, iv);
       }
-
-      // Rebuild any active indicator series (also seeds incremental EMA caches)
-      for (const [key, s] of Object.entries(emaRefs.current) as [keyof IndicatorState, ISeriesApi<"Line">][]) {
-        fillIndicator(s, key, bars);
-      }
-
-      // Clear any stale vertical pan range locked during replay (or a previous
-      // symbol) so indicator autoscaleInfoProviders restore to auto-scale on
-      // live data. Without this, indicators stay pinned to the old price range
-      // and appear frozen / invisible after replay exits.
-      activatePanRange(null);
-
-      // ── Set viewport: TradingView-style initial view ──────────────────────────
-      // Goal: on load, show the most-recent DEFAULT_VISIBLE_BARS bars with
-      // MIN_FUTURE_BARS of blank future space on the right — exactly like TradingView.
-      //
-      // Saved viewport from localStorage is restored only when it is "fresh":
-      //   • saved.to >= lastBarIdx - 5  → user was near the right edge, restore it
-      //   • saved.to <  lastBarIdx - 5  → user was deep in history OR the save is
-      //     stale (many new bars added since last visit) — use TradingView default
-      //     so the chart opens at the latest candles, not buried in old history.
-      const lastBarIdx = bars.length - 1;     // logical index of most-recent bar
-      const vpKey      = `tv_vp_${sym}_${iv}`;
-      const defaultRange = {
-        from: Math.max(0, lastBarIdx - DEFAULT_VISIBLE_BARS + 1),
-        to:   lastBarIdx + MIN_FUTURE_BARS,
-      };
-      try {
-        const saved = JSON.parse(localStorage.getItem(vpKey) ?? "null") as
-          { from: number; to: number; priceMin?: number; priceMax?: number } | null;
-
-        if (saved && typeof saved.from === "number" && typeof saved.to === "number") {
-          // Was the viewport saved while near the right edge?
-          const wasNearRealtime = saved.to >= lastBarIdx - 5;
-
-          if (wasNearRealtime) {
-            // Restore the saved zoom level (same width), but slide right edge to
-            // the current latest bar + MIN_FUTURE_BARS so the newest candles are
-            // always visible and position-tool boxes have room on the right.
-            const savedWidth   = saved.to - saved.from;
-            const adjustedTo   = lastBarIdx + MIN_FUTURE_BARS;
-            const adjustedFrom = adjustedTo - savedWidth;
-            chart.timeScale().setVisibleLogicalRange({
-              from: Math.max(0, adjustedFrom),
-              to:   adjustedTo,
-            });
-          } else {
-            // Saved viewport is deep in history — honour it (user may have
-            // specifically navigated there), but still ensure a sane right edge.
-            // We do NOT restore if the saved range would hide all recent bars
-            // (stale from a session with far fewer bars).
-            const savedAge = lastBarIdx - saved.to;
-            if (savedAge > DEFAULT_VISIBLE_BARS * 3) {
-              // Very stale: snap to latest bars so user isn't confused
-              chart.timeScale().setVisibleLogicalRange(defaultRange);
-            } else {
-              chart.timeScale().setVisibleLogicalRange({ from: saved.from, to: saved.to });
-            }
-          }
-
-          // Restore the vertical pan range lock if one was saved
-          if (typeof saved.priceMin === "number" && typeof saved.priceMax === "number") {
-            activatePanRange({ lo: saved.priceMin, hi: saved.priceMax });
-            cs.applyOptions({
-              autoscaleInfoProvider: () => ({
-                priceRange: { minValue: saved.priceMin!, maxValue: saved.priceMax! },
-              }),
-            });
-          }
-        } else {
-          // No saved viewport (first visit or cleared storage) → TradingView default:
-          // show the latest DEFAULT_VISIBLE_BARS bars with future space on the right.
-          chart.timeScale().setVisibleLogicalRange(defaultRange);
-        }
-      } catch {
-        // Corrupt localStorage — fall back to the TradingView default view.
-        chart.timeScale().setVisibleLogicalRange(defaultRange);
-      }
-
-      // The viewport is now correct — seed nearRealtimeRef so auto-follow starts
-      // in the right state without waiting for the first range-change event.
-      nearRealtimeRef.current = true;
-
-      // Update DrawingOverlay context AFTER the viewport is fully set.
-      // This ensures DrawingOverlay's very first render sees the correct time range
-      // so toPx() future-area calculations produce the right pixel X on load.
-      setChartCtx({ chart, candle: cs });
       setBarsLoaded(true);
     } catch (err) {
       console.error("[CustomChart] loadCandles error:", err);
     }
-  }, [setBarsLoaded, setLivePrice, doUpdatePriceLine, fillIndicator]);
+  }, [setBarsLoaded, applyBarArray]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (replayBars != null) return; // skip fetch during replay

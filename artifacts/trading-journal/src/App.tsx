@@ -24,6 +24,9 @@ const CalcForex   = lazy(() => import("@/pages/calc-forex"));
 const CalcPosition= lazy(() => import("@/pages/calc-position"));
 const CalcMargin  = lazy(() => import("@/pages/calc-margin"));
 const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
+// Charts is kept alive permanently — never unmounts on tab switch.
+// Using lazy() still splits the bundle (fast initial load), but the module
+// is preloaded eagerly in the background so the first tap to /charts is instant.
 const Charts      = lazy(() => import("@/pages/charts"));
 const Portfolio   = lazy(() => import("@/pages/portfolio"));
 const Trade       = lazy(() => import("@/pages/trade"));
@@ -68,9 +71,32 @@ function PageLoader() {
   );
 }
 
+// ── Keep-alive charts node ────────────────────────────────────────────────────
+// Charts is rendered OUTSIDE the route Switch so wouter never unmounts it.
+// The Layout component hides it with display:none when the user is on another
+// page, so the LWC chart instance, canvas, and loaded candles all survive tab
+// switches. Suspense fallback=null keeps the charts container empty-but-dark
+// while the lazy JS bundle is still loading (invisible to the user since the
+// container is hidden until they navigate to /charts).
+const CHARTS_NODE = (
+  <Suspense fallback={null}>
+    <Charts />
+  </Suspense>
+);
+
 function Router() {
+  useEffect(() => {
+    // Eagerly trigger the Charts lazy-import after the initial render so the
+    // module is in the browser cache before the user taps the Charts tab.
+    // This eliminates the dynamic-import round-trip (~50-200ms) on first visit.
+    const id = setTimeout(() => { import("@/pages/charts").catch(() => {}); }, 80);
+    return () => clearTimeout(id);
+  }, []);
+
   return (
-    <Layout>
+    // chartsNode is always rendered (inside Layout) but hidden off-route.
+    // children (the Switch) only gets rendered for non-charts pages.
+    <Layout chartsNode={CHARTS_NODE}>
       <Suspense fallback={<PageLoader />}>
         <Switch>
           <Route path="/">{() => <Dashboard />}</Route>
@@ -87,7 +113,9 @@ function Router() {
           <Route path="/calc/position">{() => <CalcPosition />}</Route>
           <Route path="/calc/margin">{() => <CalcMargin />}</Route>
           <Route path="/calc/risk">{() => <CalcRisk />}</Route>
-          <Route path="/charts">{() => <Charts />}</Route>
+          {/* /charts is handled by chartsNode above — this empty route prevents
+              the NotFound catchall from matching when path === /charts */}
+          <Route path="/charts">{() => null}</Route>
           <Route path="/portfolio">{() => <Portfolio />}</Route>
           <Route path="/trade">{() => <Trade />}</Route>
           <Route>{() => <NotFound />}</Route>

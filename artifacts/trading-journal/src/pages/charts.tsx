@@ -943,6 +943,16 @@ function SnapshotPreviewPopup({ url, filename, onClose }: {
 
 // ── Main Charts page ──────────────────────────────────────────────────────────
 export default function Charts() {
+  // ── Startup performance timings ───────────────────────────────────────────
+  // These mark the wall-clock time at which the Charts component mounts.
+  // Pair with "[PERF] LWC createChart" and "[PERF] candles" in console to
+  // identify the exact bottleneck (route nav / JS parse / LWC init / fetch).
+  useEffect(() => {
+    performance.mark("tj:charts:mount");
+    console.debug(`[PERF] Charts component mounted at ${performance.now().toFixed(1)} ms since page load`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const isMobile = useIsMobile();
   const { openSidebar } = useChartFocusMode();
   const { wsStatus, alertEvents } = useLiveMarketContext();

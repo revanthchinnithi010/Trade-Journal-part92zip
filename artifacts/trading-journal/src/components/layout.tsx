@@ -132,7 +132,7 @@ function ReconnectBanner() {
   );
 }
 
-export const Layout = memo(function Layout({ children }: { children: React.ReactNode }) {
+export const Layout = memo(function Layout({ children, chartsNode }: { children: React.ReactNode; chartsNode?: React.ReactNode }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
   const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
@@ -510,43 +510,57 @@ export const Layout = memo(function Layout({ children }: { children: React.React
           </header>
         )}
 
-        {/* Page Content */}
-        {location === "/charts" ? (
+        {/* ── Charts page — always mounted, hidden off-route ───────────────────────
+            display:none removes the element from layout entirely (zero height,
+            zero pointer events) while keeping the React subtree alive in memory.
+            The LWC chart instance, loaded candles, drawings, and all gesture
+            state survive tab switches — no re-init, no re-fetch.
+            The ResizeObserver inside CustomChart fires automatically when this
+            container changes from display:none → display:flex, so LWC resizes
+            itself to the correct dimensions without any manual nudge. */}
+        {chartsNode && (
           <div
             className="flex-1 overflow-hidden"
             style={{
-              touchAction: "none",
+              display:            location === "/charts" ? "flex" : "none",
+              flexDirection:      "column",
+              touchAction:        "none",
               overscrollBehavior: "none",
-              paddingBottom: (isMobile && !mobileChartFullscreen) ? 80 : 0,
+              paddingBottom:      (isMobile && !mobileChartFullscreen) ? 80 : 0,
             }}
           >
-            {children}
+            {chartsNode}
           </div>
-        ) : location === "/markets" ? (
-          <div
-            className="flex-1 overflow-hidden flex flex-col"
-            style={isMobile ? { paddingBottom: 80 } : undefined}
-          >
-            {children}
-          </div>
-        ) : location === "/portfolio" ? (
-          <div
-            className="flex-1 overflow-hidden flex flex-col"
-            style={isMobile ? { paddingBottom: 56 } : undefined}
-          >
-            <div className="p-4 md:p-6 pb-2 mx-auto w-full max-w-[1400px] flex flex-col flex-1 min-h-0">
+        )}
+
+        {/* Page Content — non-charts pages */}
+        {location !== "/charts" && (
+          location === "/markets" ? (
+            <div
+              className="flex-1 overflow-hidden flex flex-col"
+              style={isMobile ? { paddingBottom: 80 } : undefined}
+            >
               {children}
             </div>
-          </div>
-        ) : (
-          <div
-            className="flex-1 overflow-auto scroll-container"
-            style={isMobile ? { paddingBottom: 56 } : undefined}
-          >
-            <div className="p-5 md:p-6 pb-10 mx-auto max-w-[1400px] min-h-full">
-              {children}
+          ) : location === "/portfolio" ? (
+            <div
+              className="flex-1 overflow-hidden flex flex-col"
+              style={isMobile ? { paddingBottom: 56 } : undefined}
+            >
+              <div className="p-4 md:p-6 pb-2 mx-auto w-full max-w-[1400px] flex flex-col flex-1 min-h-0">
+                {children}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div
+              className="flex-1 overflow-auto scroll-container"
+              style={isMobile ? { paddingBottom: 56 } : undefined}
+            >
+              <div className="p-5 md:p-6 pb-10 mx-auto max-w-[1400px] min-h-full">
+                {children}
+              </div>
+            </div>
+          )
         )}
       </main>
 
