@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  getAssetClass, getAssetClassLabel, getProviderLabel,
+  getAssetClass, getAssetClassLabel, getProviderLabel, getRoutingReason,
   updateSymbolProviderRouting,
   type AssetClass, type DataProvider,
 } from "@/lib/assetClass";
@@ -10,21 +10,23 @@ import { Activity, Wifi, WifiOff, ChevronDown, ChevronUp } from "lucide-react";
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 interface ProviderStat {
-  name:        string;
-  displayName: string;
-  status:      string;
-  tickCount:   number;
-  lastTickAt:  number | null;
+  name:          string;
+  displayName?:  string;
+  status:        string;
+  tickCount:     number;
+  lastTickAt:    number | null;
   subscriptions: string[];
 }
 
 interface SymbolDiag {
-  provider:    string | undefined;
-  subscribed:  boolean;
-  lastTickAt:  number | null;
-  lastPrice:   number | null;
-  lastTickAgo: number | null;
-  symbolId:    string | undefined;
+  provider:      string | undefined;
+  assetClass:    string | undefined;
+  routingReason: string | undefined;
+  subscribed:    boolean;
+  lastTickAt:    number | null;
+  lastPrice:     number | null;
+  lastTickAgo:   number | null;
+  symbolId:      string | undefined;
 }
 
 interface DiagData {
@@ -53,33 +55,47 @@ const PROVIDER_COLOR: Record<string, string> = {
   unknown: "rgba(255,255,255,0.35)",
 };
 
-function Row({ label, value, color = "rgba(255,255,255,0.8)" }: { label: string; value: string; color?: string }) {
+function Row({
+  label, value, color = "rgba(255,255,255,0.8)", dimValue = false,
+}: {
+  label: string; value: string; color?: string; dimValue?: boolean;
+}) {
   return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 4 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 4 }}>
       <span style={{ color: "rgba(255,255,255,0.38)", fontSize: 10, flexShrink: 0 }}>{label}</span>
-      <span style={{ color, fontSize: 11, fontWeight: 600, textAlign: "right", wordBreak: "break-all" }}>{value}</span>
+      <span style={{
+        color: dimValue ? "rgba(255,255,255,0.45)" : color,
+        fontSize: 11, fontWeight: 600,
+        textAlign: "right", wordBreak: "break-word", maxWidth: 160,
+      }}>{value}</span>
     </div>
   );
 }
 
+function Divider() {
+  return <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "7px 0" }} />;
+}
+
 export function FeedDiagnostics({ symbol }: Props) {
-  const [open, setOpen]   = useState(false);
-  const [diag, setDiag]   = useState<DiagData | null>(null);
-  const [tps,  setTps]    = useState<number>(0);
+  const [open, setOpen] = useState(false);
+  const [diag, setDiag] = useState<DiagData | null>(null);
+  const [tps,  setTps]  = useState<number>(0);
 
-  const tickCountRef   = useRef(0);
-  const lastTpsRef     = useRef(Date.now());
-  const prevCountRef   = useRef(0);
-  const prevTickTsRef  = useRef(0);
+  const tickCountRef  = useRef(0);
+  const lastTpsRef    = useRef(Date.now());
+  const prevCountRef  = useRef(0);
+  const prevTickTsRef = useRef(0);
 
-  const assetClass   = getAssetClass(symbol);
   const symData      = diag?.perSymbol[symbol];
-
-  // Provider: prefer live server routing, fall back to pattern matching
-  const liveProvider  = symData?.provider ?? diag?.symbolRouting?.[symbol];
-  const providerKey   = (liveProvider ?? "unknown") as DataProvider;
-  const providerStat  = diag?.providers.find(p => p.name === liveProvider);
-  const provOk        = providerStat?.status === "connected";
+  // Asset class: prefer server-classified value, fall back to client pattern
+  const assetClass   = (symData?.assetClass as AssetClass | undefined) ?? getAssetClass(symbol);
+  // Provider: prefer server routing (definitive), fall back to client priority rule
+  const liveProvider = symData?.provider ?? diag?.symbolRouting?.[symbol];
+  const providerKey  = (liveProvider ?? "unknown") as DataProvider;
+  const providerStat = diag?.providers.find(p => p.name === liveProvider);
+  const provOk       = providerStat?.status === "connected";
+  // Routing reason: prefer server-generated, fall back to client derivation
+  const reason       = symData?.routingReason ?? getRoutingReason(symbol);
 
   // Poll /api/feed/diagnostics every 3 s
   useEffect(() => {
@@ -90,8 +106,14 @@ export function FeedDiagnostics({ symbol }: Props) {
         if (r.ok && !cancelled) {
           const data = await r.json() as DiagData;
           setDiag(data);
-          // Keep assetClass.ts runtime routing in sync
-          if (data.symbolRouting) updateSymbolProviderRouting(data.symbolRouting);
+          // Build per-symbol class + reason maps from perSymbol
+          const classes: Record<string, string> = {};
+          const reasons: Record<string, string> = {};
+          for (const [sym, info] of Object.entries(data.perSymbol)) {
+            if (info.assetClass)    classes[sym] = info.assetClass;
+            if (info.routingReason) reasons[sym] = info.routingReason;
+          }
+          updateSymbolProviderRouting(data.symbolRouting, classes, reasons);
         }
       } catch { /* ignore network errors */ }
     };
@@ -100,9 +122,9 @@ export function FeedDiagnostics({ symbol }: Props) {
     return () => { cancelled = true; clearInterval(id); };
   }, []);
 
-  // Count live ticks for the active symbol → derive tps
+  // Count live ticks for the active symbol → tps
   useEffect(() => {
-    tickCountRef.current = 0;
+    tickCountRef.current  = 0;
     prevTickTsRef.current = 0;
     const unsub = useTickStore.subscribe((state) => {
       const ts = state.ticks[symbol]?.ts ?? 0;
@@ -114,14 +136,12 @@ export function FeedDiagnostics({ symbol }: Props) {
     return unsub;
   }, [symbol]);
 
-  // Recalculate tps every 5 s
   const calcTps = useCallback(() => {
     const now     = Date.now();
     const elapsed = (now - lastTpsRef.current) / 1000;
     if (elapsed < 1) return;
     const delta   = tickCountRef.current - prevCountRef.current;
-    const rate    = Math.round((delta / elapsed) * 10) / 10;
-    setTps(rate);
+    setTps(Math.round((delta / elapsed) * 10) / 10);
     prevCountRef.current = tickCountRef.current;
     lastTpsRef.current   = now;
   }, []);
@@ -131,30 +151,27 @@ export function FeedDiagnostics({ symbol }: Props) {
     return () => clearInterval(id);
   }, [calcTps]);
 
-  // Format last-tick age
   const lastTickAt  = symData?.lastTickAt ?? null;
   const tickAgeMs   = lastTickAt ? Date.now() - lastTickAt : null;
   const tickAgeStr  = tickAgeMs !== null
-    ? tickAgeMs < 60_000
-      ? `${Math.round(tickAgeMs / 1000)}s ago`
-      : `${Math.round(tickAgeMs / 60_000)}m ago`
+    ? tickAgeMs < 60_000  ? `${Math.round(tickAgeMs / 1000)}s ago`
+    : tickAgeMs < 3600_000 ? `${Math.round(tickAgeMs / 60_000)}m ago`
+    : `${Math.round(tickAgeMs / 3600_000)}h ago`
     : "—";
 
-  const subStatus  = symData?.subscribed ? "Subscribed ✓" : "Not subscribed";
-  const provStatus = providerStat?.status ?? "unknown";
-  const statusStr  = `${provStatus}  ·  ${subStatus}`;
+  const subStatus   = symData?.subscribed ? "Subscribed ✓" : "Not subscribed";
+  const provStatus  = providerStat?.status ?? "unknown";
+  const statusStr   = `${provStatus}  ·  ${subStatus}`;
   const statusColor = symData?.subscribed && provOk ? "#00FFB4" : "#FF9F43";
+
+  const classColor    = CLASS_COLOR[assetClass]             ?? CLASS_COLOR.unknown;
+  const providerColor = PROVIDER_COLOR[providerKey]          ?? PROVIDER_COLOR.unknown;
 
   return (
     <div
       style={{
-        position: "absolute",
-        bottom: 10,
-        left: 10,
-        zIndex: 25,
-        fontFamily: "monospace",
-        userSelect: "none",
-        pointerEvents: "auto",
+        position: "absolute", bottom: 10, left: 10, zIndex: 25,
+        fontFamily: "monospace", userSelect: "none", pointerEvents: "auto",
       }}
     >
       {/* Toggle pill */}
@@ -162,14 +179,11 @@ export function FeedDiagnostics({ symbol }: Props) {
         onClick={() => setOpen(o => !o)}
         style={{
           display: "flex", alignItems: "center", gap: 5,
-          padding: "3px 9px",
-          borderRadius: 20,
-          background:  "rgba(0,0,0,0.65)",
-          border:      `1px solid ${provOk ? "rgba(0,255,140,0.25)" : "rgba(255,100,100,0.25)"}`,
-          color:       provOk ? "#00FFB4" : "#ff6b6b",
-          cursor:      "pointer",
-          fontSize:    10,
-          fontFamily:  "monospace",
+          padding: "3px 9px", borderRadius: 20,
+          background: "rgba(0,0,0,0.65)",
+          border: `1px solid ${provOk ? "rgba(0,255,140,0.25)" : "rgba(255,100,100,0.25)"}`,
+          color: provOk ? "#00FFB4" : "#ff6b6b",
+          cursor: "pointer", fontSize: 10, fontFamily: "monospace",
         }}
         title="Feed Diagnostics"
       >
@@ -183,36 +197,59 @@ export function FeedDiagnostics({ symbol }: Props) {
       {open && (
         <div
           style={{
-            marginTop: 5,
-            padding: "10px 12px",
-            background: "rgba(5,10,8,0.88)",
+            marginTop: 5, padding: "10px 12px",
+            background: "rgba(5,10,8,0.92)",
             border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 9,
-            backdropFilter: "blur(14px)",
+            borderRadius: 9, backdropFilter: "blur(14px)",
             WebkitBackdropFilter: "blur(14px)",
-            minWidth: 240,
+            minWidth: 256,
             boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
           }}
         >
-          <div style={{ color: "rgba(255,255,255,0.25)", fontSize: 9, marginBottom: 8, letterSpacing: "0.08em" }}>
+          {/* Header */}
+          <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginBottom: 9, letterSpacing: "0.08em" }}>
             FEED DIAGNOSTICS
           </div>
 
-          <Row label="Selected Symbol" value={symbol}                                                 color="#F3FFF3" />
-          <Row label="Asset Class"     value={getAssetClassLabel(assetClass)}                         color={CLASS_COLOR[assetClass]} />
-          <Row
-            label="Data Provider"
-            value={liveProvider ? getProviderLabel(providerKey) : "—"}
-            color={PROVIDER_COLOR[providerKey] ?? PROVIDER_COLOR.unknown}
-          />
-          <Row label="Status"          value={statusStr}                                              color={statusColor} />
+          {/* Symbol identity */}
+          <Row label="Symbol"      value={symbol}                        color="#F3FFF3" />
+          <Row label="Asset Class" value={getAssetClassLabel(assetClass)} color={classColor} />
 
+          <Divider />
+
+          {/* Provider selection */}
+          <Row
+            label="Provider"
+            value={liveProvider ? getProviderLabel(providerKey) : "—"}
+            color={providerColor}
+          />
+          <Row label="Status" value={statusStr} color={statusColor} />
           {symData?.symbolId && (
-            <Row label="Symbol ID" value={symData.symbolId} color="rgba(255,255,255,0.55)" />
+            <Row label="Symbol ID" value={symData.symbolId} dimValue />
           )}
 
-          <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "7px 0" }} />
+          {/* Routing reason */}
+          {reason && (
+            <div
+              style={{
+                marginTop: 6, padding: "5px 8px",
+                background: "rgba(255,255,255,0.04)",
+                border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 5,
+              }}
+            >
+              <div style={{ color: "rgba(255,255,255,0.22)", fontSize: 9, marginBottom: 3, letterSpacing: "0.06em" }}>
+                ROUTING REASON
+              </div>
+              <div style={{ color: "rgba(255,255,255,0.6)", fontSize: 10, lineHeight: 1.5 }}>
+                {reason}
+              </div>
+            </div>
+          )}
 
+          <Divider />
+
+          {/* Live tick metrics */}
           <Row
             label="Last Tick"
             value={tickAgeStr}
@@ -224,26 +261,39 @@ export function FeedDiagnostics({ symbol }: Props) {
             color={tps > 0 ? "#00FFB4" : "rgba(255,255,255,0.35)"}
           />
           {symData?.lastPrice != null && (
-            <Row label="Last Price" value={String(symData.lastPrice)} color="rgba(255,255,255,0.7)" />
+            <Row label="Last Price" value={String(symData.lastPrice)} dimValue />
           )}
 
           {!symData?.subscribed && (
-            <div style={{ marginTop: 7, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
-              Symbol not yet subscribed — select it in the watchlist to start receiving ticks.
+            <div style={{ marginTop: 6, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
+              Not subscribed — select this symbol in the watchlist to start receiving ticks.
             </div>
           )}
 
           {/* Provider catalog summary */}
           {diag && (
-            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            <>
+              <Divider />
               <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginBottom: 5, letterSpacing: "0.06em" }}>
-                CATALOG
+                PROVIDER CATALOG
               </div>
               {diag.providers.map(p => {
                 const routedCount = Object.values(diag.symbolRouting).filter(v => v === p.name).length;
+                const isActive    = p.name === liveProvider;
                 return (
-                  <div key={p.name} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
-                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>{p.displayName ?? p.name}</span>
+                  <div
+                    key={p.name}
+                    style={{
+                      display: "flex", justifyContent: "space-between",
+                      alignItems: "center", marginBottom: 3,
+                      padding: isActive ? "2px 5px" : "2px 0",
+                      borderRadius: 4,
+                      background: isActive ? "rgba(255,255,255,0.05)" : "transparent",
+                    }}
+                  >
+                    <span style={{ color: isActive ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.25)", fontSize: 9 }}>
+                      {isActive ? "▶ " : ""}{p.displayName ?? p.name}
+                    </span>
                     <span style={{
                       color: p.status === "connected" ? "#00FFB4" : "rgba(255,80,80,0.8)",
                       fontSize: 9, fontWeight: 600,
@@ -253,7 +303,7 @@ export function FeedDiagnostics({ symbol }: Props) {
                   </div>
                 );
               })}
-            </div>
+            </>
           )}
         </div>
       )}

@@ -12,36 +12,102 @@ const MAX_TICKS_PER_SYMBOL = 500;
 export interface UnifiedTick extends ProviderTick {}
 
 export interface FeedManagerStats {
-  providers:          ProviderStats[];
-  totalSymbols:       number;
-  totalTicks:         number;
+  providers:           ProviderStats[];
+  totalSymbols:        number;
+  totalTicks:          number;
   allProvidersHealthy: boolean;
 }
 
+// ── Asset class classification (mirrors client-side assetClass.ts) ─────────────
+type AssetClass = "crypto" | "forex" | "metal" | "index" | "commodity" | "unknown";
+type PriorityProvider = "delta" | "ctrader";
+
+const METALS      = new Set(["XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD"]);
+const INDICES     = new Set([
+  "US30", "NAS100", "SPX500", "GER40", "UK100", "JP225", "AUS200", "STOXX50",
+  "HK50", "CN50", "USTECH", "USTEC", "US500", "US2000", "EU50",
+  "DE40", "FR40", "IT40", "ES35", "CH20", "NETH25", "SE30",
+]);
+const COMMODITIES = new Set([
+  "USOIL", "UKOIL", "NGAS", "COPPER", "WHEAT", "CORN", "SUGAR", "COFFEE",
+  "COCOA", "COTTON", "SOYBEANS", "LUMBER",
+]);
+const FOREX_PAIRS = new Set([
+  "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF",
+  "EURGBP","GBPJPY","EURJPY","EURAUD","GBPAUD","NZDUSD",
+  "USDSGD","USDHKD","USDMXN","USDZAR","USDNOK","USDSEK",
+  "AUDCAD","AUDCHF","AUDNZD","CADCHF","CADJPY","CHFJPY",
+  "EURNZD","EURCAD","EURCHF","GBPCAD","GBPCHF","GBPNZD",
+  "NZDCAD","NZDCHF","NZDJPY",
+]);
+
 /**
- * Symbol routing is built entirely dynamically — no hardcoded symbol lists.
- *
- * Sources:
- *  - Delta Exchange: catalog fetched from REST API on startup + periodic refresh
- *  - cTrader: catalog loaded from the connected broker account via SYMBOLS_LIST_REQ
- *
- * Routing rules (applied in order):
- *  1. Explicit entry in symbolRouting map (set when catalogs load)
- *  2. Auto-route: any xyzUSDT or xyzUSD perpetual pattern → Delta (crypto fallback)
+ * Classify a symbol's asset class using the same rules as the client.
+ * Server-side pattern matching — no runtime routing state needed here.
  */
+function classifySymbol(symbol: string): AssetClass {
+  const s = symbol.toUpperCase().replace(/\.(pro|raw|ecn|std)$/i, "");
+  if (METALS.has(s))      return "metal";
+  if (INDICES.has(s))     return "index";
+  if (COMMODITIES.has(s)) return "commodity";
+  if (FOREX_PAIRS.has(s)) return "forex";
+  // USDT-quoted perpetuals from Delta Exchange India
+  if (/^[A-Z0-9]{2,12}USDT$/.test(s)) return "crypto";
+  // USD-suffix crypto (BTCUSD, ETHUSD, SOLUSD …)  — exclude known forex/metals
+  if (/^[A-Z0-9]{2,8}USD$/.test(s) && !FOREX_PAIRS.has(s) && !METALS.has(s)) return "crypto";
+  // Any cTrader-typical 6-letter pair that isn't in our curated set → treat as forex
+  if (/^[A-Z]{6}$/.test(s)) return "forex";
+  // Index-like names from cTrader
+  if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|DE4|FR4|IT4|ES3|EU5|CH2|SE3|NETH)/.test(s)) return "index";
+  // Commodity-like names
+  if (/^(OIL|GAS|WTI|BRENT|NGAS|USOIL|UKOIL|COPP|WHEAT|CORN|SUGAR|COFFEE|COCOA|COTTON)/.test(s)) return "commodity";
+  return "unknown";
+}
+
+/**
+ * Deterministic provider priority based solely on asset class.
+ *
+ *   crypto              → Delta Exchange  (fastest/deepest crypto liquidity)
+ *   forex / metal /
+ *   index / commodity   → cTrader / Fusion Markets
+ *   unknown             → whichever provider first claims it
+ */
+function priorityProviderFor(assetClass: AssetClass): PriorityProvider | null {
+  if (assetClass === "crypto")    return "delta";
+  if (assetClass === "forex")     return "ctrader";
+  if (assetClass === "metal")     return "ctrader";
+  if (assetClass === "index")     return "ctrader";
+  if (assetClass === "commodity") return "ctrader";
+  return null; // unknown — first-come first-served
+}
+
+function routingReasonFor(assetClass: AssetClass, provider: PriorityProvider): string {
+  switch (assetClass) {
+    case "crypto":    return "Crypto symbols always use Delta Exchange";
+    case "forex":     return "Forex symbols always use Fusion Markets";
+    case "metal":     return "Metals always use Fusion Markets";
+    case "index":     return "Indices always use Fusion Markets";
+    case "commodity": return "Commodities always use Fusion Markets";
+    default:          return `First available provider: ${provider}`;
+  }
+}
 
 export const PROVIDER_METADATA: Record<string, { displayName: string; badge: string; color: string }> = {
   finnhub: { displayName: "Finnhub / OANDA · Binance", badge: "oanda",   color: "#3B82F6" },
   delta:   { displayName: "Delta Exchange India",       badge: "delta",   color: "#8B5CF6" },
-  ctrader: { displayName: "cTrader Open API",           badge: "ctrader", color: "#F59E0B" },
+  ctrader: { displayName: "cTrader / Fusion Markets",   badge: "ctrader", color: "#F59E0B" },
 };
 
 export class MarketFeedManager extends EventEmitter {
-  private providers:        Map<string, BaseProvider>  = new Map();
-  private latestTicks:      Map<string, UnifiedTick>   = new Map();
-  private tickHistory:      Map<string, UnifiedTick[]> = new Map();
-  private subscribedSymbols: Set<string>               = new Set();
-  private symbolRouting:    Map<string, string>        = new Map();
+  private providers:         Map<string, BaseProvider>  = new Map();
+  private latestTicks:       Map<string, UnifiedTick>   = new Map();
+  private tickHistory:       Map<string, UnifiedTick[]> = new Map();
+  private subscribedSymbols: Set<string>                = new Set();
+  private symbolRouting:     Map<string, string>        = new Map();
+  /** Stores the human-readable reason each symbol was routed to its provider. */
+  private routingReasons:    Map<string, string>        = new Map();
+  /** Tracks the asset class of every known symbol (for diagnostics). */
+  private symbolClasses:     Map<string, AssetClass>    = new Map();
   private totalTicks = 0;
 
   readonly symbolService: SymbolService = new SymbolService();
@@ -66,7 +132,7 @@ export class MarketFeedManager extends EventEmitter {
 
     logger.info(
       { providers: [...this.providers.keys()], symbols: defaultSymbols },
-      "MarketFeedManager: started — symbol routing will be built dynamically",
+      "MarketFeedManager: started — symbol routing built dynamically by priority rules",
     );
 
     this._bootstrapDeltaIndia(defaultSymbols).catch(err =>
@@ -74,7 +140,8 @@ export class MarketFeedManager extends EventEmitter {
     );
   }
 
-  /** Fetch the full Delta India catalog and upgrade the provider symbol map. */
+  // ── Delta India bootstrap ──────────────────────────────────────────────────
+
   private async _bootstrapDeltaIndia(defaultSymbols: string[]): Promise<void> {
     try {
       const catalog = await this.symbolService.getDeltaSymbols();
@@ -84,16 +151,13 @@ export class MarketFeedManager extends EventEmitter {
       }));
 
       for (const { internalSymbol } of entries) {
-        if (!this.symbolRouting.has(internalSymbol)) {
-          this.symbolRouting.set(internalSymbol, "delta");
-        }
+        this._applyPriorityRoute(internalSymbol, "delta");
       }
 
       const deltaProvider = this.providers.get("delta");
       if (deltaProvider && deltaProvider instanceof DeltaExchangeProvider) {
         deltaProvider.refreshSymbols(entries);
         logger.info({ count: entries.length }, "MarketFeedManager: Delta India symbol map refreshed");
-
         for (const sym of defaultSymbols) {
           if (this.symbolRouting.get(sym) === "delta") deltaProvider.subscribe(sym);
         }
@@ -112,42 +176,227 @@ export class MarketFeedManager extends EventEmitter {
     }
   }
 
-  subscribe(symbol: string): boolean {
-    let providerName = this.symbolRouting.get(symbol);
+  // ── Core routing: apply priority rules ────────────────────────────────────
 
-    // Auto-route: any unknown xyzUSDT or xyzUSD perpetual → Delta India.
-    // This handles coins added before the async bootstrap completes AND
-    // any new Delta India listing not yet in the routing table.
-    // Symbols explicitly routed elsewhere (ctrader) are never overridden.
-    if (!providerName && /^[A-Z0-9]+USDT?$/.test(symbol)) {
-      providerName = "delta";
-      this.symbolRouting.set(symbol, "delta");
-      logger.info({ symbol }, "MarketFeedManager: auto-routed new crypto symbol → delta");
-    }
+  /**
+   * Attempts to route `symbol` to `candidateProvider`.
+   * Priority rules are applied:
+   *   - If the symbol's class has a priority provider, ONLY that provider wins.
+   *   - If the class is unknown, first-come first-served.
+   * Returns true if the route was set or confirmed; false if blocked by priority.
+   */
+  private _applyPriorityRoute(symbol: string, candidateProvider: "delta" | "ctrader"): boolean {
+    const s          = symbol.toUpperCase();
+    const cls        = classifySymbol(s);
+    const priority   = priorityProviderFor(cls);
+    this.symbolClasses.set(s, cls);
 
-    if (!providerName) return false;
-
-    // Always record the intent — even if the provider isn't live yet.
-    this.subscribedSymbols.add(symbol);
-
-    const provider = this.providers.get(providerName);
-    if (!provider) {
-      logger.debug({ symbol, providerName }, "MarketFeedManager: provider not yet active — subscription queued");
+    if (priority !== null && priority !== candidateProvider) {
+      // This symbol belongs to a different provider — don't touch the routing.
+      logger.debug(
+        { symbol: s, candidateProvider, priority, cls },
+        "MarketFeedManager: routing blocked by priority rule",
+      );
       return false;
     }
-    provider.subscribe(symbol);
-    this.emit("subscription_update", { symbol, action: "subscribed", provider: providerName, subscriptions: this.getSubscriptions() });
+
+    const winner = priority ?? candidateProvider;
+    const reason = priority
+      ? routingReasonFor(cls, winner)
+      : `First available provider: ${winner}`;
+
+    this.symbolRouting.set(s, winner);
+    this.routingReasons.set(s, reason);
+    return true;
+  }
+
+  // ── Subscribe / Unsubscribe ────────────────────────────────────────────────
+
+  subscribe(symbol: string): boolean {
+    const s        = symbol.toUpperCase();
+    const cls      = classifySymbol(s);
+    const priority = priorityProviderFor(cls);
+
+    let providerName = this.symbolRouting.get(s);
+
+    // If no route yet, derive from priority rule or auto-detect crypto.
+    if (!providerName) {
+      if (priority) {
+        providerName = priority;
+        this.symbolRouting.set(s, priority);
+        this.symbolClasses.set(s, cls);
+        this.routingReasons.set(s, routingReasonFor(cls, priority));
+        logger.info({ symbol: s, providerName, cls }, "MarketFeedManager: priority-routed on subscribe");
+      } else if (/^[A-Z0-9]+USDT?$/.test(s)) {
+        // Auto-route unknown xyzUSDT / xyzUSD symbols as crypto → delta
+        providerName = "delta";
+        this.symbolRouting.set(s, "delta");
+        this.symbolClasses.set(s, "crypto");
+        this.routingReasons.set(s, "Crypto symbols always use Delta Exchange");
+        logger.info({ symbol: s }, "MarketFeedManager: auto-routed new crypto symbol → delta");
+      } else {
+        return false;
+      }
+    }
+
+    this.subscribedSymbols.add(s);
+    const provider = this.providers.get(providerName);
+    if (!provider) {
+      logger.debug({ symbol: s, providerName }, "MarketFeedManager: provider not yet active — subscription queued");
+      return false;
+    }
+    provider.subscribe(s);
+    this.emit("subscription_update", {
+      symbol: s, action: "subscribed", provider: providerName,
+      subscriptions: this.getSubscriptions(),
+    });
     return true;
   }
 
   unsubscribe(symbol: string): boolean {
-    if (!this.subscribedSymbols.has(symbol)) return false;
-    const providerName = this.symbolRouting.get(symbol);
-    if (providerName) this.providers.get(providerName)?.unsubscribe(symbol);
-    this.subscribedSymbols.delete(symbol);
-    this.emit("subscription_update", { symbol, action: "unsubscribed", subscriptions: this.getSubscriptions() });
+    const s = symbol.toUpperCase();
+    if (!this.subscribedSymbols.has(s)) return false;
+    const providerName = this.symbolRouting.get(s);
+    if (providerName) this.providers.get(providerName)?.unsubscribe(s);
+    this.subscribedSymbols.delete(s);
+    this.emit("subscription_update", { symbol: s, action: "unsubscribed", subscriptions: this.getSubscriptions() });
     return true;
   }
+
+  // ── cTrader catalog ────────────────────────────────────────────────────────
+
+  enableCTrader(ctrader: CTraderService): void {
+    const existing = this.providers.get("ctrader");
+    if (existing) { existing.destroy(); this.providers.delete("ctrader"); }
+
+    const provider = new CTraderProvider(ctrader);
+    this.wireProvider(provider);
+    this.providers.set("ctrader", provider);
+
+    this._onCTraderSymbolsChanged(provider, provider.supportedSymbols);
+    provider.on("symbols_changed", (syms: string[]) => {
+      this._onCTraderSymbolsChanged(provider, syms);
+    });
+
+    provider.connect();
+    logger.info("MarketFeedManager: cTrader provider enabled");
+  }
+
+  private _onCTraderSymbolsChanged(provider: CTraderProvider, syms: string[]): void {
+    let routed = 0;
+    let blocked = 0;
+
+    for (const sym of syms) {
+      const accepted = this._applyPriorityRoute(sym.toUpperCase(), "ctrader");
+      if (accepted) {
+        routed++;
+        if (this.subscribedSymbols.has(sym.toUpperCase())) provider.subscribe(sym.toUpperCase());
+      } else {
+        blocked++;
+      }
+    }
+
+    this.symbolService.setCTraderSymbols(
+      syms.map(sym => ({
+        symbol:       sym,
+        name:         sym,
+        contractType: this._guessCTraderContractType(sym),
+        broker:       "ctrader",
+        underlying:   sym.slice(0, 3),
+        quoteAsset:   sym.slice(3) || "USD",
+        active:       true,
+      }))
+    );
+
+    logger.info(
+      { total: syms.length, routed, blocked },
+      "MarketFeedManager: cTrader routing applied (blocked = priority reserved for Delta)",
+    );
+    this.emit("subscription_update", { action: "catalog_updated", provider: "ctrader", count: syms.length });
+  }
+
+  private _guessCTraderContractType(sym: string): string {
+    const s = sym.toUpperCase();
+    if (METALS.has(s))                                                             return "metal";
+    if (/^[A-Z]{6}$/.test(s))                                                     return "forex";
+    if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|HAN|BEL|SMI|OMX)/.test(s)) return "index";
+    if (/^(USOIL|UKOIL|NGAS|COPPER|WHEAT|CORN|SUGAR|COFFEE|COCOA|COTTON)/.test(s))        return "commodity";
+    return "cfd";
+  }
+
+  disableCTrader(): void {
+    const existing = this.providers.get("ctrader");
+    if (existing) {
+      existing.destroy();
+      this.providers.delete("ctrader");
+      logger.info("MarketFeedManager: cTrader provider disabled");
+      this.emit("provider_status", { provider: "ctrader", status: "disconnected" });
+    }
+  }
+
+  // ── Finnhub / Delta helpers ────────────────────────────────────────────────
+
+  enableFinnhub(apiKey: string, symbols: string[]): void {
+    const existing = this.providers.get("finnhub");
+    if (existing) { existing.destroy(); this.providers.delete("finnhub"); }
+    const finnhub = new FinnhubProvider(apiKey);
+    this.wireProvider(finnhub);
+    this.providers.set("finnhub", finnhub);
+    for (const sym of symbols) { this.subscribedSymbols.add(sym); finnhub.subscribe(sym); }
+    finnhub.connect();
+    logger.info({ symbols }, "MarketFeedManager: Finnhub provider enabled");
+  }
+
+  disableFinnhub(): void {
+    const existing = this.providers.get("finnhub");
+    if (existing) {
+      existing.destroy();
+      this.providers.delete("finnhub");
+      this.emit("provider_status", { provider: "finnhub", status: "disconnected" });
+    }
+  }
+
+  enableDelta(symbols: string[]): void {
+    const existing = this.providers.get("delta");
+    if (existing) { existing.destroy(); this.providers.delete("delta"); }
+
+    const entries: DeltaSymbolEntry[] = symbols.map(sym => ({
+      internalSymbol: sym,
+      deltaSymbol:    sym.replace("USD", "USDT"),
+    }));
+
+    const delta = new DeltaExchangeProvider(entries);
+    this.wireProvider(delta);
+    this.providers.set("delta", delta);
+    for (const sym of symbols) {
+      this._applyPriorityRoute(sym, "delta");
+      this.subscribedSymbols.add(sym);
+      delta.subscribe(sym);
+    }
+    delta.connect();
+
+    this.symbolService.getDeltaSymbols().then(catalog => {
+      const fullEntries: DeltaSymbolEntry[] = catalog.map(s => ({
+        internalSymbol: s.symbol,
+        deltaSymbol:    s.symbol,
+      }));
+      delta.refreshSymbols(fullEntries);
+      for (const { internalSymbol } of fullEntries) {
+        this._applyPriorityRoute(internalSymbol, "delta");
+      }
+    }).catch(err => logger.error({ err }, "MarketFeedManager: Delta catalog refresh failed"));
+  }
+
+  disableDelta(): void {
+    const existing = this.providers.get("delta");
+    if (existing) {
+      existing.destroy();
+      this.providers.delete("delta");
+      this.emit("provider_status", { provider: "delta", status: "disconnected" });
+    }
+  }
+
+  // ── Accessors ──────────────────────────────────────────────────────────────
 
   getLatestTick(symbol: string): UnifiedTick | undefined  { return this.latestTicks.get(symbol); }
   getAllLatestTicks(): Record<string, UnifiedTick>         { return Object.fromEntries(this.latestTicks.entries()); }
@@ -167,150 +416,18 @@ export class MarketFeedManager extends EventEmitter {
     };
   }
 
-  isAnyConnected(): boolean  { return [...this.providers.values()].some(p => p.isConnected()); }
-  isFeedEnabled(): boolean   { return !!this.finnhubApiKey || this.providers.size > 0; }
-
-  enableFinnhub(apiKey: string, symbols: string[]): void {
-    const existing = this.providers.get("finnhub");
-    if (existing) { existing.destroy(); this.providers.delete("finnhub"); }
-    const finnhub = new FinnhubProvider(apiKey);
-    this.wireProvider(finnhub);
-    this.providers.set("finnhub", finnhub);
-    for (const sym of symbols) { this.subscribedSymbols.add(sym); finnhub.subscribe(sym); }
-    finnhub.connect();
-    logger.info({ symbols }, "MarketFeedManager: Finnhub provider enabled");
-  }
-
-  disableFinnhub(): void {
-    const existing = this.providers.get("finnhub");
-    if (existing) {
-      existing.destroy();
-      this.providers.delete("finnhub");
-      logger.info("MarketFeedManager: Finnhub provider disabled");
-      this.emit("provider_status", { provider: "finnhub", status: "disconnected" });
-    }
-  }
-
-  enableDelta(symbols: string[]): void {
-    const existing = this.providers.get("delta");
-    if (existing) { existing.destroy(); this.providers.delete("delta"); }
-
-    const entries: DeltaSymbolEntry[] = symbols.map(sym => ({
-      internalSymbol: sym,
-      deltaSymbol:    sym.replace("USD", "USDT"),
-    }));
-
-    const delta = new DeltaExchangeProvider(entries);
-    this.wireProvider(delta);
-    this.providers.set("delta", delta);
-    for (const sym of symbols) { this.subscribedSymbols.add(sym); delta.subscribe(sym); }
-    delta.connect();
-    logger.info({ symbols }, "MarketFeedManager: Delta India provider enabled");
-
-    this.symbolService.getDeltaSymbols().then(catalog => {
-      const fullEntries: DeltaSymbolEntry[] = catalog.map(s => ({
-        internalSymbol: s.symbol,
-        deltaSymbol:    s.symbol,
-      }));
-      delta.refreshSymbols(fullEntries);
-      for (const { internalSymbol } of fullEntries) {
-        if (!this.symbolRouting.has(internalSymbol)) this.symbolRouting.set(internalSymbol, "delta");
-      }
-      logger.info({ count: fullEntries.length }, "MarketFeedManager: Delta India catalog refreshed after enableDelta");
-    }).catch(err => logger.error({ err }, "MarketFeedManager: Delta catalog refresh failed"));
-  }
-
-  disableDelta(): void {
-    const existing = this.providers.get("delta");
-    if (existing) {
-      existing.destroy();
-      this.providers.delete("delta");
-      logger.info("MarketFeedManager: Delta provider disabled");
-      this.emit("provider_status", { provider: "delta", status: "disconnected" });
-    }
-  }
-
-  enableCTrader(ctrader: CTraderService): void {
-    const existing = this.providers.get("ctrader");
-    if (existing) { existing.destroy(); this.providers.delete("ctrader"); }
-
-    const provider = new CTraderProvider(ctrader);
-    this.wireProvider(provider);
-    this.providers.set("ctrader", provider);
-
-    // If symbols are already loaded (re-enable after reconnect), seed routing now.
-    this._onCTraderSymbolsChanged(provider, provider.supportedSymbols);
-
-    // Listen for future catalog updates (first connect, or reconnects).
-    provider.on("symbols_changed", (syms: string[]) => {
-      this._onCTraderSymbolsChanged(provider, syms);
-    });
-
-    provider.connect();
-    logger.info("MarketFeedManager: cTrader provider enabled — routing will be seeded from broker catalog");
-  }
-
-  private _onCTraderSymbolsChanged(provider: CTraderProvider, syms: string[]): void {
-    let newRoutes = 0;
-    for (const sym of syms) {
-      // Never override an explicit Delta route.
-      const current = this.symbolRouting.get(sym);
-      if (!current || current === "finnhub") {
-        this.symbolRouting.set(sym, "ctrader");
-        newRoutes++;
-      }
-      // Re-subscribe queued symbols.
-      if (this.subscribedSymbols.has(sym)) provider.subscribe(sym);
-    }
-
-    // Update SymbolService with the live cTrader catalog.
-    this.symbolService.setCTraderSymbols(
-      syms.map(sym => ({
-        symbol:       sym,
-        name:         sym,
-        contractType: this._guessCTraderContractType(sym),
-        broker:       "ctrader",
-        underlying:   sym.slice(0, 3),
-        quoteAsset:   sym.slice(3) || "USD",
-        active:       true,
-      }))
-    );
-
-    logger.info(
-      { total: syms.length, newRoutes },
-      "MarketFeedManager: cTrader routing table updated from live broker catalog",
-    );
-
-    this.emit("subscription_update", { action: "catalog_updated", provider: "ctrader", count: syms.length });
-  }
-
-  private _guessCTraderContractType(sym: string): string {
-    const s = sym.toUpperCase();
-    const METALS = ["XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD"];
-    if (METALS.includes(s)) return "metal";
-    if (/^[A-Z]{6}$/.test(s)) return "forex";
-    if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|HAN|BEL|SMI|OMX)/.test(s)) return "index";
-    if (/^(USOIL|UKOIL|NGAS|COPPER|WHEAT|CORN|SUGAR|COFFEE|COCOA|COTTON)/.test(s)) return "commodity";
-    return "cfd";
-  }
-
-  disableCTrader(): void {
-    const existing = this.providers.get("ctrader");
-    if (existing) {
-      existing.destroy();
-      this.providers.delete("ctrader");
-      logger.info("MarketFeedManager: cTrader provider disabled");
-      this.emit("provider_status", { provider: "ctrader", status: "disconnected" });
-    }
-  }
+  isAnyConnected(): boolean { return [...this.providers.values()].some(p => p.isConnected()); }
+  isFeedEnabled(): boolean  { return !!this.finnhubApiKey || this.providers.size > 0; }
 
   getDiagnostics() {
-    const allTicks = this.getAllLatestTicks();
-    const now      = Date.now();
+    const allTicks        = this.getAllLatestTicks();
+    const now             = Date.now();
     const ctraderProvider = this.providers.get("ctrader") as CTraderProvider | undefined;
 
     const perSymbol: Record<string, {
       provider:     string | undefined;
+      assetClass:   string;
+      routingReason: string;
       subscribed:   boolean;
       lastTickAt:   number | null;
       lastPrice:    number | null;
@@ -324,13 +441,17 @@ export class MarketFeedManager extends EventEmitter {
       const symbolId     = providerName === "ctrader"
         ? ctraderProvider?.getSymbolId(sym)?.toString()
         : undefined;
+      const assetClass   = this.symbolClasses.get(sym) ?? classifySymbol(sym);
+      const reason       = this.routingReasons.get(sym) ?? "Unknown";
 
       perSymbol[sym] = {
-        provider:    providerName,
-        subscribed:  this.subscribedSymbols.has(sym),
-        lastTickAt:  tick?.timestamp ?? null,
-        lastPrice:   tick?.price    ?? null,
-        lastTickAgo: tick ? now - tick.timestamp : null,
+        provider:      providerName,
+        assetClass,
+        routingReason: reason,
+        subscribed:    this.subscribedSymbols.has(sym),
+        lastTickAt:    tick?.timestamp ?? null,
+        lastPrice:     tick?.price    ?? null,
+        lastTickAgo:   tick ? now - tick.timestamp : null,
         symbolId,
       };
     }
@@ -338,8 +459,8 @@ export class MarketFeedManager extends EventEmitter {
     return {
       providers:     this.getProviderStats(),
       symbolRouting: Object.fromEntries(this.symbolRouting.entries()),
-      subscriptions: [...this.subscribedSymbols],
       perSymbol,
+      subscriptions: [...this.subscribedSymbols],
       totalTicks:    this.totalTicks,
       ts:            now,
     };
@@ -350,14 +471,13 @@ export class MarketFeedManager extends EventEmitter {
     this.providers.clear();
   }
 
+  // ── Internal ───────────────────────────────────────────────────────────────
+
   private buildStaticProviders(): void {
     if (this.finnhubApiKey) {
       this.providers.set("finnhub", new FinnhubProvider(this.finnhubApiKey));
-    } else {
-      logger.warn("MarketFeedManager: no FINNHUB_API_KEY — Finnhub/OANDA/Binance feed disabled");
     }
-
-    // Delta provider starts with an empty catalog — full catalog loaded async via _bootstrapDeltaIndia.
+    // Delta starts empty — catalog populated async via _bootstrapDeltaIndia.
     this.providers.set("delta", new DeltaExchangeProvider([]));
   }
 
@@ -378,15 +498,12 @@ export class MarketFeedManager extends EventEmitter {
     provider.on("connected", () => {
       this.emit("provider_status", { provider: provider.name, status: "connected" });
     });
-
     provider.on("disconnected", (info: { code?: number }) => {
       this.emit("provider_status", { provider: provider.name, status: "disconnected", ...info });
     });
-
     provider.on("reconnecting", (info: { delay: number }) => {
       this.emit("provider_status", { provider: provider.name, status: "reconnecting", ...info });
     });
-
     provider.on("error", (err: Error) => {
       this.emit("provider_status", { provider: provider.name, status: "error", message: err.message });
     });
