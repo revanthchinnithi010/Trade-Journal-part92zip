@@ -1,5 +1,6 @@
 import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
+import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import type { PrivateWsStatus } from "@/store/brokerStore";
 import {
   BarChart2, ShoppingCart, Power, TrendingUp, TrendingDown,
@@ -179,15 +180,9 @@ export function BrokerStatusBar() {
         {/* Broker badge */}
         <div className="flex items-center gap-1.5 shrink-0 min-w-0">
           <div
-            className="w-5 h-5 rounded flex items-center justify-center text-[10px] font-black overflow-hidden shrink-0"
-            style={{
-              background: broker?.image ? "transparent" : (broker?.color ?? "#888") + "22",
-              color: broker?.color,
-            }}
+            className="w-5 h-5 rounded flex items-center justify-center overflow-hidden shrink-0"
           >
-            {broker?.image
-              ? <img src={broker.image} alt={broker.name} className="w-full h-full object-cover" />
-              : broker?.logo}
+            {broker ? <BrokerLogo brokerId={broker.id} size={20} /> : null}
           </div>
           <span className="text-[11px] font-bold text-white hidden md:inline truncate">
             {broker?.name}

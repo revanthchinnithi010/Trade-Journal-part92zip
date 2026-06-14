@@ -3,6 +3,7 @@ import { X, Plug, Trash2, ChevronLeft, CheckCircle2, AlertCircle, Loader2, Wifi,
 import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import type { ConnectionStatus } from "@/types/broker";
 
 // ── Status badge ─────────────────────────────────────────────────────────────
@@ -64,19 +65,15 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
               display: "flex", alignItems: "center", gap: 14,
               padding: "16px 18px",
             }}>
-              {/* Logo */}
+              {/* Logo — inline SVG, no network request */}
               <div style={{
                 width: 44, height: 44, borderRadius: 13, flexShrink: 0,
-                background: broker.image ? "transparent" : broker.color + "22",
-                color: broker.color, fontSize: 18, fontWeight: 900,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 overflow: "hidden",
                 boxShadow: isConnected ? `0 0 14px ${broker.color}30` : "none",
                 transition: "box-shadow 0.3s",
               }}>
-                {broker.image
-                  ? <img src={broker.image} alt={broker.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : broker.logo}
+                <BrokerLogo brokerId={broker.id} size={44} />
               </div>
 
               {/* Name + description + status */}

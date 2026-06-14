@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { DeltaLogo, CTraderLogo, MT5Logo } from "@/components/broker/BrokerLogos";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi, WifiOff, RefreshCw, CheckCircle2, X, Upload, Shield,
@@ -1095,7 +1096,7 @@ export default function Brokers() {
           lastSync="10:30 AM"
           tradesCount={deltaCount}
           accentColor="transparent"
-          icon={<img src="/broker-delta.png" alt="Delta Exchange" className="w-full h-full object-cover" />}
+          icon={<DeltaLogo size={48} />}
           onSelect={() => setActiveTab("delta")}
           onToggleConnect={() => setDeltaConnected(v => !v)}
         />
@@ -1107,7 +1108,7 @@ export default function Brokers() {
           lastSync="9:45 AM"
           tradesCount={fusionCount}
           accentColor="transparent"
-          icon={<img src="/broker-ctrader.png" alt="cTrader" className="w-full h-full object-cover" />}
+          icon={<CTraderLogo size={48} />}
           onSelect={() => setActiveTab("fusion")}
           onToggleConnect={() => setFusionConnected(v => !v)}
         />
@@ -1119,7 +1120,7 @@ export default function Brokers() {
           lastSync="7:30 AM"
           tradesCount={growwCount}
           accentColor="transparent"
-          icon={<img src="/broker-mt5.png" alt="MT5" className="w-full h-full object-cover" />}
+          icon={<MT5Logo size={48} />}
           onSelect={() => setActiveTab("groww")}
           onToggleConnect={() => setGrowwConnected(v => !v)}
         />

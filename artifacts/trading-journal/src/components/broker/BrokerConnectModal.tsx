@@ -4,6 +4,7 @@ import {
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
   ChevronLeft, X,
 } from "lucide-react";
+import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
@@ -283,13 +284,9 @@ function MobileBrokerConnectPage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
           <div style={{
             width: 30, height: 30, borderRadius: 8, flexShrink: 0,
-            background: broker.image ? "transparent" : broker.color + "22",
-            color: broker.color, fontSize: 14, fontWeight: 900,
             display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
           }}>
-            {broker.image
-              ? <img src={broker.image} alt={broker.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : broker.logo}
+            <BrokerLogo brokerId={broker.id} size={30} />
           </div>
           <div>
             <p style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: 0, lineHeight: 1 }}>{brokerTitle}</p>
@@ -352,15 +349,11 @@ function DesktopBrokerConnectModal() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-                background: broker.image ? "transparent" : broker.color + "18",
                 border: `1.5px solid ${broker.color}30`,
-                color: broker.color, fontSize: 18, fontWeight: 700,
                 display: "flex", alignItems: "center", justifyContent: "center",
-                overflow: "hidden", fontFamily: "monospace",
+                overflow: "hidden",
               }}>
-                {broker.image
-                  ? <img src={broker.image} alt={broker.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : broker.logo}
+                <BrokerLogo brokerId={broker.id} size={44} />
               </div>
               <div>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", margin: 0 }}>
