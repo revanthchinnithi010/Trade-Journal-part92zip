@@ -4,6 +4,7 @@ import {
 } from "react";
 import { activatePanRange, updatePanRange, subscribePanRange, getPanRange } from "./chartPanState";
 import * as sheetProfiler from "@/lib/sheetProfiler";
+import * as perfFlags from "@/lib/perfFlags";
 import type { RefObject } from "react";
 import {
   createChart,
@@ -970,6 +971,12 @@ const CustomChart = memo(function CustomChart({
     chartUpdateRafRef.current = requestAnimationFrame(() => {
       chartUpdateRafRef.current = null;
       if (!mountedRef.current) return;
+      // PERF_PAUSE_CHART_UPDATES: discard pending bar — zero LWC canvas repaints.
+      // Used by the benchmark runner to isolate blur cost from canvas render cost.
+      if (perfFlags.getFlag("PERF_PAUSE_CHART_UPDATES")) {
+        pendingChartBarRef.current = null;
+        return;
+      }
       const b = pendingChartBarRef.current;
       const s = mainRef.current;
       if (!b || !s) return;

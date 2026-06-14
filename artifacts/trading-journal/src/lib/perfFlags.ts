@@ -11,12 +11,15 @@ export interface PerfFlags {
   PERF_DISABLE_SHEET_SHADOW:   boolean;
   PERF_DISABLE_MESH_BLOBS:     boolean;
   PERF_DISABLE_BACKDROP_BLUR:  boolean;
+  /** When true, scheduleChartUpdate() discards pending bars — zero LWC repaints. */
+  PERF_PAUSE_CHART_UPDATES:    boolean;
 }
 
 const DEFAULT: PerfFlags = {
   PERF_DISABLE_SHEET_SHADOW:   false,
   PERF_DISABLE_MESH_BLOBS:     false,
   PERF_DISABLE_BACKDROP_BLUR:  false,
+  PERF_PAUSE_CHART_UPDATES:    false,
 };
 
 let _state: PerfFlags = { ...DEFAULT };

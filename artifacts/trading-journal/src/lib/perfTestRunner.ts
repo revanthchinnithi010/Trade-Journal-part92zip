@@ -12,15 +12,25 @@ import * as paintProfiler from "@/lib/paintProfiler";
 import type { PaintReport } from "@/lib/paintProfiler";
 
 // ── Config table ──────────────────────────────────────────────────────────────
+//
+// Current suite: blur-isolation test.
+// Blur ON in both configs; only PERF_PAUSE_CHART_UPDATES differs.
+// This isolates whether remaining lag is:
+//   A) live canvas rendering behind the sheet, or
+//   B) the backdrop-blur compositor pass itself.
 
 const CONFIGS: Array<{
   name:  string;
   flags: Partial<typeof perfFlags.getFlags extends () => infer R ? R : never>;
 }> = [
-  { name: "1. Baseline (all enabled)",    flags: {} },
-  { name: "2. Shadow disabled",           flags: { PERF_DISABLE_SHEET_SHADOW:  true } },
-  { name: "3. Mesh blobs disabled",       flags: { PERF_DISABLE_MESH_BLOBS:    true } },
-  { name: "4. Backdrop blur disabled",    flags: { PERF_DISABLE_BACKDROP_BLUR: true } },
+  {
+    name:  "1. Blur ON  — chart live (baseline)",
+    flags: {},
+  },
+  {
+    name:  "2. Blur ON  — chart paused",
+    flags: { PERF_PAUSE_CHART_UPDATES: true },
+  },
 ];
 
 const CAPTURE_MS       = 2500;
