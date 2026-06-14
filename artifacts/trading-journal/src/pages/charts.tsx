@@ -1518,8 +1518,6 @@ export default function Charts() {
         setShowQuickAlert={setShowQuickAlert}
         alertDrawing={alertDrawing}
         closeAlertModal={closeAlertModal}
-        showSettings={showSettings}
-        setShowSettings={setShowSettings}
         openSidebar={openSidebar}
         handleScreenshot={handleScreenshot}
         chartAreaRef={chartAreaRef}

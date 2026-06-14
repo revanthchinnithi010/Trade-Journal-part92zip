@@ -3361,8 +3361,6 @@ export interface MobileChartLayoutProps {
   setShowQuickAlert:   React.Dispatch<React.SetStateAction<boolean>>;
   alertDrawing:        Drawing | null;
   closeAlertModal:     () => void;
-  showSettings:        boolean;
-  setShowSettings:     React.Dispatch<React.SetStateAction<boolean>>;
   openSidebar:         () => void;
   handleScreenshot:    () => void;
   chartAreaRef:        React.RefObject<HTMLDivElement | null>;
@@ -3389,7 +3387,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     showIndicators, setShowIndicators,
     showAlertCenter, setShowAlertCenter,
     showQuickAlert, setShowQuickAlert, alertDrawing, closeAlertModal,
-    showSettings, setShowSettings,
     openSidebar, handleScreenshot, chartAreaRef,
     onBarReplay,
     layoutCount, onLayoutChange, syncTF, onSyncTFChange,
@@ -3419,6 +3416,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
+  const [showSettings,      setShowSettings]      = useState(false);
   const [showBrokerSheet,   setShowBrokerSheet]   = useState(false);
   const [showTFSheet,       setShowTFSheet]       = useState(false);
   const [showChartType,     setShowChartType]     = useState(false);
@@ -3471,7 +3469,8 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   // ── Stable sheet close handlers — MUST be useCallback so memo'd sheets
   // don't re-render from a new inline-arrow onClose prop on every parent render ──
   const handleCloseDrawingSheet = useCallback(() => setShowDrawingSheet(false), []);
-  const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false), []);
+  const handleCloseSettings     = useCallback(() => setShowSettings(false),    []);
+  const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false),  []);
 
   // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
   const handleSelectSymbol = useCallback((sym: string) => {
@@ -3798,7 +3797,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       />
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
-      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={() => setShowSettings(false)} />}
+      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} />}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
       <SymbolPickerSheet
