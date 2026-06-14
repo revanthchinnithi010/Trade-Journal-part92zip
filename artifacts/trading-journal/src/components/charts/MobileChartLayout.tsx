@@ -3380,6 +3380,9 @@ export interface MobileChartLayoutProps {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export const MobileChartLayout = memo(function MobileChartLayout(props: MobileChartLayoutProps) {
+  const _profCommitMCL = sheetProfiler.trackRender("MobileChartLayout", "MobileChartLayout.tsx", 3382);
+  useLayoutEffect(() => { _profCommitMCL(); });
+
   const {
     activeKey, interval, selectInterval, selectSymbol,
     chartSettings, handleSettings, handleSaveAsDefault,

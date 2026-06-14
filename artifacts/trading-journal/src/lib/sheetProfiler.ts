@@ -10,6 +10,18 @@
 //   Records every render unconditionally (no localStorage flag needed).
 //   Call getRenderStats() or printRenderReport() to read data.
 //
+// MODE 3 — Tick-correlation (always-on)
+//   Call notifyTick(symbol, price) each time a price batch lands in the store.
+//   Within the next 120 ms, any watched component that commits a render is
+//   flagged as tick-triggered and logged to the console.
+//
+//   Watched components:
+//     ChartSettingsSheet · SettingsTabContent · SettingsRow:* (prefix)
+//     MobileChartLayout  · Charts
+//
+//   Every 20th clean tick (no watched re-renders) a summary is logged instead
+//   of spamming the console on every tick.
+//
 // FPS capture
 //   measureFps(durationMs) → Promise<FpsResult>  ← for on-screen panel
 //   startFps(durationMs)                          ← console-only helper
@@ -21,6 +33,7 @@
 //   .resetRenderStats()
 //   .measureFps(5000)
 //   .startFps(5000) / .stopFps()
+//   .notifyTick(symbol, price)   ← manual test
 
 export type ProfileEvent = {
   timestamp: number;
@@ -86,8 +99,6 @@ function _printReport() {
 }
 
 // ── Mode 2: always-on render stats ────────────────────────────────────────
-// NOTE: trackRender() runs unconditionally — no ENABLED gate.
-// The render overhead is ~0.05 ms per call, negligible for debugging.
 const _renderStats = new Map<string, RenderStat>();
 
 function _printRenderReport() {
@@ -116,6 +127,170 @@ function _printRenderReport() {
 
 function _getRenderStats(): RenderStat[] {
   return [..._renderStats.values()].sort((a, b) => b.totalMs - a.totalMs);
+}
+
+// ── Mode 3: tick-correlation ───────────────────────────────────────────────
+// Components the user cares about for tick re-render analysis.
+const _WATCH_SET = new Set([
+  "ChartSettingsSheet",
+  "SettingsTabContent",
+  "MobileChartLayout",
+  "Charts",
+]);
+
+function _isWatched(component: string): boolean {
+  return _WATCH_SET.has(component) || component.startsWith("SettingsRow:");
+}
+
+// Rolling 2-second buffer of commit timestamps per stat-key (for renders/sec).
+const _rpsBuffer = new Map<string, number[]>();
+const RPS_WINDOW_MS  = 1000;   // window for renders/sec calculation
+const TICK_WINDOW_MS = 120;    // renders within this many ms of a tick are "tick-triggered"
+
+let _lastTick: { symbol: string; price: number; at: number } | null = null;
+let _pendingTickLog: string[] = [];   // watched component names that re-rendered
+let _tickLogTimer: ReturnType<typeof setTimeout> | null = null;
+let _cleanTicks = 0;                  // consecutive ticks with zero watched re-renders
+
+function _getComponentRps(component: string): number {
+  let total = 0;
+  const now = performance.now();
+  const cutoff = now - RPS_WINDOW_MS;
+  for (const [key, stat] of _renderStats) {
+    if (stat.component !== component && !(component === "SettingsRow:*" && stat.component.startsWith("SettingsRow:"))) continue;
+    const buf = _rpsBuffer.get(key);
+    if (!buf) continue;
+    total += buf.filter(t => t >= cutoff).length;
+  }
+  return total;
+}
+
+function _getAllWatchedRps(): Record<string, number> {
+  const now = performance.now();
+  const cutoff = now - RPS_WINDOW_MS;
+  const out: Record<string, number> = {};
+  for (const [key, stat] of _renderStats) {
+    if (!_isWatched(stat.component)) continue;
+    const buf = _rpsBuffer.get(key);
+    if (!buf) continue;
+    const rps = buf.filter(t => t >= cutoff).length;
+    if (rps === 0) continue;
+    // Bucket SettingsRow:* variants under a single key for readability
+    const bucket = stat.component.startsWith("SettingsRow:") ? "SettingsRow:*" : stat.component;
+    out[bucket] = (out[bucket] ?? 0) + rps;
+  }
+  return out;
+}
+
+function _flushTickLog(): void {
+  _tickLogTimer = null;
+  if (!_lastTick) return;
+
+  const { symbol, price } = _lastTick;
+  const rpsMap = _getAllWatchedRps();
+
+  if (_pendingTickLog.length > 0) {
+    _cleanTicks = 0;
+
+    // Deduplicate (multiple components may have same name from different keys)
+    const unique = [...new Set(_pendingTickLog)];
+    console.group(
+      `%c[TJProfiler] ⚡ TICK ${symbol} @${price.toFixed(2)} → ${unique.length} watched component(s) RE-RENDERED`,
+      "color:#f87171;font-weight:bold;font-size:13px",
+    );
+    unique.forEach(c => {
+      const bucket = c.startsWith("SettingsRow:") ? "SettingsRow:*" : c;
+      const rps = rpsMap[bucket] ?? 0;
+      console.log(`%c  🔴 ${c}  ·  source: tick  ·  ~${rps} renders/sec`, "color:#fbbf24;font-weight:600");
+    });
+
+    // Always print the full rps summary table for watched components
+    const tableRows = Object.entries(rpsMap).map(([comp, rps]) => ({
+      "Component": comp,
+      "Renders/sec": rps,
+      "Tick-triggered": unique.some(u => (u.startsWith("SettingsRow:") ? "SettingsRow:*" : u) === comp) ? "🔴 YES" : "—",
+    }));
+    if (tableRows.length > 0) console.table(tableRows);
+    console.groupEnd();
+  } else {
+    _cleanTicks++;
+    // Log 1-in-20 clean ticks so there is evidence of silence
+    if (_cleanTicks % 20 === 1) {
+      const rpsStr = Object.keys(rpsMap).length > 0
+        ? Object.entries(rpsMap).map(([c, r]) => `${c}=${r}`).join(" | ")
+        : "all 0";
+      console.log(
+        `%c[TJProfiler] ✅ TICK ${symbol} @${price.toFixed(2)} — no watched component re-rendered  (${_cleanTicks} consecutive clean ticks)  rps: ${rpsStr}`,
+        "color:#34d399;font-size:11px",
+      );
+    }
+  }
+}
+
+/**
+ * Call once per price-batch flush (after _setMany lands in the store).
+ * Resets the pending log window and schedules a 120ms-deferred flush —
+ * giving React time to commit any tick-triggered re-renders before we report.
+ */
+export function notifyTick(symbol: string, price: number): void {
+  _lastTick = { symbol, price, at: performance.now() };
+  _pendingTickLog = [];   // fresh window for this tick batch
+  if (_tickLogTimer !== null) clearTimeout(_tickLogTimer);
+  _tickLogTimer = setTimeout(_flushTickLog, 120);
+}
+
+// ── Mode 2 + 3: trackRender ────────────────────────────────────────────────
+
+/**
+ * Always-on render tracker — NO ENABLED gate, always accumulates.
+ * Pattern:
+ *   const _commit = sheetProfiler.trackRender("Name", "file.tsx", LINE);
+ *   useLayoutEffect(() => { _commit(); });
+ */
+export function trackRender(component: string, file: string, line: number): () => void {
+  const start = performance.now();
+  return function commit() {
+    const now      = performance.now();
+    const duration = now - start;
+    const key      = `${component}@${file}:${line}`;
+
+    // ── render stats ─────────────────────────────────────────────────────
+    const s = _renderStats.get(key);
+    if (s) {
+      s.renderCount++;
+      s.totalMs += duration;
+      if (duration > s.maxMs) s.maxMs = duration;
+      if (duration < s.minMs) s.minMs = duration;
+      s.lastMs = duration;
+    } else {
+      _renderStats.set(key, {
+        component, file, line,
+        renderCount: 1, totalMs: duration,
+        maxMs: duration, minMs: duration, lastMs: duration,
+      });
+    }
+
+    // ── rps ring buffer ───────────────────────────────────────────────────
+    let buf = _rpsBuffer.get(key);
+    if (!buf) { buf = []; _rpsBuffer.set(key, buf); }
+    buf.push(now);
+    // Trim entries older than 2 × RPS_WINDOW_MS to cap memory
+    const cutoff = now - RPS_WINDOW_MS * 2;
+    let i = 0;
+    while (i < buf.length && buf[i] < cutoff) i++;
+    if (i > 0) buf.splice(0, i);
+
+    // ── tick correlation ──────────────────────────────────────────────────
+    if (
+      _lastTick &&
+      (now - _lastTick.at) < TICK_WINDOW_MS &&
+      _isWatched(component)
+    ) {
+      if (!_pendingTickLog.includes(component)) {
+        _pendingTickLog.push(component);
+      }
+    }
+  };
 }
 
 // ── FPS capture ───────────────────────────────────────────────────────────
@@ -199,30 +374,6 @@ export function instant(component: string, operation: string): void {
   _events.push({ timestamp: performance.now() - _transitionStart, component, operation, duration: 0 });
 }
 
-/**
- * Always-on render tracker — NO ENABLED gate, always accumulates.
- * Pattern:
- *   const _commit = sheetProfiler.trackRender("Name", "file.tsx", LINE);
- *   useLayoutEffect(() => { _commit(); });
- */
-export function trackRender(component: string, file: string, line: number): () => void {
-  const start = performance.now();
-  return function commit() {
-    const duration = performance.now() - start;
-    const key = `${component}@${file}:${line}`;
-    const s = _renderStats.get(key);
-    if (s) {
-      s.renderCount++;
-      s.totalMs += duration;
-      if (duration > s.maxMs) s.maxMs = duration;
-      if (duration < s.minMs) s.minMs = duration;
-      s.lastMs = duration;
-    } else {
-      _renderStats.set(key, { component, file, line, renderCount: 1, totalMs: duration, maxMs: duration, minMs: duration, lastMs: duration });
-    }
-  };
-}
-
 /** Returns render stats sorted by total time descending. Always available. */
 export function getRenderStats(): RenderStat[] { return _getRenderStats(); }
 
@@ -231,7 +382,7 @@ export function measureFps(durationMs = 5000): Promise<FpsResult> { return _meas
 
 export function printNow(): void { if (_reportTimer !== null) { clearTimeout(_reportTimer); _reportTimer = null; } _printReport(); }
 export function printRenderReport(): void { _printRenderReport(); }
-export function resetRenderStats(): void { _renderStats.clear(); }
+export function resetRenderStats(): void { _renderStats.clear(); _rpsBuffer.clear(); }
 export function isActive():  boolean { return ENABLED && _active; }
 export function isEnabled(): boolean { return ENABLED; }
 
@@ -246,21 +397,20 @@ if (typeof window !== "undefined") {
     measureFps:        _measureFps,
     startFps:          _startFps,
     stopFps:           _stopFps,
+    notifyTick,
     enable:  () => { localStorage.setItem("TJ_PROFILE_SHEET","1"); location.reload(); },
     disable: () => { localStorage.removeItem("TJ_PROFILE_SHEET"); location.reload(); },
   };
 
-  if (ENABLED) {
-    console.log(
-      "%c[SheetProfiler] ✅ ENABLED — trackRender() always-on.\n" +
-      "  → window.__tjProfiler.getRenderStats()    — raw data array\n" +
-      "  → window.__tjProfiler.printRenderReport() — console table\n" +
-      "  → window.__tjProfiler.resetRenderStats()  — clear counters\n" +
-      "  → window.__tjProfiler.measureFps(5000)    — Promise<FpsResult>\n" +
-      "  → window.__tjProfiler.startFps(5000)      — console FPS log",
-      "color:#34d399;font-weight:bold;font-size:13px",
-    );
-  } else {
-    console.log("%c[SheetProfiler] trackRender() always-on. run window.__tjProfiler.enable() for snap-session mode.", "color:#6b7280");
-  }
+  console.log(
+    "%c[TJProfiler] tick-correlation active.\n" +
+    "  Watched: ChartSettingsSheet · SettingsTabContent · SettingsRow:* · MobileChartLayout · Charts\n" +
+    "  → tick-triggered re-renders log automatically when they happen\n" +
+    "  → every 20th clean tick logs a ✅ silence confirmation\n" +
+    "  → window.__tjProfiler.printRenderReport()  — full render table\n" +
+    "  → window.__tjProfiler.resetRenderStats()   — clear counters\n" +
+    "  → window.__tjProfiler.measureFps(5000)     — Promise<FpsResult>\n" +
+    "  → window.__tjProfiler.notifyTick('BTC',95000) — manual test",
+    "color:#34d399;font-weight:bold;font-size:12px",
+  );
 }

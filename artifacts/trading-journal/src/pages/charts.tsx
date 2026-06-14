@@ -1,6 +1,7 @@
 import {
-  memo, useCallback, useEffect, useRef, useState, useMemo,
+  memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo,
 } from "react";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 import html2canvas from "html2canvas";
 import {
   ChevronDown, ChevronUp,
@@ -943,6 +944,9 @@ function SnapshotPreviewPopup({ url, filename, onClose }: {
 
 // ── Main Charts page ──────────────────────────────────────────────────────────
 export default function Charts() {
+  const _profCommitCharts = sheetProfiler.trackRender("Charts", "charts.tsx", 947);
+  useLayoutEffect(() => { _profCommitCharts(); });
+
   const isMobile = useIsMobile();
   const { openSidebar } = useChartFocusMode();
   const { wsStatus, alertEvents } = useLiveMarketContext();

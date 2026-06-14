@@ -4,6 +4,7 @@ import {
 } from "react";
 import { useTickStore } from "@/store/tickStore";
 import type { TickState, FlashDir } from "@/store/tickStore";
+import * as sheetProfiler from "@/lib/sheetProfiler";
 
 // Re-export for backward compat — all consumers can import from here or tickStore
 export type { FlashDir, TickState } from "@/store/tickStore";
@@ -132,6 +133,13 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
     if (Object.keys(batch).length === 0) return;
 
     useTickStore.getState()._setMany(batch);
+
+    // Notify tick-correlation profiler — must come after _setMany so that
+    // any React re-renders triggered by the store update can be attributed
+    // to this tick batch within the 120 ms deferred flush window.
+    for (const [sym, tick] of Object.entries(batch)) {
+      sheetProfiler.notifyTick(sym, tick.price);
+    }
 
     // Schedule flash-clear timeouts AFTER the batch lands in the store
     for (const [sym, tick] of Object.entries(batch)) {
