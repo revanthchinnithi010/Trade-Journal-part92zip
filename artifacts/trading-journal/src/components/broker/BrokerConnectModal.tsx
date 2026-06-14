@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   CheckCircle2, XCircle, Loader2, ExternalLink,
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
-  ChevronLeft, X,
+  ChevronLeft, X, Zap,
 } from "lucide-react";
 import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import { BROKERS } from "@/types/broker";
@@ -421,9 +421,67 @@ function CTraderOAuthPanel({
   status, errorMsg, onConnect, onRetry,
 }: { status: Status; errorMsg: string; onConnect: () => void; onRetry: () => void }) {
   const isLoading = status === "loading" || status === "waiting_oauth";
+  const [hasCTraderImported, setHasCTraderImported] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/credentials/status", { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { ok: boolean; status?: Record<string, boolean> }) => {
+        if (d.ok && d.status?.CTRADER_CLIENT_ID && d.status?.CTRADER_CLIENT_SECRET) {
+          setHasCTraderImported(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* Imported credentials banner */}
+      {hasCTraderImported && (
+        <div style={{
+          padding: "14px 16px", borderRadius: 12,
+          background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)",
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Zap size={14} style={{ color: "#EF4444", flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#EF4444", margin: 0 }}>
+                App credentials found
+              </p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "2px 0 0" }}>
+                CTRADER_CLIENT_ID &amp; CLIENT_SECRET are pre-configured. Click below to start OAuth.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={onConnect}
+            disabled={isLoading}
+            style={{
+              width: "100%", padding: "11px 0", borderRadius: 10, fontSize: 13, fontWeight: 700,
+              background: isLoading
+                ? "rgba(239,68,68,0.15)"
+                : "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
+              color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
+              border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              boxShadow: isLoading ? "none" : "0 0 20px rgba(239,68,68,0.25)",
+            }}
+          >
+            {isLoading
+              ? <><Loader2 size={14} className="animate-spin" /> Connecting…</>
+              : <><ExternalLink size={14} /> Connect cTrader — OAuth</>}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>
+              or use the button below
+            </span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+          </div>
+        </div>
+      )}
+
       <div style={{
         display: "flex", flexDirection: "column", gap: 12, padding: 16, borderRadius: 12,
         background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",

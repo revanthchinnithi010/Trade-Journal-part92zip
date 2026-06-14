@@ -14,6 +14,7 @@ interface ParsedCredentials {
   DELTA_API_SECRET?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
+  SESSION_SECRET?: string;
   DATABASE_URL?: string;
 }
 
@@ -25,6 +26,7 @@ interface CredStatus {
   DELTA_API_SECRET: boolean;
   TELEGRAM_BOT_TOKEN: boolean;
   TELEGRAM_CHAT_ID: boolean;
+  SESSION_SECRET: boolean;
   DATABASE_URL: boolean;
   [key: string]: boolean;
 }
@@ -57,8 +59,8 @@ const CREDENTIAL_GROUPS = [
     bg: "rgba(139,92,246,0.12)",
   },
   {
-    label: "Encryption Key",
-    keys: ["BROKER_ENCRYPTION_KEY"] as const,
+    label: "Security Keys",
+    keys: ["BROKER_ENCRYPTION_KEY", "SESSION_SECRET"] as const,
     color: "#00FFB4",
     bg: "rgba(0,255,180,0.10)",
   },
@@ -69,7 +71,7 @@ function parseCredentialsFile(content: string): ParsedCredentials {
   const supported = [
     "CTRADER_CLIENT_ID", "CTRADER_CLIENT_SECRET", "BROKER_ENCRYPTION_KEY",
     "DELTA_API_KEY", "DELTA_API_SECRET", "TELEGRAM_BOT_TOKEN",
-    "TELEGRAM_CHAT_ID", "DATABASE_URL",
+    "TELEGRAM_CHAT_ID", "SESSION_SECRET", "DATABASE_URL",
   ];
   const lines = content.split("\n");
   for (const line of lines) {

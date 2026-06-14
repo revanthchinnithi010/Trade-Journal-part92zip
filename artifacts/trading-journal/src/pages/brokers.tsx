@@ -8,6 +8,7 @@ import {
   Link2, Unlink, Signal, ExternalLink, Copy, Server, BarChart3,
 } from "lucide-react";
 import { CredentialImportModal, ConnectionStatusPanel } from "@/components/broker/CredentialImportModal";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useCurrencyFormatter } from "@/store/currencyStore";
@@ -1055,6 +1056,7 @@ const BROKER_FILTER_OPTIONS: Array<{ label: string; value: BrokerName | "all" }>
 
 export default function Brokers() {
   const fc = useCurrencyFormatter();
+  const isMobile = useIsMobile();
   const [activeTab, setActiveTab] = useState<ActiveTab>("delta");
   const [deltaConnected, setDeltaConnected] = useState(true);
   const [fusionConnected, setFusionConnected] = useState(false);
@@ -1080,6 +1082,38 @@ export default function Brokers() {
         />
       )}
 
+      {/* ── Mobile: Sticky "Import Credentials File" bar ─────────────── */}
+      {isMobile && (
+        <div style={{
+          position: "sticky",
+          top: 0,
+          zIndex: 20,
+          marginLeft: -16,
+          marginRight: -16,
+          marginTop: -16,
+          padding: "10px 16px",
+          paddingTop: "calc(10px + env(safe-area-inset-top, 0px))",
+          background: "rgba(11,16,23,0.97)",
+          backdropFilter: "blur(20px)",
+          WebkitBackdropFilter: "blur(20px)",
+          borderBottom: "1px solid rgba(255,255,255,0.07)",
+        }}>
+          <button
+            onClick={() => setShowImportModal(true)}
+            style={{
+              width: "100%",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+              padding: "13px 0", borderRadius: 12, fontSize: 14, fontWeight: 700,
+              background: "linear-gradient(135deg, rgba(0,255,180,0.18) 0%, rgba(0,200,140,0.12) 100%)",
+              color: "#00FFB4", border: "1px solid rgba(0,255,180,0.28)", cursor: "pointer",
+              boxShadow: "0 0 20px rgba(0,255,180,0.06)",
+            }}
+          >
+            <Upload size={16} /> Import Credentials File
+          </button>
+        </div>
+      )}
+
       {/* Connection Status Panel */}
       <div key={statusKey}>
         <ConnectionStatusPanel onImport={() => setShowImportModal(true)} />
@@ -1091,14 +1125,62 @@ export default function Brokers() {
           <h1 className="text-[22px] font-black text-white tracking-tight">Broker Connections</h1>
           <p className="text-[13px] text-muted-foreground mt-1">Connect your brokers to automatically sync trades and build your journal.</p>
         </div>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-          <Shield className="w-3.5 h-3.5 text-muted-foreground/60" />
-          <span className="text-[11px] font-semibold text-muted-foreground/60">Bank-Grade Security</span>
-          <div className="w-px h-3.5 bg-white/[0.08]" />
-          <Lock className="w-3 h-3 text-muted-foreground/60" />
-          <span className="text-[10px] text-muted-foreground/60">AES-256 · TLS 1.3</span>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Desktop: Import CTA in header */}
+          {!isMobile && (
+            <button
+              onClick={() => setShowImportModal(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 7,
+                padding: "8px 16px", borderRadius: 10, fontSize: 13, fontWeight: 700,
+                background: "linear-gradient(135deg, rgba(0,255,180,0.15) 0%, rgba(0,200,140,0.1) 100%)",
+                color: "#00FFB4", border: "1px solid rgba(0,255,180,0.28)", cursor: "pointer",
+                boxShadow: "0 0 16px rgba(0,255,180,0.06)",
+              }}
+            >
+              <Upload size={14} /> Import Credentials File
+            </button>
+          )}
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+            <Shield className="w-3.5 h-3.5 text-muted-foreground/60" />
+            <span className="text-[11px] font-semibold text-muted-foreground/60">Bank-Grade Security</span>
+            <div className="w-px h-3.5 bg-white/[0.08]" />
+            <Lock className="w-3 h-3 text-muted-foreground/60" />
+            <span className="text-[10px] text-muted-foreground/60">AES-256 · TLS 1.3</span>
+          </div>
         </div>
       </div>
+
+      {/* ── Full-width Import CTA above broker cards ─────────────────── */}
+      <button
+        onClick={() => setShowImportModal(true)}
+        style={{
+          width: "100%",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+          padding: "14px 0", borderRadius: 14, fontSize: 14, fontWeight: 700,
+          background: "linear-gradient(135deg, rgba(0,255,180,0.12) 0%, rgba(0,200,140,0.07) 100%)",
+          color: "#00FFB4", border: "1px solid rgba(0,255,180,0.22)", cursor: "pointer",
+          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+          boxShadow: "inset 0 1px 0 rgba(0,255,180,0.06), 0 0 24px rgba(0,255,180,0.04)",
+          transition: "all 0.2s",
+        }}
+      >
+        <span style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          width: 26, height: 26, borderRadius: 8,
+          background: "rgba(0,255,180,0.12)", border: "1px solid rgba(0,255,180,0.2)",
+        }}>
+          <Upload size={13} />
+        </span>
+        Import Credentials File
+        <span style={{
+          fontSize: 11, padding: "2px 8px", borderRadius: 6,
+          background: "rgba(0,255,180,0.08)", border: "1px solid rgba(0,255,180,0.15)",
+          color: "rgba(0,255,180,0.7)",
+        }}>
+          .env · .txt
+        </span>
+      </button>
 
       {/* Broker Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -37,6 +37,7 @@ export const SUPPORTED_KEYS = [
   "DELTA_API_SECRET",
   "TELEGRAM_BOT_TOKEN",
   "TELEGRAM_CHAT_ID",
+  "SESSION_SECRET",
   "DATABASE_URL",
 ] as const;
 
