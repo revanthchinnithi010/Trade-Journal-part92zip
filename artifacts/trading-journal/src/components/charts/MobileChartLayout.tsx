@@ -45,7 +45,6 @@ import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import * as sheetProfiler from "@/lib/sheetProfiler";
 import type { RenderStat, FpsResult } from "@/lib/sheetProfiler";
-import * as paintProfiler from "@/lib/paintProfiler";
 import { usePerfFlag } from "@/hooks/usePerfFlag";
 import { run as runPerfTests, type TestResult as PerfTestResult } from "@/lib/perfTestRunner";
 
@@ -469,6 +468,7 @@ function BottomSheet({
   const headerRef    = useRef<HTMLDivElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
   const onCloseRef   = useRef(onClose);
+  const isTouchDeviceRef = useRef(typeof window !== "undefined" && navigator.maxTouchPoints > 0);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
   const onOpenedRef  = useRef(onOpened);
   useEffect(() => { onOpenedRef.current = onOpened; }, [onOpened]);
@@ -563,7 +563,7 @@ function BottomSheet({
   // ── Animate to a snap position with spring easing ────────────────────────
   // Only `transform` is animated — border-radius, blur, and overflow are applied
   // after transitionend (see pendingTransitionEndRef) to avoid per-frame GPU work.
-  const SNAP_SPRING = "transform 0.40s cubic-bezier(0.34, 1.32, 0.64, 1)";
+  const SNAP_SPRING = "transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)";
   const animateTo = useCallback((
     targetY: number,
     easing = SNAP_SPRING,
@@ -574,7 +574,7 @@ function BottomSheet({
     sheet.style.transition = easing;
     sheet.style.transform  = `translateY(${targetY}px)`;
     if (bd) {
-      bd.style.transition = "opacity 0.30s ease";
+      bd.style.transition = "opacity 0.18s ease";
       syncBackdrop(targetY);
     }
   }, [syncBackdrop]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -601,10 +601,10 @@ function BottomSheet({
     const bd    = backdropRef.current;
     if (!sheet) { onCloseRef.current(); return; }
     const offY = window.innerHeight + 20;
-    sheet.style.transition = "transform 0.28s cubic-bezier(0.40, 0, 0.80, 0.60)";
+    sheet.style.transition = "transform 0.16s cubic-bezier(0.40, 0, 0.80, 0.60)";
     sheet.style.transform  = `translateY(${offY}px)`;
-    if (bd) { bd.style.transition = "opacity 0.28s ease"; bd.style.opacity = "0"; }
-    setTimeout(() => onCloseRef.current(), 270);
+    if (bd) { bd.style.transition = "opacity 0.16s ease"; bd.style.opacity = "0"; }
+    setTimeout(() => onCloseRef.current(), 165);
   }, []);
 
   // ── Snap decision on pointer/touch release ────────────────────────────────
@@ -620,7 +620,7 @@ function BottomSheet({
       if (pendingFallbackTimerRef.current !== null) { clearTimeout(pendingFallbackTimerRef.current); pendingFallbackTimerRef.current = null; }
       const sheet = sheetRef.current;
       if (sheet) sheet.style.borderRadius = p.borderRadius;
-      if (p.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+      if (p.restoreBlur && !isTouchDeviceRef.current) document.body.classList.remove("tj-sheet-drag");
       if (p.applyOverflow) applySnapDom(p.applyOverflow);
     }
     // Stop any previous FPS measurement
@@ -653,9 +653,9 @@ function BottomSheet({
       pendingTransitionEndRef.current = null;
       const sheet = sheetRef.current;
       if (sheet) sheet.style.borderRadius = pending.borderRadius;
-      if (pending.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+      if (pending.restoreBlur && !isTouchDeviceRef.current) document.body.classList.remove("tj-sheet-drag");
       if (pending.applyOverflow) applySnapDom(pending.applyOverflow);
-    }, 500);
+    }, 220);
 
     if (ds.current.snap === "half") {
       if (delta < -60) {
@@ -850,7 +850,7 @@ function BottomSheet({
         computeSnaps(); // re-sync in case window.innerHeight changed
         animateTo(
           snapYRef.current.half,
-          "transform 0.38s cubic-bezier(0.22, 1.00, 0.36, 1)",
+          "transform 0.18s cubic-bezier(0.22, 1, 0.36, 1)",
         );
       });
     });
@@ -886,8 +886,8 @@ function BottomSheet({
         pendingTransitionEndRef.current = null;
         // 1. Instant border-radius — no animation = no re-rasterization cost
         sheet.style.borderRadius = pending.borderRadius;
-        // 2. Restore backdrop-filter blur — GPU is idle after transform settles
-        if (pending.restoreBlur) document.body.classList.remove("tj-sheet-drag");
+        // 2. Restore backdrop-filter blur — GPU is idle after transform settles (skip on touch)
+        if (pending.restoreBlur && !isTouchDeviceRef.current) document.body.classList.remove("tj-sheet-drag");
         // 3. Switch overflow — layout is safe now that animation is complete
         if (pending.applyOverflow) applySnapDom(pending.applyOverflow);
       }
@@ -914,6 +914,13 @@ function BottomSheet({
     return () => sheet.removeEventListener("transitionend", onTransitionEnd);
   }, [applySnapDom]);
 
+  // ── Suppress backdrop-filter on touch devices while sheet is open ─────────
+  useEffect(() => {
+    if (!isTouchDeviceRef.current) return;
+    document.body.classList.add("tj-sheet-drag");
+    return () => { document.body.classList.remove("tj-sheet-drag"); };
+  }, []);
+
   // ── Tap backdrop to close ─────────────────────────────────────────────────
   const onBackdropClick = useCallback((e: React.MouseEvent) => {
     if (e.target === e.currentTarget) doClose();
@@ -928,7 +935,7 @@ function BottomSheet({
         background:"rgba(0,0,0,0.72)",
         willChange:"opacity",
         // Backdrop fades in quickly; opacity is later driven by syncBackdrop
-        animation:"sheet-fade-in 0.22s ease both",
+        animation:"sheet-fade-in 0.15s ease both",
       }}
     >
       <div
@@ -1748,8 +1755,6 @@ type CSSHandlers = {
 type CSSSectionProps = { settings: ChartSettings; h: CSSHandlers };
 
 const CandleSection = memo(function CandleSection({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("CandleSection", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <Section title="Candles">
       <ColorPair label="Body" bull={settings.upColor} bear={settings.downColor} onBull={h.upColor} onBear={h.downColor} />
@@ -1760,8 +1765,6 @@ const CandleSection = memo(function CandleSection({ settings, h }: CSSSectionPro
 });
 
 const PriceLabelSection = memo(function PriceLabelSection({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("PriceLabelSection", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <Section title="Price Label">
       <ColorPair label="Background"
@@ -1779,8 +1782,6 @@ const PriceLabelSection = memo(function PriceLabelSection({ settings, h }: CSSSe
 });
 
 const GridSection = memo(function GridSection({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("GridSection", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <Section title="Grid Lines">
       <Row label="Display">
@@ -1794,8 +1795,6 @@ const GridSection = memo(function GridSection({ settings, h }: CSSSectionProps) 
 });
 
 const ThemeSection = memo(function ThemeSection({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("ThemeSection", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <Section title="Background">
       <Row label="Type">
@@ -1813,8 +1812,6 @@ const ThemeSection = memo(function ThemeSection({ settings, h }: CSSSectionProps
 // across all three tabs (only one is ever mounted at a time).
 
 const TimezoneSection = memo(function TimezoneSection({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("TimezoneSection", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <Section title="Timezone">
       <Row label="Display Timezone" last>
@@ -1825,8 +1822,6 @@ const TimezoneSection = memo(function TimezoneSection({ settings, h }: CSSSectio
 });
 
 const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ padding:"12px 14px 4px" }}>
       <CandleSection settings={settings} h={h} />
@@ -1842,8 +1837,6 @@ const CandlesTabContent = memo(function CandlesTabContent({ settings, h }: CSSSe
 });
 
 const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ padding:"12px 14px 4px" }}>
       <ThemeSection settings={settings} h={h} />
@@ -1895,8 +1888,6 @@ const AppearanceTabContent = memo(function AppearanceTabContent({ settings, h }:
 });
 
 const ScaleTabContent = memo(function ScaleTabContent({ settings, h }: CSSSectionProps) {
-  const _c = sheetProfiler.trackRender("SettingsTabContent", "MobileChartLayout.tsx", 0);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ padding:"12px 14px 4px" }}>
       <Section title="Price Scale Mode">
@@ -1933,13 +1924,6 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   onSaveAsDefault?: (s: ChartSettings) => void;
   onClose: () => void;
 }) {
-  const _profCommitCSS = sheetProfiler.trackRender("ChartSettingsSheet", "MobileChartLayout.tsx", 1690);
-  useLayoutEffect(() => { _profCommitCSS(); });
-
-  useEffect(() => { paintProfiler.onSheetMounted(); }, []);
-
-  const noShadow = usePerfFlag("PERF_DISABLE_SHEET_SHADOW");
-
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
 
   // settingsRef lets `p` read the latest settings without being in the dep array.
@@ -1987,7 +1971,7 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   }), [p]);
 
   return (
-    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh" noShadow={noShadow}>
+    <BottomSheet title="Chart Settings" onClose={onClose} maxHeight="80vh">
 
       {/* ── Tab navigation — plain div, no sticky, matches DrawingToolsSheet ── */}
       <div style={{
@@ -2015,10 +1999,10 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
         })}
       </div>
 
-      {/* ── Tab content — rendered immediately on mount, same as DrawingToolsSheet ── */}
-      {tab === "Candles"    && <Profiler id="CandlesTabContent"    onRender={rpStore.onRender}><CandlesTabContent    settings={settings} h={h} /></Profiler>}
-      {tab === "Appearance" && <Profiler id="AppearanceTabContent" onRender={rpStore.onRender}><AppearanceTabContent settings={settings} h={h} /></Profiler>}
-      {tab === "Scale"      && <Profiler id="ScaleTabContent"      onRender={rpStore.onRender}><ScaleTabContent      settings={settings} h={h} /></Profiler>}
+      {/* ── Tab content — only active tab is mounted (lazy + unmount on switch) ── */}
+      {tab === "Candles"    && <CandlesTabContent    settings={settings} h={h} />}
+      {tab === "Appearance" && <AppearanceTabContent settings={settings} h={h} />}
+      {tab === "Scale"      && <ScaleTabContent      settings={settings} h={h} />}
 
       {/* ── Footer ── */}
       <div style={{
@@ -3778,7 +3762,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleCloseDrawingSheet = useCallback(() => setShowDrawingSheet(false), []);
   const handleCloseSettings     = useCallback(() => setShowSettings(false),    []);
   const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false),  []);
-  const handleOpenSettings      = useCallback(() => { paintProfiler.startCapture(); setShowSettings(true); }, []);
+  const handleOpenSettings      = useCallback(() => { setShowSettings(true); }, []);
 
   // Expose open/close handles so perfTestRunner can programmatically drive the sheet
   useEffect(() => {
@@ -4145,7 +4129,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       />
 
       {showIndicators  && <IndicatorsPanel anchorEl={null} onClose={() => setShowIndicators(false)} />}
-      {showSettings    && <Profiler id="ChartSettingsSheet" onRender={rpStore.onRender}><ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} /></Profiler>}
+      {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} />}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
       <SymbolPickerSheet

@@ -172,11 +172,7 @@ const _ColorSwatchImpl = memo(function ColorSwatchImpl({ value, onChange, label,
   );
 });
 
-export const ColorSwatch = (props: ColorBoxProps) => (
-  <Profiler id="ColorSwatch" onRender={rpStore.onRender}>
-    <_ColorSwatchImpl {...props} />
-  </Profiler>
-);
+export const ColorSwatch = (props: ColorBoxProps) => <_ColorSwatchImpl {...props} />;
 
 // ── Section container ─────────────────────────────────────────────────────────
 export const Section = memo(function Section({ title, children }: { title: string; children: React.ReactNode }) {
