@@ -3069,13 +3069,13 @@ function MiniWatchlistPopup({
 // own props change — i.e. symbol/interval/watchlist/fullscreen/broker status.
 const MiniControlBar = memo(function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
-  onSelectSymbol, onTF, onDraw, onBroker, onMore, onSettings, onPrev, onNext, onFullscreen, isFullscreen,
+  onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
   brokerConnected,
 }: {
   activeKey: string; badge: string; interval: string;
   watchlistItems: { symbol: string; badge?: string }[];
   onSelectSymbol: (key: string) => void; onTF: () => void; onDraw: () => void;
-  onBroker: () => void; onMore: () => void; onSettings: () => void;
+  onBroker: () => void; onMore: () => void;
   onPrev: () => void; onNext: () => void;
   onFullscreen: () => void; isFullscreen: boolean;
   brokerConnected: boolean;
@@ -3093,7 +3093,7 @@ const MiniControlBar = memo(function MiniControlBar({
   useLayoutEffect(() => {
     const current: Record<string, unknown> = {
       activeKey, badge, interval, watchlistItems,
-      onSelectSymbol, onTF, onDraw, onBroker, onMore, onSettings,
+      onSelectSymbol, onTF, onDraw, onBroker, onMore,
       onPrev, onNext, onFullscreen, isFullscreen, brokerConnected,
     };
     const changedProps = Object.entries(current)
@@ -3257,11 +3257,6 @@ const MiniControlBar = memo(function MiniControlBar({
         {/* More options */}
         <CtrlBtn onClick={onMore}>
           <MoreHorizontal style={{ width:17, height:17, color: GL_TEAL }} />
-        </CtrlBtn>
-
-        {/* Chart settings */}
-        <CtrlBtn onClick={onSettings}>
-          <Settings2 style={{ width:17, height:17, color: GL_TEAL }} />
         </CtrlBtn>
 
         {divider}
@@ -3678,7 +3673,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleOpenDrawingSheet = useCallback(() => setShowDrawingSheet(true),  []);
   const handleOpenBrokerSheet  = useCallback(() => setShowBrokerSheet(true),   []);
   const handleOpenMoreSheet    = useCallback(() => setShowMoreSheet(true),     []);
-  const handleOpenSettings     = useCallback(() => setShowSettings(true),      []);
 
   // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
   const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
@@ -3720,6 +3714,40 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <AnimatedMeshBackground />
 
         <IndicatorTags topOffset={8} />
+
+        {/* ── Floating chart-settings button — bottom-right of chart area, above date axis ── */}
+        <button
+          onClick={() => setShowSettings(true)}
+          title="Chart Settings"
+          style={{
+            position:"absolute", bottom:34, right:6, zIndex:55,
+            width:44, height:44,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            background:"rgba(8,9,18,0.78)",
+            backdropFilter:"blur(10px) saturate(140%)",
+            WebkitBackdropFilter:"blur(10px) saturate(140%)",
+            border:"1px solid rgba(255,255,255,0.11)",
+            borderRadius:12,
+            boxShadow:"0 4px 16px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.40)",
+            cursor:"pointer",
+            touchAction:"manipulation",
+            pointerEvents:"auto",
+          }}
+          onPointerDown={e => {
+            e.currentTarget.style.transform  = "scale(0.86)";
+            e.currentTarget.style.transition = "transform 0.09s ease";
+          }}
+          onPointerUp={e => {
+            e.currentTarget.style.transform  = "scale(1)";
+            e.currentTarget.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
+          }}
+          onPointerCancel={e => {
+            e.currentTarget.style.transform  = "scale(1)";
+            e.currentTarget.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
+          }}
+        >
+          <Settings2 style={{ width:18, height:18, color:"rgba(255,255,255,0.72)" }} />
+        </button>
 
         {/* ── Debug: Dump Render Report button ── */}
         <button
@@ -3854,7 +3882,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onDraw={handleOpenDrawingSheet}
           onBroker={handleOpenBrokerSheet}
           onMore={handleOpenMoreSheet}
-          onSettings={handleOpenSettings}
           onPrev={handlePrev}
           onNext={handleNext}
           onFullscreen={handleFullscreen}
