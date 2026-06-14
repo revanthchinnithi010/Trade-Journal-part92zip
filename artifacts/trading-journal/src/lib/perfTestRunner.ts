@@ -84,7 +84,9 @@ function closeSheet(): void {
 
 // ── Runner ────────────────────────────────────────────────────────────────────
 
-async function runPerfTests(): Promise<void> {
+async function runPerfTests(
+  onProgress?: (configIndex: number, total: number, configName: string) => void,
+): Promise<TestResult[]> {
   console.group(
     "%c[PerfTestRunner] ── Automated 4-Config Perf Test ──",
     "color:#60a5fa;font-weight:bold;font-size:14px",
@@ -101,6 +103,7 @@ async function runPerfTests(): Promise<void> {
 
   for (let i = 0; i < CONFIGS.length; i++) {
     const cfg = CONFIGS[i];
+    onProgress?.(i, CONFIGS.length, cfg.name);
     console.log(
       `%c[PerfTestRunner] ▶ ${cfg.name}  (${i + 1}/${CONFIGS.length})`,
       "color:#f59e0b;font-weight:bold",
@@ -118,7 +121,7 @@ async function runPerfTests(): Promise<void> {
     if (!openSheet()) {
       console.error("[PerfTestRunner] Cannot find Chart Settings button — aborting.");
       perfFlags.resetFlags();
-      return;
+      return [];
     }
 
     // 4. Await profiler
@@ -135,6 +138,7 @@ async function runPerfTests(): Promise<void> {
   perfFlags.resetFlags();
 
   _printComparisonTable(results);
+  return results;
 }
 
 // ── Table printer ─────────────────────────────────────────────────────────────
@@ -240,4 +244,5 @@ if (typeof window !== "undefined") {
   );
 }
 
+export type { TestResult };
 export { runPerfTests as run };

@@ -66,6 +66,7 @@ import { OrdersList } from "@/components/broker/OrdersList";
 import { PlaceOrderPanel } from "@/components/broker/PlaceOrderPanel";
 import { BrokerTabs } from "@/components/charts/BrokerTabs";
 import { ConnectionStatus } from "@/components/charts/ConnectionStatus";
+import { PerfBenchmarkPanel } from "@/components/charts/PerfBenchmarkPanel";
 
 // ── Replay selector — draggable vertical line overlay ─────────────────────────
 const ReplaySelector = memo(function ReplaySelector({
@@ -969,8 +970,9 @@ export default function Charts() {
   const bottomOpen = layout.bottomOpen;
   const bottomH       = layout.bottomHeight;
 
-  const [bottomTab,     setBottomTab]     = useState<BottomTab>("Positions");
-  const [isFullscreen,  setIsFullscreen]  = useState(false);
+  const [bottomTab,       setBottomTab]       = useState<BottomTab>("Positions");
+  const [isFullscreen,    setIsFullscreen]    = useState(false);
+  const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
   const [showPicker,    setShowPicker]    = useState(false);
   const [showAlertCenter, setShowAlertCenter] = useState(false);
   const [showQuickAlert, setShowQuickAlert] = useState(false);
@@ -1854,6 +1856,22 @@ export default function Charts() {
               </div>
             )}
 
+            {/* ── Debug: Run Performance Test button ── */}
+            <button
+              onClick={() => setShowBenchmarkPanel(true)}
+              style={{
+                position: "absolute", bottom: 10, left: 10, zIndex: 60,
+                padding: "5px 11px", borderRadius: 8,
+                background: "rgba(96,165,250,0.18)", border: "1px solid rgba(96,165,250,0.45)",
+                color: "#60a5fa", fontSize: 10, fontWeight: 700,
+                cursor: "pointer", touchAction: "manipulation",
+                letterSpacing: "0.04em", lineHeight: 1,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
+              }}
+            >
+              ⚡ Perf
+            </button>
+
             {/* ── Panel border overlay — rendered above chart canvas, no pointer events ── */}
             {chartSettings.panelBorderVisible !== false && (
               <div style={{
@@ -2186,6 +2204,11 @@ export default function Charts() {
             {showOrders && <OrdersList />}
           </div>
         </div>
+      )}
+
+      {/* ── Performance Benchmark Panel ── */}
+      {showBenchmarkPanel && (
+        <PerfBenchmarkPanel onClose={() => setShowBenchmarkPanel(false)} />
       )}
 
       {/* ── Modals ── */}
