@@ -2400,131 +2400,126 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   const dragRafPending = useRef(false);
   const [dragTick,     setDragTick] = useState(0);
 
-  // ── Canvas render scheduler ────────────────────────────────────────────────
-  // Called on every pan/zoom event instead of setRenderTick.
-  // Reads all values via mutable refs → zero React state writes during pan.
-  // useCallback with [] deps: the function reference is stable for the component lifetime.
+  // ── Canvas render body — reads all values via refs, zero React involvement ────
+  // Called directly from the viewport sync RAF (same frame as LWC paint) and also
+  // via scheduleCanvasRender for event-driven renders (drawing added/changed/removed).
+  // useCallback with [] deps keeps the reference stable for the component lifetime.
+  const doCanvasRender = useCallback(() => {
+    const canvas = drawingCanvasRef.current;
+    if (!canvas || !chartRef.current) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const W   = canvas.clientWidth;
+    const H   = canvas.clientHeight;
+    if (W <= 0 || H <= 0) return;
+    // Resize canvas backing store when element size changes (e.g. window resize)
+    if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+      canvas.width  = Math.round(W * dpr);
+      canvas.height = Math.round(H * dpr);
+    }
+    // Always-current barHalfWidth computed from live chart API
+    let bhw = 0;
+    try {
+      const vr = chartRef.current!.timeScale().getVisibleLogicalRange();
+      if (vr) {
+        const mid = Math.floor(((vr.from as number) + (vr.to as number)) / 2);
+        const x0  = chartRef.current!.timeScale().logicalToCoordinate(mid as Logical);
+        const x1  = chartRef.current!.timeScale().logicalToCoordinate((mid + 1) as Logical);
+        if (x0 !== null && x1 !== null) bhw = Math.abs((x1 as number) - (x0 as number)) / 2;
+      }
+    } catch { /* ok */ }
+    // Skip drawing currently under DOM transform (SVG handles move-drag visuals)
+    const moveDragId = dragRef.current?.kind === "move" ? dragRef.current.id : null;
+    // Clip to chart plotting area only — exclude the date/time scale row at the bottom.
+    let plotH = H;
+    try {
+      const tsH = (chartRef.current as any).timeScale().height?.() as number | undefined;
+      if (typeof tsH === "number" && tsH > 0) plotH = Math.max(1, H - tsH);
+    } catch { /* leave plotH = H as safe fallback */ }
+    // Also update the SVG clipPath rect height directly (zero React renders).
+    if (svgClipRectRef.current && svgClipRectRef.current.getAttribute("height") !== String(Math.round(plotH))) {
+      svgClipRectRef.current.setAttribute("height", String(Math.round(plotH)));
+    }
+    renderDrawingsToCanvas(
+      ctx, W, H,
+      drawingsRef.current,
+      toPxRef.current ?? (() => null),
+      selectedIdRef.current,
+      dragLiveRef.current,
+      bhw,
+      barsRef.current as OhlcBar[],
+      dpr,
+      moveDragId,
+      plotH,
+    );
+
+    // ── Zero-React P&L label position sync ──────────────────────────────────
+    // For every RUNNING position tool that has a registered foreignObject ref,
+    // recompute the label position from live chart coords and write it directly to
+    // the DOM — keeping the label attached to the position box at 60fps.
+    for (const [drawingId, fo] of pnlFoRefs.current) {
+      const d = drawingsRef.current.find(dr => dr.id === drawingId);
+      if (!d || d.points.length < 2 || !toPxRef.current) continue;
+
+      const pts = d.points;
+      const entPx = toPxRef.current({ time: pts[0].time, price: pts[0].price });
+      const tpPx  = toPxRef.current(pts[1]);
+      if (!entPx || !tpPx) continue;
+
+      const rawL  = Math.min(entPx.x, tpPx.x);
+      const rawR  = Math.max(entPx.x, tpPx.x);
+      const zoneW = rawR - rawL;
+      const ELX   = zoneW < 20 ? entPx.x - 120 : rawL - bhw;
+      const ERX   = zoneW < 20 ? entPx.x + 120 : rawR;
+
+      const allBars       = barsRef.current as OhlcBar[];
+      const toolLeftTime  = Math.min(pts[0].time, pts[1].time);
+      const toolRightTime = Math.max(pts[0].time, pts[1].time);
+      const barsInRange   = allBars.filter(b => b.time >= toolLeftTime && b.time <= toolRightTime);
+      if (!barsInRange.length) continue;
+
+      const lastBar   = barsInRange[barsInRange.length - 1];
+      const lastBarPx = toPxRef.current({ time: lastBar.time, price: lastBar.close });
+      if (!lastBarPx) continue;
+
+      const entryPrice     = pts[0].price;
+      const sp             = toPxRef.current({ time: lastBar.time, price: entryPrice });
+      const profitSplitX   = sp ? Math.min(ERX, Math.max(ELX, sp.x)) : ELX;
+      const activeFillEndX = Math.min(W, profitSplitX + bhw);
+      const lineX1 = ELX + bhw;
+      const lineY1 = entPx.y;
+      const lineX2 = activeFillEndX;
+      const lineY2 = lastBarPx.y;
+      const LBL_W  = 150;
+      const LBL_H  = 72;
+      const lblX   = Math.round(Math.min(lineX2 + 10, W - LBL_W - 4));
+      const lblY   = Math.round(lineY2 - LBL_H / 2);
+
+      fo.setAttribute("x", String(lblX));
+      fo.setAttribute("y", String(lblY));
+
+      const ln = pnlLineRefs.current.get(drawingId);
+      if (ln) {
+        ln.setAttribute("x1", String(Math.round(lineX1)));
+        ln.setAttribute("y1", String(Math.round(lineY1)));
+        ln.setAttribute("x2", String(Math.round(lineX2)));
+        ln.setAttribute("y2", String(Math.round(lineY2)));
+      }
+    }
+  }, []); // stable — all state accessed via mutable refs
+
+  // ── Canvas render scheduler — for event-driven renders ────────────────────
+  // Coalesces rapid calls (new drawing added, style changed, etc.) via RAF.
+  // Pan/zoom renders bypass this entirely — they call doCanvasRender() directly
+  // from the viewport sync loop below so there is zero extra-frame delay.
   const scheduleCanvasRender = useCallback(() => {
-    if (canvasRafRef.current !== null) return; // already scheduled, coalesce
+    if (canvasRafRef.current !== null) return; // already queued, coalesce
     canvasRafRef.current = requestAnimationFrame(() => {
       canvasRafRef.current = null;
-      const canvas = drawingCanvasRef.current;
-      if (!canvas || !chartRef.current) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const W   = canvas.clientWidth;
-      const H   = canvas.clientHeight;
-      if (W <= 0 || H <= 0) return;
-      // Resize canvas backing store when element size changes (e.g. window resize)
-      if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
-        canvas.width  = Math.round(W * dpr);
-        canvas.height = Math.round(H * dpr);
-      }
-      // Always-current barHalfWidth computed from live chart API
-      let bhw = 0;
-      try {
-        const vr = chartRef.current!.timeScale().getVisibleLogicalRange();
-        if (vr) {
-          const mid = Math.floor(((vr.from as number) + (vr.to as number)) / 2);
-          const x0  = chartRef.current!.timeScale().logicalToCoordinate(mid as Logical);
-          const x1  = chartRef.current!.timeScale().logicalToCoordinate((mid + 1) as Logical);
-          if (x0 !== null && x1 !== null) bhw = Math.abs((x1 as number) - (x0 as number)) / 2;
-        }
-      } catch { /* ok */ }
-      // Skip drawing currently under DOM transform (SVG handles move-drag visuals)
-      const moveDragId = dragRef.current?.kind === "move" ? dragRef.current.id : null;
-      // Clip to chart plotting area only — exclude the date/time scale row at the bottom.
-      // chart.timeScale().height() returns the pixel height of the date-scale row so we
-      // subtract it to get the pure candlestick pane height. This prevents drawings from
-      // painting over the date scale, price scale labels, and other UI chrome below the chart.
-      let plotH = H;
-      try {
-        const tsH = (chartRef.current as any).timeScale().height?.() as number | undefined;
-        if (typeof tsH === "number" && tsH > 0) plotH = Math.max(1, H - tsH);
-      } catch { /* leave plotH = H as safe fallback */ }
-      // Also update the SVG clipPath rect height directly (zero React renders).
-      if (svgClipRectRef.current && svgClipRectRef.current.getAttribute("height") !== String(Math.round(plotH))) {
-        svgClipRectRef.current.setAttribute("height", String(Math.round(plotH)));
-      }
-      renderDrawingsToCanvas(
-        ctx, W, H,
-        drawingsRef.current,
-        toPxRef.current ?? (() => null),
-        selectedIdRef.current,
-        dragLiveRef.current,
-        bhw,
-        barsRef.current as OhlcBar[],
-        dpr,
-        moveDragId,
-        plotH,
-      );
-
-      // ── Zero-React P&L label position sync ──────────────────────────────────
-      // The P&L foreignObject and measurement line live in SVG. SVG is only updated
-      // when React renders, but this RAF fires on every pan/zoom without React renders.
-      // For every RUNNING position tool that has a registered foreignObject ref,
-      // recompute the label position from live chart coords and write it directly to
-      // the DOM — keeping the label attached to the position box at 60fps.
-      for (const [drawingId, fo] of pnlFoRefs.current) {
-        const d = drawingsRef.current.find(dr => dr.id === drawingId);
-        if (!d || d.points.length < 2 || !toPxRef.current) continue;
-
-        const pts = d.points;
-        const entPx = toPxRef.current({ time: pts[0].time, price: pts[0].price });
-        const tpPx  = toPxRef.current(pts[1]);
-        if (!entPx || !tpPx) continue;
-
-        const rawL  = Math.min(entPx.x, tpPx.x);
-        const rawR  = Math.max(entPx.x, tpPx.x);
-        const zoneW = rawR - rawL;
-        const ELX   = zoneW < 20 ? entPx.x - 120 : rawL - bhw;
-        const ERX   = zoneW < 20 ? entPx.x + 120 : rawR;
-
-        const allBars       = barsRef.current as OhlcBar[];
-        const toolLeftTime  = Math.min(pts[0].time, pts[1].time);
-        const toolRightTime = Math.max(pts[0].time, pts[1].time);
-        // Slice bars that fall within the drawing's time range
-        const barsInRange   = allBars.filter(b => b.time >= toolLeftTime && b.time <= toolRightTime);
-        if (!barsInRange.length) continue;
-
-        // The foreignObject is only registered while tradeStatus === "RUNNING",
-        // so lastActiveBar = the last bar in range (no TP/SL cap needed here).
-        const lastBar   = barsInRange[barsInRange.length - 1];
-        const lastBarPx = toPxRef.current({ time: lastBar.time, price: lastBar.close });
-        if (!lastBarPx) continue;
-
-        // profitSplitX: X at entry price at the last bar's time, clamped to zone bounds
-        const entryPrice    = pts[0].price;
-        const sp            = toPxRef.current({ time: lastBar.time, price: entryPrice });
-        const profitSplitX  = sp ? Math.min(ERX, Math.max(ELX, sp.x)) : ELX;
-        const activeFillEndX = Math.min(W, profitSplitX + bhw);
-
-        // Measurement line endpoints
-        const lineX1 = ELX + bhw;
-        const lineY1 = entPx.y;
-        const lineX2 = activeFillEndX;
-        const lineY2 = lastBarPx.y;
-
-        // Label position (mirrors DrawingShape's livePnlOverlay computation)
-        const LBL_W = 150;
-        const LBL_H = 72;
-        const lblX  = Math.round(Math.min(lineX2 + 10, W - LBL_W - 4));
-        const lblY  = Math.round(lineY2 - LBL_H / 2);
-
-        fo.setAttribute("x", String(lblX));
-        fo.setAttribute("y", String(lblY));
-
-        const ln = pnlLineRefs.current.get(drawingId);
-        if (ln) {
-          ln.setAttribute("x1", String(Math.round(lineX1)));
-          ln.setAttribute("y1", String(Math.round(lineY1)));
-          ln.setAttribute("x2", String(Math.round(lineX2)));
-          ln.setAttribute("y2", String(Math.round(lineY2)));
-        }
-      }
+      doCanvasRender();
     });
-  }, []); // stable — dragRef/dragLiveRef/barsRef/drawingsRef/pnlFoRefs/pnlLineRefs are all mutable refs
+  }, [doCanvasRender]);
 
   // ── Direct SVG DOM refs — one per drawing g-wrapper, keyed by drawing id ───
   // Used to apply transform="translate(dx,dy)" for move-drag without any React renders.
@@ -2548,46 +2543,63 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
   const freehandRafRef    = useRef<number | null>(null);
   const [freehandPreview, setFreehandPreview] = useState<DrawingPoint[] | null>(null);
 
-  // ── Re-render on chart viewport change (time AND price scale) ───────────
+  // ── Viewport sync loop — renders overlay in the SAME frame as LWC ───────────
+  // Replaces subscribeVisibleLogicalRangeChange + setInterval(50ms) polling.
+  //
+  // Why this eliminates jitter:
+  //   Old approach — subscribeVisibleLogicalRangeChange fired → scheduleCanvasRender
+  //   added ANOTHER requestAnimationFrame → canvas redrawed 1 frame AFTER LWC painted.
+  //   Price-scale polling at 50ms = up to 3 frames lag at 60fps during vertical drag.
+  //
+  //   New approach — a single continuous RAF loop that reads the current chart
+  //   transform every frame and calls doCanvasRender() DIRECTLY (no extra RAF delay).
+  //   LWC registers its RAF before this effect runs (chart created before component
+  //   mounts), so LWC paints first in each frame, then our loop reads the fresh
+  //   coordinates and redraws — perfect synchronization, zero lag on:
+  //     • horizontal pan/zoom (time scale)
+  //     • vertical scale drag (price scale)
+  //     • pinch zoom
+  //     • device rotation
   useEffect(() => {
     if (!chart || !candle) return;
 
-    // Time-scale: subscribe once to the logical range event only.
-    // subscribeVisibleTimeRangeChange is intentionally omitted — it fires
-    // simultaneously with subscribeVisibleLogicalRangeChange during every pan,
-    // causing 2× setRenderTick calls per frame (double React renders) during drag.
-    // Every pan/zoom frame → canvas redraws imperatively (zero React renders).
-    // React renderTick is bumped ONLY when a drawing is selected (for anchor handle positions).
-    let debounceRaf: number | null = null;
-    const bump = () => {
-      scheduleCanvasRender(); // always update canvas visuals
-      if (selectedIdRef.current !== null) {
-        // Selected drawing has anchor handles that need React to reposition
-        if (debounceRaf !== null) cancelAnimationFrame(debounceRaf);
-        debounceRaf = requestAnimationFrame(() => setRenderTick(v => v + 1));
-      }
-    };
-    chart.timeScale().subscribeVisibleLogicalRangeChange(bump);
+    let rafId: number;
+    let prevFrom: number | null = null;
+    let prevTo:   number | null = null;
+    let prevPY:   number | null = null;
 
-    // Price-scale: no native event — poll at 20fps (50ms).
-    // The 3px threshold filters out sub-pixel floating-point jitter from autoScale.
-    let prevY = candle.priceToCoordinate(0) as number | null;
-    const pollPrice = () => {
-      const cur = candle.priceToCoordinate(0) as number | null;
-      if (cur !== null && (prevY === null || Math.abs((cur as number) - (prevY as number)) >= 3)) {
-        prevY = cur;
-        scheduleCanvasRender();
+    const loop = () => {
+      rafId = requestAnimationFrame(loop);
+      let dirty = false;
+
+      // Horizontal transform — time scale pan / zoom
+      try {
+        const vr = chart.timeScale().getVisibleLogicalRange();
+        const f  = vr ? (vr.from as number) : null;
+        const t  = vr ? (vr.to   as number) : null;
+        if (f !== prevFrom || t !== prevTo) { prevFrom = f; prevTo = t; dirty = true; }
+      } catch { /* chart torn down — loop will be cancelled by cleanup */ }
+
+      // Vertical transform — price scale drag / autoScale shift
+      // Sub-pixel threshold (0.5px) filters float noise without masking real moves.
+      try {
+        const py = candle.priceToCoordinate(0) as number | null;
+        if (py !== null && (prevPY === null || Math.abs(py - prevPY) > 0.5)) {
+          prevPY = py; dirty = true;
+        }
+      } catch { /* series removed */ }
+
+      if (dirty) {
+        doCanvasRender(); // synchronous — same browser frame as LWC paint
+        // Anchor handles (selected drawing) are React SVG elements — bump renderTick
+        // so React repositions them. This is fine: it's throttled to actual changes only.
         if (selectedIdRef.current !== null) setRenderTick(v => v + 1);
       }
     };
-    const pollId = setInterval(pollPrice, 50);
 
-    return () => {
-      if (debounceRaf !== null) cancelAnimationFrame(debounceRaf);
-      clearInterval(pollId);
-      chart.timeScale().unsubscribeVisibleLogicalRangeChange(bump);
-    };
-  }, [chart, candle, scheduleCanvasRender]);
+    rafId = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafId);
+  }, [chart, candle, doCanvasRender]);
 
   // ── Load drawings ──────────────────────────────────────────────────────────
   // Drawings are symbol-scoped, not timeframe-scoped. Fetch all drawings for
