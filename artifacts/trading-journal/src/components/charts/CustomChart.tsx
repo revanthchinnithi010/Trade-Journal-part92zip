@@ -2563,6 +2563,15 @@ const CustomChart = memo(function CustomChart({
     try { pl.applyOptions({ color: settings?.priceLabelLineColor ?? "rgba(255,255,255,0.4)" }); } catch { /* disposed */ }
   }, [settings?.priceLabelLineColor]);
 
+  // ── tj:chart-reset — fit all bars when the ⋯ menu "Reset Chart" is tapped ──
+  useEffect(() => {
+    const onReset = () => {
+      try { chartRef.current?.timeScale().fitContent(); } catch { /* disposed */ }
+    };
+    window.addEventListener("tj:chart-reset", onReset);
+    return () => window.removeEventListener("tj:chart-reset", onReset);
+  }, []);
+
   // ── Measure actual LWC price scale width from DOM ─────────────────────────
   // LWC v5 renders a <table>; the last <td> in the first <tr> is the right price scale.
   // priceScaleWRef is written first (zero React overhead) so the LivePriceBox RAF loop

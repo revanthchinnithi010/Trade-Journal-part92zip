@@ -1609,6 +1609,7 @@ function LayoutBottomSheet({
 // ── More Options Sheet ─────────────────────────────────────────────────────
 function MoreOptionsSheet({
   onClose, onIndicators, onAlerts, onBarReplay, onChartType, onObjectTree, onSettings, onScreenshot, onLayout,
+  onFullscreen, isFullscreen, onReset,
 }: {
   onClose: () => void;
   onIndicators: () => void;
@@ -1619,8 +1620,33 @@ function MoreOptionsSheet({
   onSettings: () => void;
   onScreenshot: () => void;
   onLayout: () => void;
+  onFullscreen: () => void;
+  isFullscreen: boolean;
+  onReset: () => void;
 }) {
   const TILES: { icon: React.ReactNode; label: string; action: () => void; accent?: string }[] = [
+    {
+      icon: <Settings2 style={{ width:22, height:22 }} />,
+      label: "Chart Settings", accent: "#94a3b8",
+      action: () => { onSettings(); onClose(); },
+    },
+    {
+      icon: <RefreshCw style={{ width:22, height:22 }} />,
+      label: "Reset Chart", accent: "#34d399",
+      action: () => { onReset(); onClose(); },
+    },
+    {
+      icon: <Camera style={{ width:22, height:22 }} />,
+      label: "Screenshot", accent: TEXT_MED,
+      action: () => { onScreenshot(); onClose(); },
+    },
+    {
+      icon: isFullscreen
+        ? <Minimize2 style={{ width:22, height:22 }} />
+        : <Maximize2 style={{ width:22, height:22 }} />,
+      label: isFullscreen ? "Exit Full" : "Fullscreen", accent: GL_TEAL,
+      action: () => { onFullscreen(); onClose(); },
+    },
     {
       icon: <LayoutGrid style={{ width:22, height:22 }} />,
       label: "Layout", accent: "#38bdf8",
@@ -1650,11 +1676,6 @@ function MoreOptionsSheet({
       icon: <List style={{ width:22, height:22 }} />,
       label: "Object Tree", accent: "#f472b6",
       action: () => { onObjectTree(); onClose(); },
-    },
-    {
-      icon: <Camera style={{ width:22, height:22 }} />,
-      label: "Screenshot", accent: TEXT_MED,
-      action: () => { onScreenshot(); onClose(); },
     },
   ];
 
@@ -3299,6 +3320,11 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         ?? SYMBOL_CATALOG[activeSlotSymbol]?.badge
         ?? activeSlotSymbol.slice(0, 4).toUpperCase());
 
+  // ── Reset chart zoom / fit all bars ───────────────────────────────────────
+  const handleResetChart = useCallback(() => {
+    window.dispatchEvent(new CustomEvent("tj:chart-reset"));
+  }, []);
+
   // ── Fullscreen — sync to store so layout nav can hide ──
   const containerRef = useRef<HTMLDivElement>(null);
   const handleFullscreen = useCallback(() => {
@@ -3324,40 +3350,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
         <AnimatedMeshBackground />
 
         <IndicatorTags topOffset={8} />
-
-        {/* ── Floating chart-settings button — bottom-right of chart area, above date axis ── */}
-        <button
-          onClick={handleOpenSettings}
-          title="Chart Settings"
-          style={{
-            position:"absolute", bottom:34, right:6, zIndex:55,
-            width:44, height:44,
-            display:"flex", alignItems:"center", justifyContent:"center",
-            background:"rgba(8,9,18,0.78)",
-            backdropFilter:"blur(10px) saturate(140%)",
-            WebkitBackdropFilter:"blur(10px) saturate(140%)",
-            border:"1px solid rgba(255,255,255,0.11)",
-            borderRadius:12,
-            boxShadow:"0 4px 16px rgba(0,0,0,0.65), 0 1px 4px rgba(0,0,0,0.40)",
-            cursor:"pointer",
-            touchAction:"manipulation",
-            pointerEvents:"auto",
-          }}
-          onPointerDown={e => {
-            e.currentTarget.style.transform  = "scale(0.86)";
-            e.currentTarget.style.transition = "transform 0.09s ease";
-          }}
-          onPointerUp={e => {
-            e.currentTarget.style.transform  = "scale(1)";
-            e.currentTarget.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
-          }}
-          onPointerCancel={e => {
-            e.currentTarget.style.transform  = "scale(1)";
-            e.currentTarget.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
-          }}
-        >
-          <Settings2 style={{ width:18, height:18, color:"rgba(255,255,255,0.72)" }} />
-        </button>
 
         {/* Inner absolutely-pinned container — CSS grid root in multi-chart mode.
             position:absolute + inset:0 gives explicit pixel dimensions so 1fr rows resolve. */}
@@ -3505,6 +3497,9 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onSettings={handleOpenSettings}
           onScreenshot={handleScreenshot}
           onLayout={() => setShowLayoutSheet(true)}
+          onFullscreen={handleFullscreen}
+          isFullscreen={isFullscreen}
+          onReset={handleResetChart}
         />
       )}
       {showLayoutSheet && (
