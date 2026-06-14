@@ -1,9 +1,6 @@
 import {
-  memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo, Profiler,
+  memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo,
 } from "react";
-import * as sheetProfiler from "@/lib/sheetProfiler";
-import * as rpStore from "@/lib/reactProfilerStore";
-import ReactProfilerPanel from "@/components/charts/ReactProfilerPanel";
 import html2canvas from "html2canvas";
 import {
   ChevronDown, ChevronUp,
@@ -68,7 +65,6 @@ import { OrdersList } from "@/components/broker/OrdersList";
 import { PlaceOrderPanel } from "@/components/broker/PlaceOrderPanel";
 import { BrokerTabs } from "@/components/charts/BrokerTabs";
 import { ConnectionStatus } from "@/components/charts/ConnectionStatus";
-import { PerfBenchmarkPanel } from "@/components/charts/PerfBenchmarkPanel";
 
 // ── Replay selector — draggable vertical line overlay ─────────────────────────
 const ReplaySelector = memo(function ReplaySelector({
@@ -947,9 +943,6 @@ function SnapshotPreviewPopup({ url, filename, onClose }: {
 
 // ── Main Charts page ──────────────────────────────────────────────────────────
 export default function Charts() {
-  const _profCommitCharts = sheetProfiler.trackRender("Charts", "charts.tsx", 947);
-  useLayoutEffect(() => { _profCommitCharts(); });
-
   const isMobile = useIsMobile();
   const { openSidebar } = useChartFocusMode();
   const { wsStatus, alertEvents } = useLiveMarketContext();
@@ -974,8 +967,6 @@ export default function Charts() {
 
   const [bottomTab,       setBottomTab]       = useState<BottomTab>("Positions");
   const [isFullscreen,    setIsFullscreen]    = useState(false);
-  const [showBenchmarkPanel, setShowBenchmarkPanel] = useState(false);
-  const [showReactProfiler, setShowReactProfiler]   = useState(false);
   const [showPicker,    setShowPicker]    = useState(false);
   const [showAlertCenter, setShowAlertCenter] = useState(false);
   const [showQuickAlert, setShowQuickAlert] = useState(false);
@@ -1859,35 +1850,6 @@ export default function Charts() {
               </div>
             )}
 
-            {/* ── Debug buttons ── */}
-            <button
-              onClick={() => setShowBenchmarkPanel(true)}
-              style={{
-                position: "absolute", bottom: 10, left: 10, zIndex: 60,
-                padding: "5px 11px", borderRadius: 8,
-                background: "rgba(96,165,250,0.18)", border: "1px solid rgba(96,165,250,0.45)",
-                color: "#60a5fa", fontSize: 10, fontWeight: 700,
-                cursor: "pointer", touchAction: "manipulation",
-                letterSpacing: "0.04em", lineHeight: 1,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
-              }}
-            >
-              ⚡ Perf
-            </button>
-            <button
-              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); }}
-              style={{
-                position: "absolute", bottom: 10, left: 88, zIndex: 60,
-                padding: "5px 11px", borderRadius: 8,
-                background: "rgba(167,139,250,0.18)", border: "1px solid rgba(167,139,250,0.45)",
-                color: "#a78bfa", fontSize: 10, fontWeight: 700,
-                cursor: "pointer", touchAction: "manipulation",
-                letterSpacing: "0.04em", lineHeight: 1,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.55)",
-              }}
-            >
-              ⚛ React
-            </button>
 
             {/* ── Panel border overlay — rendered above chart canvas, no pointer events ── */}
             {chartSettings.panelBorderVisible !== false && (
@@ -2010,13 +1972,11 @@ export default function Charts() {
               )}
 
               {showSettings && (
-                <Profiler id="SettingsPanel" onRender={rpStore.onRender}>
-                  <SettingsPanel
-                    settings={chartSettings}
-                    onChange={handleSettings}
-                    onSaveAsDefault={handleSaveAsDefault}
-                    onClose={() => setShowSettings(false)} />
-                </Profiler>
+                <SettingsPanel
+                  settings={chartSettings}
+                  onChange={handleSettings}
+                  onSaveAsDefault={handleSaveAsDefault}
+                  onClose={() => setShowSettings(false)} />
               )}
 
               {showBuySell && (
@@ -2223,19 +2183,6 @@ export default function Charts() {
             {showOrders && <OrdersList />}
           </div>
         </div>
-      )}
-
-      {/* ── Performance Benchmark Panel ── */}
-      {showBenchmarkPanel && (
-        <PerfBenchmarkPanel onClose={() => setShowBenchmarkPanel(false)} />
-      )}
-
-      {/* ── React Profiler Panel ── */}
-      {showReactProfiler && (
-        <ReactProfilerPanel
-          onClose={() => setShowReactProfiler(false)}
-          onStartCapture={() => { rpStore.clearStats(); setShowSettings(true); }}
-        />
       )}
 
       {/* ── Modals ── */}

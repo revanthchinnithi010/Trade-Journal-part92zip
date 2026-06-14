@@ -1,8 +1,6 @@
 import {
-  memo, useRef, useEffect, useLayoutEffect, useState, useCallback, Profiler,
+  memo, useRef, useEffect, useLayoutEffect, useState, useCallback,
 } from "react";
-import * as sheetProfiler from "@/lib/sheetProfiler";
-import * as rpStore from "@/lib/reactProfilerStore";
 import { X, ChevronDown } from "lucide-react";
 import icoSettingsUrl from "@assets/setting1_1780282162661.svg";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
@@ -58,8 +56,6 @@ export interface ColorBoxProps {
 }
 
 export const ColorBox = memo(function ColorBox({ value, onChange, label, fallback = "#000000", autoOpen, onDismiss }: ColorBoxProps) {
-  const _c = sheetProfiler.trackRender("ColorPicker", "SettingsPanel.tsx", 58);
-  useLayoutEffect(() => { _c(); });
   const safe   = safeColor(value, fallback);
   const [open, setOpen]     = useState(autoOpen ?? false);
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
@@ -132,8 +128,6 @@ export const ColorBox = memo(function ColorBox({ value, onChange, label, fallbac
 // One-at-a-time: registers in the same _colorBoxClosers registry so tapping a
 // new swatch automatically collapses any other open picker.
 const _ColorSwatchImpl = memo(function ColorSwatchImpl({ value, onChange, label, fallback = "#000000" }: ColorBoxProps) {
-  const _c = sheetProfiler.trackRender("ColorSwatch", "SettingsPanel.tsx", 120);
-  useLayoutEffect(() => { _c(); });
   const safe = safeColor(value, fallback);
   const [pickerOpen, setPickerOpen] = useState(false);
   const idRef = useRef<symbol>(Symbol());
@@ -176,8 +170,6 @@ export const ColorSwatch = (props: ColorBoxProps) => <_ColorSwatchImpl {...props
 
 // ── Section container ─────────────────────────────────────────────────────────
 export const Section = memo(function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  const _c = sheetProfiler.trackRender("Section", "SettingsPanel.tsx", 110);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ marginBottom: 20 }}>
       <p style={{
@@ -205,10 +197,6 @@ export const Section = memo(function Section({ title, children }: { title: strin
 // Hover state removed — on touchscreen it causes pointless re-renders on every
 // finger contact. Color highlight is irrelevant on mobile.
 export const Row = memo(function Row({ label, children, last }: { label: string; children: React.ReactNode; last?: boolean }) {
-  // Per-label render tracking: each row gets its own stats bucket in the profiler.
-  // Lets the dump report show "SettingsRow:Up Color" × N renders, not an aggregate.
-  const _c = sheetProfiler.trackRender(`SettingsRow:${label}`, "SettingsPanel.tsx", 204);
-  useLayoutEffect(() => { _c(); });
   return (
     <div
       style={{
@@ -229,8 +217,6 @@ export const ColorPair = memo(function ColorPair({ label, bull, bear, onBull, on
   label: string; bull: string; bear: string;
   onBull: (v: string) => void; onBear: (v: string) => void; last?: boolean;
 }) {
-  const _c = sheetProfiler.trackRender("ColorPair", "SettingsPanel.tsx", 160);
-  useLayoutEffect(() => { _c(); });
   return (
     <Row label={label} last={last}>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -254,8 +240,6 @@ const _StyledSelectImpl = memo(function StyledSelectImpl({ value, onChange, opti
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
 }) {
-  const _c = sheetProfiler.trackRender("StyledSelect", "SettingsPanel.tsx", 185);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ position: "relative" }}>
       <select
@@ -287,17 +271,13 @@ const _StyledSelectImpl = memo(function StyledSelectImpl({ value, onChange, opti
 });
 
 export const StyledSelect = (props: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) => (
-  <Profiler id="StyledSelect" onRender={rpStore.onRender}>
-    <_StyledSelectImpl {...props} />
-  </Profiler>
+  <_StyledSelectImpl {...props} />
 );
 
 // ── Toggle ────────────────────────────────────────────────────────────────────
 // Toggle: memo'd with stable onChange from h-handler — only re-renders when
 // its own `checked` value changes, not when other settings change.
 export const Toggle = memo(function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  const _c = sheetProfiler.trackRender("Toggle", "SettingsPanel.tsx", 228);
-  useLayoutEffect(() => { _c(); });
   return (
     <button
       onClick={() => onChange(!checked)}
@@ -324,8 +304,6 @@ export const Toggle = memo(function Toggle({ checked, onChange }: { checked: boo
 // ThicknessButtons: memo'd with stable onChange — only re-renders when its own
 // `value` changes.
 export const ThicknessButtons = memo(function ThicknessButtons({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  const _c = sheetProfiler.trackRender("ThicknessButtons", "SettingsPanel.tsx", 260);
-  useLayoutEffect(() => { _c(); });
   return (
     <div style={{ display: "flex", gap: 4 }}>
       {[1, 2, 3].map(w => (
@@ -360,8 +338,6 @@ export const ToggleRow = memo(function ToggleRow({
 }: {
   label: string; checked: boolean; onChange: (v: boolean) => void; last?: boolean;
 }) {
-  const _c = sheetProfiler.trackRender("ToggleRow", "SettingsPanel.tsx", 282);
-  useLayoutEffect(() => { _c(); });
   return (
     <Row label={label} last={last}>
       <Toggle checked={checked} onChange={onChange} />
@@ -436,8 +412,6 @@ interface Props {
 }
 
 const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAsDefault, onClose }: Props) {
-  const _c = sheetProfiler.trackRender("SettingsPanel", "SettingsPanel.tsx", 363);
-  useLayoutEffect(() => { _c(); });
   const ref = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SidebarSection>("Symbol");
 

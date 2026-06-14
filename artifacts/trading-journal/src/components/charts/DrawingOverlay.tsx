@@ -12,8 +12,6 @@ import { DrawingSettingsModal } from "@/components/charts/DrawingSettingsModal";
 import { PositionToolbar } from "@/components/charts/PositionToolbar";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { renderDrawingsToCanvas } from "@/components/charts/drawingCanvasRenderer";
-import * as sheetProfiler from "@/lib/sheetProfiler";
-
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 import icoLockUrl    from "@assets/lockicon1_1780335267097.svg";
@@ -2279,16 +2277,6 @@ interface Props {
 }
 
 const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawingAlert, alertDrawingIds }: Props) {
-  // ── Profiler: render tracking ─────────────────────────────────────────────
-  const _profRenderCountDO = useRef(0);
-  _profRenderCountDO.current++;
-  const _profRenderCountDOSnap = _profRenderCountDO.current;
-  const _profRenderStartDO = useRef(performance.now());
-  _profRenderStartDO.current = performance.now();
-  useLayoutEffect(() => {
-    sheetProfiler.end(_profRenderStartDO.current, "DrawingOverlay", `render #${_profRenderCountDOSnap} → layout committed`);
-  });
-  // ─────────────────────────────────────────────────────────────────────────
   const { chart, candle } = useChartContext();
   const {
     activeTool, setActiveTool,
@@ -2459,7 +2447,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
       if (svgClipRectRef.current && svgClipRectRef.current.getAttribute("height") !== String(Math.round(plotH))) {
         svgClipRectRef.current.setAttribute("height", String(Math.round(plotH)));
       }
-      const _rct = sheetProfiler.begin("DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
       renderDrawingsToCanvas(
         ctx, W, H,
         drawingsRef.current,
@@ -2472,7 +2459,6 @@ const DrawingOverlay = memo(function DrawingOverlay({ symbol, timeframe, onDrawi
         moveDragId,
         plotH,
       );
-      sheetProfiler.end(_rct, "DrawingOverlay", "renderDrawingsToCanvas (RAF callback)");
 
       // ── Zero-React P&L label position sync ──────────────────────────────────
       // The P&L foreignObject and measurement line live in SVG. SVG is only updated
