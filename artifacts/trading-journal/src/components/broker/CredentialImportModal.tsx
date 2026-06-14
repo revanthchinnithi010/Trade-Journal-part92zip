@@ -650,7 +650,7 @@ function DoneScreen({ onClose }: { onClose: () => void }) {
 
 /* ── Connection Status Panel ─────────────────────────────────────────────── */
 interface ConnectionStatusPanelProps {
-  onImport: () => void;
+  onImport?: () => void;
 }
 
 interface StatusState {
@@ -813,32 +813,18 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
       background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.07)",
     }}>
       <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
+        display: "flex", alignItems: "center", gap: 8,
         padding: "14px 16px",
         borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={{
-            width: 26, height: 26, borderRadius: 8,
-            background: "rgba(0,255,180,0.1)", border: "1px solid rgba(0,255,180,0.2)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>
-            <ShieldCheck size={13} style={{ color: "#00FFB4" }} />
-          </div>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>Connection Status</span>
+        <div style={{
+          width: 26, height: 26, borderRadius: 8,
+          background: "rgba(0,255,180,0.1)", border: "1px solid rgba(0,255,180,0.2)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+        }}>
+          <ShieldCheck size={13} style={{ color: "#00FFB4" }} />
         </div>
-        <button
-          onClick={onImport}
-          style={{
-            display: "flex", alignItems: "center", gap: 6,
-            padding: "6px 12px", borderRadius: 9, fontSize: 12, fontWeight: 600,
-            background: "rgba(0,255,180,0.1)", color: "#00FFB4",
-            border: "1px solid rgba(0,255,180,0.25)", cursor: "pointer",
-          }}
-        >
-          <Upload size={12} />
-          Import Credentials File
-        </button>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "rgba(255,255,255,0.9)" }}>Connection Status</span>
       </div>
 
       <div style={{ display: "flex", flexDirection: "column" }}>
