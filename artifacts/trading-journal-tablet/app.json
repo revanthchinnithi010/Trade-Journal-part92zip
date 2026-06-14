@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "Trading Journal Tablet",
-    "slug": "trading-journal-tablet",
+    "name": "TradeVault",
+    "slug": "tradevault",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/images/icon.png",
-    "scheme": "trading-journal-tablet",
+    "scheme": "tradevault",
     "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "splash": {
@@ -15,10 +15,12 @@
     },
     "ios": {
       "supportsTablet": true,
-      "requireFullScreen": true
+      "requireFullScreen": true,
+      "bundleIdentifier": "com.tradevault.app"
     },
     "android": {
-      "softwareKeyboardLayoutMode": "pan"
+      "softwareKeyboardLayoutMode": "pan",
+      "package": "com.tradevault.app"
     },
     "web": {
       "favicon": "./assets/images/icon.png",
