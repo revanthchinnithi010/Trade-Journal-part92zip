@@ -13,17 +13,14 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
   router.get("/ctrader/config", async (req, res) => {
     const clientId = process.env["CTRADER_CLIENT_ID"];
     const configured = !!(clientId && process.env["CTRADER_CLIENT_SECRET"]);
-    const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-    const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
-    const redirectUri = `${proto}://${host}/api/ctrader/callback`;
+    const redirectUri = resolveRedirectUri(req);
     logger.info({
+      "CTRADER_REDIRECT_URI_env": process.env["CTRADER_REDIRECT_URI"] ?? "(not set)",
       "x-forwarded-proto": req.headers["x-forwarded-proto"] ?? "(not set)",
       "x-forwarded-host": req.headers["x-forwarded-host"] ?? "(not set)",
       "x-forwarded-for": req.headers["x-forwarded-for"] ?? "(not set)",
       "req.protocol": req.protocol,
       "req.hostname": req.hostname,
-      "resolved_proto": proto,
-      "resolved_host": host,
       "redirect_uri": redirectUri,
     }, "ctrader/config: redirect_uri debug");
 
@@ -74,11 +71,9 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     }
 
     try {
-      const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-      const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
-      const redirectUri = `${proto}://${host}/api/ctrader/callback`;
+      const redirectUri = resolveRedirectUri(req);
 
-      logger.info("ctrader/callback: exchanging authorization code for tokens");
+      logger.info({ redirectUri }, "ctrader/callback: exchanging authorization code for tokens");
       await ctrader.handleOAuthCode(code, redirectUri);
 
       const accessToken = ctrader.currentAccessToken;
@@ -174,6 +169,15 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
   });
 
   return router;
+}
+
+function resolveRedirectUri(req: import("express").Request): string {
+  if (process.env["CTRADER_REDIRECT_URI"]) {
+    return process.env["CTRADER_REDIRECT_URI"];
+  }
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
+  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
+  return `${proto}://${host}/api/ctrader/callback`;
 }
 
 function popupHtml(status: "success" | "error", message: string | null): string {

@@ -45,3 +45,6 @@ externalPort = 3003
 [userenv]
 
 [userenv.shared]
+
+[userenv.production]
+CTRADER_REDIRECT_URI = "https://trade-journal-part-92-zip--essa11.replit.app/api/ctrader/callback"

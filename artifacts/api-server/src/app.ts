@@ -54,6 +54,7 @@ export function createApp(deps: {
   const allowedOrigins = [
     /\.replit\.dev$/,
     /\.pike\.replit\.dev$/,
+    /\.replit\.app$/,
     /localhost/,
   ];
 
