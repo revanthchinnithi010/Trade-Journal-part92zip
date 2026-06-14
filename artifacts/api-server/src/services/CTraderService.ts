@@ -177,26 +177,9 @@ export class CTraderService extends EventEmitter {
   private symbolMeta = new Map<bigint, { name: string; digits: number }>();
   // symbol name → latest tick
   readonly ticks = new Map<string, CTraderTick>();
+  // track pending SYMBOL_BY_ID_REQ batches before we can subscribe
+  private detailBatchesPending = 0;
 
-  private readonly TARGET_SYMBOLS = [
-    // Forex
-    "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
-    "EURGBP", "GBPJPY", "EURJPY",
-    // Metals
-    "XAUUSD", "XAGUSD",
-    // Indices
-    "US30", "NAS100", "SPX500", "GER40", "UK100",
-    // Commodities
-    "USOIL", "UKOIL",
-  ];
-
-  private readonly SYMBOL_DIGITS_FALLBACK: Record<string, number> = {
-    EURUSD: 5, GBPUSD: 5, USDJPY: 3, AUDUSD: 5, USDCAD: 5, USDCHF: 5,
-    EURGBP: 5, GBPJPY: 3, EURJPY: 3,
-    XAUUSD: 2, XAGUSD: 3,
-    US30: 1, NAS100: 1, SPX500: 1, GER40: 1, UK100: 1,
-    USOIL: 3, UKOIL: 3,
-  };
 
   get isConnected() { return this.state === "subscribed"; }
   get connectionState() { return this.state; }
@@ -482,33 +465,34 @@ export class CTraderService extends EventEmitter {
       if (f.num === 2 && f.type === 2 && f.bytes) {
         const sub = decodeFields(f.bytes);
         const rawId = sub.find(s => s.num === 1 && s.type === 0)?.varint;
+        const enabled = sub.find(s => s.num === 3 && s.type === 0)?.varint;
         const name = sub.find(s => s.num === 2 && s.type === 2)?.bytes?.toString("utf8");
-        if (rawId !== undefined && name) {
+        if (rawId !== undefined && name && enabled !== 0n) {
           const id = dezigzag(rawId);
-          for (const sym of this.TARGET_SYMBOLS) {
-            if (name === sym || name.startsWith(sym) || sym.startsWith(name)) {
-              found.set(sym, id);
-            }
-          }
+          found.set(name, id);
         }
       }
     }
 
     if (found.size === 0) {
-      logger.warn("CTraderService: no target symbols found in list");
+      logger.warn("CTraderService: no symbols found in list");
+      return;
     }
 
     this.symbolIds = found;
-    logger.info({ symbols: Object.fromEntries([...found.entries()].map(([k, v]) => [k, v.toString()])) },
-      "CTraderService: symbol IDs resolved");
-
-    if (found.size === 0) return;
+    logger.info({ count: found.size }, "CTraderService: symbol IDs resolved — fetching details");
 
     this.state = "fetch_symbol_details";
+    // Batch SYMBOL_BY_ID_REQ in chunks of 500 to stay within message size limits
     const ids = [...found.values()];
-    let payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
-    for (const id of ids) payload = Buffer.concat([payload, sint64Field(2, id)]);
-    this.send(PT.SYMBOL_BY_ID_REQ, payload);
+    const CHUNK = 500;
+    const numChunks = Math.ceil(ids.length / CHUNK);
+    this.detailBatchesPending = numChunks;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      let payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
+      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(2, id)]);
+      this.send(PT.SYMBOL_BY_ID_REQ, payload);
+    }
   }
 
   private handleSymbolByIdRes(buf: Buffer): void {
@@ -521,25 +505,55 @@ export class CTraderService extends EventEmitter {
         const digitsF = sub.find(s => s.num === 14 && s.type === 0)?.varint;
         if (rawId !== undefined && name) {
           const id = dezigzag(rawId);
-          const digits = Number(digitsF ?? BigInt(this.SYMBOL_DIGITS_FALLBACK[name] ?? 5));
+          const digits = Number(digitsF ?? BigInt(this._guessDigits(name)));
           this.symbolMeta.set(id, { name, digits });
         }
       }
     }
 
-    logger.info("CTraderService: symbol details fetched → subscribing spots");
+    this.detailBatchesPending--;
+    if (this.detailBatchesPending > 0) {
+      logger.debug({ remaining: this.detailBatchesPending }, "CTraderService: waiting for more detail batches");
+      return;
+    }
+    logger.info({ count: this.symbolMeta.size }, "CTraderService: all symbol details fetched → subscribing spots");
     this.subscribeToSpots();
   }
 
   private subscribeToSpots(): void {
     if (!this.activeAccount || this.symbolIds.size === 0) return;
-    let payload = sint64Field(1, this.activeAccount.ctidTraderAccountId);
-    for (const id of this.symbolIds.values()) payload = Buffer.concat([payload, sint64Field(2, id)]);
-    this.send(PT.SUBSCRIBE_SPOTS_REQ, payload);
+    // Subscribe to ALL symbols from the broker in batches of 500
+    const ids = [...this.symbolIds.values()];
+    const CHUNK = 500;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      let payload = sint64Field(1, this.activeAccount.ctidTraderAccountId);
+      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(2, id)]);
+      this.send(PT.SUBSCRIBE_SPOTS_REQ, payload);
+    }
     this.state = "subscribed";
-    logger.info("CTraderService: subscribed to spot prices ✓");
+    logger.info({ count: this.symbolIds.size }, "CTraderService: subscribed to all spot prices ✓");
     this.emit("status_change", this.getStatus());
+    // Notify listeners of the full live symbol catalog
+    this.emit("symbols_loaded", [...this.symbolIds.keys()]);
   }
+
+  /** Digit-precision heuristic for symbols missing SYMBOL_BY_ID_RES coverage. */
+  private _guessDigits(name: string): number {
+    const s = name.toUpperCase();
+    if (s.includes("JPY") || s.includes("HUF") || s.includes("CZK")) return 3;
+    if (s === "XAUUSD" || s === "XAGUSD") return 2;
+    if (/^[A-Z]{6}$/.test(s)) return 5;
+    if (/^(US30|DOW|DJIA)/.test(s)) return 1;
+    if (/^(NAS|NDX|DAX|CAC|FTSE|GER|UK1|SP5|SPX|NIK|HAN|AUS|CHI)/.test(s)) return 1;
+    if (/USDT$/.test(s) || /BTC|ETH|SOL/.test(s)) return 2;
+    return 5;
+  }
+
+  /** Returns the complete list of symbols available from the connected broker. */
+  getLoadedSymbols(): string[] { return [...this.symbolIds.keys()]; }
+
+  /** Returns the cTrader numeric symbol ID for a given symbol name. */
+  getSymbolId(name: string): bigint | undefined { return this.symbolIds.get(name); }
 
   private handleSpotEvent(buf: Buffer): void {
     const fields = decodeFields(buf);

@@ -19,43 +19,16 @@ export interface FeedManagerStats {
 }
 
 /**
- * Symbol routing:
- *  - Crypto perpetuals → Delta Exchange India (no API key required)
- *  - Forex / Metals / Indices → Finnhub/OANDA (requires FINNHUB_API_KEY)
- *                              OR cTrader (requires OAuth)
+ * Symbol routing is built entirely dynamically — no hardcoded symbol lists.
  *
- * Routes are stored in a mutable map so new symbols can be added dynamically
- * as the Delta India catalog is fetched and cTrader connects.
+ * Sources:
+ *  - Delta Exchange: catalog fetched from REST API on startup + periodic refresh
+ *  - cTrader: catalog loaded from the connected broker account via SYMBOLS_LIST_REQ
+ *
+ * Routing rules (applied in order):
+ *  1. Explicit entry in symbolRouting map (set when catalogs load)
+ *  2. Auto-route: any xyzUSDT or xyzUSD perpetual pattern → Delta (crypto fallback)
  */
-
-// Broker-aware static symbol routing.
-// Forex / Metals / Indices / Commodities → cTrader (Fusion Markets)
-// Crypto perpetuals → Delta Exchange India (USDT-quoted; also legacy USD-suffix aliases)
-const STATIC_SYMBOL_ROUTING: Record<string, string> = {
-  // ── Forex ──────────────────────────────────────────────────────────────────
-  EURUSD: "ctrader", GBPUSD: "ctrader", USDJPY: "ctrader",
-  AUDUSD: "ctrader", USDCAD: "ctrader", USDCHF: "ctrader",
-  EURGBP: "ctrader", GBPJPY: "ctrader", EURJPY: "ctrader",
-  EURAUD: "ctrader", GBPAUD: "ctrader", NZDUSD: "ctrader",
-  USDSGD: "ctrader", USDHKD: "ctrader",
-  // ── Metals ─────────────────────────────────────────────────────────────────
-  XAUUSD: "ctrader", XAGUSD: "ctrader",
-  // ── Indices ────────────────────────────────────────────────────────────────
-  US30: "ctrader", NAS100: "ctrader", SPX500: "ctrader",
-  GER40: "ctrader", UK100:  "ctrader", JP225:  "ctrader",
-  AUS200: "ctrader", STOXX50: "ctrader",
-  // ── Commodities ────────────────────────────────────────────────────────────
-  USOIL: "ctrader", UKOIL: "ctrader", NGAS: "ctrader",
-  // ── Crypto perpetuals (USDT-quoted, Delta Exchange India) ──────────────────
-  BTCUSDT: "delta", ETHUSDT: "delta", SOLUSDT: "delta",
-  BNBUSDT: "delta", XRPUSDT: "delta", DOGEUSDT: "delta",
-  ADAUSDT: "delta", AVAXUSDT: "delta", DOTUSDT: "delta",
-  PEPEUSDT: "delta", LINKUSDT: "delta", UNIUSDT: "delta",
-  NEARUSDT: "delta", ATOMUSDT: "delta", LTCUSDT: "delta",
-  // ── Legacy USD-suffix aliases (backward compat for old watchlist entries) ──
-  BTCUSD: "delta", ETHUSD: "delta", SOLUSD: "delta",
-  DOGEUSD: "delta", PEPEUSD: "delta",
-};
 
 export const PROVIDER_METADATA: Record<string, { displayName: string; badge: string; color: string }> = {
   finnhub: { displayName: "Finnhub / OANDA · Binance", badge: "oanda",   color: "#3B82F6" },
@@ -68,7 +41,7 @@ export class MarketFeedManager extends EventEmitter {
   private latestTicks:      Map<string, UnifiedTick>   = new Map();
   private tickHistory:      Map<string, UnifiedTick[]> = new Map();
   private subscribedSymbols: Set<string>               = new Set();
-  private symbolRouting:    Map<string, string>        = new Map(Object.entries(STATIC_SYMBOL_ROUTING));
+  private symbolRouting:    Map<string, string>        = new Map();
   private totalTicks = 0;
 
   readonly symbolService: SymbolService = new SymbolService();
@@ -93,7 +66,7 @@ export class MarketFeedManager extends EventEmitter {
 
     logger.info(
       { providers: [...this.providers.keys()], symbols: defaultSymbols },
-      "MarketFeedManager: started",
+      "MarketFeedManager: started — symbol routing will be built dynamically",
     );
 
     this._bootstrapDeltaIndia(defaultSymbols).catch(err =>
@@ -105,9 +78,6 @@ export class MarketFeedManager extends EventEmitter {
   private async _bootstrapDeltaIndia(defaultSymbols: string[]): Promise<void> {
     try {
       const catalog = await this.symbolService.getDeltaSymbols();
-      // Delta India product symbols are "xyzUSD" (e.g. BTCUSD).
-      // The replace("USDT","USD") is a no-op for these symbols but kept for safety.
-      // internalSymbol === deltaSymbol for all Delta India perpetuals.
       const entries: DeltaSymbolEntry[] = catalog.map(s => ({
         internalSymbol: s.symbol,
         deltaSymbol:    s.symbol,
@@ -145,10 +115,10 @@ export class MarketFeedManager extends EventEmitter {
   subscribe(symbol: string): boolean {
     let providerName = this.symbolRouting.get(symbol);
 
-    // Auto-route: any unknown xyzUSD / xyzUSDT perpetual → Delta India.
+    // Auto-route: any unknown xyzUSDT or xyzUSD perpetual → Delta India.
     // This handles coins added before the async bootstrap completes AND
-    // any new Delta India listing not yet in the static routing table.
-    // Symbols explicitly routed elsewhere (finnhub/ctrader) are not overridden.
+    // any new Delta India listing not yet in the routing table.
+    // Symbols explicitly routed elsewhere (ctrader) are never overridden.
     if (!providerName && /^[A-Z0-9]+USDT?$/.test(symbol)) {
       providerName = "delta";
       this.symbolRouting.set(symbol, "delta");
@@ -158,8 +128,6 @@ export class MarketFeedManager extends EventEmitter {
     if (!providerName) return false;
 
     // Always record the intent — even if the provider isn't live yet.
-    // When enableCTrader() / enableDelta() runs later it checks
-    // subscribedSymbols to re-subscribe queued symbols.
     this.subscribedSymbols.add(symbol);
 
     const provider = this.providers.get(providerName);
@@ -241,7 +209,7 @@ export class MarketFeedManager extends EventEmitter {
 
     this.symbolService.getDeltaSymbols().then(catalog => {
       const fullEntries: DeltaSymbolEntry[] = catalog.map(s => ({
-        internalSymbol: s.symbol.replace("USDT", "USD"),
+        internalSymbol: s.symbol,
         deltaSymbol:    s.symbol,
       }));
       delta.refreshSymbols(fullEntries);
@@ -270,22 +238,60 @@ export class MarketFeedManager extends EventEmitter {
     this.wireProvider(provider);
     this.providers.set("ctrader", provider);
 
-    for (const sym of provider.supportedSymbols) {
-      // Override any "finnhub" placeholder routes — Finnhub is disabled in prod
-      // so these symbols would never receive ticks unless rerouted to ctrader.
-      // Delta routes are never overridden.
+    // If symbols are already loaded (re-enable after reconnect), seed routing now.
+    this._onCTraderSymbolsChanged(provider, provider.supportedSymbols);
+
+    // Listen for future catalog updates (first connect, or reconnects).
+    provider.on("symbols_changed", (syms: string[]) => {
+      this._onCTraderSymbolsChanged(provider, syms);
+    });
+
+    provider.connect();
+    logger.info("MarketFeedManager: cTrader provider enabled — routing will be seeded from broker catalog");
+  }
+
+  private _onCTraderSymbolsChanged(provider: CTraderProvider, syms: string[]): void {
+    let newRoutes = 0;
+    for (const sym of syms) {
+      // Never override an explicit Delta route.
       const current = this.symbolRouting.get(sym);
       if (!current || current === "finnhub") {
         this.symbolRouting.set(sym, "ctrader");
+        newRoutes++;
       }
+      // Re-subscribe queued symbols.
       if (this.subscribedSymbols.has(sym)) provider.subscribe(sym);
     }
 
-    provider.connect();
-    logger.info(
-      { symbols: provider.supportedSymbols, overrodeCount: provider.supportedSymbols.length },
-      "MarketFeedManager: cTrader provider enabled — Forex/Indices/Commodities routed",
+    // Update SymbolService with the live cTrader catalog.
+    this.symbolService.setCTraderSymbols(
+      syms.map(sym => ({
+        symbol:       sym,
+        name:         sym,
+        contractType: this._guessCTraderContractType(sym),
+        broker:       "ctrader",
+        underlying:   sym.slice(0, 3),
+        quoteAsset:   sym.slice(3) || "USD",
+        active:       true,
+      }))
     );
+
+    logger.info(
+      { total: syms.length, newRoutes },
+      "MarketFeedManager: cTrader routing table updated from live broker catalog",
+    );
+
+    this.emit("subscription_update", { action: "catalog_updated", provider: "ctrader", count: syms.length });
+  }
+
+  private _guessCTraderContractType(sym: string): string {
+    const s = sym.toUpperCase();
+    const METALS = ["XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD"];
+    if (METALS.includes(s)) return "metal";
+    if (/^[A-Z]{6}$/.test(s)) return "forex";
+    if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|HAN|BEL|SMI|OMX)/.test(s)) return "index";
+    if (/^(USOIL|UKOIL|NGAS|COPPER|WHEAT|CORN|SUGAR|COFFEE|COCOA|COTTON)/.test(s)) return "commodity";
+    return "cfd";
   }
 
   disableCTrader(): void {
@@ -301,6 +307,7 @@ export class MarketFeedManager extends EventEmitter {
   getDiagnostics() {
     const allTicks = this.getAllLatestTicks();
     const now      = Date.now();
+    const ctraderProvider = this.providers.get("ctrader") as CTraderProvider | undefined;
 
     const perSymbol: Record<string, {
       provider:     string | undefined;
@@ -308,16 +315,23 @@ export class MarketFeedManager extends EventEmitter {
       lastTickAt:   number | null;
       lastPrice:    number | null;
       lastTickAgo:  number | null;
+      symbolId:     string | undefined;
     }> = {};
 
     for (const sym of this.symbolRouting.keys()) {
-      const tick = allTicks[sym];
+      const tick         = allTicks[sym];
+      const providerName = this.symbolRouting.get(sym);
+      const symbolId     = providerName === "ctrader"
+        ? ctraderProvider?.getSymbolId(sym)?.toString()
+        : undefined;
+
       perSymbol[sym] = {
-        provider:    this.symbolRouting.get(sym),
+        provider:    providerName,
         subscribed:  this.subscribedSymbols.has(sym),
         lastTickAt:  tick?.timestamp ?? null,
         lastPrice:   tick?.price    ?? null,
         lastTickAgo: tick ? now - tick.timestamp : null,
+        symbolId,
       };
     }
 
@@ -343,16 +357,8 @@ export class MarketFeedManager extends EventEmitter {
       logger.warn("MarketFeedManager: no FINNHUB_API_KEY — Finnhub/OANDA/Binance feed disabled");
     }
 
-    // Delta India symbols are "xyzUSD" — internalSymbol === deltaSymbol.
-    // (Full catalog is loaded asynchronously via _bootstrapDeltaIndia.)
-    const fallbackEntries: DeltaSymbolEntry[] = [
-      { internalSymbol: "BTCUSD",  deltaSymbol: "BTCUSD"  },
-      { internalSymbol: "ETHUSD",  deltaSymbol: "ETHUSD"  },
-      { internalSymbol: "SOLUSD",  deltaSymbol: "SOLUSD"  },
-      { internalSymbol: "DOGEUSD", deltaSymbol: "DOGEUSD" },
-      { internalSymbol: "PEPEUSD", deltaSymbol: "PEPEUSD" },
-    ];
-    this.providers.set("delta", new DeltaExchangeProvider(fallbackEntries));
+    // Delta provider starts with an empty catalog — full catalog loaded async via _bootstrapDeltaIndia.
+    this.providers.set("delta", new DeltaExchangeProvider([]));
   }
 
   private wireProvider(provider: BaseProvider): void {

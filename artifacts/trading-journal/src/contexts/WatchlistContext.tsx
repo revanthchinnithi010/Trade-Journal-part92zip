@@ -57,11 +57,65 @@ type RawRow = {
   position: number; isFavorite: boolean; createdAt: string;
 };
 
+function deriveMeta(symbol: string): { tv: string; label: string; badge: string; market: string } {
+  const s = symbol.toUpperCase();
+  // Use curated catalog first
+  const catalogEntry = SYMBOL_CATALOG[s];
+  if (catalogEntry) return catalogEntry;
+
+  // Derive dynamically for symbols not in the curated catalog
+  let market: string = "Other";
+  let badge  = s.slice(0, 4);
+  let label  = s;
+
+  // Crypto: xyzUSDT or xyzUSD patterns
+  if (/^[A-Z0-9]{2,12}USDT$/.test(s)) {
+    const base = s.replace("USDT", "");
+    market = "Crypto";
+    badge  = base.slice(0, 5);
+    label  = `${base}/USDT`;
+  } else if (/^[A-Z0-9]{2,8}USD$/.test(s)) {
+    const base = s.replace("USD", "");
+    if (!["EUR","GBP","AUD","NZD","CAD","CHF","XAU","XAG"].includes(base)) {
+      market = "Crypto";
+      badge  = base.slice(0, 5);
+      label  = `${base}/USD`;
+    }
+  }
+
+  // Standard 6-letter forex
+  if (market === "Other" && /^[A-Z]{6}$/.test(s)) {
+    market = "Forex";
+    badge  = s.slice(0, 3);
+    label  = `${s.slice(0,3)}/${s.slice(3)}`;
+  }
+
+  // Metals
+  if (["XAUUSD","XAGUSD","XPTUSD","XPDUSD"].includes(s)) {
+    market = "Commodities";
+    badge  = s.slice(0, 3);
+    label  = s;
+  }
+
+  // Index patterns
+  if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|DE4|FR4|IT4|ES3)/.test(s)) {
+    market = "Indices";
+    badge  = s.slice(0, 4);
+    label  = s;
+  }
+
+  // Commodity patterns
+  if (/^(OIL|GAS|WTI|BRENT|NGAS|USOIL|UKOIL|COPP|WHEAT|CORN|SUGAR|COFFEE)/.test(s)) {
+    market = "Commodities";
+    badge  = s.slice(0, 4);
+    label  = s;
+  }
+
+  return { tv: s, label, badge, market };
+}
+
 function toEntry(row: RawRow): WatchlistEntry {
-  const meta = SYMBOL_CATALOG[row.symbol] ?? {
-    tv: row.symbol, label: row.symbol,
-    badge: row.symbol.slice(0, 4), market: "Other",
-  };
+  const meta = deriveMeta(row.symbol);
   return { ...row, ...meta };
 }
 

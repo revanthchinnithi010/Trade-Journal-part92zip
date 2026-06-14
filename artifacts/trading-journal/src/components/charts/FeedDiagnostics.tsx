@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  getAssetClass, getDataProvider,
-  getAssetClassLabel, getProviderLabel,
+  getAssetClass, getAssetClassLabel, getProviderLabel,
+  updateSymbolProviderRouting,
   type AssetClass, type DataProvider,
 } from "@/lib/assetClass";
 import { useTickStore } from "@/store/tickStore";
@@ -24,14 +24,16 @@ interface SymbolDiag {
   lastTickAt:  number | null;
   lastPrice:   number | null;
   lastTickAgo: number | null;
+  symbolId:    string | undefined;
 }
 
 interface DiagData {
-  providers:    ProviderStat[];
-  perSymbol:    Record<string, SymbolDiag>;
+  providers:     ProviderStat[];
+  perSymbol:     Record<string, SymbolDiag>;
   subscriptions: string[];
-  totalTicks:   number;
-  ts:           number;
+  symbolRouting: Record<string, string>;
+  totalTicks:    number;
+  ts:            number;
 }
 
 interface Props { symbol: string }
@@ -45,7 +47,7 @@ const CLASS_COLOR: Record<AssetClass, string> = {
   unknown:   "rgba(255,255,255,0.35)",
 };
 
-const PROVIDER_COLOR: Record<DataProvider, string> = {
+const PROVIDER_COLOR: Record<string, string> = {
   delta:   "#8B5CF6",
   ctrader: "#F59E0B",
   unknown: "rgba(255,255,255,0.35)",
@@ -70,11 +72,14 @@ export function FeedDiagnostics({ symbol }: Props) {
   const prevCountRef   = useRef(0);
   const prevTickTsRef  = useRef(0);
 
-  const assetClass     = getAssetClass(symbol);
-  const provider       = getDataProvider(symbol);
-  const symData        = diag?.perSymbol[symbol];
-  const providerStat   = diag?.providers.find(p => p.name === provider);
-  const provOk         = providerStat?.status === "connected";
+  const assetClass   = getAssetClass(symbol);
+  const symData      = diag?.perSymbol[symbol];
+
+  // Provider: prefer live server routing, fall back to pattern matching
+  const liveProvider  = symData?.provider ?? diag?.symbolRouting?.[symbol];
+  const providerKey   = (liveProvider ?? "unknown") as DataProvider;
+  const providerStat  = diag?.providers.find(p => p.name === liveProvider);
+  const provOk        = providerStat?.status === "connected";
 
   // Poll /api/feed/diagnostics every 3 s
   useEffect(() => {
@@ -82,7 +87,12 @@ export function FeedDiagnostics({ symbol }: Props) {
     const poll = async () => {
       try {
         const r = await fetch(`${BASE}/api/feed/diagnostics`);
-        if (r.ok && !cancelled) setDiag(await r.json() as DiagData);
+        if (r.ok && !cancelled) {
+          const data = await r.json() as DiagData;
+          setDiag(data);
+          // Keep assetClass.ts runtime routing in sync
+          if (data.symbolRouting) updateSymbolProviderRouting(data.symbolRouting);
+        }
       } catch { /* ignore network errors */ }
     };
     poll();
@@ -91,8 +101,6 @@ export function FeedDiagnostics({ symbol }: Props) {
   }, []);
 
   // Count live ticks for the active symbol → derive tps
-  // tickStore uses plain Zustand (no subscribeWithSelector), so we subscribe
-  // to the whole state and check if the symbol's ts changed.
   useEffect(() => {
     tickCountRef.current = 0;
     prevTickTsRef.current = 0;
@@ -190,10 +198,18 @@ export function FeedDiagnostics({ symbol }: Props) {
             FEED DIAGNOSTICS
           </div>
 
-          <Row label="Selected Symbol" value={symbol}                         color="#F3FFF3" />
-          <Row label="Asset Class"     value={getAssetClassLabel(assetClass)} color={CLASS_COLOR[assetClass]} />
-          <Row label="Data Provider"   value={getProviderLabel(provider)}     color={PROVIDER_COLOR[provider]} />
-          <Row label="Status"          value={statusStr}                      color={statusColor} />
+          <Row label="Selected Symbol" value={symbol}                                                 color="#F3FFF3" />
+          <Row label="Asset Class"     value={getAssetClassLabel(assetClass)}                         color={CLASS_COLOR[assetClass]} />
+          <Row
+            label="Data Provider"
+            value={liveProvider ? getProviderLabel(providerKey) : "—"}
+            color={PROVIDER_COLOR[providerKey] ?? PROVIDER_COLOR.unknown}
+          />
+          <Row label="Status"          value={statusStr}                                              color={statusColor} />
+
+          {symData?.symbolId && (
+            <Row label="Symbol ID" value={symData.symbolId} color="rgba(255,255,255,0.55)" />
+          )}
 
           <div style={{ height: 1, background: "rgba(255,255,255,0.07)", margin: "7px 0" }} />
 
@@ -214,6 +230,29 @@ export function FeedDiagnostics({ symbol }: Props) {
           {!symData?.subscribed && (
             <div style={{ marginTop: 7, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
               Symbol not yet subscribed — select it in the watchlist to start receiving ticks.
+            </div>
+          )}
+
+          {/* Provider catalog summary */}
+          {diag && (
+            <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginBottom: 5, letterSpacing: "0.06em" }}>
+                CATALOG
+              </div>
+              {diag.providers.map(p => {
+                const routedCount = Object.values(diag.symbolRouting).filter(v => v === p.name).length;
+                return (
+                  <div key={p.name} style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+                    <span style={{ color: "rgba(255,255,255,0.3)", fontSize: 9 }}>{p.displayName ?? p.name}</span>
+                    <span style={{
+                      color: p.status === "connected" ? "#00FFB4" : "rgba(255,80,80,0.8)",
+                      fontSize: 9, fontWeight: 600,
+                    }}>
+                      {routedCount} syms · {p.status}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

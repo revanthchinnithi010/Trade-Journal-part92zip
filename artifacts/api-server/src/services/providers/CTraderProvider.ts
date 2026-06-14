@@ -6,20 +6,11 @@ import { logger } from "../../lib/logger.js";
  * CTraderProvider — bridges CTraderService spot-tick events into the
  * unified BaseProvider pipeline consumed by MarketFeedManager.
  *
- * CTraderService handles its own TLS connection, OAuth auth, heartbeat,
- * and reconnect logic. This adapter only:
- *  1. Translates its `tick` events → BaseProvider.onTick()
- *  2. Reflects its connection state → BaseProvider status fields
- *  3. Exposes the list of symbols it streams
+ * Symbol catalog is loaded dynamically from the connected broker account:
+ * CTraderService fetches ALL symbols via SYMBOLS_LIST_REQ after auth,
+ * then emits "symbols_loaded" with the full list.  We relay that as
+ * "symbols_changed" so MarketFeedManager can update its routing table.
  */
-
-const CTRADER_SYMBOLS = [
-  "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCAD",
-  "USDCHF", "EURGBP", "GBPJPY", "EURJPY",
-  "XAUUSD", "XAGUSD",
-  "US30", "NAS100", "SPX500", "GER40", "UK100",
-  "USOIL",
-];
 
 interface CTraderTickEvent {
   symbol: string;
@@ -40,11 +31,14 @@ export class CTraderProvider extends BaseProvider {
   readonly displayName = "cTrader Open API";
   readonly badge       = "ctrader";
   readonly color       = "#F59E0B";
-  readonly supportedSymbols: string[] = [...CTRADER_SYMBOLS];
+
+  /** Populated dynamically when CTraderService emits "symbols_loaded". */
+  supportedSymbols: string[] = [];
 
   private readonly svc: CTraderService;
-  private tickHandler: ((e: CTraderTickEvent) => void) | null = null;
-  private statusHandler: ((e: CTraderStatusEvent) => void) | null = null;
+  private tickHandler:    ((e: CTraderTickEvent) => void)   | null = null;
+  private statusHandler:  ((e: CTraderStatusEvent) => void) | null = null;
+  private symbolsHandler: ((syms: string[]) => void)        | null = null;
 
   constructor(ctrader: CTraderService) {
     super();
@@ -69,10 +63,6 @@ export class CTraderProvider extends BaseProvider {
         receivedAt:     Date.now(),
       };
 
-      logger.info(
-        { provider: this.name, symbol: e.symbol, bid: e.bid, ask: e.ask, mid },
-        "CTraderProvider: tick",
-      );
       this.onTick(tick);
     };
 
@@ -97,14 +87,27 @@ export class CTraderProvider extends BaseProvider {
       }
     };
 
-    this.svc.on("tick",          this.tickHandler);
-    this.svc.on("status_change", this.statusHandler as (e: unknown) => void);
+    this.symbolsHandler = (syms: string[]) => {
+      this.supportedSymbols = syms;
+      logger.info({ count: syms.length }, "CTraderProvider: broker symbol catalog received");
+      this.emit("symbols_changed", syms);
+    };
+
+    this.svc.on("tick",           this.tickHandler);
+    this.svc.on("status_change",  this.statusHandler as (e: unknown) => void);
+    this.svc.on("symbols_loaded", this.symbolsHandler as (e: unknown) => void);
 
     const st = this.svc.getStatus();
     if (st.connected) {
       logger.info({ provider: this.name }, "CTraderProvider: already connected at bridge time");
       this.status = "connected";
       this.connectedAt = Date.now();
+      // Populate symbol list from the already-connected service
+      const loaded = this.svc.getLoadedSymbols();
+      if (loaded.length > 0) {
+        this.supportedSymbols = loaded;
+        this.emit("symbols_changed", loaded);
+      }
       for (const sym of this.subscriptions) this.subscribeSymbol(sym);
     }
   }
@@ -116,22 +119,27 @@ export class CTraderProvider extends BaseProvider {
   destroy(): void {
     this.destroyed = true;
     this.clearReconnectTimer();
-    if (this.tickHandler)   this.svc.removeListener("tick",          this.tickHandler);
-    if (this.statusHandler) this.svc.removeListener("status_change", this.statusHandler as (e: unknown) => void);
-    this.tickHandler   = null;
-    this.statusHandler = null;
+    if (this.tickHandler)    this.svc.removeListener("tick",           this.tickHandler);
+    if (this.statusHandler)  this.svc.removeListener("status_change",  this.statusHandler as (e: unknown) => void);
+    if (this.symbolsHandler) this.svc.removeListener("symbols_loaded", this.symbolsHandler as (e: unknown) => void);
+    this.tickHandler    = null;
+    this.statusHandler  = null;
+    this.symbolsHandler = null;
     logger.info({ provider: this.name }, "CTraderProvider: destroyed");
   }
 
   subscribeSymbol(symbol: string): void {
-    logger.debug({ provider: this.name, symbol }, "CTraderProvider: subscribeSymbol (cTrader auto-streams all target symbols)");
+    logger.debug({ provider: this.name, symbol }, "CTraderProvider: subscribeSymbol (cTrader auto-streams all subscribed symbols)");
   }
 
   unsubscribeSymbol(symbol: string): void {
-    logger.debug({ provider: this.name, symbol }, "CTraderProvider: unsubscribeSymbol (individual unsub not supported in current impl)");
+    logger.debug({ provider: this.name, symbol }, "CTraderProvider: unsubscribeSymbol");
   }
 
+  /** Returns the broker's numeric ID for a given symbol (for diagnostics). */
+  getSymbolId(name: string): bigint | undefined { return this.svc.getSymbolId(name); }
+
   protected scheduleReconnect(): void {
-    logger.debug({ provider: this.name }, "CTraderProvider: reconnect delegated to CTraderService — no local timer");
+    logger.debug({ provider: this.name }, "CTraderProvider: reconnect delegated to CTraderService");
   }
 }
