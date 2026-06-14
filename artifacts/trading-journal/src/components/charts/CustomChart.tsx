@@ -1473,6 +1473,13 @@ const CustomChart = memo(function CustomChart({
       if (!ig) return;
       if (ig.hRafId !== null) cancelAnimationFrame(ig.hRafId);
       if (ig.vRafId !== null) cancelAnimationFrame(ig.vRafId);
+      // CRITICAL: release pointer capture so the browser doesn't hold a stale
+      // capture for a pointer ID that will never receive pointerup/cancel.
+      // Releasing a capture the element doesn't hold is a safe no-op.
+      // Skip for PINCH_ZOOM (pointerId = -1 sentinel; no setPointerCapture was called).
+      if (ig.pointerId >= 0) {
+        try { container.releasePointerCapture(ig.pointerId); } catch { /* ok */ }
+      }
       ig = null;
     };
 
@@ -2443,6 +2450,46 @@ const CustomChart = memo(function CustomChart({
       }
     };
 
+    // ── touchcancel capture — OS-level gesture interruption ───────────────────
+    // touchcancel fires when the OS takes over the touch (orientation change,
+    // home-button swipe, incoming call, notification banner). It is distinct
+    // from touchend: no corresponding pointerup may ever arrive (iOS drops it
+    // during rotation). We therefore do a FULL gesture reset here rather than
+    // relying on the pointer-event path.
+    //
+    // When ALL touches are gone (e.touches.length === 0), reset every piece of
+    // mutable state — same as onPageHide but also handles partial cancels.
+    // If pointercancel does arrive afterward, onUp safely no-ops because
+    // pressCount is already 0 and ig is null.
+    //
+    // NOTE: do NOT use this path for touchend (normal lift). onTouchEnd handles
+    // PINCH_ZOOM cleanup; normal single-finger lift is handled by onUp.
+    const onTouchCancel = (e: TouchEvent) => {
+      touchCount = e.touches.length;
+      if (e.touches.length === 0) {
+        // All touches cancelled — full reset. cancelIg() now also releases
+        // pointer capture, so no stale capture survives to the next gesture.
+        cancelIg();
+        pressCount = 0;
+        if (momentumRaf !== null) { cancelAnimationFrame(momentumRaf); momentumRaf = null; }
+        activatePanRange(null);
+        // Clear crosshair lock — locked pixel coords are meaningless in the
+        // new layout that follows an orientation change.
+        if (crosshairLocked) {
+          crosshairLocked        = false;
+          lockedCrosshairPos     = null;
+          lockedFutureCrossPixel = null;
+          lockedCrosshairPixel   = null;
+          crosshairDragAnchor    = null;
+          try { chartRef.current?.clearCrosshairPosition(); } catch { /* ok */ }
+          drawCanvasCrosshair(null, 0);
+        }
+      } else if (ig?.mode === 'PINCH_ZOOM') {
+        // Partial cancel (some fingers remain): same logic as onTouchEnd
+        ig = null;
+      }
+    };
+
     // ── touchmove capture — custom pinch zoom + block LWC during pan ─────────
     // LWC uses TOUCH events (not pointer events) internally. Our pointer-event
     // stopPropagation has zero effect on LWC's touchmove handler, which keeps
@@ -2560,21 +2607,39 @@ const CustomChart = memo(function CustomChart({
       if (w > 0 && h > 0) {
         try { ch.applyOptions({ width: w, height: h }); } catch { /* ok */ }
       }
+      // Re-applying handleScroll/handleScale/kineticScroll forces LWC to
+      // tear down and re-register its internal touch/pointer event handlers
+      // with a fresh state — clearing any stuck "pressed/panning" flag in
+      // LWC's internal pane interaction state machine.
+      try {
+        ch.applyOptions({
+          handleScroll:  { mouseWheel: false, pressedMouseMove: false, horzTouchDrag: false, vertTouchDrag: false },
+          handleScale:   { mouseWheel: true,  pinch: false, axisPressedMouseMove: { time: false, price: true }, axisDoubleClickReset: { time: true, price: true } },
+          kineticScroll: { mouse: false, touch: false },
+        });
+      } catch { /* ok — chart may have been disposed between the two calls */ }
     };
 
     const onOrientationReset = () => {
       resetAllGestureState();
-      // Three-pass resize so LWC's coordinate system is correct regardless of
+      // Four-pass resize so LWC's coordinate system is correct regardless of
       // how long the browser's orientation animation takes:
-      //   pass 1 — immediate (catches instantaneous reflow on Android)
+      //   pass 1 — immediate (catches instantaneous reflow on Android Chrome)
       //   pass 2 — next animation frame (post-paint; LWC DOM settled)
       //   pass 3 — 300 ms safety (iOS rotation animation ~250 ms)
+      //   pass 4 — 500 ms belt-and-suspenders for very slow devices
       resizeLwcNow();
       requestAnimationFrame(resizeLwcNow);
       setTimeout(resizeLwcNow, 300);
+      setTimeout(resizeLwcNow, 500);
     };
+    // IMPORTANT: only orientationchange triggers gesture state reset.
+    // window 'resize' fires for soft-keyboard show/hide, browser-chrome
+    // animation, and DevTools open/close — resetting gesture state on those
+    // would interrupt live touch gestures unrelated to rotation.
+    // LWC canvas resizing on all resizes is already handled by the
+    // ResizeObserver registered above (line: ro.observe(container)).
     window.addEventListener('orientationchange', onOrientationReset);
-    window.addEventListener('resize',            onOrientationReset);
 
     // ── DEV diagnostics — event trace for interaction debugging ──────────────
     // Logs the 6 key events with gesture state snapshots so stuck-state bugs
@@ -2615,7 +2680,7 @@ const CustomChart = memo(function CustomChart({
     container.addEventListener('touchstart',    onTouchStart,    { capture: true, passive: true });
     container.addEventListener('touchmove',     onTouchMove,     { capture: true, passive: true });
     container.addEventListener('touchend',      onTouchEnd,      { capture: true, passive: true });
-    container.addEventListener('touchcancel',   onTouchEnd,      { capture: true, passive: true });
+    container.addEventListener('touchcancel',   onTouchCancel,   { capture: true, passive: true });
     container.addEventListener('dragstart',     preventDragStart);
     container.addEventListener('wheel',         onWheel,         { capture: true, passive: false });
 
@@ -2628,7 +2693,6 @@ const CustomChart = memo(function CustomChart({
       window.removeEventListener('blur',               onPageHide);
       document.removeEventListener('visibilitychange', onPageHide);
       window.removeEventListener('orientationchange', onOrientationReset);
-      window.removeEventListener('resize',            onOrientationReset);
       if (diagEnabled) {
         window.removeEventListener('pointerdown',   diagPointerDown,   { capture: true });
         window.removeEventListener('pointerup',     diagPointerUp,     { capture: true });
@@ -2655,7 +2719,7 @@ const CustomChart = memo(function CustomChart({
       container.removeEventListener('touchstart',    onTouchStart,    { capture: true });
       container.removeEventListener('touchmove',     onTouchMove,     { capture: true });
       container.removeEventListener('touchend',      onTouchEnd,      { capture: true });
-      container.removeEventListener('touchcancel',   onTouchEnd,      { capture: true });
+      container.removeEventListener('touchcancel',   onTouchCancel,   { capture: true });
       container.removeEventListener('dragstart',     preventDragStart);
       container.removeEventListener('wheel',         onWheel,         { capture: true });
       // Set flag before removal so any already-queued ro callbacks bail immediately
