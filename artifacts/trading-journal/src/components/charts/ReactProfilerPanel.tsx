@@ -5,6 +5,7 @@ import type { ComponentStats } from "@/lib/reactProfilerStore";
 
 interface Props {
   onClose: () => void;
+  onStartCapture?: () => void;
 }
 
 function fmt(ms: number | null): string {
@@ -25,7 +26,7 @@ function Badge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export default function ReactProfilerPanel({ onClose }: Props) {
+export default function ReactProfilerPanel({ onClose, onStartCapture }: Props) {
   const [, forceUpdate] = useReducer(x => x + 1, 0);
 
   useEffect(() => rpStore.subscribe(forceUpdate), []);
@@ -63,9 +64,21 @@ export default function ReactProfilerPanel({ onClose }: Props) {
           <span style={{ fontSize: 14, color: "#a78bfa", fontWeight: 800 }}>⚛ React Profiler</span>
           <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", flex: 1 }}>
             {stats.length === 0
-              ? "Open Chart Settings to collect data"
+              ? "Press Start Capture to begin"
               : `${stats.length} component${stats.length > 1 ? "s" : ""} tracked`}
           </span>
+          {onStartCapture && (
+            <button
+              onClick={onStartCapture}
+              style={{
+                padding: "5px 12px", borderRadius: 7, fontSize: 10, fontWeight: 700,
+                background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.35)",
+                color: "#34d399", cursor: "pointer",
+              }}
+            >
+              ▶ Start Capture
+            </button>
+          )}
           <button
             onClick={() => rpStore.clearStats()}
             style={{

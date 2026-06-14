@@ -1875,7 +1875,7 @@ export default function Charts() {
               ⚡ Perf
             </button>
             <button
-              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); setShowSettings(true); }}
+              onClick={() => { rpStore.clearStats(); setShowReactProfiler(true); }}
               style={{
                 position: "absolute", bottom: 10, left: 88, zIndex: 60,
                 padding: "5px 11px", borderRadius: 8,
@@ -2232,7 +2232,10 @@ export default function Charts() {
 
       {/* ── React Profiler Panel ── */}
       {showReactProfiler && (
-        <ReactProfilerPanel onClose={() => setShowReactProfiler(false)} />
+        <ReactProfilerPanel
+          onClose={() => setShowReactProfiler(false)}
+          onStartCapture={() => { rpStore.clearStats(); setShowSettings(true); }}
+        />
       )}
 
       {/* ── Modals ── */}
