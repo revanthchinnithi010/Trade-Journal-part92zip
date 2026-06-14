@@ -2693,7 +2693,7 @@ interface MktSymbolInfo {
   contractType: string;
 }
 
-function MktRow({
+const MktRow = memo(function MktRow({
   symbol, name, contractType, isFavorite, onStar, onTap,
 }: {
   symbol: string;
@@ -2709,6 +2709,17 @@ function MktRow({
   const isUp      = changePct >= 0;
   const tag       = MKT_CONTRACT_LABELS[contractType] ?? contractType;
 
+  // Optimistic star visual — fills at pointer-down, zero latency
+  const [visualFav, setVisualFav] = useState(isFavorite);
+  useEffect(() => { setVisualFav(isFavorite); }, [isFavorite]);
+
+  const handleStarDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setVisualFav(v => !v);
+    onStar();
+  }, [onStar]);
+
   return (
     <div
       onClick={e => { if ((e.target as HTMLElement).closest("button")) return; onTap(); }}
@@ -2719,16 +2730,21 @@ function MktRow({
         gap: 9, minHeight: 58, cursor: "pointer",
       }}
     >
-      {/* Star */}
+      {/* Star — fires on pointer-down for instant response */}
       <button
-        onClick={e => { e.stopPropagation(); onStar(); }}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: "4px 2px", flexShrink: 0, lineHeight: 0 }}
+        onPointerDown={handleStarDown}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          padding: "6px 4px", flexShrink: 0, lineHeight: 0,
+          touchAction: "manipulation",
+        }}
       >
         <Star
           size={15}
-          fill={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.15)"}
-          color={isFavorite ? "#f59e0b" : "rgba(148,163,184,0.35)"}
+          fill={visualFav ? "#f59e0b" : "rgba(148,163,184,0.15)"}
+          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.35)"}
           strokeWidth={1.8}
+          style={{ transition: "fill 0.08s, color 0.08s" }}
         />
       </button>
 
@@ -2771,7 +2787,7 @@ function MktRow({
       </div>
     </div>
   );
-}
+});
 
 function MarketWatchlistSheet({
   onSelect, onClose, activeSymbol,
@@ -2814,6 +2830,33 @@ function MarketWatchlistSheet({
     if (item) toggleFavorite(item.id, item.isFavorite);
     else addSymbol(symbol, true);
   }, [addSymbol, toggleFavorite]);
+
+  // Stable per-symbol callback cache so MktRow.memo works correctly
+  const starCbCache = useRef(new Map<string, () => void>());
+  const tapCbCache  = useRef(new Map<string, () => void>());
+
+  const prevHandleStar = useRef(handleStar);
+  const prevOnSelect   = useRef(onSelect);
+  if (prevHandleStar.current !== handleStar || prevOnSelect.current !== onSelect) {
+    prevHandleStar.current = handleStar;
+    prevOnSelect.current   = onSelect;
+    starCbCache.current.clear();
+    tapCbCache.current.clear();
+  }
+
+  const getStarCb = useCallback((symbol: string) => {
+    if (!starCbCache.current.has(symbol)) {
+      starCbCache.current.set(symbol, () => handleStar(symbol));
+    }
+    return starCbCache.current.get(symbol)!;
+  }, [handleStar]);
+
+  const getTapCb = useCallback((symbol: string) => {
+    if (!tapCbCache.current.has(symbol)) {
+      tapCbCache.current.set(symbol, () => { onSelect(symbol); onClose(); });
+    }
+    return tapCbCache.current.get(symbol)!;
+  }, [onSelect, onClose]);
 
   const rows = useMemo((): MktSymbolInfo[] => {
     let r: MktSymbolInfo[];
@@ -2953,8 +2996,8 @@ function MarketWatchlistSheet({
             name={row.name}
             contractType={row.contractType}
             isFavorite={isFavorite}
-            onStar={() => handleStar(row.symbol)}
-            onTap={() => { onSelect(row.symbol); onClose(); }}
+            onStar={getStarCb(row.symbol)}
+            onTap={getTapCb(row.symbol)}
           />
         );
       })}

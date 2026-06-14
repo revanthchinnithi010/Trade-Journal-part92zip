@@ -2,6 +2,7 @@ import {
   createContext, useContext, useEffect, useState,
   useCallback, useRef, type ReactNode,
 } from "react";
+import { recordDb } from "@/lib/starDiag";
 
 export interface WatchlistEntry {
   id:         number;
@@ -59,58 +60,34 @@ type RawRow = {
 
 function deriveMeta(symbol: string): { tv: string; label: string; badge: string; market: string } {
   const s = symbol.toUpperCase();
-  // Use curated catalog first
   const catalogEntry = SYMBOL_CATALOG[s];
   if (catalogEntry) return catalogEntry;
 
-  // Derive dynamically for symbols not in the curated catalog
   let market: string = "Other";
   let badge  = s.slice(0, 4);
   let label  = s;
 
-  // Crypto: xyzUSDT or xyzUSD patterns
   if (/^[A-Z0-9]{2,12}USDT$/.test(s)) {
     const base = s.replace("USDT", "");
-    market = "Crypto";
-    badge  = base.slice(0, 5);
-    label  = `${base}/USDT`;
+    market = "Crypto"; badge = base.slice(0, 5); label = `${base}/USDT`;
   } else if (/^[A-Z0-9]{2,8}USD$/.test(s)) {
     const base = s.replace("USD", "");
     if (!["EUR","GBP","AUD","NZD","CAD","CHF","XAU","XAG"].includes(base)) {
-      market = "Crypto";
-      badge  = base.slice(0, 5);
-      label  = `${base}/USD`;
+      market = "Crypto"; badge = base.slice(0, 5); label = `${base}/USD`;
     }
   }
-
-  // Standard 6-letter forex
   if (market === "Other" && /^[A-Z]{6}$/.test(s)) {
-    market = "Forex";
-    badge  = s.slice(0, 3);
-    label  = `${s.slice(0,3)}/${s.slice(3)}`;
+    market = "Forex"; badge = s.slice(0, 3); label = `${s.slice(0,3)}/${s.slice(3)}`;
   }
-
-  // Metals
   if (["XAUUSD","XAGUSD","XPTUSD","XPDUSD"].includes(s)) {
-    market = "Commodities";
-    badge  = s.slice(0, 3);
-    label  = s;
+    market = "Commodities"; badge = s.slice(0, 3); label = s;
   }
-
-  // Index patterns
   if (/^(US30|NAS|SPX|GER|UK1|JP2|AUS|DOW|DAX|CAC|FTSE|IBEX|DE4|FR4|IT4|ES3)/.test(s)) {
-    market = "Indices";
-    badge  = s.slice(0, 4);
-    label  = s;
+    market = "Indices"; badge = s.slice(0, 4); label = s;
   }
-
-  // Commodity patterns
   if (/^(OIL|GAS|WTI|BRENT|NGAS|USOIL|UKOIL|COPP|WHEAT|CORN|SUGAR|COFFEE)/.test(s)) {
-    market = "Commodities";
-    badge  = s.slice(0, 4);
-    label  = s;
+    market = "Commodities"; badge = s.slice(0, 4); label = s;
   }
-
   return { tv: s, label, badge, market };
 }
 
@@ -123,9 +100,9 @@ interface WatchlistContextValue {
   items:          WatchlistEntry[];
   loading:        boolean;
   symbols:        string[];
-  addSymbol:      (symbol: string, isFavorite?: boolean) => Promise<{ ok: boolean; error?: string }>;
+  addSymbol:      (symbol: string, isFavorite?: boolean, tapAt?: number) => Promise<{ ok: boolean; error?: string }>;
   removeSymbol:   (id: number) => Promise<void>;
-  toggleFavorite: (id: number, current: boolean) => Promise<void>;
+  toggleFavorite: (id: number, current: boolean, tapAt?: number) => Promise<void>;
   refresh:        () => Promise<void>;
 }
 
@@ -144,7 +121,11 @@ export function useWatchlist() {
 export function WatchlistProvider({ children }: { children: ReactNode }) {
   const [items,   setItems]   = useState<WatchlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const seeding = useRef(false);
+  const seeding   = useRef(false);
+
+  // Ref so callbacks stay stable without depending on items
+  const itemsRef = useRef(items);
+  useEffect(() => { itemsRef.current = items; }, [items]);
 
   const load = useCallback(async () => {
     try {
@@ -163,7 +144,7 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
             })
           )
         );
-        const r2   = await fetch("/api/watchlist");
+        const r2    = await fetch("/api/watchlist");
         const rows2 = await r2.json() as RawRow[];
         setItems(rows2.map(toEntry));
         seeding.current = false;
@@ -177,20 +158,56 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { load(); }, [load]);
 
-  const addSymbol = useCallback(async (symbol: string, isFavorite = false) => {
-    const res = await fetch("/api/watchlist", {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ symbol: symbol.toUpperCase(), isFavorite }),
+  /**
+   * Optimistic add: inserts a temp entry immediately so the UI reflects the
+   * change in the same frame as the tap. The API call runs in the background;
+   * on success the temp entry is replaced with the real one, on failure it is
+   * removed (rollback).
+   */
+  const addSymbol = useCallback(async (
+    symbol: string,
+    isFavorite = false,
+    tapAt?: number,
+  ) => {
+    const sym    = symbol.toUpperCase();
+    const tempId = -(Date.now());          // negative → clearly a temp entry
+    const meta   = deriveMeta(sym);
+    const tempEntry: WatchlistEntry = {
+      id: tempId, symbol: sym, provider: "pending",
+      position: itemsRef.current.length,
+      isFavorite, createdAt: new Date().toISOString(), ...meta,
+    };
+
+    // ── Optimistic update — fires synchronously before the await ─────────────
+    setItems(prev => {
+      if (prev.some(i => i.symbol === sym)) return prev;   // already present
+      return [...prev, tempEntry];
     });
-    if (res.ok) {
-      const item = await res.json() as RawRow;
-      setItems(prev => [...prev, toEntry(item)]);
-      return { ok: true };
+
+    // ── Background: persist to DB ─────────────────────────────────────────────
+    try {
+      const res = await fetch("/api/watchlist", {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ symbol: sym, isFavorite }),
+      });
+      if (res.ok) {
+        const item = await res.json() as RawRow;
+        setItems(prev => prev.map(i => i.id === tempId ? toEntry(item) : i));
+        if (tapAt !== undefined) recordDb(tapAt, true);
+        return { ok: true };
+      }
+      // Rollback
+      setItems(prev => prev.filter(i => i.id !== tempId));
+      const data = await res.json().catch(() => ({})) as { error?: string };
+      if (tapAt !== undefined) recordDb(tapAt, false);
+      return { ok: false, error: data.error ?? "Failed to add symbol" };
+    } catch {
+      setItems(prev => prev.filter(i => i.id !== tempId));
+      if (tapAt !== undefined) recordDb(tapAt, false);
+      return { ok: false, error: "Network error" };
     }
-    const data = await res.json().catch(() => ({})) as { error?: string };
-    return { ok: false, error: data.error ?? "Failed to add symbol" };
-  }, []);
+  }, []);   // stable — no deps
 
   const removeSymbol = useCallback(async (id: number) => {
     const res = await fetch(`/api/watchlist/${id}`, { method: "DELETE" });
@@ -199,16 +216,31 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const toggleFavorite = useCallback(async (id: number, current: boolean) => {
+  /**
+   * Optimistic toggle: flips isFavorite immediately so the star responds
+   * in the same frame as the tap, then confirms with the API. Rolls back
+   * if the request fails.
+   */
+  const toggleFavorite = useCallback(async (
+    id: number,
+    current: boolean,
+    tapAt?: number,
+  ) => {
+    // ── Optimistic flip ───────────────────────────────────────────────────────
+    setItems(prev => prev.map(i => i.id === id ? { ...i, isFavorite: !current } : i));
+
+    // ── Background: confirm with DB ───────────────────────────────────────────
     const res = await fetch(`/api/watchlist/${id}`, {
       method:  "PATCH",
       headers: { "Content-Type": "application/json" },
       body:    JSON.stringify({ isFavorite: !current }),
     });
-    if (res.ok) {
-      setItems(prev => prev.map(i => i.id === id ? { ...i, isFavorite: !current } : i));
+    if (tapAt !== undefined) recordDb(tapAt, res.ok);
+    if (!res.ok) {
+      // Rollback
+      setItems(prev => prev.map(i => i.id === id ? { ...i, isFavorite: current } : i));
     }
-  }, []);
+  }, []);   // stable — no deps
 
   const symbols = items.map(i => i.symbol);
 
