@@ -16,7 +16,7 @@ type Status = "idle" | "loading" | "waiting_oauth" | "waiting_ready" | "success"
 interface CTraderDiagStep {
   id: string;
   label: string;
-  status: "done" | "active" | "pending";
+  status: "done" | "active" | "error" | "pending";
   detail: string;
 }
 
@@ -170,11 +170,10 @@ function useBrokerConnect() {
         }
       } catch { /* network hiccup — continue polling */ }
 
-      if (Date.now() - startMs > 90_000) {
+      if (Date.now() - startMs > 35_000) {
         setStatus("error");
         setErrorMsg(
-          "cTrader connection timed out after 90 seconds. " +
-          "Check CTRADER_ENV in server config and verify your API credentials.",
+          "cTrader connection timed out. Check server logs for the exact failing step.",
         );
         return;
       }
@@ -531,22 +530,26 @@ function SuccessBanner({ broker, onClose }: { broker: { name: string }; onClose:
 }
 
 function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }) {
-  const stepIconStyle = (s: "done" | "active" | "pending"): React.CSSProperties => ({
+  const hasStepError = ctDiag?.steps.some(s => s.status === "error") ?? false;
+
+  const stepIconStyle = (s: "done" | "active" | "error" | "pending"): React.CSSProperties => ({
     width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
     display: "flex", alignItems: "center", justifyContent: "center",
     background:
-      s === "done" ? "rgba(0,255,180,0.12)" :
-      s === "active" ? "rgba(239,68,68,0.12)" :
+      s === "done"   ? "rgba(0,255,180,0.12)" :
+      s === "error"  ? "rgba(239,68,68,0.16)" :
+      s === "active" ? "rgba(239,68,68,0.08)" :
       "rgba(255,255,255,0.05)",
     border:
-      s === "done" ? "1.5px solid rgba(0,255,180,0.35)" :
-      s === "active" ? "1.5px solid rgba(239,68,68,0.35)" :
+      s === "done"   ? "1.5px solid rgba(0,255,180,0.35)" :
+      s === "error"  ? "1.5px solid rgba(239,68,68,0.55)" :
+      s === "active" ? "1.5px solid rgba(239,68,68,0.25)" :
       "1.5px solid rgba(255,255,255,0.08)",
   });
 
   const defaultSteps: CTraderDiagStep[] = [
-    { id: "oauth",     label: "OAuth authorized",          status: "done",   detail: "Access token stored" },
-    { id: "accounts",  label: "Trading account loaded",    status: "active", detail: "Authenticating with cTrader" },
+    { id: "oauth",     label: "OAuth authorized",          status: "done",    detail: "Access token stored" },
+    { id: "accounts",  label: "Trading account loaded",    status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
     { id: "symbols",   label: "Symbol catalog downloaded", status: "pending", detail: "Waiting…" },
     { id: "websocket", label: "WebSocket session active",  status: "pending", detail: "Waiting…" },
   ];
@@ -558,15 +561,22 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
       {/* Header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12,
-        background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)",
+        background: hasStepError ? "rgba(239,68,68,0.10)" : "rgba(239,68,68,0.07)",
+        border: `1px solid ${hasStepError ? "rgba(239,68,68,0.40)" : "rgba(239,68,68,0.18)"}`,
       }}>
-        <Loader2 size={18} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
+        {hasStepError
+          ? <XCircle size={18} style={{ color: "#EF4444", flexShrink: 0 }} />
+          : <Loader2 size={18} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
+        }
         <div>
           <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0 }}>
-            Initializing cTrader connection
+            {hasStepError ? "Connection failed" : "Initializing cTrader connection"}
           </p>
           <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>
-            {ctDiag ? `State: ${ctDiag.state}` : "Connecting to Spotware TLS endpoint…"}
+            {hasStepError
+              ? "See the failing step below for details"
+              : ctDiag ? `State: ${ctDiag.state}` : "Connecting to Spotware TLS endpoint…"
+            }
           </p>
         </div>
       </div>
@@ -583,10 +593,13 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
             display: "flex", alignItems: "center", gap: 14,
             padding: "14px 16px",
             borderBottom: i < steps.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+            background: step.status === "error" ? "rgba(239,68,68,0.04)" : undefined,
           }}>
             <div style={stepIconStyle(step.status)}>
               {step.status === "done"
                 ? <CheckCircle2 size={14} style={{ color: "#00FFB4" }} />
+                : step.status === "error"
+                ? <XCircle size={13} style={{ color: "#EF4444" }} />
                 : step.status === "active"
                 ? <Loader2 size={13} style={{ color: "#EF4444" }} className="animate-spin" />
                 : <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
@@ -595,13 +608,18 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{
                 fontSize: 13, fontWeight: 500, margin: 0,
-                color: step.status === "done" ? "#00FFB4" :
+                color: step.status === "done"   ? "#00FFB4" :
+                       step.status === "error"  ? "#F87171" :
                        step.status === "active" ? "rgba(255,255,255,0.9)" :
                        "rgba(255,255,255,0.35)",
               }}>
                 {step.label}
               </p>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.3)", margin: "2px 0 0" }}>
+              <p style={{
+                fontSize: 11, margin: "2px 0 0",
+                color: step.status === "error" ? "rgba(248,113,113,0.75)" : "rgba(255,255,255,0.3)",
+                wordBreak: "break-word" as const,
+              }}>
                 {step.detail}
               </p>
             </div>

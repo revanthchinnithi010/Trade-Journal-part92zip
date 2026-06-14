@@ -162,8 +162,10 @@ export class CTraderService extends EventEmitter {
   private rxBuf = Buffer.alloc(0);
   private state: State = "disconnected";
   private lastError: string | null = null;
+  private lastStuckStep: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private stepTimeoutTimer: ReturnType<typeof setTimeout> | null = null;
   private hbSentAt = 0;
   latencyMs = 0;
 
@@ -261,7 +263,19 @@ export class CTraderService extends EventEmitter {
     const expiresIn = Number(res["expires_in"] ?? 3600);
     this.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
 
+    logger.info({
+      accessTokenPrefix: this.accessToken.slice(0, 8) + "…",
+      expiresIn,
+      hasRefreshToken: !!this.refreshToken,
+    }, "CTraderService: access token received — saving and connecting");
+
     await this.saveToken();
+    // Reset any previous error so connect() can proceed
+    this.lastError = null;
+    this.lastStuckStep = null;
+    if (this.state !== "disconnected") {
+      this.state = "disconnected";
+    }
     this.connect();
   }
 
@@ -281,6 +295,25 @@ export class CTraderService extends EventEmitter {
     this.emit("status_change", this.getStatus());
   }
 
+  // ── Step timeout ─────────────────────────────────────────────────────────
+
+  private setStepTimeout(stepLabel: string, ms = 30_000): void {
+    this.clearStepTimeout();
+    this.stepTimeoutTimer = setTimeout(() => {
+      this.stepTimeoutTimer = null;
+      const msg = `No response after ${ms / 1000}s waiting for: ${stepLabel}`;
+      logger.error({ stepLabel, stateAtTimeout: this.state }, `CTraderService: step timed out — ${msg}`);
+      this.lastStuckStep = stepLabel;
+      this.lastError = msg;
+      this.state = "error";
+      this.emit("status_change", this.getStatus());
+    }, ms);
+  }
+
+  private clearStepTimeout(): void {
+    if (this.stepTimeoutTimer) { clearTimeout(this.stepTimeoutTimer); this.stepTimeoutTimer = null; }
+  }
+
   // ── TLS connect ───────────────────────────────────────────────────────────
 
   private connect(): void {
@@ -294,13 +327,16 @@ export class CTraderService extends EventEmitter {
     const env  = (process.env["CTRADER_ENV"] ?? "live").toLowerCase();
     const host = process.env["CTRADER_API_HOST"] ?? (env === "demo" ? "demo.ctraderapi.com" : "live.ctraderapi.com");
     const port = Number(process.env["CTRADER_API_PORT"] ?? (env === "demo" ? "5035" : "5036"));
-    logger.info({ host, port, env }, "CTraderService: connecting");
+    logger.info({ host, port, env }, "CTraderService: WebSocket connect requested");
+
+    this.setStepTimeout("TLS handshake / connect");
 
     const sock = tls.connect({ host, port, rejectUnauthorized: true });
     this.socket = sock;
 
     sock.on("secureConnect", () => {
-      logger.info("CTraderService: TLS connected — sending AppAuth");
+      this.clearStepTimeout();
+      logger.info({ host, port }, "CTraderService: TLS/WebSocket connected — sending AppAuth");
       this.state = "app_auth";
       this.sendAppAuth();
       this.startHeartbeat();
@@ -314,7 +350,10 @@ export class CTraderService extends EventEmitter {
     });
 
     sock.on("error", (err) => {
-      logger.warn({ err: err.message }, "CTraderService: socket error");
+      this.clearStepTimeout();
+      logger.warn({ err: err.message, host, port }, "CTraderService: socket error");
+      this.lastError = `TLS connection failed: ${err.message}`;
+      this.lastStuckStep = "TLS connect";
       this.onDisconnected();
     });
   }
@@ -322,6 +361,23 @@ export class CTraderService extends EventEmitter {
   private onDisconnected(): void {
     this.clearTimers();
     const wasConnected = this.state === "subscribed";
+    // If the socket closed while we were mid-auth-flow and there's no error yet,
+    // it means cTrader rejected the connection (wrong credentials / error before ERROR_RES arrived).
+    const midAuthStates: State[] = ["app_auth", "get_accounts", "account_auth", "fetch_symbols", "fetch_symbol_details"];
+    if (midAuthStates.includes(this.state) && !this.lastError) {
+      const stateLabel = this.state;
+      const msg = `Connection closed by server during ${stateLabel}. ` +
+        "Check CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET — credentials may be invalid or app not approved.";
+      logger.error({ stateAtClose: stateLabel }, `CTraderService: ${msg}`);
+      this.lastError = msg;
+      this.lastStuckStep = stateLabel;
+      this.state = "error";
+      this.symbolIds.clear();
+      this.symbolMeta.clear();
+      this.emit("status_change", this.getStatus());
+      // Do NOT auto-reconnect for credential errors — user must re-authenticate
+      return;
+    }
     this.state = "disconnected";
     this.symbolIds.clear();
     this.symbolMeta.clear();
@@ -389,7 +445,16 @@ export class CTraderService extends EventEmitter {
         const fields = decodeFields(payload);
         const errCode = fields.find(f => f.num === 2)?.varint;
         const desc = fields.find(f => f.num === 3)?.bytes?.toString("utf8");
-        logger.warn({ errCode: Number(errCode), desc }, "CTraderService: error response");
+        const codeNum = Number(errCode ?? 0);
+        const msg = desc
+          ? `cTrader API error ${codeNum}: ${desc}`
+          : `cTrader API error ${codeNum}`;
+        logger.error({ errCode: codeNum, desc, stateAtError: this.state }, `CTraderService: ${msg}`);
+        this.clearStepTimeout();
+        this.lastError = msg;
+        this.lastStuckStep = this.state; // which step was active when the error came in
+        this.state = "error";
+        this.emit("status_change", this.getStatus());
         break;
       }
 
@@ -408,16 +473,22 @@ export class CTraderService extends EventEmitter {
   private sendAppAuth(): void {
     const id = process.env["CTRADER_CLIENT_ID"] ?? "";
     const secret = process.env["CTRADER_CLIENT_SECRET"] ?? "";
+    logger.info({ clientIdPrefix: id.slice(0, 8) + "…" }, "CTraderService: sending App Auth request");
     const payload = Buffer.concat([stringField(1, id), stringField(2, secret)]);
     this.send(PT.APP_AUTH_REQ, payload);
+    this.setStepTimeout("App Auth response (CTRADER_CLIENT_ID/SECRET may be wrong)");
   }
 
   private sendGetAccounts(): void {
+    logger.info({ accessTokenPrefix: (this.accessToken ?? "").slice(0, 8) + "…" },
+      "CTraderService: Get Trading Accounts API request sent");
     const payload = stringField(1, this.accessToken ?? "");
     this.send(PT.GET_ACCOUNTS_REQ, payload);
+    this.setStepTimeout("Get Trading Accounts response");
   }
 
   private handleGetAccountsRes(buf: Buffer): void {
+    this.clearStepTimeout();
     const fields = decodeFields(buf);
     const accounts: CTraderAccount[] = [];
     for (const f of fields) {
@@ -436,24 +507,50 @@ export class CTraderService extends EventEmitter {
       }
     }
     this.accounts = accounts;
-    logger.info({ accounts: accounts.length }, "CTraderService: got account list");
 
-    const live = accounts.find(a => a.isLive) ?? accounts[0];
-    if (!live) {
-      logger.warn("CTraderService: no accounts found");
-      this.lastError = "No trading accounts found for this token";
+    logger.info({
+      totalAccounts: accounts.length,
+      accounts: accounts.map(a => ({
+        id: a.ctidTraderAccountId.toString(),
+        login: a.traderLogin,
+        isLive: a.isLive,
+      })),
+    }, "CTraderService: Get Trading Accounts API response received");
+
+    if (accounts.length === 0) {
+      const msg = "No cTrader trading accounts found for this access token. " +
+        "Ensure the OAuth scope includes 'trading' and the account is linked to this application.";
+      logger.error({ accessTokenPrefix: (this.accessToken ?? "").slice(0, 8) + "…" },
+        `CTraderService: ${msg}`);
+      this.lastError = msg;
+      this.lastStuckStep = "Get Trading Accounts";
+      this.state = "error";
+      this.emit("status_change", this.getStatus());
       return;
     }
+
+    // Auto-select: prefer first live account (Fusion Markets or any broker)
+    const live = accounts.find(a => a.isLive) ?? accounts[0];
+    logger.info({
+      selectedId: live.ctidTraderAccountId.toString(),
+      selectedLogin: live.traderLogin,
+      isLive: live.isLive,
+      totalAccounts: accounts.length,
+    }, "CTraderService: selected trading account");
+
     this.activeAccount = live;
     // Persist the resolved ctidAccountId back to broker_accounts so REST calls work
     // (The OAuth callback may have stored "pending" if the initial REST fetch failed)
     void this.persistResolvedAccountId(live.ctidTraderAccountId.toString());
     this.state = "account_auth";
+    logger.info({ accountId: live.ctidTraderAccountId.toString() },
+      "CTraderService: sending Account Auth request");
     const payload = Buffer.concat([
       sint64Field(1, live.ctidTraderAccountId),
       stringField(2, this.accessToken ?? ""),
     ]);
     this.send(PT.ACCOUNT_AUTH_REQ, payload);
+    this.setStepTimeout("Account Auth response");
   }
 
   /** Writes the TLS-resolved ctidAccountId into broker_accounts and evicts the adapter cache. */
@@ -480,15 +577,21 @@ export class CTraderService extends EventEmitter {
   }
 
   private handleAccountAuthRes(buf: Buffer): void {
+    this.clearStepTimeout();
     const fields = decodeFields(buf);
     const acctId = fields.find(f => f.num === 1 && f.type === 0)?.varint;
-    logger.info({ acctId: acctId ? dezigzag(acctId).toString() : "?" }, "CTraderService: account auth OK → fetching symbols");
+    logger.info({
+      acctId: acctId ? dezigzag(acctId).toString() : "?",
+      accountId: this.activeAccount?.ctidTraderAccountId.toString(),
+    }, "CTraderService: Account Auth OK — sending Symbol catalog request");
     this.state = "fetch_symbols";
     const payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
     this.send(PT.SYMBOLS_LIST_REQ, payload);
+    this.setStepTimeout("Symbol catalog response (SYMBOLS_LIST_RES)");
   }
 
   private handleSymbolsListRes(buf: Buffer): void {
+    this.clearStepTimeout();
     const fields = decodeFields(buf);
     const found = new Map<string, bigint>();
     for (const f of fields) {
@@ -504,13 +607,21 @@ export class CTraderService extends EventEmitter {
       }
     }
 
+    logger.info({ symbolCount: found.size }, "CTraderService: Symbol catalog response received");
+
     if (found.size === 0) {
-      logger.warn("CTraderService: no symbols found in list");
+      const msg = "Symbol catalog returned 0 symbols. The account may have no tradeable instruments.";
+      logger.error({ accountId: this.activeAccount?.ctidTraderAccountId.toString() },
+        `CTraderService: ${msg}`);
+      this.lastError = msg;
+      this.lastStuckStep = "Symbol catalog";
+      this.state = "error";
+      this.emit("status_change", this.getStatus());
       return;
     }
 
     this.symbolIds = found;
-    logger.info({ count: found.size }, "CTraderService: symbol IDs resolved — fetching details");
+    logger.info({ count: found.size }, "CTraderService: symbol IDs resolved — fetching symbol details");
 
     this.state = "fetch_symbol_details";
     // Batch SYMBOL_BY_ID_REQ in chunks of 500 to stay within message size limits
@@ -518,11 +629,13 @@ export class CTraderService extends EventEmitter {
     const CHUNK = 500;
     const numChunks = Math.ceil(ids.length / CHUNK);
     this.detailBatchesPending = numChunks;
+    logger.info({ totalSymbols: ids.length, chunks: numChunks }, "CTraderService: sending Symbol detail requests");
     for (let i = 0; i < ids.length; i += CHUNK) {
       let payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
       for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(2, id)]);
       this.send(PT.SYMBOL_BY_ID_REQ, payload);
     }
+    this.setStepTimeout(`Symbol detail responses (${numChunks} batch(es))`);
   }
 
   private handleSymbolByIdRes(buf: Buffer): void {
@@ -546,7 +659,8 @@ export class CTraderService extends EventEmitter {
       logger.debug({ remaining: this.detailBatchesPending }, "CTraderService: waiting for more detail batches");
       return;
     }
-    logger.info({ count: this.symbolMeta.size }, "CTraderService: all symbol details fetched → subscribing spots");
+    this.clearStepTimeout();
+    logger.info({ count: this.symbolMeta.size }, "CTraderService: all symbol details fetched — subscribing to spot prices");
     this.subscribeToSpots();
   }
 
@@ -619,6 +733,7 @@ export class CTraderService extends EventEmitter {
   private clearTimers(): void {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
     if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
+    this.clearStepTimeout();
   }
 
   // ── Token refresh ─────────────────────────────────────────────────────────
@@ -668,6 +783,7 @@ export class CTraderService extends EventEmitter {
       ticks: Object.fromEntries([...this.ticks.entries()]),
       symbolCount: this.symbolIds.size,
       lastError: this.lastError ?? null,
+      lastStuckStep: this.lastStuckStep ?? null,
     };
   }
 

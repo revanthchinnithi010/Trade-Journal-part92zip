@@ -170,13 +170,58 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
 
   router.get("/ctrader/diagnostics", (_req, res) => {
     const s = ctrader.getStatus();
-    const idx = s.stateIdx; // -1 if state is unknown
+    const idx = s.stateIdx; // -1 if state is unknown/error
+    const isErr = s.state === "error";
 
-    function stepStatus(readyAtIdx: number): "done" | "active" | "pending" {
+    // Map stuck step name (state name or timeout label) to a frontend step id
+    const stuckStepId = (() => {
+      const step = (s as Record<string, unknown>)["lastStuckStep"] as string | null;
+      if (!step) return null;
+      // State names: "app_auth", "connecting" — TLS/App Auth phase
+      if (/app.?auth|TLS|connecting/i.test(step)) return "websocket";
+      // State names: "get_accounts", "account_auth" — account loading phase
+      if (/account|get.?account/i.test(step)) return "accounts";
+      // State names: "fetch_symbols", "fetch_symbol_details" — symbol phase
+      if (/symbol/i.test(step)) return "symbols";
+      return null;
+    })();
+
+    type StepStatus = "done" | "active" | "error" | "pending";
+
+    function stepStatus(readyAtIdx: number, stepId: string): StepStatus {
+      if (isErr && stuckStepId === stepId) return "error";
+      if (isErr) {
+        // steps before the stuck one are done; after are pending
+        const order = ["websocket", "accounts", "symbols", "websocket"];
+        const stuckPos = order.indexOf(stuckStepId ?? "");
+        const thisPos = order.indexOf(stepId);
+        if (stuckPos >= 0 && thisPos < stuckPos) return "done";
+        if (stuckPos >= 0 && thisPos > stuckPos) return "pending";
+        return "pending";
+      }
       if (idx >= readyAtIdx) return "done";
       if (idx >= readyAtIdx - 2 && idx >= 0) return "active";
       return "pending";
     }
+
+    // Accounts step: error if no-accounts case, done if activeAccountId set, else active/pending
+    const accountsStatus: StepStatus = isErr && (stuckStepId === "accounts" || (!stuckStepId && !s.activeAccountId))
+      ? "error"
+      : s.activeAccountId ? "done"
+      : (idx >= 1 ? "active" : "pending");
+
+    // Symbols step
+    const symbolsStatus: StepStatus = isErr && stuckStepId === "symbols"
+      ? "error"
+      : s.symbolCount > 0 ? "done"
+      : stepStatus(5, "symbols");
+
+    // WebSocket step: error only if TLS itself failed
+    const wsStatus: StepStatus = s.connected ? "done"
+      : isErr && stuckStepId === "websocket" ? "error"
+      : (idx >= 1 ? "active" : "pending");
+
+    const errMsg: string | null = s.lastError ?? (isErr ? "Connection failed — check credentials and retry" : null);
 
     res.json({
       state: s.state,
@@ -196,29 +241,37 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
         {
           id: "accounts",
           label: "Trading account loaded",
-          status: s.activeAccountId ? "done" : (idx >= 1 ? "active" : "pending"),
-          detail: s.activeAccountId
+          status: accountsStatus,
+          detail: accountsStatus === "error"
+            ? (errMsg ?? "No trading accounts found")
+            : s.activeAccountId
             ? `Account ID ${s.activeAccountId}`
-            : "Authenticating with cTrader",
+            : (s.state === "app_auth" || s.state === "connecting")
+            ? "Connecting to Spotware TLS endpoint…"
+            : "Requesting trading accounts…",
         },
         {
           id: "symbols",
           label: "Symbol catalog downloaded",
-          status: s.symbolCount > 0 ? "done" : stepStatus(5),
-          detail: s.symbolCount > 0
+          status: symbolsStatus,
+          detail: symbolsStatus === "error"
+            ? (errMsg ?? "Failed to download symbols")
+            : s.symbolCount > 0
             ? `${s.symbolCount.toLocaleString()} symbols loaded`
-            : "Downloading symbol list",
+            : idx >= 4 ? "Downloading symbol catalog…" : "Waiting for account auth…",
         },
         {
           id: "websocket",
           label: "WebSocket session active",
-          status: s.connected ? "done" : (idx >= 1 ? "active" : "pending"),
-          detail: s.connected
+          status: wsStatus,
+          detail: wsStatus === "error"
+            ? (errMsg ?? "TLS connection failed")
+            : s.connected
             ? `${s.latencyMs}ms latency`
-            : s.state === "subscribed" ? "Connected" : `Connecting… (${s.state})`,
+            : idx >= 6 ? "Subscribing to spot prices…" : `Connecting… (${s.state})`,
         },
       ],
-      error: s.lastError ?? (s.state === "error" ? "Connection failed — check credentials and retry" : null),
+      error: errMsg,
     });
   });
 
