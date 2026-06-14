@@ -168,6 +168,60 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     res.json({ ticks: status.ticks, latencyMs: status.latencyMs, connected: status.connected });
   });
 
+  router.get("/ctrader/diagnostics", (_req, res) => {
+    const s = ctrader.getStatus();
+    const idx = s.stateIdx; // -1 if state is unknown
+
+    function stepStatus(readyAtIdx: number): "done" | "active" | "pending" {
+      if (idx >= readyAtIdx) return "done";
+      if (idx >= readyAtIdx - 2 && idx >= 0) return "active";
+      return "pending";
+    }
+
+    res.json({
+      state: s.state,
+      connected: s.connected,
+      hasToken: s.hasToken,
+      activeAccountId: s.activeAccountId,
+      symbolCount: s.symbolCount,
+      latencyMs: s.latencyMs,
+      lastError: s.lastError,
+      steps: [
+        {
+          id: "oauth",
+          label: "OAuth authorized",
+          status: s.hasToken ? "done" : "active",
+          detail: s.hasToken ? "Access token stored" : "Awaiting authorization",
+        },
+        {
+          id: "accounts",
+          label: "Trading account loaded",
+          status: s.activeAccountId ? "done" : (idx >= 1 ? "active" : "pending"),
+          detail: s.activeAccountId
+            ? `Account ID ${s.activeAccountId}`
+            : "Authenticating with cTrader",
+        },
+        {
+          id: "symbols",
+          label: "Symbol catalog downloaded",
+          status: s.symbolCount > 0 ? "done" : stepStatus(5),
+          detail: s.symbolCount > 0
+            ? `${s.symbolCount.toLocaleString()} symbols loaded`
+            : "Downloading symbol list",
+        },
+        {
+          id: "websocket",
+          label: "WebSocket session active",
+          status: s.connected ? "done" : (idx >= 1 ? "active" : "pending"),
+          detail: s.connected
+            ? `${s.latencyMs}ms latency`
+            : s.state === "subscribed" ? "Connected" : `Connecting… (${s.state})`,
+        },
+      ],
+      error: s.lastError ?? (s.state === "error" ? "Connection failed — check credentials and retry" : null),
+    });
+  });
+
   return router;
 }
 

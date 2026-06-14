@@ -5,6 +5,8 @@ import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger.js";
+import { encrypt } from "./BrokerEncryption.js";
+import { BrokerService } from "../brokers/BrokerService.js";
 
 // ─── Protobuf helpers ────────────────────────────────────────────────────────
 
@@ -159,6 +161,7 @@ export class CTraderService extends EventEmitter {
   private socket: tls.TLSSocket | null = null;
   private rxBuf = Buffer.alloc(0);
   private state: State = "disconnected";
+  private lastError: string | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private hbSentAt = 0;
@@ -438,15 +441,42 @@ export class CTraderService extends EventEmitter {
     const live = accounts.find(a => a.isLive) ?? accounts[0];
     if (!live) {
       logger.warn("CTraderService: no accounts found");
+      this.lastError = "No trading accounts found for this token";
       return;
     }
     this.activeAccount = live;
+    // Persist the resolved ctidAccountId back to broker_accounts so REST calls work
+    // (The OAuth callback may have stored "pending" if the initial REST fetch failed)
+    void this.persistResolvedAccountId(live.ctidTraderAccountId.toString());
     this.state = "account_auth";
     const payload = Buffer.concat([
       sint64Field(1, live.ctidTraderAccountId),
       stringField(2, this.accessToken ?? ""),
     ]);
     this.send(PT.ACCOUNT_AUTH_REQ, payload);
+  }
+
+  /** Writes the TLS-resolved ctidAccountId into broker_accounts and evicts the adapter cache. */
+  private async persistResolvedAccountId(ctidId: string): Promise<void> {
+    try {
+      const enc = encrypt(ctidId);
+      const result = await pool.query(
+        `UPDATE broker_accounts SET api_secret_enc = $1 WHERE broker_id = 'ctrader'`,
+        [enc],
+      );
+      if ((result.rowCount ?? 0) > 0) {
+        // Evict cached adapters so the next REST call rebuilds with the correct account ID
+        const rows = await pool.query<{ id: number }>(
+          `SELECT id FROM broker_accounts WHERE broker_id = 'ctrader'`,
+        );
+        for (const row of rows.rows) {
+          BrokerService.evict(row.id);
+        }
+        logger.info({ ctidId }, "CTraderService: ctidAccountId persisted to DB — adapter cache evicted");
+      }
+    } catch (err) {
+      logger.warn({ err }, "CTraderService: failed to persist ctidAccountId — REST calls may use stale value");
+    }
   }
 
   private handleAccountAuthRes(buf: Buffer): void {
@@ -617,10 +647,18 @@ export class CTraderService extends EventEmitter {
   // ── Status ────────────────────────────────────────────────────────────────
 
   getStatus() {
+    const stateOrder = [
+      "disconnected", "connecting", "app_auth", "get_accounts",
+      "account_auth", "fetch_symbols", "fetch_symbol_details", "subscribed",
+    ] as const;
+    const stateIdx = stateOrder.indexOf(this.state as typeof stateOrder[number]);
     return {
       configured: !!(process.env["CTRADER_CLIENT_ID"] && process.env["CTRADER_CLIENT_SECRET"]),
       connected: this.state === "subscribed",
       state: this.state,
+      stateIdx,
+      hasToken: !!(this.accessToken),
+      activeAccountId: this.activeAccount?.ctidTraderAccountId.toString() ?? null,
       latencyMs: this.latencyMs,
       accounts: this.accounts.map(a => ({
         id: a.ctidTraderAccountId.toString(),
@@ -629,6 +667,7 @@ export class CTraderService extends EventEmitter {
       })),
       ticks: Object.fromEntries([...this.ticks.entries()]),
       symbolCount: this.symbolIds.size,
+      lastError: this.lastError ?? null,
     };
   }
 
