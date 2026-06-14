@@ -2,9 +2,10 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import {
   Upload, FileText, CheckCircle2, XCircle, ShieldCheck,
   ChevronRight, X, Loader2, AlertTriangle, Lock, Eye, EyeOff,
-  Database, Wifi, RefreshCw,
+  Database, Wifi, RefreshCw, Key,
 } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useBrokerStore } from "@/store/brokerStore";
 
 interface ParsedCredentials {
   CTRADER_CLIENT_ID?: string;
@@ -657,10 +658,68 @@ interface StatusState {
   status: Partial<CredStatus>;
 }
 
+interface DeltaTestResult {
+  ok: boolean;
+  error?: string;
+  envName?: string;
+  usdtBalance?: string;
+}
+
+type CheckStatus = "idle" | "running" | "ok" | "fail";
+
+function CheckChip({ label, status, icon }: { label: string; status: CheckStatus; icon: React.ReactNode }) {
+  const color =
+    status === "ok"      ? "#00FFB4" :
+    status === "fail"    ? "#EF4444" :
+    status === "running" ? "rgba(255,255,255,0.45)" :
+                           "rgba(255,255,255,0.2)";
+  const bg =
+    status === "ok"      ? "rgba(0,255,180,0.08)" :
+    status === "fail"    ? "rgba(239,68,68,0.08)" :
+                           "rgba(255,255,255,0.04)";
+  const border =
+    status === "ok"      ? "1px solid rgba(0,255,180,0.2)" :
+    status === "fail"    ? "1px solid rgba(239,68,68,0.2)" :
+                           "1px solid rgba(255,255,255,0.07)";
+
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 4,
+      padding: "3px 8px", borderRadius: 6,
+      background: bg, border, flexShrink: 0,
+    }}>
+      <span style={{ color, display: "flex", alignItems: "center" }}>
+        {status === "running"
+          ? <Loader2 size={9} className="animate-spin" />
+          : status === "ok"
+            ? <CheckCircle2 size={9} />
+            : status === "fail"
+              ? <XCircle size={9} />
+              : icon}
+      </span>
+      <span style={{ fontSize: 9, fontWeight: 600, color, letterSpacing: "0.03em" }}>{label}</span>
+    </div>
+  );
+}
+
 export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) {
   const [st, setSt] = useState<StatusState>({ loaded: false, status: {} });
-  const [testing, setTesting] = useState<string | null>(null);
-  const [testResults, setTestResults] = useState<Record<string, boolean | null>>({});
+
+  // Delta 3-check state
+  const [deltaApiStatus, setDeltaApiStatus] = useState<CheckStatus>("idle");
+  const [deltaTestResult, setDeltaTestResult] = useState<DeltaTestResult | null>(null);
+
+  // Telegram single-test state
+  const [telegramTesting, setTelegramTesting] = useState(false);
+  const [telegramResult, setTelegramResult] = useState<boolean | null>(null);
+
+  // Live broker state for WS + account data checks
+  const wsClientStates  = useBrokerStore(s => s.wsClientStates);
+  const brokerBalances  = useBrokerStore(s => s.brokerBalances);
+  const connectedAccounts = useBrokerStore(s => s.connectedAccounts);
+
+  const deltaWsConnected  = wsClientStates.delta?.status === "connected";
+  const deltaHasBalance   = !!(brokerBalances["delta"] || connectedAccounts["delta"]);
 
   const load = useCallback(async () => {
     try {
@@ -672,18 +731,44 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
 
   useEffect(() => { void load(); }, [load]);
 
-  async function testService(service: "delta" | "telegram") {
-    setTesting(service);
+  const runDeltaTest = useCallback(async () => {
+    setDeltaApiStatus("running");
+    setDeltaTestResult(null);
     try {
-      const res = await fetch(`/api/credentials/test/${service}`, {
+      const res = await fetch("/api/credentials/test/delta", {
+        method: "POST", credentials: "include",
+      });
+      const data = await res.json() as DeltaTestResult;
+      setDeltaTestResult(data);
+      setDeltaApiStatus(data.ok ? "ok" : "fail");
+    } catch {
+      setDeltaTestResult({ ok: false, error: "Network error" });
+      setDeltaApiStatus("fail");
+    }
+  }, []);
+
+  // Auto-run Delta test once credentials are confirmed present
+  const deltaConfigured = !!(st.status.DELTA_API_KEY && st.status.DELTA_API_SECRET);
+  useEffect(() => {
+    if (st.loaded && deltaConfigured) {
+      void runDeltaTest();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [st.loaded, deltaConfigured]);
+
+  async function testTelegram() {
+    setTelegramTesting(true);
+    setTelegramResult(null);
+    try {
+      const res = await fetch("/api/credentials/test/telegram", {
         method: "POST", credentials: "include",
       });
       const data = await res.json() as { ok: boolean };
-      setTestResults(prev => ({ ...prev, [service]: data.ok }));
+      setTelegramResult(data.ok);
     } catch {
-      setTestResults(prev => ({ ...prev, [service]: false }));
+      setTelegramResult(false);
     } finally {
-      setTesting(null);
+      setTelegramTesting(false);
     }
   }
 
@@ -697,16 +782,14 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
     {
       key: "delta",
       label: "Delta Exchange",
-      configured: !!(st.status.DELTA_API_KEY && st.status.DELTA_API_SECRET),
+      configured: deltaConfigured,
       color: "#F97316",
-      testable: true,
     },
     {
       key: "telegram",
       label: "Telegram",
       configured: !!(st.status.TELEGRAM_BOT_TOKEN && st.status.TELEGRAM_CHAT_ID),
       color: "#3B82F6",
-      testable: true,
     },
     {
       key: "database",
@@ -759,13 +842,15 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
       </div>
 
       <div style={{ display: "flex", flexDirection: "column" }}>
-        {services.map((svc, i) => {
-          const testResult = testResults[svc.key];
-          return (
-            <div key={svc.key} style={{
+        {services.map((svc, i) => (
+          <div key={svc.key}>
+            {/* Main service row */}
+            <div style={{
               display: "flex", alignItems: "center", gap: 12,
               padding: "11px 16px",
-              borderBottom: i < services.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+              borderBottom: (i < services.length - 1 && svc.key !== "delta") || (svc.key === "delta" && svc.configured)
+                ? "none"
+                : i < services.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
             }}>
               <div style={{
                 width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
@@ -773,29 +858,33 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
                 boxShadow: svc.configured ? `0 0 6px ${svc.color}60` : "none",
               }} />
               <span style={{ fontSize: 13, color: "rgba(255,255,255,0.75)", flex: 1 }}>{svc.label}</span>
+
               {!st.loaded ? (
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>…</span>
               ) : (
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  {svc.testable && svc.configured && (
-                    <button
-                      onClick={() => testService(svc.key as "delta" | "telegram")}
-                      disabled={testing === svc.key}
-                      style={{
-                        fontSize: 10, padding: "2px 8px", borderRadius: 5,
-                        background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)",
-                        border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
-                        display: "flex", alignItems: "center", gap: 4,
-                      }}
-                    >
-                      {testing === svc.key ? <Loader2 size={10} className="animate-spin" /> : <Wifi size={10} />}
-                      Test
-                    </button>
-                  )}
-                  {testResult !== undefined && (
-                    <span style={{ fontSize: 10, color: testResult ? "#00FFB4" : "#EF4444" }}>
-                      {testResult ? "✓ OK" : "✗ Fail"}
-                    </span>
+                  {/* Telegram: single test button */}
+                  {svc.key === "telegram" && svc.configured && (
+                    <>
+                      <button
+                        onClick={testTelegram}
+                        disabled={telegramTesting}
+                        style={{
+                          fontSize: 10, padding: "2px 8px", borderRadius: 5,
+                          background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)",
+                          border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
+                          display: "flex", alignItems: "center", gap: 4,
+                        }}
+                      >
+                        {telegramTesting ? <Loader2 size={10} className="animate-spin" /> : <Wifi size={10} />}
+                        Test
+                      </button>
+                      {telegramResult !== null && (
+                        <span style={{ fontSize: 10, color: telegramResult ? "#00FFB4" : "#EF4444" }}>
+                          {telegramResult ? "✓ OK" : "✗ Fail"}
+                        </span>
+                      )}
+                    </>
                   )}
                   <span style={{
                     fontSize: 11, fontWeight: 600,
@@ -806,8 +895,79 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
                 </div>
               )}
             </div>
-          );
-        })}
+
+            {/* Delta 3-check sub-row */}
+            {svc.key === "delta" && svc.configured && st.loaded && (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 6,
+                padding: "6px 16px 10px 30px",
+                borderBottom: i < services.length - 1 ? "1px solid rgba(255,255,255,0.04)" : "none",
+                flexWrap: "wrap",
+              }}>
+                <CheckChip
+                  label="API Key"
+                  status={deltaApiStatus}
+                  icon={<Key size={9} />}
+                />
+                <CheckChip
+                  label="WebSocket"
+                  status={
+                    deltaApiStatus === "idle" || deltaApiStatus === "running"
+                      ? "idle"
+                      : deltaWsConnected ? "ok" : "fail"
+                  }
+                  icon={<Wifi size={9} />}
+                />
+                <CheckChip
+                  label="Account Data"
+                  status={
+                    deltaApiStatus === "idle" || deltaApiStatus === "running"
+                      ? "idle"
+                      : deltaHasBalance ? "ok" : "fail"
+                  }
+                  icon={<Database size={9} />}
+                />
+                {/* Retry button */}
+                <button
+                  onClick={runDeltaTest}
+                  disabled={deltaApiStatus === "running"}
+                  title="Re-test API key"
+                  style={{
+                    marginLeft: "auto",
+                    display: "flex", alignItems: "center", gap: 4,
+                    padding: "3px 8px", borderRadius: 6,
+                    background: "rgba(255,255,255,0.04)",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                    color: "rgba(255,255,255,0.3)", cursor: "pointer", fontSize: 9,
+                  }}
+                >
+                  <RefreshCw size={9} style={{ opacity: deltaApiStatus === "running" ? 0.4 : 1 }} />
+                  Retry
+                </button>
+                {/* Error detail */}
+                {deltaApiStatus === "fail" && deltaTestResult?.error && (
+                  <p style={{
+                    width: "100%", margin: "4px 0 0",
+                    fontSize: 10, color: "rgba(239,68,68,0.7)", lineHeight: 1.4,
+                  }}>
+                    {deltaTestResult.error.length > 100
+                      ? deltaTestResult.error.slice(0, 100) + "…"
+                      : deltaTestResult.error}
+                  </p>
+                )}
+                {/* Success detail */}
+                {deltaApiStatus === "ok" && deltaTestResult?.usdtBalance && (
+                  <p style={{
+                    width: "100%", margin: "4px 0 0",
+                    fontSize: 10, color: "rgba(0,255,180,0.55)", lineHeight: 1.4,
+                  }}>
+                    {deltaTestResult.envName === "india" ? "India" : "International"} · USDT balance: {deltaTestResult.usdtBalance}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
       </div>
 
       {st.loaded && !anyConfigured && (
