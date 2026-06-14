@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
+import { useBrokerStore } from "@/store/brokerStore";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
@@ -144,6 +145,30 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
 
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  // Detect cTrader same-tab OAuth redirect (?ctrader_connected=true or ?ctrader_error=...)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("ctrader_connected");
+    const error     = params.get("ctrader_error");
+    if (connected === "true" || error) {
+      console.log("[cTrader OAuth] startup param detected — connected:", connected, "error:", error);
+      // Strip params from URL before doing anything else
+      const clean = new URL(window.location.href);
+      clean.searchParams.delete("ctrader_connected");
+      clean.searchParams.delete("ctrader_error");
+      window.history.replaceState({}, "", clean.toString());
+      // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume
+      if (connected === "true") {
+        sessionStorage.setItem("ctrader_oauth_resume", "true");
+      } else if (error) {
+        sessionStorage.setItem("ctrader_oauth_error", error);
+      }
+      // Open the cTrader auth modal so BrokerConnectModal can auto-resume
+      useBrokerStore.getState().openAuthModal("ctrader");
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close sidebar on route change
   const prevLocationRef = useRef(location);

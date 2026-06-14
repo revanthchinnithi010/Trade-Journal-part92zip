@@ -50,6 +50,7 @@ function useBrokerConnect() {
   const readyPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingAccountRef = useRef<BrokerAccount | null>(null);
   const statusRef = useRef<Status>("idle");
+  const prevDiagRef = useRef<CTraderDiagnostics | null>(null);
   // Stable refs for store callbacks (Zustand actions are stable but keep ref for safety)
   const loadAccountsRef = useRef(loadAccounts);
   const connectRef = useRef(connect);
@@ -136,6 +137,19 @@ function useBrokerConnect() {
         const res = await fetch("/api/ctrader/diagnostics", { credentials: "include" });
         if (res.ok) {
           const diag = await res.json() as CTraderDiagnostics;
+          const prev = prevDiagRef.current;
+
+          // Log step transitions once
+          const symbolStep = diag.steps.find(s => s.id === "symbols");
+          const prevSymbolStep = prev?.steps.find(s => s.id === "symbols");
+          if (symbolStep?.status === "done" && prevSymbolStep?.status !== "done") {
+            console.log("[cTrader OAuth] Symbol catalog loaded —", diag.symbolCount, "symbols");
+          }
+          if (diag.connected && !prev?.connected) {
+            console.log("[cTrader OAuth] WebSocket connected — latency:", diag.latencyMs, "ms");
+          }
+          prevDiagRef.current = diag;
+
           setCtDiag(diag);
 
           if (diag.connected) {
@@ -170,6 +184,7 @@ function useBrokerConnect() {
   }
 
   async function handleCTraderOAuthSuccess() {
+    console.log("[cTrader OAuth] Account loading started");
     setStatus("loading");
     try {
       const res = await fetch("/api/ctrader/pending-account", { credentials: "include" });
@@ -181,6 +196,7 @@ function useBrokerConnect() {
         setErrorMsg(data.error ?? "Could not retrieve account details — try again");
         return;
       }
+      console.log("[cTrader OAuth] Account loading completed — accountId:", data.accountId, "label:", data.label);
       try { localStorage.setItem(`${LS_TOKEN_PREFIX}${data.accountId}`, data.apiToken); } catch { /* ignore */ }
 
       const accountDetails: BrokerAccount = {
@@ -203,6 +219,24 @@ function useBrokerConnect() {
       setErrorMsg(String(err));
     }
   }
+
+  // Auto-resume: when opened after a same-tab OAuth redirect, sessionStorage will
+  // have a "ctrader_oauth_resume" flag set by Layout's startup detection.
+  useEffect(() => {
+    if (authBrokerId !== "ctrader") return;
+    const resume = sessionStorage.getItem("ctrader_oauth_resume");
+    const errMsg = sessionStorage.getItem("ctrader_oauth_error");
+    if (resume === "true") {
+      sessionStorage.removeItem("ctrader_oauth_resume");
+      console.log("[cTrader OAuth] Token exchange successful — resuming from same-tab redirect");
+      handleCTraderOAuthSuccess();
+    } else if (errMsg) {
+      sessionStorage.removeItem("ctrader_oauth_error");
+      setStatus("error");
+      setErrorMsg(`cTrader OAuth failed: ${decodeURIComponent(errMsg)}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authBrokerId]);
 
   async function handleMt5Connect(e: React.FormEvent) {
     e.preventDefault();

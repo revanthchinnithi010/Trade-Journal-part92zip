@@ -236,6 +236,11 @@ function resolveRedirectUri(req: import("express").Request): string {
 
 function popupHtml(status: "success" | "error", message: string | null): string {
   const safeMsg = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  const safeMessage = JSON.stringify(message ?? "");
+  const redirectParam = status === "success"
+    ? "ctrader_connected=true"
+    : `ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
+
   return `<!doctype html>
 <html>
 <head>
@@ -253,17 +258,35 @@ function popupHtml(status: "success" | "error", message: string | null): string 
     <div class="icon">${status === "success" ? "✅" : "❌"}</div>
     <h2>${status === "success" ? "Connected!" : "Connection Failed"}</h2>
     ${safeMsg ? `<p>${safeMsg}</p>` : ""}
-    <p>${status === "success" ? "You can close this window." : "Please close this window and try again."}</p>
+    <p id="sub">${status === "success" ? "You can close this window." : "Please close this window and try again."}</p>
   </div>
   <script>
     (function () {
-      try {
-        window.opener && window.opener.postMessage(
-          { type: 'ctrader_oauth_result', status: '${status}', message: ${JSON.stringify(message ?? "")} },
-          '*'
-        );
-      } catch (_) {}
-      setTimeout(function () { window.close(); }, 1200);
+      console.log('[cTrader OAuth callback] entered — status: ${status}');
+      var openerAvailable = false;
+      try { openerAvailable = !!(window.opener && window.opener.postMessage); } catch (_) {}
+      console.log('[cTrader OAuth callback] window.opener available:', openerAvailable);
+
+      if (openerAvailable) {
+        // Popup mode: notify parent via postMessage then close
+        try {
+          window.opener.postMessage(
+            { type: 'ctrader_oauth_result', status: '${status}', message: ${safeMessage} },
+            '*'
+          );
+          console.log('[cTrader OAuth callback] postMessage sent to opener');
+        } catch (e) {
+          console.warn('[cTrader OAuth callback] postMessage failed:', e);
+        }
+        setTimeout(function () { window.close(); }, 1200);
+      } else {
+        // Same-tab / mobile mode: redirect back to the app with result in URL
+        console.log('[cTrader OAuth callback] no opener — redirecting to app with ?${redirectParam}');
+        document.getElementById('sub').textContent = 'Returning to app…';
+        setTimeout(function () {
+          window.location.replace('/brokers?${redirectParam}');
+        }, 400);
+      }
     })();
   </script>
 </body>
