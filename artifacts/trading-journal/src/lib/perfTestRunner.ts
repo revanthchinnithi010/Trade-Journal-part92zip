@@ -105,33 +105,49 @@ async function runPerfTests(
     const cfg = CONFIGS[i];
     onProgress?.(i, CONFIGS.length, cfg.name);
     console.log(
-      `%c[PerfTestRunner] ▶ ${cfg.name}  (${i + 1}/${CONFIGS.length})`,
+      `%c[PerfTestRunner] ▶ [${i + 1}/${CONFIGS.length}] ${cfg.name}`,
       "color:#f59e0b;font-weight:bold",
     );
 
-    // 1. Set flags — fires useSyncExternalStore listeners → React re-renders
+    // STEP 1 ── set flags
+    console.log(`%c  [step 1] resetFlags + setFlags`, "color:#94a3b8;font-size:11px");
     perfFlags.resetFlags();
     perfFlags.setFlags(cfg.flags as Parameters<typeof perfFlags.setFlags>[0]);
+
+    console.log(`%c  [step 1] sleeping ${PRE_OPEN_WAIT_MS}ms for React settle…`, "color:#94a3b8;font-size:11px");
     await sleep(PRE_OPEN_WAIT_MS);
+    console.log(`%c  [step 1] settle done`, "color:#94a3b8;font-size:11px");
 
-    // 2. Arm async profiler (resolves automatically after CAPTURE_MS)
+    // STEP 2 ── arm async profiler
+    console.log(`%c  [step 2] startCaptureAsync(${CAPTURE_MS})`, "color:#94a3b8;font-size:11px");
     const capturePromise = paintProfiler.startCaptureAsync(CAPTURE_MS);
+    console.log(`%c  [step 2] capturePromise armed`, "color:#94a3b8;font-size:11px");
 
-    // 3. Open sheet
-    if (!openSheet()) {
+    // STEP 3 ── open sheet
+    console.log(`%c  [step 3] calling openSheet()…`, "color:#94a3b8;font-size:11px");
+    const opened = openSheet();
+    console.log(`%c  [step 3] openSheet() returned: ${opened}`, opened ? "color:#34d399;font-size:11px" : "color:#f87171;font-weight:bold;font-size:11px");
+    if (!opened) {
       console.error("[PerfTestRunner] Cannot find Chart Settings button — aborting.");
+      console.error("  Checked: window.__tjOpenSettings and button[title='Chart Settings'] — both missing.");
       perfFlags.resetFlags();
       return [];
     }
 
-    // 4. Await profiler
+    // STEP 4 ── await profiler resolve
+    console.log(`%c  [step 4] awaiting capturePromise (${CAPTURE_MS}ms window)…`, "color:#94a3b8;font-size:11px");
+    const t4start = performance.now();
     const report = await capturePromise;
-    results.push(extractMetrics(report, cfg.name));
-    console.log(`%c[PerfTestRunner] ✔ "${cfg.name}" done`, "color:#34d399");
+    console.log(`%c  [step 4] capturePromise resolved after ${(performance.now() - t4start).toFixed(0)}ms`, "color:#34d399;font-size:11px");
 
-    // 5. Close sheet
+    results.push(extractMetrics(report, cfg.name));
+    console.log(`%c[PerfTestRunner] ✔ [${i + 1}/${CONFIGS.length}] "${cfg.name}" done`, "color:#34d399;font-weight:bold");
+
+    // STEP 5 ── close sheet
+    console.log(`%c  [step 5] closeSheet + sleeping ${POST_CLOSE_MS}ms`, "color:#94a3b8;font-size:11px");
     closeSheet();
     await sleep(POST_CLOSE_MS);
+    console.log(`%c  [step 5] gap done — starting next config`, "color:#94a3b8;font-size:11px");
   }
 
   // Restore flags

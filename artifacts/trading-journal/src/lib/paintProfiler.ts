@@ -170,6 +170,11 @@ let _capturing = false;
 let _cssAudit: CssAuditEntry[] = [];
 let _autoStopTimer: ReturnType<typeof setTimeout> | null = null;
 
+// Set to true while startCaptureAsync owns the capture session.
+// Prevents handleOpenSettings → startCapture() from calling _reset()
+// and destroying the async promise's timer.
+let _asyncMode = false;
+
 // ── RAF loop ──────────────────────────────────────────────────────────────────
 
 function _rafLoop(ts: number) {
@@ -431,8 +436,16 @@ function _reset() {
 /**
  * Call immediately BEFORE setShowSettings(true).
  * Arms all observers and starts the RAF timing loop.
+ * NO-OP when startCaptureAsync already owns the session (_asyncMode).
  */
 export function startCapture(): void {
+  if (_asyncMode) {
+    console.log(
+      "%c[PaintProfiler] startCapture() ignored — async runner owns this session",
+      "color:#94a3b8;font-size:11px",
+    );
+    return;
+  }
   _reset();
   _captureStart = performance.now();
 
@@ -510,6 +523,7 @@ export function report(): void { _printReport(); }
  */
 export function startCaptureAsync(durationMs = 2500): Promise<PaintReport> {
   return new Promise<PaintReport>(resolve => {
+    _asyncMode = true;   // guard: prevents startCapture() from resetting this session
     _reset();
     _captureStart = performance.now();
 
@@ -524,14 +538,19 @@ export function startCaptureAsync(durationMs = 2500): Promise<PaintReport> {
     _rafId = requestAnimationFrame(_rafLoop);
 
     _autoStopTimer = setTimeout(() => {
+      _asyncMode = false;  // release guard before resolving
       _stopCapture();
       const report = _buildReport();
       (window as unknown as Record<string, unknown>).__tjPaintLastReport = report;
+      console.log(
+        `%c[PaintProfiler] ✔ Async capture resolved — ${report.totalFrames} frames, ${report.droppedFrames} dropped`,
+        "color:#34d399;font-size:11px",
+      );
       resolve(report);
     }, durationMs);
 
     console.log(
-      `%c[PaintProfiler] ▶ Async capture started (${durationMs} ms window).`,
+      `%c[PaintProfiler] ▶ Async capture started (${durationMs} ms window). _asyncMode=true`,
       "color:#34d399;font-weight:bold;font-size:12px",
     );
   });
