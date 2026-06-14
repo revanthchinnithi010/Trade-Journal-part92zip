@@ -43,6 +43,7 @@ import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import * as sheetProfiler from "@/lib/sheetProfiler";
 import type { RenderStat, FpsResult } from "@/lib/sheetProfiler";
+import * as paintProfiler from "@/lib/paintProfiler";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -1915,6 +1916,8 @@ const ChartSettingsSheet = memo(function ChartSettingsSheet({
   const _profCommitCSS = sheetProfiler.trackRender("ChartSettingsSheet", "MobileChartLayout.tsx", 1690);
   useLayoutEffect(() => { _profCommitCSS(); });
 
+  useEffect(() => { paintProfiler.onSheetMounted(); }, []);
+
   const [tab, setTab] = useState<"Candles"|"Appearance"|"Scale">("Candles");
 
   // settingsRef lets `p` read the latest settings without being in the dep array.
@@ -3474,6 +3477,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleCloseDrawingSheet = useCallback(() => setShowDrawingSheet(false), []);
   const handleCloseSettings     = useCallback(() => setShowSettings(false),    []);
   const handleCloseObjectTree   = useCallback(() => setShowObjectTree(false),  []);
+  const handleOpenSettings      = useCallback(() => { paintProfiler.startCapture(); setShowSettings(true); }, []);
 
   // Routes symbol selection to the main chart (slot 0) or to a secondary MiniChart slot
   const handleSelectSymbol = useCallback((sym: string) => {
@@ -3578,7 +3582,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
         {/* ── Floating chart-settings button — bottom-right of chart area, above date axis ── */}
         <button
-          onClick={() => setShowSettings(true)}
+          onClick={handleOpenSettings}
           title="Chart Settings"
           style={{
             position:"absolute", bottom:34, right:6, zIndex:55,
@@ -3769,7 +3773,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           onBarReplay={onBarReplay}
           onChartType={() => setShowChartType(true)}
           onObjectTree={() => setShowObjectTree(true)}
-          onSettings={() => setShowSettings(true)}
+          onSettings={handleOpenSettings}
           onScreenshot={handleScreenshot}
           onLayout={() => setShowLayoutSheet(true)}
         />
