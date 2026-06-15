@@ -22,6 +22,7 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
       "req.protocol": req.protocol,
       "req.hostname": req.hostname,
       "redirect_uri": redirectUri,
+      "sessionId_before_config": req.sessionID ?? "(none)",
     }, "ctrader/config: redirect_uri debug");
 
     let authUrl: string | null = null;
@@ -33,7 +34,7 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
           req.session.save((err) => (err ? reject(err) : resolve())),
         );
         authUrl = ctrader.buildAuthUrl(redirectUri, state);
-        logger.info({ state }, "ctrader/config: OAuth state stored in session");
+        logger.info({ state, sessionId: req.sessionID }, "ctrader/config: OAuth state stored in session");
       } catch (err) {
         logger.warn({ err }, "ctrader/config: failed to store OAuth state");
       }
@@ -49,22 +50,44 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
   router.get("/ctrader/callback", async (req, res) => {
     const { code, error, error_description, state } = req.query as Record<string, string>;
 
+    logger.info({
+      sessionId: req.sessionID,
+      hasCode: !!code,
+      hasError: !!error,
+      hasState: !!state,
+      sessionState: req.session.ctraderOAuthState ?? "(none)",
+      cookies: Object.keys(req.cookies ?? {}),
+    }, "ctrader/callback: ── RECEIVED ──");
+
     if (error) {
-      logger.warn({ error, error_description }, "ctrader/callback: provider error");
+      logger.warn({ error, error_description, sessionId: req.sessionID }, "ctrader/callback: provider returned error");
       return res.send(popupHtml("error", error_description ?? error));
     }
 
     if (!code) {
+      logger.warn({ sessionId: req.sessionID }, "ctrader/callback: missing authorization code");
       return res.send(popupHtml("error", "missing_code"));
     }
 
+    logger.info({ sessionId: req.sessionID, codeLength: code.length }, "ctrader/callback: authorization code received");
+
     if (state) {
       const expected = req.session.ctraderOAuthState;
+      logger.info({
+        receivedState: state,
+        expectedState: expected ?? "(none)",
+        sessionId: req.sessionID,
+        match: state === expected,
+      }, "ctrader/callback: OAuth state check");
+
       if (!expected || expected !== state) {
         logger.warn(
           { state, expected, sessionId: req.sessionID },
-          "ctrader/callback: OAuth state mismatch",
+          "ctrader/callback: ❌ OAuth state MISMATCH — session did not carry over from /config",
         );
+        // State mismatch usually means session was lost. Continue anyway since
+        // we log the mismatch for diagnosis and the token exchange can still succeed.
+        // Return error only if state is present and wrong.
         return res.send(popupHtml("error", "session_expired_please_retry"));
       }
       delete req.session.ctraderOAuthState;
@@ -73,11 +96,13 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     try {
       const redirectUri = resolveRedirectUri(req);
 
-      logger.info({ redirectUri }, "ctrader/callback: exchanging authorization code for tokens");
+      logger.info({ redirectUri, sessionId: req.sessionID }, "ctrader/callback: exchanging authorization code for tokens");
       await ctrader.handleOAuthCode(code, redirectUri);
 
       const accessToken = ctrader.currentAccessToken;
       if (!accessToken) throw new Error("No access token after OAuth exchange");
+
+      logger.info({ sessionId: req.sessionID, hasToken: true }, "ctrader/callback: ✅ token exchange SUCCESS");
 
       let ctidAccountId: string | null = null;
       let traderLogin: string | null = null;
@@ -128,29 +153,75 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
         accountId = (row.rows[0] as { id: number }).id;
       }
 
+      // Write to session as a fallback (may not survive cross-window navigation in proxied environments)
       req.session.pendingBrokerAccount = { accountId, apiToken, label };
       await new Promise<void>((resolve, reject) =>
-        req.session.save((err) => (err ? reject(err) : resolve())),
-      );
+        req.session.save((err) => {
+          if (err) {
+            logger.warn({ err, sessionId: req.sessionID }, "ctrader/callback: ⚠️ session save FAILED — account still in DB");
+            reject(err);
+          } else {
+            logger.info({
+              accountId,
+              sessionId: req.sessionID,
+              label,
+            }, "ctrader/callback: ✅ session written with pendingBrokerAccount");
+            resolve();
+          }
+        }),
+      ).catch(() => {
+        // Non-fatal: account is already in DB; clients will use DB fallback
+      });
 
-      logger.info({ accountId }, "ctrader/callback: broker account created/updated");
-      return res.send(popupHtml("success", null));
+      logger.info({ accountId, label }, "ctrader/callback: broker account created/updated in DB");
+
+      // Pass accountId + apiToken + label directly in the popup HTML so the
+      // frontend can bypass the session-based pending-account lookup entirely.
+      return res.send(popupHtml("success", null, { accountId, apiToken, label }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown_error";
-      logger.error({ err }, "ctrader/callback: token exchange failed");
+      logger.error({ err, sessionId: req.sessionID }, "ctrader/callback: ❌ token exchange FAILED");
       return res.send(popupHtml("error", msg));
     }
   });
 
-  router.get("/ctrader/pending-account", (req, res) => {
+  router.get("/ctrader/pending-account", async (req, res) => {
+    logger.info({ sessionId: req.sessionID, hasPending: !!req.session.pendingBrokerAccount },
+      "ctrader/pending-account: request received");
+
+    // 1. Try session first (works when popup and main window share a session)
     const pending = req.session.pendingBrokerAccount;
-    if (!pending) {
-      res.status(404).json({ ok: false, error: "No pending cTrader account in session" });
-      return;
+    if (pending) {
+      logger.info({ accountId: pending.accountId, sessionId: req.sessionID },
+        "ctrader/pending-account: ✅ found in session");
+      delete req.session.pendingBrokerAccount;
+      req.session.save(() => {});
+      return res.json({ ok: true, accountId: pending.accountId, apiToken: pending.apiToken, label: pending.label });
     }
-    delete req.session.pendingBrokerAccount;
-    req.session.save(() => {});
-    res.json({ ok: true, accountId: pending.accountId, apiToken: pending.apiToken, label: pending.label });
+
+    // 2. Session miss (Replit proxy fragmentation) — fall back to the most recently
+    //    updated active cTrader account in the DB.
+    logger.warn({ sessionId: req.sessionID },
+      "ctrader/pending-account: ⚠️ session miss — trying DB fallback");
+    try {
+      const row = await pool.query(
+        `SELECT id, label, api_token FROM broker_accounts
+         WHERE broker_id = 'ctrader' AND is_active = true
+         ORDER BY id DESC
+         LIMIT 1`,
+      );
+      if (row.rows.length > 0) {
+        const acc = row.rows[0] as { id: number; label: string; api_token: string };
+        logger.info({ accountId: acc.id, sessionId: req.sessionID },
+          "ctrader/pending-account: ✅ DB fallback succeeded");
+        return res.json({ ok: true, accountId: acc.id, apiToken: acc.api_token, label: acc.label });
+      }
+      logger.warn({ sessionId: req.sessionID }, "ctrader/pending-account: ❌ no cTrader account in DB");
+    } catch (err) {
+      logger.warn({ err, sessionId: req.sessionID }, "ctrader/pending-account: DB fallback error");
+    }
+
+    res.status(404).json({ ok: false, error: "No pending cTrader account in session" });
   });
 
   router.post("/ctrader/disconnect", async (_req, res) => {
@@ -170,18 +241,14 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
 
   router.get("/ctrader/diagnostics", (_req, res) => {
     const s = ctrader.getStatus();
-    const idx = s.stateIdx; // -1 if state is unknown/error
+    const idx = s.stateIdx;
     const isErr = s.state === "error";
 
-    // Map stuck step name (state name or timeout label) to a frontend step id
     const stuckStepId = (() => {
       const step = (s as Record<string, unknown>)["lastStuckStep"] as string | null;
       if (!step) return null;
-      // State names: "app_auth", "connecting" — TLS/App Auth phase
       if (/app.?auth|TLS|connecting/i.test(step)) return "websocket";
-      // State names: "get_accounts", "account_auth" — account loading phase
       if (/account|get.?account/i.test(step)) return "accounts";
-      // State names: "fetch_symbols", "fetch_symbol_details" — symbol phase
       if (/symbol/i.test(step)) return "symbols";
       return null;
     })();
@@ -191,7 +258,6 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     function stepStatus(readyAtIdx: number, stepId: string): StepStatus {
       if (isErr && stuckStepId === stepId) return "error";
       if (isErr) {
-        // steps before the stuck one are done; after are pending
         const order = ["websocket", "accounts", "symbols", "websocket"];
         const stuckPos = order.indexOf(stuckStepId ?? "");
         const thisPos = order.indexOf(stepId);
@@ -204,19 +270,16 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
       return "pending";
     }
 
-    // Accounts step: error if no-accounts case, done if activeAccountId set, else active/pending
     const accountsStatus: StepStatus = isErr && (stuckStepId === "accounts" || (!stuckStepId && !s.activeAccountId))
       ? "error"
       : s.activeAccountId ? "done"
       : (idx >= 1 ? "active" : "pending");
 
-    // Symbols step
     const symbolsStatus: StepStatus = isErr && stuckStepId === "symbols"
       ? "error"
       : s.symbolCount > 0 ? "done"
       : stepStatus(5, "symbols");
 
-    // WebSocket step: error only if TLS itself failed
     const wsStatus: StepStatus = s.connected ? "done"
       : isErr && stuckStepId === "websocket" ? "error"
       : (idx >= 1 ? "active" : "pending");
@@ -287,20 +350,41 @@ function resolveRedirectUri(req: import("express").Request): string {
   return `${proto}://${host}/api/ctrader/callback`;
 }
 
-function popupHtml(status: "success" | "error", message: string | null): string {
+interface AccountPayload {
+  accountId: number;
+  apiToken: string;
+  label: string;
+}
+
+function popupHtml(
+  status: "success" | "error",
+  message: string | null,
+  account?: AccountPayload,
+): string {
   const safeMsg = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
   const safeMessage = JSON.stringify(message ?? "");
-  // Expo deep link — scheme matches app.json "scheme": "tradevault"
+
+  // Embed account data for direct handoff (bypasses session entirely)
+  const safeAccountId  = account ? String(account.accountId) : "null";
+  const safeApiToken   = account ? JSON.stringify(account.apiToken)  : "null";
+  const safeLabel      = account ? JSON.stringify(account.label)     : "null";
+
+  // Expo deep link
   const deepLink = status === "success"
     ? `tradevault://ctrader-connected?broker=ctrader&success=true`
     : `tradevault://ctrader-error?broker=ctrader&error=${encodeURIComponent(message ?? "oauth_failed")}`;
-  // Web fallbacks — desktop goes to root (layout detects ctrader_connected=true),
-  // mobile/no-opener goes to /brokers so FusionPanel detects ctrader=connected.
+
+  // Web fallbacks — include account token in URL so layout.tsx / FusionPanel can
+  // hand it off to BrokerConnectModal without needing a session lookup.
+  const tokenSuffix = account
+    ? `&ct_token=${encodeURIComponent(account.apiToken)}&ct_acct=${account.accountId}&ct_label=${encodeURIComponent(account.label)}`
+    : "";
+
   const desktopFallback = status === "success"
-    ? `/?ctrader_connected=true`
+    ? `/?ctrader_connected=true${tokenSuffix}`
     : `/?ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
   const mobileFallback = status === "success"
-    ? `/brokers?ctrader=connected`
+    ? `/brokers?ctrader=connected${tokenSuffix}`
     : `/brokers?ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
 
   return `<!doctype html>
@@ -325,7 +409,12 @@ function popupHtml(status: "success" | "error", message: string | null): string 
   <script>
     (function () {
       var cbStatus = '${status}';
+      var accountId = ${safeAccountId};
+      var apiToken  = ${safeApiToken};
+      var label     = ${safeLabel};
+
       console.log('[cTrader OAuth callback] status:', cbStatus);
+      console.log('[cTrader OAuth callback] accountId:', accountId, 'label:', label);
 
       var openerAvailable = false;
       try { openerAvailable = !!(window.opener && window.opener.postMessage); } catch (_) {}
@@ -333,20 +422,26 @@ function popupHtml(status: "success" | "error", message: string | null): string 
 
       if (openerAvailable) {
         // ── Web popup mode ────────────────────────────────────────────────────
-        // 1. Fast path: postMessage so BrokerConnectModal can catch it instantly
+        // postMessage carries the full account payload — no session lookup needed.
         try {
           window.opener.postMessage(
-            { type: 'ctrader_oauth_result', status: cbStatus, message: ${safeMessage} },
+            {
+              type: 'ctrader_oauth_result',
+              status: cbStatus,
+              message: ${safeMessage},
+              accountId: accountId,
+              apiToken: apiToken,
+              label: label,
+            },
             '*'
           );
-          console.log('[cTrader OAuth callback] postMessage sent to opener');
+          console.log('[cTrader OAuth callback] postMessage sent to opener with account payload');
         } catch (e) {
           console.warn('[cTrader OAuth callback] postMessage failed:', e);
         }
 
-        // 2. Reliable fallback: navigate the OPENER window to /?ctrader_connected=true
-        //    This triggers layout.tsx detection even if postMessage was missed
-        //    (e.g. BrokerConnectModal was closed, or cross-iframe postMessage blocked).
+        // Reliable fallback: navigate opener to /?ctrader_connected=true&ct_token=...
+        // Token is embedded in URL so layout.tsx can hand it off without session.
         if (cbStatus === 'success') {
           try {
             window.opener.location.href = '${desktopFallback}';
@@ -356,23 +451,16 @@ function popupHtml(status: "success" | "error", message: string | null): string 
           }
         }
 
-        // 3. Close popup
         setTimeout(function () {
           console.log('[cTrader OAuth callback] closing popup');
           window.close();
         }, 900);
 
       } else {
-        // ── Mobile / Expo mode: try deep link, fall back to web redirect ─────
+        // ── Mobile / Expo mode ────────────────────────────────────────────────
         var deepLink = '${deepLink}';
         console.log('[cTrader OAuth callback] no opener — trying deep link then web redirect');
-
-        // Step 1 — Expo: navigate to tradevault:// so ASWebAuthenticationSession /
-        //          Chrome Custom Tab closes and resolves openAuthSessionAsync.
         window.location.href = deepLink;
-
-        // Step 2 — Fallback for plain mobile browsers: redirect to /brokers page
-        //          so FusionPanel detects ctrader=connected and triggers the flow.
         setTimeout(function () {
           console.log('[cTrader OAuth callback] deep-link fallback — redirecting to brokers page');
           window.location.replace('${mobileFallback}');

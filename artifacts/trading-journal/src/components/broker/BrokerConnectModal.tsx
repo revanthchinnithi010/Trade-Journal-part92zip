@@ -79,8 +79,15 @@ function useBrokerConnect() {
         popupRef.current?.close();
         popupRef.current = null;
         if (e.data.status === "success") {
-          console.log("[cTrader OAuth] ✅ OAuth Success — postMessage received from popup");
-          handleCTraderOAuthSuccess();
+          // Extract account payload embedded directly in the postMessage.
+          // This bypasses the session-based pending-account lookup entirely.
+          const accountId = typeof e.data.accountId === "number" ? e.data.accountId : null;
+          const apiToken  = typeof e.data.apiToken  === "string" ? e.data.apiToken  : null;
+          const label     = typeof e.data.label     === "string" ? e.data.label     : null;
+          console.log("[cTrader OAuth] ✅ OAuth Success — postMessage received from popup", { accountId, label });
+          handleCTraderOAuthSuccess(
+            accountId && apiToken ? { accountId, apiToken, label: label ?? "cTrader" } : undefined
+          );
         } else {
           setStatus("error");
           setErrorMsg(String(e.data.message || "cTrader OAuth failed"));
@@ -214,7 +221,9 @@ function useBrokerConnect() {
     }, 2000);
   }
 
-  async function handleCTraderOAuthSuccess() {
+  async function handleCTraderOAuthSuccess(
+    preKnown?: { accountId: number; apiToken: string; label: string },
+  ) {
     // Guard: prevent double-execution when both postMessage and opener redirect fire
     if (oauthHandledRef.current) {
       console.log("[cTrader OAuth] ⚠️ handleCTraderOAuthSuccess called again — skipping (already in progress)");
@@ -222,28 +231,36 @@ function useBrokerConnect() {
     }
     oauthHandledRef.current = true;
 
-    console.log("[cTrader OAuth] ✅ OAuth Success — starting account load");
+    console.log("[cTrader OAuth] ✅ OAuth Success — starting account load", preKnown ? "(pre-known payload)" : "(fetching from server)");
     setStatus("loading");
     try {
-      const res = await fetch("/api/ctrader/pending-account", { credentials: "include" });
-      const rawText = await res.text();
       let data: { ok: boolean; accountId?: number; apiToken?: string; label?: string; error?: string };
-      try {
-        data = JSON.parse(rawText) as typeof data;
-      } catch {
-        setStatus("error");
-        setErrorMsg(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
-        oauthHandledRef.current = false;
-        return;
-      }
 
-      if (!res.ok || !data.ok || !data.accountId || !data.apiToken) {
-        const errMsg = data.error ?? `HTTP ${res.status}: ${rawText.slice(0, 300)}`;
-        console.error("[cTrader OAuth] ❌ Account load failed:", errMsg);
-        setStatus("error");
-        setErrorMsg(errMsg);
-        oauthHandledRef.current = false;
-        return;
+      if (preKnown) {
+        // Account payload came directly in the postMessage or URL params — no session needed
+        console.log("[cTrader OAuth] ✅ Using pre-known account payload — skipping /api/ctrader/pending-account");
+        data = { ok: true, accountId: preKnown.accountId, apiToken: preKnown.apiToken, label: preKnown.label };
+      } else {
+        // Fallback: ask the server (session or DB fallback)
+        console.log("[cTrader OAuth] ⏳ No pre-known payload — fetching /api/ctrader/pending-account");
+        const res = await fetch("/api/ctrader/pending-account", { credentials: "include" });
+        const rawText = await res.text();
+        try {
+          data = JSON.parse(rawText) as typeof data;
+        } catch {
+          setStatus("error");
+          setErrorMsg(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+          oauthHandledRef.current = false;
+          return;
+        }
+        if (!res.ok || !data.ok || !data.accountId || !data.apiToken) {
+          const errMsg = data.error ?? `HTTP ${res.status}: ${rawText.slice(0, 300)}`;
+          console.error("[cTrader OAuth] ❌ Account load failed:", errMsg);
+          setStatus("error");
+          setErrorMsg(errMsg);
+          oauthHandledRef.current = false;
+          return;
+        }
       }
 
       console.log("[cTrader OAuth] ✅ Account Loaded — accountId:", data.accountId, "label:", data.label);
@@ -284,8 +301,26 @@ function useBrokerConnect() {
     const errMsg = sessionStorage.getItem("ctrader_oauth_error");
     if (resume === "true") {
       sessionStorage.removeItem("ctrader_oauth_resume");
-      console.log("[cTrader OAuth] ✅ OAuth Success — resuming from same-tab/broker-page redirect");
-      handleCTraderOAuthSuccess();
+
+      // Recover the account payload stored by layout.tsx from the redirect URL.
+      // This bypasses the session-based pending-account lookup.
+      const storedToken   = sessionStorage.getItem("ctrader_oauth_token");
+      const storedAccount = sessionStorage.getItem("ctrader_oauth_account");
+      const storedLabel   = sessionStorage.getItem("ctrader_oauth_label");
+      sessionStorage.removeItem("ctrader_oauth_token");
+      sessionStorage.removeItem("ctrader_oauth_account");
+      sessionStorage.removeItem("ctrader_oauth_label");
+
+      const accountId = storedAccount ? parseInt(storedAccount, 10) : NaN;
+      const preKnown = storedToken && !isNaN(accountId)
+        ? { accountId, apiToken: storedToken, label: storedLabel ?? "cTrader" }
+        : undefined;
+
+      console.log(
+        "[cTrader OAuth] ✅ OAuth Success — resuming from same-tab/broker-page redirect",
+        preKnown ? `(pre-known accountId=${preKnown.accountId})` : "(no pre-known payload — will fetch from server)",
+      );
+      handleCTraderOAuthSuccess(preKnown);
     } else if (errMsg) {
       sessionStorage.removeItem("ctrader_oauth_error");
       setStatus("error");

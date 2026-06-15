@@ -160,11 +160,24 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       const clean = new URL(window.location.href);
       clean.searchParams.delete("ctrader_connected");
       clean.searchParams.delete("ctrader_error");
+      clean.searchParams.delete("ct_token");
+      clean.searchParams.delete("ct_acct");
+      clean.searchParams.delete("ct_label");
       // Navigate to /brokers so user lands on the broker page
       clean.pathname = "/brokers";
       window.history.replaceState({}, "", clean.toString());
-      // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume
+      // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume.
+      // Also forward any account payload embedded in the URL (avoids session lookup).
       if (connected === "true") {
+        const ctToken = params.get("ct_token");
+        const ctAcct  = params.get("ct_acct");
+        const ctLabel = params.get("ct_label");
+        if (ctToken && ctAcct) {
+          sessionStorage.setItem("ctrader_oauth_token",   ctToken);
+          sessionStorage.setItem("ctrader_oauth_account", ctAcct);
+          sessionStorage.setItem("ctrader_oauth_label",   ctLabel ?? "cTrader");
+          console.log("[cTrader OAuth] ✅ Account payload stored in sessionStorage — accountId:", ctAcct);
+        }
         sessionStorage.setItem("ctrader_oauth_resume", "true");
         console.log("[cTrader OAuth] Token Saved — ctrader_oauth_resume flag set");
       } else if (error) {
