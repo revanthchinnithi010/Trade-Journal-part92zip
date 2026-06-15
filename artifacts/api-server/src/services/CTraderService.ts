@@ -327,7 +327,26 @@ export class CTraderService extends EventEmitter {
     const env  = (process.env["CTRADER_ENV"] ?? "live").toLowerCase();
     const host = process.env["CTRADER_API_HOST"] ?? (env === "demo" ? "demo.ctraderapi.com" : "live.ctraderapi.com");
     const port = Number(process.env["CTRADER_API_PORT"] ?? (env === "demo" ? "5035" : "5036"));
-    logger.info({ host, port, env }, "CTraderService: WebSocket connect requested");
+
+    // ── Diagnostic: credential and token status ──────────────────────────────
+    const clientId     = process.env["CTRADER_CLIENT_ID"]     ?? "";
+    const clientSecret = process.env["CTRADER_CLIENT_SECRET"] ?? "";
+    logger.info({
+      "[1] clientIdLoaded":     clientId.length > 0,
+      "[1] clientIdLength":     clientId.length,
+      "[2] clientSecretLoaded": clientSecret.length > 0,
+      "[2] clientSecretLength": clientSecret.length,
+      "[3] oauthTokenLoaded":   !!(this.accessToken),
+      "[3] oauthTokenLength":   this.accessToken?.length ?? 0,
+      "[3] oauthTokenPrefix":   this.accessToken ? this.accessToken.slice(0, 12) + "…" : "(none)",
+      "[4] endpoint":           `tls://${host}:${port}`,
+      "[4] env":                env,
+    }, "CTraderService [DIAG] connection attempt — credential & endpoint status");
+
+    if (!clientId)     logger.error("CTraderService [DIAG] CTRADER_CLIENT_ID is EMPTY — App Auth will fail");
+    if (!clientSecret) logger.error("CTraderService [DIAG] CTRADER_CLIENT_SECRET is EMPTY — App Auth will fail");
+    if (!this.accessToken) logger.error("CTraderService [DIAG] OAuth access token is missing — Get Accounts will fail");
+    // ────────────────────────────────────────────────────────────────────────
 
     this.setStepTimeout("TLS handshake / connect");
 
@@ -336,22 +355,54 @@ export class CTraderService extends EventEmitter {
 
     sock.on("secureConnect", () => {
       this.clearStepTimeout();
-      logger.info({ host, port }, "CTraderService: TLS/WebSocket connected — sending AppAuth");
+      logger.info({
+        "[4] endpoint": `tls://${host}:${port}`,
+        authorized: sock.authorized,
+        cipher: sock.getCipher?.()?.name ?? "unknown",
+      }, "CTraderService: TLS connected — sending App Auth request");
       this.state = "app_auth";
       this.sendAppAuth();
       this.startHeartbeat();
     });
 
-    sock.on("data", (chunk: Buffer) => { this.onData(chunk); });
+    sock.on("data", (chunk: Buffer) => {
+      // Log raw bytes during early auth states to catch any server message before close
+      if (this.state === "app_auth" || this.state === "get_accounts") {
+        logger.info({
+          "[7] state":    this.state,
+          "[7] rawBytes": chunk.length,
+          "[7] rawHex":   chunk.toString("hex").slice(0, 128) + (chunk.length > 64 ? "…" : ""),
+        }, "CTraderService [DIAG] raw data received from server");
+      }
+      this.onData(chunk);
+    });
 
-    sock.on("close", () => {
-      logger.warn("CTraderService: socket closed");
+    sock.on("close", (hadError: boolean) => {
+      const closeInfo = {
+        "[6] hadError":       hadError,
+        "[6] stateAtClose":   this.state,
+        "[6] authorized":     sock.authorized,
+        "[6] authError":      (sock as unknown as { authorizationError?: string }).authorizationError ?? null,
+        "[7] closeReason":    hadError
+          ? "socket closed with error — see preceding error event"
+          : "server closed connection cleanly (no error flag)",
+      };
+      if (hadError || ["app_auth","get_accounts","account_auth","fetch_symbols","fetch_symbol_details"].includes(this.state)) {
+        logger.error(closeInfo, "CTraderService [DIAG] socket closed during auth flow");
+      } else {
+        logger.warn(closeInfo, "CTraderService: socket closed");
+      }
       this.onDisconnected();
     });
 
     sock.on("error", (err) => {
       this.clearStepTimeout();
-      logger.warn({ err: err.message, host, port }, "CTraderService: socket error");
+      logger.error({
+        "[6] err":          err.message,
+        "[6] code":         (err as NodeJS.ErrnoException).code ?? null,
+        "[7] closeReason":  err.message,
+        "[4] endpoint":     `tls://${host}:${port}`,
+      }, "CTraderService [DIAG] socket error");
       this.lastError = `TLS connection failed: ${err.message}`;
       this.lastStuckStep = "TLS connect";
       this.onDisconnected();
@@ -391,6 +442,52 @@ export class CTraderService extends EventEmitter {
 
   private onData(chunk: Buffer): void {
     this.rxBuf = Buffer.concat([this.rxBuf, chunk]);
+
+    // ── JSON fallback ────────────────────────────────────────────────────────
+    // cTrader sends plain-JSON responses for certain errors (e.g. invalid/empty
+    // client credentials).  The binary parser would silently discard these
+    // because 0x7b22 ("{}") looks like a 2 GB length prefix.  Detect and
+    // handle JSON messages here before attempting binary framing.
+    if (this.rxBuf.length > 0 && this.rxBuf[0] === 0x7b /* '{' */) {
+      const text = this.rxBuf.toString("utf8");
+      // Wait until we have a complete JSON object (ends with '}')
+      if (text.trimEnd().endsWith("}")) {
+        try {
+          const msg = JSON.parse(text) as {
+            payloadType?: number;
+            payload?: Record<string, unknown>;
+            clientMsgId?: string;
+          };
+          logger.info({
+            "[7] format":      "JSON (not binary protobuf)",
+            "[7] payloadType": msg.payloadType,
+            "[7] payload":     msg.payload,
+          }, "CTraderService [DIAG] JSON message received from server");
+
+          if (msg.payloadType === PT.ERROR_RES) {
+            const p        = (msg.payload ?? {}) as Record<string, unknown>;
+            const errCode  = (p["errorCode"]  as string) ?? "UNKNOWN";
+            const desc     = (p["description"] as string ?? p["errorDescription"] as string) ?? "";
+            const detail   = desc ? `${errCode} — ${desc}` : errCode;
+            const fullMsg  = `cTrader server error: ${detail}. Verify CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET match your Open API app.`;
+            logger.error({
+              "[7] errCode": errCode,
+              "[7] desc":    desc,
+              fix: "Ensure CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET are set and match the Open API app credentials",
+            }, `CTraderService [DIAG] ERROR_RES (JSON): ${fullMsg}`);
+            this.clearStepTimeout();
+            this.lastError      = fullMsg;
+            this.lastStuckStep  = this.state;
+            this.state          = "error";
+            this.emit("status_change", this.getStatus());
+          }
+          this.rxBuf = Buffer.alloc(0);
+        } catch { /* malformed JSON — fall through to binary parser */ }
+      }
+      return; // keep accumulating until the JSON object is complete
+    }
+    // ────────────────────────────────────────────────────────────────────────
+
     while (this.rxBuf.length >= 4) {
       const msgLen = this.rxBuf.readUInt32BE(0);
       if (this.rxBuf.length < 4 + msgLen) break;
@@ -471,12 +568,38 @@ export class CTraderService extends EventEmitter {
   }
 
   private sendAppAuth(): void {
-    const id = process.env["CTRADER_CLIENT_ID"] ?? "";
+    const id     = process.env["CTRADER_CLIENT_ID"]     ?? "";
     const secret = process.env["CTRADER_CLIENT_SECRET"] ?? "";
-    logger.info({ clientIdPrefix: id.slice(0, 8) + "…" }, "CTraderService: sending App Auth request");
+
+    // ── [5] app_auth request payload diagnostics ─────────────────────────────
+    const clientIdOk     = id.length > 0;
+    const clientSecretOk = secret.length > 0;
+    logger.info({
+      "[1] clientIdLoaded":     clientIdOk,
+      "[1] clientIdLength":     id.length,
+      "[2] clientSecretLoaded": clientSecretOk,
+      "[2] clientSecretLength": secret.length,
+    }, "CTraderService [DIAG] App Auth — credential check");
+
+    if (!clientIdOk || !clientSecretOk) {
+      logger.error({
+        clientIdMissing:     !clientIdOk,
+        clientSecretMissing: !clientSecretOk,
+        fix: "Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET in Replit Secrets or via the credential import UI",
+      }, "CTraderService [DIAG] [5] APP AUTH PAYLOAD — MISSING CREDENTIALS — request will be rejected by server");
+    }
+
     const payload = Buffer.concat([stringField(1, id), stringField(2, secret)]);
+    logger.info({
+      "[5] payloadType":  "APP_AUTH_REQ (2100)",
+      "[5] payloadBytes": payload.length,
+      "[5] field1_len":   id.length,       // client_id byte length
+      "[5] field2_len":   secret.length,   // client_secret byte length
+      "[5] payloadHex":   payload.toString("hex").slice(0, 96) + (payload.length > 48 ? "…" : ""),
+    }, "CTraderService [DIAG] sending App Auth request payload");
+
     this.send(PT.APP_AUTH_REQ, payload);
-    this.setStepTimeout("App Auth response (CTRADER_CLIENT_ID/SECRET may be wrong)");
+    this.setStepTimeout("App Auth response (check CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET)");
   }
 
   private sendGetAccounts(): void {
