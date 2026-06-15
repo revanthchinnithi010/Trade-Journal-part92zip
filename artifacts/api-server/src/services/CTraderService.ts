@@ -169,6 +169,22 @@ export class CTraderService extends EventEmitter {
   private hbSentAt = 0;
   latencyMs = 0;
 
+  // ── Endpoint auto-probe ───────────────────────────────────────────────────
+  // When APP_AUTH returns "Corrupted frame", the app may be registered on the
+  // OTHER endpoint (live vs. demo).  We automatically try the alternate once
+  // before surfacing a credential error to the user.
+  //   0 = use primary endpoint (from CTRADER_ENV, default "live")
+  //   1 = use alternate endpoint (flipped from primary)
+  private endpointProbe: 0 | 1 = 0;
+  private activeEndpointEnv: "live" | "demo" = "live";  // tracks what's currently in use
+  // When APP_AUTH succeeds on DEMO but accounts are LIVE, we try upgrading to
+  // the LIVE endpoint for account auth.  This flag prevents an infinite loop.
+  private liveEndpointUpgradeAttempted = false;
+  // Set to true before an intentional socket.destroy() so onDisconnected() does
+  // not falsely report "Connection closed by server during <state>".
+  private intentionalDisconnect = false;
+  // ─────────────────────────────────────────────────────────────────────────
+
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
@@ -322,9 +338,14 @@ export class CTraderService extends EventEmitter {
     this.state = "connecting";
     this.rxBuf = Buffer.alloc(0);
 
-    // Configurable endpoint: CTRADER_ENV=demo uses demo.ctraderapi.com:5035
-    // Override with CTRADER_API_HOST / CTRADER_API_PORT env vars as needed.
-    const env  = (process.env["CTRADER_ENV"] ?? "live").toLowerCase();
+    // Configurable endpoint: CTRADER_ENV=demo uses demo.ctraderapi.com:5035.
+    // Auto-probe: if APP_AUTH returns "Corrupted frame" we flip to the alternate
+    // endpoint automatically (endpointProbe=1) before reporting a credential error.
+    const primaryEnv = (process.env["CTRADER_ENV"] ?? "live").toLowerCase() as "live" | "demo";
+    const env: "live" | "demo" = this.endpointProbe === 0
+      ? primaryEnv
+      : (primaryEnv === "live" ? "demo" : "live");
+    this.activeEndpointEnv = env;
     const host = process.env["CTRADER_API_HOST"] ?? (env === "demo" ? "demo.ctraderapi.com" : "live.ctraderapi.com");
     const port = Number(process.env["CTRADER_API_PORT"] ?? (env === "demo" ? "5035" : "5036"));
 
@@ -378,6 +399,11 @@ export class CTraderService extends EventEmitter {
     });
 
     sock.on("close", (hadError: boolean) => {
+      // Skip diagnostic logging for intentional teardowns (endpoint probe / live upgrade).
+      if (this.intentionalDisconnect) {
+        this.onDisconnected();
+        return;
+      }
       const closeInfo = {
         "[6] hadError":       hadError,
         "[6] stateAtClose":   this.state,
@@ -411,6 +437,12 @@ export class CTraderService extends EventEmitter {
 
   private onDisconnected(): void {
     this.clearTimers();
+    // If this was an intentional socket teardown (endpoint probe / live upgrade),
+    // skip the error reporting — the caller schedules the next connect() itself.
+    if (this.intentionalDisconnect) {
+      this.intentionalDisconnect = false;
+      return;
+    }
     const wasConnected = this.state === "subscribed";
     // If the socket closed while we were mid-auth-flow and there's no error yet,
     // it means cTrader rejected the connection (wrong credentials / error before ERROR_RES arrived).
@@ -427,6 +459,16 @@ export class CTraderService extends EventEmitter {
       this.symbolMeta.clear();
       this.emit("status_change", this.getStatus());
       // Do NOT auto-reconnect for credential errors — user must re-authenticate
+      return;
+    }
+    // Do not auto-reconnect if there's a permanent credential/config error.
+    // Keep state as "error" so the UI can show the actionable error card.
+    if (this.lastError) {
+      logger.warn("CTraderService: permanent error — not auto-reconnecting");
+      this.state = "error";
+      this.symbolIds.clear();
+      this.symbolMeta.clear();
+      this.emit("status_change", this.getStatus());
       return;
     }
     this.state = "disconnected";
@@ -469,14 +511,58 @@ export class CTraderService extends EventEmitter {
             const errCode  = (p["errorCode"]  as string) ?? "UNKNOWN";
             const desc     = (p["description"] as string ?? p["errorDescription"] as string) ?? "";
             const detail   = desc ? `${errCode} — ${desc}` : errCode;
-            const fullMsg  = `cTrader server error: ${detail}. Verify CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET match your Open API app.`;
+            let finalMsg   = `cTrader server error: ${detail}. Verify CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET match your Open API app.`;
             logger.error({
               "[7] errCode": errCode,
               "[7] desc":    desc,
+              "[7] endpointProbe": this.endpointProbe,
+              "[7] activeEndpoint": this.activeEndpointEnv,
               fix: "Ensure CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET are set and match the Open API app credentials",
-            }, `CTraderService [DIAG] ERROR_RES (JSON): ${fullMsg}`);
+            }, `CTraderService [DIAG] ERROR_RES (JSON): ${finalMsg}`);
+
+            // ── Endpoint auto-probe ─────────────────────────────────────────
+            // "Corrupted frame" during app_auth = app not registered on this
+            // endpoint.  Automatically retry on the alternate endpoint once.
+            if (errCode === "UNKNOWN_ERROR" && desc === "Corrupted frame." && this.state === "app_auth") {
+              // Guard: if this is the liveEndpointUpgrade attempt, the app is
+              // DEMO-only — live accounts simply cannot be authed.
+              if (this.liveEndpointUpgradeAttempted && this.activeEndpointEnv === "live") {
+                logger.error({
+                  fix: "Your Open API app is registered for DEMO only but your trading accounts are LIVE. Register the app for LIVE access at https://openapi.ctrader.com/ or create a demo trading account.",
+                }, "CTraderService [DIAG] App is DEMO-only but accounts are LIVE — cannot complete Account Auth");
+                this.liveEndpointUpgradeAttempted = false;
+                // Override finalMsg so the UI shows a specific actionable error card (keyed on "DEMO only").
+                finalMsg = "App registered for DEMO only but trading accounts are LIVE. Register the app for Live access at https://openapi.ctrader.com/ or connect a Demo trading account.";
+              } else if (this.endpointProbe === 0) {
+                const altEnv = this.activeEndpointEnv === "live" ? "demo" : "live";
+                logger.warn({
+                  failedEndpoint: this.activeEndpointEnv,
+                  probingEndpoint: altEnv,
+                }, `CTraderService: 'Corrupted frame' on ${this.activeEndpointEnv} endpoint — auto-probing ${altEnv} endpoint`);
+                this.endpointProbe = 1;
+                this.rxBuf = Buffer.alloc(0);
+                this.clearStepTimeout();
+                // socket will close momentarily; onClose will NOT auto-reconnect
+                // (state is about to be set to "error") so we schedule manually.
+                setTimeout(() => {
+                  this.state = "disconnected";
+                  this.lastError = null;
+                  this.connect();
+                }, 300);
+                return;
+              } else {
+                // Both endpoints rejected — credential error
+                logger.error({
+                  triedLive: true,
+                  triedDemo: true,
+                  fix: "Verify your Open API app at https://openapi.ctrader.com/ — credentials may be invalid or the app may not be approved",
+                }, "CTraderService [DIAG] Both LIVE and DEMO endpoints returned 'Corrupted frame' — credential error");
+              }
+            }
+            // ────────────────────────────────────────────────────────────────
+
             this.clearStepTimeout();
-            this.lastError      = fullMsg;
+            this.lastError      = finalMsg;
             this.lastStuckStep  = this.state;
             this.state          = "error";
             this.emit("status_change", this.getStatus());
@@ -508,7 +594,12 @@ export class CTraderService extends EventEmitter {
 
     switch (pt) {
       case PT.APP_AUTH_RES:
-        logger.info("CTraderService: App auth OK → fetching accounts");
+        logger.info({
+          endpoint: this.activeEndpointEnv,
+          probeAttempt: this.endpointProbe,
+          liveUpgrade: this.liveEndpointUpgradeAttempted,
+        }, "CTraderService: App Auth OK ✓ → fetching accounts");
+        this.endpointProbe = 0; // reset — we know which endpoint works
         this.state = "get_accounts";
         this.sendGetAccounts();
         break;
@@ -540,13 +631,44 @@ export class CTraderService extends EventEmitter {
 
       case PT.ERROR_RES: {
         const fields = decodeFields(payload);
-        const errCode = fields.find(f => f.num === 2)?.varint;
-        const desc = fields.find(f => f.num === 3)?.bytes?.toString("utf8");
-        const codeNum = Number(errCode ?? 0);
+        // Proto: ProtoOAErrorRes { payloadType=1, errorCode(string)=2, description(string)=3 }
+        const errCode = fields.find(f => f.num === 2 && f.type === 2)?.bytes?.toString("utf8") ?? "UNKNOWN";
+        const desc = fields.find(f => f.num === 3 && f.type === 2)?.bytes?.toString("utf8");
+
+        // ── Endpoint auto-probe ──────────────────────────────────────────────
+        // "Corrupted frame." during app_auth means the application is not
+        // registered on THIS endpoint.  Automatically retry on the alternate
+        // endpoint once before surfacing a credential error.
+        if (errCode === "UNKNOWN_ERROR" && desc === "Corrupted frame." && this.state === "app_auth") {
+          if (this.endpointProbe === 0) {
+            const altEnv = this.activeEndpointEnv === "live" ? "demo" : "live";
+            logger.warn({
+              failedEndpoint: this.activeEndpointEnv,
+              probingEndpoint: altEnv,
+            }, "CTraderService [DIAG] 'Corrupted frame' — application not registered on this endpoint; auto-probing alternate endpoint");
+            this.endpointProbe = 1;
+            this.clearStepTimeout();
+            this.intentionalDisconnect = true;
+            this.socket?.destroy();
+            this.socket = null;
+            this.state = "disconnected";
+            this.rxBuf = Buffer.alloc(0);
+            setTimeout(() => this.connect(), 200);
+            return;
+          }
+          // Both endpoints rejected — surface a clear credential error
+          logger.error({
+            triedLive: true,
+            triedDemo: true,
+            fix: "Verify CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET on https://openapi.ctrader.com/ match your registered Open API application",
+          }, "CTraderService [DIAG] Both LIVE and DEMO endpoints returned 'Corrupted frame' — credentials are invalid or app not approved");
+        }
+        // ────────────────────────────────────────────────────────────────────
+
         const msg = desc
-          ? `cTrader API error ${codeNum}: ${desc}`
-          : `cTrader API error ${codeNum}`;
-        logger.error({ errCode: codeNum, desc, stateAtError: this.state }, `CTraderService: ${msg}`);
+          ? `cTrader API error ${errCode}: ${desc}`
+          : `cTrader API error ${errCode}`;
+        logger.error({ errCode, desc, stateAtError: this.state }, `CTraderService: ${msg}`);
         this.clearStepTimeout();
         this.lastError = msg;
         this.lastStuckStep = this.state; // which step was active when the error came in
@@ -594,12 +716,20 @@ export class CTraderService extends EventEmitter {
       }, "CTraderService [DIAG] [5] APP AUTH PAYLOAD — MISSING CREDENTIALS — request will be rejected by server");
     }
 
-    const payload = Buffer.concat([stringField(1, id), stringField(2, secret)]);
+    // Proto: ProtoOAApplicationAuthReq { payloadType=1, clientId=2, clientSecret=3 }
+    // payloadType (field 1) is a proto2 *required* field — must be present in the inner
+    // payload even though the outer ProtoMessage already carries it, or the server's
+    // strict proto2 parser will reject the message with "Corrupted frame."
+    const payload = Buffer.concat([
+      varintField(1, BigInt(PT.APP_AUTH_REQ)),  // required payloadType = 2100
+      stringField(2, id),
+      stringField(3, secret),
+    ]);
     logger.info({
       "[5] payloadType":  "APP_AUTH_REQ (2100)",
       "[5] payloadBytes": payload.length,
-      "[5] field1_len":   id.length,       // client_id byte length
-      "[5] field2_len":   secret.length,   // client_secret byte length
+      "[5] field2_clientId_len":     id.length,
+      "[5] field3_clientSecret_len": secret.length,
       "[5] payloadHex":   payload.toString("hex").slice(0, 96) + (payload.length > 48 ? "…" : ""),
     }, "CTraderService [DIAG] sending App Auth request payload");
 
@@ -610,7 +740,11 @@ export class CTraderService extends EventEmitter {
   private sendGetAccounts(): void {
     logger.info({ accessTokenPrefix: (this.accessToken ?? "").slice(0, 8) + "…" },
       "CTraderService: Get Trading Accounts API request sent");
-    const payload = stringField(1, this.accessToken ?? "");
+    // Proto: ProtoOAGetAccountListByAccessTokenReq { payloadType=1, accessToken=2 }
+    const payload = Buffer.concat([
+      varintField(1, BigInt(PT.GET_ACCOUNTS_REQ)),
+      stringField(2, this.accessToken ?? ""),
+    ]);
     this.send(PT.GET_ACCOUNTS_REQ, payload);
     this.setStepTimeout("Get Trading Accounts response");
   }
@@ -620,16 +754,24 @@ export class CTraderService extends EventEmitter {
     const fields = decodeFields(buf);
     const accounts: CTraderAccount[] = [];
     for (const f of fields) {
-      if (f.num === 1 && f.type === 2 && f.bytes) {
+      // Proto: ProtoOAGetAccountListByAccessTokenRes {
+      //   payloadType=1, accessToken(string)=2, subscriptionStatus=3, ctidTraderAccount[]=4
+      // }
+      // Proto: ProtoOACtidTraderAccount {
+      //   ctidTraderAccountId(uint64)=1, isLive(bool)=2, traderLogin(uint64)=3
+      // }
+      if (f.num === 4 && f.type === 2 && f.bytes) {
         const sub = decodeFields(f.bytes);
         const id = sub.find(s => s.num === 1 && s.type === 0)?.varint;
         const isLive = sub.find(s => s.num === 2 && s.type === 0)?.varint;
-        const login = sub.find(s => s.num === 3 && s.type === 2)?.bytes?.toString("utf8");
+        const loginField = sub.find(s => s.num === 3 && s.type === 0);
+        const login = loginField?.varint !== undefined ? loginField.varint.toString() : "";
+        logger.info({ id: id?.toString(), isLive, login }, "CTraderService [DIAG] parsed ctidTraderAccount");
         if (id !== undefined) {
           accounts.push({
-            ctidTraderAccountId: dezigzag(id),
+            ctidTraderAccountId: id,          // uint64 — no dezigzag
             isLive: isLive === 1n,
-            traderLogin: login ?? "",
+            traderLogin: login,
           });
         }
       }
@@ -666,17 +808,52 @@ export class CTraderService extends EventEmitter {
       totalAccounts: accounts.length,
     }, "CTraderService: selected trading account");
 
+    // ── Endpoint upgrade: LIVE accounts need the LIVE API endpoint ────────────
+    // If APP_AUTH succeeded on the DEMO endpoint (probe=1) but accounts are LIVE,
+    // tear down and reconnect to LIVE so ACCOUNT_AUTH can succeed.
+    // Prevent infinite loops with a dedicated flag.
+    if (this.activeEndpointEnv === "demo" && live.isLive && !this.liveEndpointUpgradeAttempted) {
+      logger.warn({
+        accountId: live.ctidTraderAccountId.toString(),
+        accountIsLive: live.isLive,
+        currentEndpoint: "demo",
+        action: "reconnecting to live endpoint for Account Auth",
+      }, "CTraderService: LIVE account found on DEMO endpoint — upgrading to LIVE endpoint");
+      this.liveEndpointUpgradeAttempted = true;
+      this.endpointProbe = 0;        // reset probe so connect() picks up LIVE
+      this.activeAccount = live;     // cache selected account
+      this.clearStepTimeout();
+      this.intentionalDisconnect = true;
+      this.socket?.destroy();
+      this.socket = null;
+      this.rxBuf = Buffer.alloc(0);
+      setTimeout(() => {
+        this.state = "disconnected";
+        this.lastError = null;
+        this.connect();
+      }, 200);
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     this.activeAccount = live;
     // Persist the resolved ctidAccountId back to broker_accounts so REST calls work
     // (The OAuth callback may have stored "pending" if the initial REST fetch failed)
     void this.persistResolvedAccountId(live.ctidTraderAccountId.toString());
     this.state = "account_auth";
-    logger.info({ accountId: live.ctidTraderAccountId.toString() },
-      "CTraderService: sending Account Auth request");
+    // Proto: ProtoOAAccountAuthReq { payloadType=1, ctidTraderAccountId(uint64)=2, accessToken=3 }
+    // Note: ctidTraderAccountId is effectively uint64 on the wire (proto says sint64 but
+    //       values are small positive integers, matching GET_ACCOUNTS_RES parsing without dezigzag)
     const payload = Buffer.concat([
-      sint64Field(1, live.ctidTraderAccountId),
-      stringField(2, this.accessToken ?? ""),
+      varintField(1, BigInt(PT.ACCOUNT_AUTH_REQ)),
+      varintField(2, live.ctidTraderAccountId),   // uint64, NOT sint64/zigzag
+      stringField(3, this.accessToken ?? ""),
     ]);
+    logger.info({
+      accountId: live.ctidTraderAccountId.toString(),
+      endpoint: this.activeEndpointEnv,
+      payloadHex: payload.toString("hex"),
+    }, "CTraderService: sending Account Auth request");
     this.send(PT.ACCOUNT_AUTH_REQ, payload);
     this.setStepTimeout("Account Auth response");
   }
@@ -707,13 +884,18 @@ export class CTraderService extends EventEmitter {
   private handleAccountAuthRes(buf: Buffer): void {
     this.clearStepTimeout();
     const fields = decodeFields(buf);
-    const acctId = fields.find(f => f.num === 1 && f.type === 0)?.varint;
+    // Proto: ProtoOAAccountAuthRes { payloadType=1, ctidTraderAccountId(sint64)=2 }
+    const acctId = fields.find(f => f.num === 2 && f.type === 0)?.varint;
     logger.info({
       acctId: acctId ? dezigzag(acctId).toString() : "?",
       accountId: this.activeAccount?.ctidTraderAccountId.toString(),
     }, "CTraderService: Account Auth OK — sending Symbol catalog request");
     this.state = "fetch_symbols";
-    const payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
+    // Proto: ProtoOASymbolsListReq { payloadType=1, ctidTraderAccountId(sint64)=2 }
+    const payload = Buffer.concat([
+      varintField(1, BigInt(PT.SYMBOLS_LIST_REQ)),
+      sint64Field(2, this.activeAccount!.ctidTraderAccountId),
+    ]);
     this.send(PT.SYMBOLS_LIST_REQ, payload);
     this.setStepTimeout("Symbol catalog response (SYMBOLS_LIST_RES)");
   }
@@ -723,7 +905,9 @@ export class CTraderService extends EventEmitter {
     const fields = decodeFields(buf);
     const found = new Map<string, bigint>();
     for (const f of fields) {
-      if (f.num === 2 && f.type === 2 && f.bytes) {
+      // Proto: ProtoOASymbolsListRes { payloadType=1, ctidTraderAccountId=2, symbol[]=3 }
+      // Proto: ProtoOALightSymbol { symbolId(sint64)=1, symbolName=2, enabled=3 }
+      if (f.num === 3 && f.type === 2 && f.bytes) {
         const sub = decodeFields(f.bytes);
         const rawId = sub.find(s => s.num === 1 && s.type === 0)?.varint;
         const enabled = sub.find(s => s.num === 3 && s.type === 0)?.varint;
@@ -758,9 +942,13 @@ export class CTraderService extends EventEmitter {
     const numChunks = Math.ceil(ids.length / CHUNK);
     this.detailBatchesPending = numChunks;
     logger.info({ totalSymbols: ids.length, chunks: numChunks }, "CTraderService: sending Symbol detail requests");
+    // Proto: ProtoOASymbolByIdReq { payloadType=1, ctidTraderAccountId(sint64)=2, symbolId[](sint64)=3 }
     for (let i = 0; i < ids.length; i += CHUNK) {
-      let payload = sint64Field(1, this.activeAccount!.ctidTraderAccountId);
-      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(2, id)]);
+      let payload = Buffer.concat([
+        varintField(1, BigInt(PT.SYMBOL_BY_ID_REQ)),
+        sint64Field(2, this.activeAccount!.ctidTraderAccountId),
+      ]);
+      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(3, id)]);
       this.send(PT.SYMBOL_BY_ID_REQ, payload);
     }
     this.setStepTimeout(`Symbol detail responses (${numChunks} batch(es))`);
@@ -769,7 +957,8 @@ export class CTraderService extends EventEmitter {
   private handleSymbolByIdRes(buf: Buffer): void {
     const fields = decodeFields(buf);
     for (const f of fields) {
-      if (f.num === 2 && f.type === 2 && f.bytes) {
+      // Proto: ProtoOASymbolByIdRes { payloadType=1, ctidTraderAccountId=2, symbol[]=3 }
+      if (f.num === 3 && f.type === 2 && f.bytes) {
         const sub = decodeFields(f.bytes);
         const rawId = sub.find(s => s.num === 1 && s.type === 0)?.varint;
         const name = sub.find(s => s.num === 2 && s.type === 2)?.bytes?.toString("utf8");
@@ -797,9 +986,13 @@ export class CTraderService extends EventEmitter {
     // Subscribe to ALL symbols from the broker in batches of 500
     const ids = [...this.symbolIds.values()];
     const CHUNK = 500;
+    // Proto: ProtoOASubscribeSpotsReq { payloadType=1, ctidTraderAccountId(sint64)=2, symbolId[](sint64)=3 }
     for (let i = 0; i < ids.length; i += CHUNK) {
-      let payload = sint64Field(1, this.activeAccount.ctidTraderAccountId);
-      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(2, id)]);
+      let payload = Buffer.concat([
+        varintField(1, BigInt(PT.SUBSCRIBE_SPOTS_REQ)),
+        sint64Field(2, this.activeAccount.ctidTraderAccountId),
+      ]);
+      for (const id of ids.slice(i, i + CHUNK)) payload = Buffer.concat([payload, sint64Field(3, id)]);
       this.send(PT.SUBSCRIBE_SPOTS_REQ, payload);
     }
     this.state = "subscribed";
@@ -829,9 +1022,10 @@ export class CTraderService extends EventEmitter {
 
   private handleSpotEvent(buf: Buffer): void {
     const fields = decodeFields(buf);
-    const rawSymId = fields.find(f => f.num === 2 && f.type === 0)?.varint;
-    const bidRaw = fields.find(f => f.num === 3 && f.type === 0)?.varint;
-    const askRaw = fields.find(f => f.num === 4 && f.type === 0)?.varint;
+    // Proto: ProtoOASpotEvent { payloadType=1, ctidTraderAccountId=2, symbolId(sint64)=3, bid(uint32)=4, ask(uint32)=5 }
+    const rawSymId = fields.find(f => f.num === 3 && f.type === 0)?.varint;
+    const bidRaw = fields.find(f => f.num === 4 && f.type === 0)?.varint;
+    const askRaw = fields.find(f => f.num === 5 && f.type === 0)?.varint;
 
     if (!rawSymId || (!bidRaw && !askRaw)) return;
     const symId = dezigzag(rawSymId);
@@ -854,7 +1048,8 @@ export class CTraderService extends EventEmitter {
   private startHeartbeat(): void {
     this.heartbeatTimer = setInterval(() => {
       this.hbSentAt = Date.now();
-      this.send(PT.HEARTBEAT, Buffer.alloc(0));
+      // ProtoHeartbeatEvent has required payloadType=1 — must be present in inner payload
+      this.send(PT.HEARTBEAT, varintField(1, BigInt(PT.HEARTBEAT)));
     }, 10_000);
   }
 

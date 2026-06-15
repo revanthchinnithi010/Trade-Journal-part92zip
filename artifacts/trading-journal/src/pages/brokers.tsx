@@ -408,6 +408,7 @@ interface CTraderStatus {
   configured: boolean;
   connected: boolean;
   state: string;
+  lastError: string | null;
   latencyMs: number;
   accounts: Array<{ id: string; login: string; isLive: boolean }>;
   ticks: Record<string, CTraderTick>;
@@ -745,6 +746,64 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
               Add <code className="text-amber-300 font-mono">CTRADER_CLIENT_ID</code> and{" "}
               <code className="text-amber-300 font-mono">CTRADER_CLIENT_SECRET</code> to your Replit secrets,
               then restart the server.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* DEMO-only app / LIVE accounts error */}
+      {state === "error" && status?.lastError?.includes("DEMO only") && (
+        <div className="glass-card p-4 space-y-3 border-red-500/20">
+          <div className="flex items-start gap-3">
+            <div className="w-8 h-8 rounded-xl shrink-0 flex items-center justify-center bg-red-500/15 border border-red-500/25">
+              <AlertTriangle className="w-4 h-4 text-red-400" />
+            </div>
+            <div className="space-y-1 flex-1 min-w-0">
+              <p className="text-[13px] font-bold text-red-400">App not approved for Live accounts</p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                Your Open API app is registered for <span className="text-white font-semibold">Demo only</span>, but your
+                trading accounts are <span className="text-white font-semibold">Live</span>. The cTrader Live endpoint
+                rejects App Auth with "Corrupted frame" for demo-only apps.
+              </p>
+            </div>
+          </div>
+          <div className="pl-11 space-y-2">
+            <p className="text-[11px] font-semibold text-white/70">Choose one fix:</p>
+            <div className="flex flex-col gap-2">
+              <a href="https://openapi.ctrader.com/" target="_blank" rel="noopener"
+                className="flex items-center gap-2 p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 hover:bg-blue-500/15 transition-colors group">
+                <div className="w-6 h-6 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+                  <ExternalLink className="w-3 h-3 text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-blue-400 group-hover:text-blue-300">Option A — Register app for Live</p>
+                  <p className="text-[10px] text-muted-foreground">Go to openapi.ctrader.com → your app → enable Live access, then reconnect</p>
+                </div>
+              </a>
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                <div className="w-6 h-6 rounded-lg bg-white/[0.06] flex items-center justify-center shrink-0 mt-0.5">
+                  <Shield className="w-3 h-3 text-foreground/60" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[11px] font-bold text-white/70">Option B — Use a Demo trading account</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Create a Demo account in cTrader, re-authorise OAuth so the token links to the Demo account, then reconnect.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Generic error notice (non-DEMO-only errors) */}
+      {state === "error" && status?.lastError && !status.lastError.includes("DEMO only") && (
+        <div className="glass-card p-4 flex items-start gap-3 border-red-500/20">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-[12px] font-semibold text-red-400">Connection error</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed font-mono break-all">
+              {status.lastError}
             </p>
           </div>
         </div>
