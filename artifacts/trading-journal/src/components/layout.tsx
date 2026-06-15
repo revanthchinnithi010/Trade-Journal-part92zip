@@ -18,6 +18,7 @@ import { NotificationPanel } from "./NotificationPanel";
 import { ProfileDropdown, useProfile, getInitials } from "./ProfileMenu";
 import { ChartFocusContext } from "@/contexts/ChartFocusContext";
 import { MobileBottomNav } from "./MobileBottomNav";
+import { SidebarSystemSections } from "./SidebarSystemSections";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChartStore } from "@/store/chartStore";
 import { useCurrencyStore, CURRENCY_META } from "@/store/currencyStore";
@@ -334,7 +335,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-5 overflow-y-auto">
+        <nav className="flex-1 px-3 py-3 overflow-y-auto" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           {NAV_SECTIONS.map((section) => (
             <div key={section.label}>
               <p
@@ -358,6 +359,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               </div>
             </div>
           ))}
+          <SidebarSystemSections open={sidebarOpen} />
         </nav>
 
         {/* Account Summary */}
