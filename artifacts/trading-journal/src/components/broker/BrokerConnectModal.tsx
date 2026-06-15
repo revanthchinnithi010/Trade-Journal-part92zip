@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import {
   CheckCircle2, XCircle, Loader2, ExternalLink,
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
-  ChevronLeft, X,
+  ChevronLeft, X, Copy, Check,
 } from "lucide-react";
 import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import { BROKERS } from "@/types/broker";
@@ -43,7 +43,20 @@ function useBrokerConnect() {
   const [mt5Password, setMt5Password] = useState("");
   const [mt5Label,    setMt5Label]    = useState("");
   const [showMt5Pass, setShowMt5Pass] = useState(false);
-  const [ctDiag,      setCtDiag]      = useState<CTraderDiagnostics | null>(null);
+  const [ctDiag,         setCtDiag]         = useState<CTraderDiagnostics | null>(null);
+  const [ctRedirectUri,  setCtRedirectUri]  = useState<string>("");
+
+  // Pre-fetch config as soon as the cTrader panel mounts so the
+  // redirect URI is visible for the user to register before clicking Connect
+  useEffect(() => {
+    if (authBrokerId !== "ctrader") return;
+    fetch("/api/ctrader/config", { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { configured?: boolean; redirectUri?: string }) => {
+        if (d.redirectUri) setCtRedirectUri(d.redirectUri);
+      })
+      .catch(() => { /* non-fatal */ });
+  }, [authBrokerId]);
 
   const popupRef     = useRef<Window | null>(null);
   const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -161,7 +174,8 @@ function useBrokerConnect() {
     setErrorMsg("");
     try {
       const res  = await fetch("/api/ctrader/config", { credentials: "include" });
-      const data = await res.json() as { configured: boolean; authUrl: string | null; error?: string };
+      const data = await res.json() as { configured: boolean; authUrl: string | null; redirectUri?: string; error?: string };
+      if (data.redirectUri) setCtRedirectUri(data.redirectUri);
 
       if (!data.configured || !data.authUrl) {
         setStatus("error");
@@ -230,7 +244,7 @@ function useBrokerConnect() {
     mt5Server, setMt5Server, mt5Login, setMt5Login,
     mt5Password, setMt5Password, mt5Label, setMt5Label,
     showMt5Pass, setShowMt5Pass,
-    ctDiag, startCTraderOAuth, handleMt5Connect,
+    ctDiag, ctRedirectUri, startCTraderOAuth, handleMt5Connect,
     closeAuthModal, openSelectModal,
   };
 }
@@ -241,7 +255,7 @@ function BrokerFormContent({
   mt5Server, setMt5Server, mt5Login, setMt5Login,
   mt5Password, setMt5Password, mt5Label, setMt5Label,
   showMt5Pass, setShowMt5Pass,
-  ctDiag, startCTraderOAuth, handleMt5Connect,
+  ctDiag, ctRedirectUri, startCTraderOAuth, handleMt5Connect,
   onDone,
 }: ReturnType<typeof useBrokerConnect> & { onDone: () => void }) {
   if (!broker) return null;
@@ -278,6 +292,7 @@ function BrokerFormContent({
           : <CTraderOAuthPanel
               status={status}
               errorMsg={errorMsg}
+              redirectUri={ctRedirectUri}
               onConnect={startCTraderOAuth}
               onRetry={() => { setStatus("idle"); setErrorMsg(""); }}
             />
@@ -461,35 +476,127 @@ function SuccessBanner({ broker, onClose }: { broker: { name: string }; onClose:
   );
 }
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        }).catch(() => { /* ignore */ });
+      }}
+      title="Copy to clipboard"
+      style={{
+        display: "flex", alignItems: "center", gap: 5, padding: "5px 10px",
+        borderRadius: 7, fontSize: 11, fontWeight: 500, flexShrink: 0,
+        background: copied ? "rgba(0,255,180,0.12)" : "rgba(255,255,255,0.07)",
+        color: copied ? "#00FFB4" : "rgba(255,255,255,0.55)",
+        border: `1px solid ${copied ? "rgba(0,255,180,0.25)" : "rgba(255,255,255,0.10)"}`,
+        cursor: "pointer", transition: "all 0.15s",
+      }}
+    >
+      {copied ? <Check size={11} /> : <Copy size={11} />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
 function CTraderOAuthPanel({
-  status, errorMsg, onConnect, onRetry,
-}: { status: Status; errorMsg: string; onConnect: () => void; onRetry: () => void }) {
+  status, errorMsg, redirectUri, onConnect, onRetry,
+}: { status: Status; errorMsg: string; redirectUri: string; onConnect: () => void; onRetry: () => void }) {
   const isLoading = status === "loading" || status === "waiting_oauth";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* How it works */}
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+      {/* ── Step 1: Register redirect URI ─────────────────────────────────── */}
       <div style={{
-        display: "flex", flexDirection: "column", gap: 12, padding: 16, borderRadius: 12,
-        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+        display: "flex", flexDirection: "column", gap: 10, padding: 14, borderRadius: 12,
+        background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.22)",
       }}>
-        <p style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", margin: 0, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
-          How it works
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
+            background: "rgba(251,191,36,0.2)", color: "#FBBF24",
+          }}>1</span>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(251,191,36,0.9)", margin: 0 }}>
+            Register this Redirect URI in the Spotware portal first
+          </p>
+        </div>
+        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", margin: 0, lineHeight: 1.5 }}>
+          Go to{" "}
+          <a
+            href="https://openapi.ctrader.com/apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "#FBBF24", textDecoration: "none" }}
+          >
+            openapi.ctrader.com/apps
+          </a>
+          {" "}→ your app → <strong style={{ color: "rgba(255,255,255,0.6)" }}>Redirect URIs</strong> and add the exact URL below.
         </p>
-        {[
-          "You'll be redirected to cTrader to authorize",
-          "We securely store your access + refresh tokens",
-          "Tokens auto-refresh — stay connected without re-authorizing",
-        ].map((step, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <span style={{
-              flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-              width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 600, marginTop: 1,
-              background: "rgba(239,68,68,0.15)", color: "#EF4444",
-            }}>{i + 1}</span>
-            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>{step}</span>
+
+        {redirectUri ? (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 9,
+            background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.08)",
+          }}>
+            <code style={{
+              flex: 1, fontSize: 12, color: "rgba(255,255,255,0.85)", wordBreak: "break-all" as const,
+              fontFamily: "ui-monospace, monospace", lineHeight: 1.4,
+            }}>
+              {redirectUri}
+            </code>
+            <CopyButton text={redirectUri} />
           </div>
-        ))}
+        ) : (
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 9,
+            background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <Loader2 size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} className="animate-spin" />
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Loading redirect URI…</span>
+          </div>
+        )}
+      </div>
+
+      {/* ── Step 2: Also set CTRADER_REDIRECT_URI env var ─────────────────── */}
+      <div style={{
+        display: "flex", flexDirection: "column", gap: 8, padding: 14, borderRadius: 12,
+        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
+            background: "rgba(239,68,68,0.18)", color: "#EF4444",
+          }}>2</span>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", margin: 0 }}>
+            Pin the URI in your server secrets (recommended)
+          </p>
+        </div>
+        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: 0, lineHeight: 1.5 }}>
+          Add <code style={{ color: "rgba(255,255,255,0.65)", background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: 4, fontFamily: "monospace" }}>CTRADER_REDIRECT_URI</code> to your Replit Secrets with the exact URL above. This ensures the redirect URI stays consistent after redeployment.
+        </p>
+      </div>
+
+      {/* ── Step 3: Authorize ─────────────────────────────────────────────── */}
+      <div style={{
+        display: "flex", flexDirection: "column", gap: 8, padding: 14, borderRadius: 12,
+        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{
+            display: "flex", alignItems: "center", justifyContent: "center",
+            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
+            background: "rgba(239,68,68,0.18)", color: "#EF4444",
+          }}>3</span>
+          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", margin: 0 }}>
+            Authorize — tokens are stored and auto-refreshed
+          </p>
+        </div>
       </div>
 
       {/* Waiting for popup */}
@@ -506,11 +613,20 @@ function CTraderOAuthPanel({
       {/* Error */}
       {status === "error" && (
         <div style={{
-          display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px", borderRadius: 10,
+          display: "flex", flexDirection: "column", gap: 8, padding: "12px 16px", borderRadius: 10,
           background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
         }}>
-          <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: "#EF4444", margin: 0, lineHeight: 1.5 }}>{errorMsg}</p>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
+            <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
+            <p style={{ fontSize: 13, color: "#EF4444", margin: 0, lineHeight: 1.5 }}>{errorMsg}</p>
+          </div>
+          {/redirect/i.test(errorMsg) && (
+            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", margin: 0, paddingLeft: 23, lineHeight: 1.5 }}>
+              Make sure the URI above is added to your app's allowed Redirect URIs at{" "}
+              <a href="https://openapi.ctrader.com/apps" target="_blank" rel="noopener noreferrer"
+                style={{ color: "#FBBF24", textDecoration: "none" }}>openapi.ctrader.com/apps</a>.
+            </p>
+          )}
         </div>
       )}
 

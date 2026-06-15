@@ -5,7 +5,11 @@ import { logger } from "../lib/logger.js";
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function resolveRedirectUri(req: Request): string {
-  const host = req.get("x-forwarded-host") ?? req.get("host") ?? "localhost";
+  // Allow an explicit override — must match exactly what is registered in the
+  // Spotware developer portal at https://openapi.ctrader.com/apps
+  const override = process.env["CTRADER_REDIRECT_URI"];
+  if (override) return override;
+  const host  = req.get("x-forwarded-host") ?? req.get("host") ?? "localhost";
   const proto = req.get("x-forwarded-proto") ?? req.protocol ?? "https";
   return `${proto}://${host}/api/ctrader/callback`;
 }
@@ -48,7 +52,8 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
       const state       = await ctrader.createOAuthState();
       const redirectUri = resolveRedirectUri(req);
       const authUrl     = ctrader.buildAuthUrl(redirectUri, state);
-      res.json({ configured: true, authUrl });
+      // Return redirectUri so the frontend can show it for portal registration
+      res.json({ configured: true, authUrl, redirectUri });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err }, "ctrader/config: failed to build auth URL");
