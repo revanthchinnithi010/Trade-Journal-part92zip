@@ -1,17 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  CheckCircle2, XCircle, Loader2, ExternalLink,
+  CheckCircle2, XCircle, Loader2,
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
-  ChevronLeft, X, Zap,
+  ChevronLeft, X,
 } from "lucide-react";
 import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 import { DeltaApiConnectForm } from "./DeltaApiConnectForm";
+import { CTraderTokenForm } from "./CTraderTokenForm";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type Status = "idle" | "loading" | "waiting_oauth" | "waiting_ready" | "success" | "error";
+type Status = "idle" | "loading" | "waiting_ready" | "success" | "error";
 
 interface CTraderDiagStep {
   id: string;
@@ -45,14 +46,8 @@ function useBrokerConnect() {
   const [showMt5Pass, setShowMt5Pass] = useState(false);
   const [ctDiag, setCtDiag] = useState<CTraderDiagnostics | null>(null);
 
-  const popupRef = useRef<Window | null>(null);
-  const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const readyPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingAccountRef = useRef<BrokerAccount | null>(null);
   const statusRef = useRef<Status>("idle");
-  const prevDiagRef = useRef<CTraderDiagnostics | null>(null);
-  const oauthHandledRef = useRef(false);
-  // Stable refs for store callbacks (Zustand actions are stable but keep ref for safety)
   const loadAccountsRef = useRef(loadAccounts);
   const connectRef = useRef(connect);
   const closeAuthModalRef = useRef(closeAuthModal);
@@ -60,111 +55,14 @@ function useBrokerConnect() {
   useEffect(() => { connectRef.current = connect; }, [connect]);
   useEffect(() => { closeAuthModalRef.current = closeAuthModal; }, [closeAuthModal]);
 
-  const stopPopupPoll = useCallback(() => {
-    if (popupPollRef.current) { clearInterval(popupPollRef.current); popupPollRef.current = null; }
-  }, []);
-
   const stopReadyPoll = useCallback(() => {
     if (readyPollRef.current) { clearTimeout(readyPollRef.current); readyPollRef.current = null; }
   }, []);
 
   useEffect(() => { statusRef.current = status; }, [status]);
-  useEffect(() => () => { stopPopupPoll(); stopReadyPoll(); }, [stopPopupPoll, stopReadyPoll]);
+  useEffect(() => () => { stopReadyPoll(); }, [stopReadyPoll]);
 
-  useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (!e.data) return;
-      if (e.data.type === "ctrader_oauth_result") {
-        stopPopupPoll();
-        popupRef.current?.close();
-        popupRef.current = null;
-        if (e.data.status === "success") {
-          // Extract account payload embedded directly in the postMessage.
-          // This bypasses the session-based pending-account lookup entirely.
-          const accountId = typeof e.data.accountId === "number" ? e.data.accountId : null;
-          const apiToken  = typeof e.data.apiToken  === "string" ? e.data.apiToken  : null;
-          const label     = typeof e.data.label     === "string" ? e.data.label     : null;
-          console.log("[cTrader OAuth] ✅ OAuth Success — postMessage received from popup", { accountId, label });
-          handleCTraderOAuthSuccess(
-            accountId && apiToken ? { accountId, apiToken, label: label ?? "cTrader" } : undefined
-          );
-        } else {
-          setStatus("error");
-          setErrorMsg(String(e.data.message || "cTrader OAuth failed"));
-        }
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function openOAuthPopup(url: string, windowName: string): Window | null {
-    const popup = window.open(url, windowName, "width=560,height=700,resizable=yes,scrollbars=yes");
-    if (!popup) {
-      setStatus("error");
-      setErrorMsg("Popup was blocked. Allow popups for this site and try again.");
-      return null;
-    }
-    popupRef.current = popup;
-    setStatus("waiting_oauth");
-    popupPollRef.current = setInterval(() => {
-      try {
-        if (popup.closed && statusRef.current === "waiting_oauth") {
-          stopPopupPoll();
-          setStatus("error");
-          setErrorMsg("OAuth window was closed before completing.");
-        }
-      } catch { /* cross-origin */ }
-    }, 800);
-    return popup;
-  }
-
-  async function startCTraderOAuth() {
-    // ── Save return context BEFORE opening OAuth ──────────────────────────────
-    // layout.tsx reads this on callback to restore the originating page + sheet.
-    const sourceRoute = window.location.pathname;
-    sessionStorage.setItem("ctrader_oauth_source_route", sourceRoute);
-    sessionStorage.setItem("ctrader_oauth_source_broker", authBrokerId ?? "ctrader");
-    console.log("[cTrader OAuth] Source route saved:", sourceRoute, "broker:", authBrokerId);
-    // ─────────────────────────────────────────────────────────────────────────
-
-    setStatus("loading");
-    setErrorMsg("");
-    try {
-      const res = await fetch("/api/ctrader/config", { credentials: "include" });
-      const data = await res.json() as { configured: boolean; authUrl: string | null; error?: string };
-      if (!data.configured || !data.authUrl) {
-        setStatus("error");
-        setErrorMsg(
-          !data.configured
-            ? "cTrader OAuth is not configured. Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET."
-            : "Could not generate OAuth URL — try again",
-        );
-        return;
-      }
-
-      // ── Expo WebView bridge ────────────────────────────────────────────────
-      // When running inside the Expo tablet WebView, window.ReactNativeWebView
-      // is injected by react-native-webview. Delegate OAuth to the native side
-      // so it can open a proper ASWebAuthenticationSession / Chrome Custom Tab
-      // and handle the tradevault:// deep-link redirect automatically.
-      const rnBridge = (window as { ReactNativeWebView?: { postMessage(s: string): void } }).ReactNativeWebView;
-      if (rnBridge) {
-        console.log("[cTrader OAuth] Expo WebView detected — sending ctrader_oauth_start to native bridge");
-        rnBridge.postMessage(JSON.stringify({ type: "ctrader_oauth_start", url: data.authUrl }));
-        setStatus("waiting_oauth");
-        return;
-      }
-      // ──────────────────────────────────────────────────────────────────────
-
-      openOAuthPopup(data.authUrl, "ctrader_oauth");
-    } catch (err) {
-      setStatus("error");
-      setErrorMsg(String(err));
-    }
-  }
-
-  function scheduleCTraderReadyPoll(startMs: number, accountDetails: BrokerAccount) {
+  function startReadinessPoll(startMs: number) {
     readyPollRef.current = setTimeout(async () => {
       readyPollRef.current = null;
       if (statusRef.current !== "waiting_ready") return;
@@ -173,37 +71,17 @@ function useBrokerConnect() {
         const res = await fetch("/api/ctrader/diagnostics", { credentials: "include" });
         if (res.ok) {
           const diag = await res.json() as CTraderDiagnostics;
-          const prev = prevDiagRef.current;
-
-          // Log step transitions once
-          const symbolStep = diag.steps.find(s => s.id === "symbols");
-          const prevSymbolStep = prev?.steps.find(s => s.id === "symbols");
-          const wsStep = diag.steps.find(s => s.id === "websocket");
-          const prevWsStep = prev?.steps.find(s => s.id === "websocket");
-          const accountStep = diag.steps.find(s => s.id === "accounts");
-          const prevAccountStep = prev?.steps.find(s => s.id === "accounts");
-
-          if (accountStep?.status === "done" && prevAccountStep?.status !== "done") {
-            console.log("[cTrader OAuth] ✅ Account Loaded — ID:", diag.activeAccountId);
-          }
-          if (symbolStep?.status === "done" && prevSymbolStep?.status !== "done") {
-            console.log("[cTrader OAuth] ✅ Symbol Catalog Loaded —", diag.symbolCount, "symbols");
-          }
-          if (wsStep?.status === "done" && prevWsStep?.status !== "done") {
-            console.log("[cTrader OAuth] ✅ WS Connected — latency:", diag.latencyMs, "ms");
-          }
-          if (diag.connected && !prev?.connected) {
-            console.log("[cTrader OAuth] ✅ WS Authenticated — broker connection fully ready");
-          }
-          prevDiagRef.current = diag;
-
           setCtDiag(diag);
 
           if (diag.connected) {
             setStatus("success");
             await loadAccountsRef.current();
+            const { connectedAccounts } = useBrokerStore.getState();
+            const ctAccount = Object.values(connectedAccounts).find(
+              (a: BrokerAccount) => a.broker_id === "ctrader",
+            );
             setTimeout(() => {
-              connectRef.current(accountDetails);
+              if (ctAccount) connectRef.current(ctAccount);
               closeAuthModalRef.current();
             }, 1200);
             return;
@@ -219,123 +97,19 @@ function useBrokerConnect() {
 
       if (Date.now() - startMs > 35_000) {
         setStatus("error");
-        setErrorMsg(
-          "cTrader connection timed out. Check server logs for the exact failing step.",
-        );
+        setErrorMsg("cTrader connection timed out. Check server logs for the exact failing step.");
         return;
       }
 
-      scheduleCTraderReadyPoll(startMs, accountDetails);
+      startReadinessPoll(startMs);
     }, 2000);
   }
 
-  async function handleCTraderOAuthSuccess(
-    preKnown?: { accountId: number; apiToken: string; label: string },
-  ) {
-    // Guard: prevent double-execution when both postMessage and opener redirect fire
-    if (oauthHandledRef.current) {
-      console.log("[cTrader OAuth] ⚠️ handleCTraderOAuthSuccess called again — skipping (already in progress)");
-      return;
-    }
-    oauthHandledRef.current = true;
-
-    console.log("[cTrader OAuth] ✅ OAuth Success — starting account load", preKnown ? "(pre-known payload)" : "(fetching from server)");
-    setStatus("loading");
-    try {
-      let data: { ok: boolean; accountId?: number; apiToken?: string; label?: string; error?: string };
-
-      if (preKnown) {
-        // Account payload came directly in the postMessage or URL params — no session needed
-        console.log("[cTrader OAuth] ✅ Using pre-known account payload — skipping /api/ctrader/pending-account");
-        data = { ok: true, accountId: preKnown.accountId, apiToken: preKnown.apiToken, label: preKnown.label };
-      } else {
-        // Fallback: ask the server (session or DB fallback)
-        console.log("[cTrader OAuth] ⏳ No pre-known payload — fetching /api/ctrader/pending-account");
-        const res = await fetch("/api/ctrader/pending-account", { credentials: "include" });
-        const rawText = await res.text();
-        try {
-          data = JSON.parse(rawText) as typeof data;
-        } catch {
-          setStatus("error");
-          setErrorMsg(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
-          oauthHandledRef.current = false;
-          return;
-        }
-        if (!res.ok || !data.ok || !data.accountId || !data.apiToken) {
-          const errMsg = data.error ?? `HTTP ${res.status}: ${rawText.slice(0, 300)}`;
-          console.error("[cTrader OAuth] ❌ Account load failed:", errMsg);
-          setStatus("error");
-          setErrorMsg(errMsg);
-          oauthHandledRef.current = false;
-          return;
-        }
-      }
-
-      console.log("[cTrader OAuth] ✅ Account Loaded — accountId:", data.accountId, "label:", data.label);
-
-      try {
-        localStorage.setItem(`${LS_TOKEN_PREFIX}${data.accountId}`, data.apiToken);
-        console.log("[cTrader OAuth] ✅ Token Saved — localStorage key:", `${LS_TOKEN_PREFIX}${data.accountId}`);
-      } catch { /* ignore */ }
-
-      const accountDetails: BrokerAccount = {
-        id: data.accountId,
-        broker_id: "ctrader",
-        label: data.label ?? "cTrader",
-        is_active: true,
-        api_token: data.apiToken,
-        created_at: new Date().toISOString(),
-      };
-      pendingAccountRef.current = accountDetails;
-
-      console.log("[cTrader OAuth] ⏳ Waiting for cTrader TLS session — polling diagnostics…");
-      setCtDiag(null);
-      setStatus("waiting_ready");
-      scheduleCTraderReadyPoll(Date.now(), accountDetails);
-    } catch (err) {
-      console.error("[cTrader OAuth] ❌ Exception in account load:", err);
-      setStatus("error");
-      setErrorMsg(String(err));
-      oauthHandledRef.current = false;
-    }
+  function handleCTraderTokenSuccess() {
+    setCtDiag(null);
+    setStatus("waiting_ready");
+    startReadinessPoll(Date.now());
   }
-
-  // Auto-resume: when opened after a same-tab OAuth redirect, sessionStorage will
-  // have a "ctrader_oauth_resume" flag set by Layout's startup detection OR by
-  // brokers.tsx FusionPanel when it detects the ?ctrader=connected URL param.
-  useEffect(() => {
-    if (authBrokerId !== "ctrader") return;
-    const resume = sessionStorage.getItem("ctrader_oauth_resume");
-    const errMsg = sessionStorage.getItem("ctrader_oauth_error");
-    if (resume === "true") {
-      sessionStorage.removeItem("ctrader_oauth_resume");
-
-      // Recover the account payload stored by layout.tsx from the redirect URL.
-      // This bypasses the session-based pending-account lookup.
-      const storedToken   = sessionStorage.getItem("ctrader_oauth_token");
-      const storedAccount = sessionStorage.getItem("ctrader_oauth_account");
-      const storedLabel   = sessionStorage.getItem("ctrader_oauth_label");
-      sessionStorage.removeItem("ctrader_oauth_token");
-      sessionStorage.removeItem("ctrader_oauth_account");
-      sessionStorage.removeItem("ctrader_oauth_label");
-
-      const accountId = storedAccount ? parseInt(storedAccount, 10) : NaN;
-      const preKnown = storedToken && !isNaN(accountId)
-        ? { accountId, apiToken: storedToken, label: storedLabel ?? "cTrader" }
-        : undefined;
-
-      console.log(
-        "[cTrader OAuth] ✅ OAuth Success — resuming from same-tab/broker-page redirect",
-        preKnown ? `(pre-known accountId=${preKnown.accountId})` : "(no pre-known payload — will fetch from server)",
-      );
-      handleCTraderOAuthSuccess(preKnown);
-    } else if (errMsg) {
-      sessionStorage.removeItem("ctrader_oauth_error");
-      setStatus("error");
-      setErrorMsg(`cTrader OAuth failed: ${decodeURIComponent(errMsg)}`);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authBrokerId]);
 
   async function handleMt5Connect(e: React.FormEvent) {
     e.preventDefault();
@@ -382,7 +156,7 @@ function useBrokerConnect() {
     mt5Password, setMt5Password, mt5Label, setMt5Label,
     showMt5Pass, setShowMt5Pass,
     ctDiag,
-    startCTraderOAuth, handleMt5Connect,
+    handleCTraderTokenSuccess, handleMt5Connect,
     closeAuthModal, openSelectModal,
   };
 }
@@ -394,7 +168,7 @@ function BrokerFormContent({
   mt5Password, setMt5Password, mt5Label, setMt5Label,
   showMt5Pass, setShowMt5Pass,
   ctDiag,
-  startCTraderOAuth, handleMt5Connect,
+  handleCTraderTokenSuccess, handleMt5Connect,
   onDone,
 }: ReturnType<typeof useBrokerConnect> & { onDone: () => void }) {
   if (!broker) return null;
@@ -428,7 +202,10 @@ function BrokerFormContent({
           ? <SuccessBanner broker={broker} onClose={onDone} />
           : status === "waiting_ready"
           ? <CTraderReadinessPanel ctDiag={ctDiag} />
-          : <CTraderOAuthPanel status={status} errorMsg={errorMsg} onConnect={startCTraderOAuth} onRetry={() => { setStatus("idle"); setErrorMsg(""); }} />
+          : <CTraderTokenForm
+              onSuccess={handleCTraderTokenSuccess}
+              onError={msg => { setStatus("error"); setErrorMsg(msg); }}
+            />
       )}
 
       {/* MT5 */}
@@ -648,10 +425,10 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
   });
 
   const defaultSteps: CTraderDiagStep[] = [
-    { id: "oauth",     label: "OAuth authorized",          status: "done",    detail: "Access token stored" },
-    { id: "accounts",  label: "Trading account loaded",    status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
-    { id: "symbols",   label: "Symbol catalog downloaded", status: "pending", detail: "Waiting…" },
-    { id: "websocket", label: "WebSocket session active",  status: "pending", detail: "Waiting…" },
+    { id: "token",     label: "Token verified",              status: "done",    detail: "Access token stored" },
+    { id: "accounts",  label: "Trading account loaded",      status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
+    { id: "symbols",   label: "Symbol catalog downloaded",   status: "pending", detail: "Waiting…" },
+    { id: "websocket", label: "WebSocket session active",    status: "pending", detail: "Waiting…" },
   ];
 
   const steps = ctDiag?.steps ?? defaultSteps;
@@ -756,129 +533,6 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
       <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", textAlign: "center" as const, margin: 0 }}>
         This typically takes 15–30 seconds · Do not close this window
       </p>
-    </div>
-  );
-}
-
-function CTraderOAuthPanel({
-  status, errorMsg, onConnect, onRetry,
-}: { status: Status; errorMsg: string; onConnect: () => void; onRetry: () => void }) {
-  const isLoading = status === "loading" || status === "waiting_oauth";
-  const [hasCTraderImported, setHasCTraderImported] = useState(false);
-
-  useEffect(() => {
-    fetch("/api/credentials/status", { credentials: "include" })
-      .then(r => r.json())
-      .then((d: { ok: boolean; status?: Record<string, boolean> }) => {
-        if (d.ok && d.status?.CTRADER_CLIENT_ID && d.status?.CTRADER_CLIENT_SECRET) {
-          setHasCTraderImported(true);
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Imported credentials banner */}
-      {hasCTraderImported && (
-        <div style={{
-          padding: "14px 16px", borderRadius: 12,
-          background: "rgba(239,68,68,0.06)", border: "1px solid rgba(239,68,68,0.2)",
-          display: "flex", flexDirection: "column", gap: 10,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Zap size={14} style={{ color: "#EF4444", flexShrink: 0 }} />
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: "#EF4444", margin: 0 }}>
-                App credentials found
-              </p>
-              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "2px 0 0" }}>
-                CTRADER_CLIENT_ID &amp; CLIENT_SECRET are pre-configured. Click below to start OAuth.
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onConnect}
-            disabled={isLoading}
-            style={{
-              width: "100%", padding: "11px 0", borderRadius: 10, fontSize: 13, fontWeight: 700,
-              background: isLoading
-                ? "rgba(239,68,68,0.15)"
-                : "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
-              color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
-              border: "none", cursor: isLoading ? "not-allowed" : "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-              boxShadow: isLoading ? "none" : "0 0 20px rgba(239,68,68,0.25)",
-            }}
-          >
-            {isLoading
-              ? <><Loader2 size={14} className="animate-spin" /> Connecting…</>
-              : <><ExternalLink size={14} /> Connect cTrader — OAuth</>}
-          </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>
-              or use the button below
-            </span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-          </div>
-        </div>
-      )}
-
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 12, padding: 16, borderRadius: 12,
-        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
-      }}>
-        <p style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", margin: 0, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>How it works</p>
-        {["You'll be redirected to cTrader to authorize", "We store an encrypted OAuth token", "Live trades, positions & balance sync via WS"].map((step, i) => (
-          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-            <span style={{
-              flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-              width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 600, marginTop: 1,
-              background: "rgba(239,68,68,0.15)", color: "#EF4444",
-            }}>{i + 1}</span>
-            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>{step}</span>
-          </div>
-        ))}
-      </div>
-
-      {status === "waiting_oauth" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-          <Loader2 size={15} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>Waiting for OAuth authorization…</span>
-        </div>
-      )}
-
-      {status === "error" && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-          <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: "#EF4444", margin: 0 }}>{errorMsg}</p>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 10 }}>
-        {status === "error" && (
-          <button onClick={onRetry} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10,
-            fontSize: 13, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)",
-            border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
-          }}>
-            <RefreshCw size={13} /> Retry
-          </button>
-        )}
-        <button onClick={onConnect} disabled={isLoading} style={{
-          flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          padding: "14px 0", borderRadius: 12, fontSize: 14, fontWeight: 600,
-          background: isLoading ? "rgba(239,68,68,0.2)" : "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
-          color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
-          border: "none", cursor: isLoading ? "not-allowed" : "pointer",
-          boxShadow: isLoading ? "none" : "0 0 24px rgba(239,68,68,0.25)",
-        }}>
-          {isLoading
-            ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
-            : <><ExternalLink size={15} /> Connect via cTrader OAuth</>}
-        </button>
-      </div>
     </div>
   );
 }

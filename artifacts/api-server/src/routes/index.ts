@@ -9,7 +9,6 @@ import { createTelegramRouter } from "./telegram.js";
 import { createFinnhubRouter } from "./finnhub.js";
 import { createDeltaRouter } from "./delta.js";
 import { createCTraderRouter } from "./ctrader.js";
-import { createDeltaOAuthRouter } from "./delta_oauth.js";
 import { createMarketRouter } from "./market.js";
 import { createAnalyticsRouter } from "./analytics.js";
 import { configRouter } from "./config.js";
@@ -71,7 +70,6 @@ export function createRouter(deps: {
   router.use(createFinnhubRouter(deps.finnhub));
   router.use(createDeltaRouter(deps.delta));
   router.use(createCTraderRouter(deps.ctrader));
-  router.use(createDeltaOAuthRouter());
   router.use(createMarketRouter(deps.marketData, deps.healthMonitor));
   router.use(createCandlesRouter(deps.candleAggregator, deps.marketData));
   router.use(createAnalyticsRouter());

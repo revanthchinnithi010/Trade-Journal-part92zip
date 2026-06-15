@@ -1,7 +1,6 @@
 import * as tls from "tls";
 import * as https from "https";
 import * as querystring from "querystring";
-import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -188,6 +187,7 @@ export class CTraderService extends EventEmitter {
   private accessToken: string | null = null;
   private refreshToken: string | null = null;
   private tokenExpiresAt: Date | null = null;
+  private preferredAccountId: string | null = null;
 
   private accounts: CTraderAccount[] = [];
   private activeAccount: CTraderAccount | null = null;
@@ -211,10 +211,9 @@ export class CTraderService extends EventEmitter {
 
   async init(): Promise<void> {
     await this.ensureTable();
-    await this.ensureOAuthStateTable();
     const row = await this.loadToken();
     if (!row) {
-      logger.info("CTraderService: no stored token — awaiting OAuth");
+      logger.info("CTraderService: no stored token — awaiting token");
       return;
     }
     this.accessToken = row.access_token;
@@ -230,83 +229,44 @@ export class CTraderService extends EventEmitter {
     this.connect();
   }
 
-  // ── OAuth ─────────────────────────────────────────────────────────────────
+  // ── Token connect ─────────────────────────────────────────────────────────
 
-  buildAuthUrl(redirectUri: string, state?: string): string {
-    const id = process.env["CTRADER_CLIENT_ID"];
-    if (!id) throw new Error("CTRADER_CLIENT_ID not set");
-    const params: Record<string, string> = { client_id: id, redirect_uri: redirectUri, scope: "trading", response_type: "code" };
-    if (state) params["state"] = state;
-    const p = new URLSearchParams(params);
-    return `https://connect.spotware.com/apps/auth?${p.toString()}`;
-  }
-
-  async createOAuthState(): Promise<string> {
-    await this.ensureOAuthStateTable();
-    const state = randomUUID();
-    await pool.query(
-      "INSERT INTO ctrader_oauth_state (state) VALUES ($1)",
-      [state],
-    );
-    await pool.query("DELETE FROM ctrader_oauth_state WHERE created_at < NOW() - INTERVAL '15 minutes'");
-    return state;
-  }
-
-  async validateOAuthState(state: string): Promise<boolean> {
-    await this.ensureOAuthStateTable();
-    const r = await pool.query(
-      "DELETE FROM ctrader_oauth_state WHERE state = $1 RETURNING state",
-      [state],
-    );
-    return (r.rowCount ?? 0) > 0;
-  }
-
-  async handleOAuthCode(code: string, redirectUri: string): Promise<void> {
-    const id = process.env["CTRADER_CLIENT_ID"];
-    const secret = process.env["CTRADER_CLIENT_SECRET"];
-    if (!id || !secret) throw new Error("CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET not configured");
-
-    logger.info("CTraderService: exchanging OAuth code for tokens");
-    const res = await httpPost("/apps/token", {
-      grant_type: "authorization_code",
-      code, client_id: id, client_secret: secret, redirect_uri: redirectUri,
-    });
-
-    if (res["error"]) throw new Error(String(res["error_description"] ?? res["error"]));
-
-    this.accessToken = String(res["access_token"]);
-    this.refreshToken = String(res["refresh_token"]);
-    const expiresIn = Number(res["expires_in"] ?? 3600);
-    this.tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
-
-    logger.info({
-      accessTokenPrefix: this.accessToken.slice(0, 8) + "…",
-      expiresIn,
-      hasRefreshToken: !!this.refreshToken,
-    }, "CTraderService: access token received — saving and connecting");
-
+  async connectWithToken(accessToken: string, accountId: string | null): Promise<void> {
+    this.accessToken = accessToken;
+    this.preferredAccountId = accountId;
+    this.refreshToken = null;
+    this.tokenExpiresAt = null;
     await this.saveToken();
-    // Tear down any existing socket BEFORE resetting state.
-    // Without this, the old socket's pending 'close' event fires after the new
-    // connection starts, sees state="app_auth" and slams it back to "error".
+
+    // Upsert into broker_accounts so the frontend loadAccounts() can find it
+    const existing = await pool.query("SELECT id FROM broker_accounts WHERE broker_id = 'ctrader'");
+    if (existing.rows.length > 0) {
+      BrokerService.evict(existing.rows[0].id as number);
+      await pool.query(
+        "UPDATE broker_accounts SET api_key_enc=$1, api_secret_enc=$2, api_token=$3, is_active=true WHERE broker_id='ctrader'",
+        [encrypt(accessToken), encrypt(accountId ?? "pending"), accessToken],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO broker_accounts (broker_id, label, api_key_enc, api_secret_enc, api_token, is_active)
+         VALUES ('ctrader', 'cTrader', $1, $2, $3, true)`,
+        [encrypt(accessToken), encrypt(accountId ?? "pending"), accessToken],
+      );
+    }
+
+    // Tear down stale socket before reconnect
     if (this.socket) {
-      logger.info("CTraderService: handleOAuthCode — destroying stale socket before reconnect");
       this.intentionalDisconnect = true;
       this.socket.destroy();
       this.socket = null;
     }
     this.clearTimers();
-    // Reset any previous error so connect() can proceed
     this.lastError = null;
     this.lastStuckStep = null;
     this.endpointProbe = 0;
     this.liveEndpointUpgradeAttempted = false;
     this.state = "disconnected";
-    logger.info({
-      stateBeforeConnect: "disconnected",
-      hasToken: !!this.accessToken,
-      CTRADER_ENV: process.env["CTRADER_ENV"] ?? "(not set — will default to live, auto-probes demo)",
-    }, "CTraderService: handleOAuthCode ── calling connect() now");
+    logger.info({ hasToken: true }, "CTraderService: connectWithToken — calling connect()");
     this.connect();
   }
 
@@ -1164,12 +1124,4 @@ export class CTraderService extends EventEmitter {
     await pool.query("DELETE FROM ctrader_connections");
   }
 
-  private async ensureOAuthStateTable(): Promise<void> {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS ctrader_oauth_state (
-        state      TEXT PRIMARY KEY,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-  }
 }
