@@ -120,6 +120,14 @@ function useBrokerConnect() {
   }
 
   async function startCTraderOAuth() {
+    // ── Save return context BEFORE opening OAuth ──────────────────────────────
+    // layout.tsx reads this on callback to restore the originating page + sheet.
+    const sourceRoute = window.location.pathname;
+    sessionStorage.setItem("ctrader_oauth_source_route", sourceRoute);
+    sessionStorage.setItem("ctrader_oauth_source_broker", authBrokerId ?? "ctrader");
+    console.log("[cTrader OAuth] Source route saved:", sourceRoute, "broker:", authBrokerId);
+    // ─────────────────────────────────────────────────────────────────────────
+
     setStatus("loading");
     setErrorMsg("");
     try {

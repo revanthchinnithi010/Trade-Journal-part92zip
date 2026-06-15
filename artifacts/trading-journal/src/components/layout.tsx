@@ -155,7 +155,15 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
     const connected = params.get("ctrader_connected");
     const error     = params.get("ctrader_error");
     if (connected === "true" || error) {
-      console.log("[cTrader OAuth] ✅ OAuth Success — URL param detected, redirecting to brokers");
+      // ── Restore the page that launched OAuth ────────────────────────────────
+      // BrokerConnectModal saves the originating route before opening the popup.
+      // Fall back to /brokers only if OAuth wasn't launched from a known page.
+      const sourceRoute = sessionStorage.getItem("ctrader_oauth_source_route") ?? "/brokers";
+      sessionStorage.removeItem("ctrader_oauth_source_route");
+      sessionStorage.removeItem("ctrader_oauth_source_broker");
+      console.log("[cTrader OAuth] OAuth source route:", sourceRoute, "— restoring");
+      // ────────────────────────────────────────────────────────────────────────
+
       // Strip params from URL before doing anything else
       const clean = new URL(window.location.href);
       clean.searchParams.delete("ctrader_connected");
@@ -163,9 +171,10 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       clean.searchParams.delete("ct_token");
       clean.searchParams.delete("ct_acct");
       clean.searchParams.delete("ct_label");
-      // Navigate to /brokers so user lands on the broker page
-      clean.pathname = "/brokers";
+      // Restore originating page (Charts, Brokers, or wherever OAuth was started)
+      clean.pathname = sourceRoute;
       window.history.replaceState({}, "", clean.toString());
+      console.log("[cTrader OAuth] Restored route:", sourceRoute);
       // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume.
       // Also forward any account payload embedded in the URL (avoids session lookup).
       if (connected === "true") {
@@ -179,11 +188,11 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
           console.log("[cTrader OAuth] ✅ Account payload stored in sessionStorage — accountId:", ctAcct);
         }
         sessionStorage.setItem("ctrader_oauth_resume", "true");
-        console.log("[cTrader OAuth] Token Saved — ctrader_oauth_resume flag set");
+        console.log("[cTrader OAuth] Restored sheet state: broker=ctrader modal=open on route:", sourceRoute);
       } else if (error) {
         sessionStorage.setItem("ctrader_oauth_error", error);
       }
-      // Open the cTrader auth modal so BrokerConnectModal can auto-resume
+      // Reopen the Connect Broker Sheet on the restored page
       useBrokerStore.getState().openAuthModal("ctrader");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
