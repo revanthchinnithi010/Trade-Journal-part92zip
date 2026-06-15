@@ -4,6 +4,7 @@ import {
   X, Camera, Eye, EyeOff, ChevronRight, ChevronLeft,
   Sun, Moon, Monitor, Check,
 } from "lucide-react";
+import { SidebarSystemSections } from "./SidebarSystemSections";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -217,13 +218,16 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
     <>
       <div
         ref={dropRef}
-        className="dropdown-in absolute top-[calc(100%+10px)] right-0 w-[248px] rounded-2xl overflow-hidden z-50"
+        className="dropdown-in absolute top-[calc(100%+10px)] right-0 w-[276px] rounded-2xl z-50"
         style={{
           background:          "var(--surface-header)",
           backdropFilter:      "blur(24px)",
           WebkitBackdropFilter:"blur(24px)",
           border:              "1px solid var(--surface-btn-border)",
           boxShadow:           "0 24px 64px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset",
+          maxHeight:           "min(88vh, 700px)",
+          overflowY:           "auto",
+          overflowX:           "hidden",
         }}
       >
         {panel === "appearance" ? (
@@ -280,6 +284,11 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
                   </button>
                 </div>
               ))}
+            </div>
+
+            {/* ── System Status, Backend Info, Backup & Restore ── */}
+            <div className="px-1.5 pb-2">
+              <SidebarSystemSections open={true} />
             </div>
           </>
         )}
