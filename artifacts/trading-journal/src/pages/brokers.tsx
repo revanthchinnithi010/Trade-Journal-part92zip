@@ -8,7 +8,6 @@ import {
   ChevronRight, ArrowUpRight, ArrowDownRight, Filter, Download,
   Link2, Unlink, Signal, ExternalLink, Copy, Server, BarChart3,
 } from "lucide-react";
-import { CredentialImportModal, ConnectionStatusPanel } from "@/components/broker/CredentialImportModal";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1070,9 +1069,6 @@ export default function Brokers() {
   const [fusionConnected, setFusionConnected] = useState(false);
   const [growwConnected, setGrowwConnected] = useState(false);
   const [tradeFilter, setTradeFilter] = useState<BrokerName | "all">("all");
-  const [showImportModal, setShowImportModal] = useState(false);
-  const [statusKey, setStatusKey] = useState(0);
-
   const filteredTrades = SAMPLE_SYNCED_TRADES.filter(
     t => tradeFilter === "all" || t.broker === tradeFilter
   );
@@ -1083,48 +1079,6 @@ export default function Brokers() {
 
   return (
     <div className="space-y-6 pb-12">
-      {showImportModal && (
-        <CredentialImportModal
-          onClose={() => setShowImportModal(false)}
-          onImported={() => { setStatusKey(k => k + 1); setShowImportModal(false); }}
-        />
-      )}
-
-      {/* ── Single Import Credentials File button ─────────────────────── */}
-      <button
-        onClick={() => setShowImportModal(true)}
-        style={{
-          width: "100%",
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
-          padding: "14px 0", borderRadius: 14, fontSize: 14, fontWeight: 700,
-          background: "linear-gradient(135deg, rgba(0,255,180,0.12) 0%, rgba(0,200,140,0.07) 100%)",
-          color: "#00FFB4", border: "1px solid rgba(0,255,180,0.22)", cursor: "pointer",
-          backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
-          boxShadow: "inset 0 1px 0 rgba(0,255,180,0.06), 0 0 24px rgba(0,255,180,0.04)",
-        }}
-      >
-        <span style={{
-          display: "flex", alignItems: "center", justifyContent: "center",
-          width: 26, height: 26, borderRadius: 8,
-          background: "rgba(0,255,180,0.12)", border: "1px solid rgba(0,255,180,0.2)",
-        }}>
-          <Upload size={13} />
-        </span>
-        Import Credentials File
-        <span style={{
-          fontSize: 11, padding: "2px 8px", borderRadius: 6,
-          background: "rgba(0,255,180,0.08)", border: "1px solid rgba(0,255,180,0.15)",
-          color: "rgba(0,255,180,0.7)",
-        }}>
-          .env · .txt
-        </span>
-      </button>
-
-      {/* Connection Status Panel */}
-      <div key={statusKey}>
-        <ConnectionStatusPanel />
-      </div>
-
       {/* Page Header */}
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>

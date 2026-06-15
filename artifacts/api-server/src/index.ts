@@ -13,7 +13,6 @@ import { AlertEngine } from "./services/AlertEngine.js";
 import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
-import { AppConfigService } from "./services/AppConfigService.js";
 
 console.log(`CTRADER_CLIENT_ID loaded: ${process.env["CTRADER_CLIENT_ID"] ? "YES" : "NO"}`);
 console.log(`CTRADER_CLIENT_SECRET loaded: ${process.env["CTRADER_CLIENT_SECRET"] ? "YES" : "NO"}`);
@@ -95,12 +94,6 @@ healthMonitor.start();
   } catch (err) {
     logger.error({ err }, "DB migration failed — services may have limited functionality");
   }
-
-  // Inject any stored credentials from app_config into process.env so that
-  // CTraderService, TelegramService, etc. pick them up without code changes.
-  await AppConfigService.injectToEnv().catch((err) =>
-    logger.warn({ err }, "AppConfigService.injectToEnv: non-fatal"),
-  );
 
   await new Promise<void>((resolve, reject) => {
     server.listen(port, (err?: Error) => {

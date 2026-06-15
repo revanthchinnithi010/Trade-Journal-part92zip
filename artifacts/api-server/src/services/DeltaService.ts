@@ -70,11 +70,18 @@ export class DeltaService {
         dbGet(KEY_API_SECRET),
       ]);
 
-      if (storedKey)    this.apiKey    = storedKey;
-      if (storedSecret) this.apiSecret = storedSecret;
+      // Replit Secrets take priority; fall back to DB-stored keys
+      const envKey    = process.env["DELTA_API_KEY"]    || undefined;
+      const envSecret = process.env["DELTA_API_SECRET"] || undefined;
 
-      if (connected === "true") {
-        logger.info("DeltaService: restoring previous connection");
+      this.apiKey    = envKey    ?? storedKey    ?? undefined;
+      this.apiSecret = envSecret ?? storedSecret ?? undefined;
+
+      if (envKey && envSecret) {
+        logger.info("DeltaService: credentials found in Replit Secrets — auto-connecting");
+        this._enableFeed();
+      } else if (connected === "true") {
+        logger.info("DeltaService: restoring previous connection from DB");
         this._enableFeed();
       } else {
         logger.info("DeltaService: not previously connected — waiting for manual connect");
