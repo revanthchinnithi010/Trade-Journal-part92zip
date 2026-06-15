@@ -1,6 +1,7 @@
 import * as tls from "tls";
 import * as https from "https";
 import * as querystring from "querystring";
+import { randomUUID } from "crypto";
 import { EventEmitter } from "events";
 import { pool } from "@workspace/db";
 import { logger } from "../lib/logger.js";
@@ -211,9 +212,10 @@ export class CTraderService extends EventEmitter {
 
   async init(): Promise<void> {
     await this.ensureTable();
+    await this.ensureOAuthStateTable();
     const row = await this.loadToken();
     if (!row) {
-      logger.info("CTraderService: no stored token — awaiting token");
+      logger.info("CTraderService: no stored token — awaiting OAuth");
       return;
     }
     this.accessToken = row.access_token;
@@ -229,13 +231,70 @@ export class CTraderService extends EventEmitter {
     this.connect();
   }
 
+  // ── OAuth ─────────────────────────────────────────────────────────────────
+
+  buildAuthUrl(redirectUri: string, state?: string): string {
+    const id = process.env["CTRADER_CLIENT_ID"];
+    if (!id) throw new Error("CTRADER_CLIENT_ID not set");
+    const params: Record<string, string> = {
+      client_id: id, redirect_uri: redirectUri,
+      scope: "trading", response_type: "code",
+    };
+    if (state) params["state"] = state;
+    return `https://connect.spotware.com/apps/auth?${new URLSearchParams(params)}`;
+  }
+
+  async createOAuthState(): Promise<string> {
+    await this.ensureOAuthStateTable();
+    const state = randomUUID();
+    await pool.query("INSERT INTO ctrader_oauth_state (state) VALUES ($1)", [state]);
+    await pool.query("DELETE FROM ctrader_oauth_state WHERE created_at < NOW() - INTERVAL '15 minutes'");
+    return state;
+  }
+
+  async validateOAuthState(state: string): Promise<boolean> {
+    const r = await pool.query(
+      "DELETE FROM ctrader_oauth_state WHERE state = $1 RETURNING state", [state],
+    );
+    return (r.rowCount ?? 0) > 0;
+  }
+
+  async handleOAuthCode(code: string, redirectUri: string): Promise<void> {
+    const id = process.env["CTRADER_CLIENT_ID"];
+    const secret = process.env["CTRADER_CLIENT_SECRET"];
+    if (!id || !secret) throw new Error("CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET not configured");
+
+    logger.info("CTraderService: exchanging OAuth code for tokens");
+    const res = await httpPost("/apps/token", {
+      grant_type: "authorization_code",
+      code, client_id: id, client_secret: secret, redirect_uri: redirectUri,
+    });
+    if (res["error"]) throw new Error(String(res["error_description"] ?? res["error"]));
+
+    const accessToken = String(res["access_token"]);
+    const refreshToken = String(res["refresh_token"] ?? "");
+    const expiresIn = Number(res["expires_in"] ?? 3600);
+    logger.info({
+      accessTokenPrefix: accessToken.slice(0, 8) + "…",
+      expiresIn, hasRefreshToken: !!refreshToken,
+    }, "CTraderService: OAuth tokens received — storing and connecting");
+
+    await this.connectWithToken(accessToken, null, { refreshToken, expiresIn });
+  }
+
   // ── Token connect ─────────────────────────────────────────────────────────
 
-  async connectWithToken(accessToken: string, accountId: string | null): Promise<void> {
+  async connectWithToken(
+    accessToken: string,
+    accountId: string | null,
+    opts?: { refreshToken?: string; expiresIn?: number },
+  ): Promise<void> {
     this.accessToken = accessToken;
     this.preferredAccountId = accountId;
-    this.refreshToken = null;
-    this.tokenExpiresAt = null;
+    this.refreshToken = opts?.refreshToken ?? null;
+    this.tokenExpiresAt = opts?.expiresIn
+      ? new Date(Date.now() + opts.expiresIn * 1000)
+      : null;
     await this.saveToken();
 
     // Upsert into broker_accounts so the frontend loadAccounts() can find it
@@ -1107,21 +1166,35 @@ export class CTraderService extends EventEmitter {
     `);
   }
 
-  private async loadToken(): Promise<{ access_token: string; refresh_token: string; expires_at: Date | null } | null> {
-    const r = await pool.query("SELECT * FROM ctrader_connections ORDER BY id DESC LIMIT 1");
-    return r.rows[0] ?? null;
-  }
-
   private async saveToken(): Promise<void> {
     await pool.query("DELETE FROM ctrader_connections");
     await pool.query(
       "INSERT INTO ctrader_connections (access_token, refresh_token, expires_at) VALUES ($1, $2, $3)",
-      [this.accessToken, this.refreshToken, this.tokenExpiresAt],
+      [this.accessToken, this.refreshToken ?? "", this.tokenExpiresAt],
     );
+  }
+
+  private async loadToken(): Promise<{ access_token: string; refresh_token: string | null; expires_at: Date | null } | null> {
+    const r = await pool.query("SELECT * FROM ctrader_connections ORDER BY id DESC LIMIT 1");
+    if (!r.rows[0]) return null;
+    return {
+      access_token: r.rows[0].access_token as string,
+      refresh_token: (r.rows[0].refresh_token as string) || null,
+      expires_at: r.rows[0].expires_at as Date | null,
+    };
   }
 
   private async clearToken(): Promise<void> {
     await pool.query("DELETE FROM ctrader_connections");
+  }
+
+  private async ensureOAuthStateTable(): Promise<void> {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ctrader_oauth_state (
+        state      TEXT PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
   }
 
 }

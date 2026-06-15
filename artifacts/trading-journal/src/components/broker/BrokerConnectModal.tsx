@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import {
-  CheckCircle2, XCircle, Loader2,
+  CheckCircle2, XCircle, Loader2, ExternalLink,
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
   ChevronLeft, X,
 } from "lucide-react";
@@ -9,10 +9,9 @@ import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 import { DeltaApiConnectForm } from "./DeltaApiConnectForm";
-import { CTraderTokenForm } from "./CTraderTokenForm";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type Status = "idle" | "loading" | "waiting_ready" | "success" | "error";
+type Status = "idle" | "loading" | "waiting_oauth" | "waiting_ready" | "success" | "error";
 
 interface CTraderDiagStep {
   id: string;
@@ -32,35 +31,66 @@ interface CTraderDiagnostics {
 
 const LS_TOKEN_PREFIX = "tj_broker_token_";
 
-// ── Shared logic hook ────────────────────────────────────────────────────────
+// ── Shared logic hook ─────────────────────────────────────────────────────────
 function useBrokerConnect() {
   const { authBrokerId, closeAuthModal, openSelectModal, loadAccounts, connect } = useBrokerStore();
   const broker = BROKERS.find(b => b.id === authBrokerId);
 
-  const [status, setStatus] = useState<Status>("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-  const [mt5Server, setMt5Server] = useState("");
-  const [mt5Login, setMt5Login] = useState("");
+  const [status,      setStatus]      = useState<Status>("idle");
+  const [errorMsg,    setErrorMsg]    = useState("");
+  const [mt5Server,   setMt5Server]   = useState("");
+  const [mt5Login,    setMt5Login]    = useState("");
   const [mt5Password, setMt5Password] = useState("");
-  const [mt5Label, setMt5Label] = useState("");
+  const [mt5Label,    setMt5Label]    = useState("");
   const [showMt5Pass, setShowMt5Pass] = useState(false);
-  const [ctDiag, setCtDiag] = useState<CTraderDiagnostics | null>(null);
+  const [ctDiag,      setCtDiag]      = useState<CTraderDiagnostics | null>(null);
 
+  const popupRef     = useRef<Window | null>(null);
+  const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const readyPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const statusRef = useRef<Status>("idle");
-  const loadAccountsRef = useRef(loadAccounts);
-  const connectRef = useRef(connect);
+  const statusRef    = useRef<Status>("idle");
+
+  const loadAccountsRef   = useRef(loadAccounts);
+  const connectRef        = useRef(connect);
   const closeAuthModalRef = useRef(closeAuthModal);
-  useEffect(() => { loadAccountsRef.current = loadAccounts; }, [loadAccounts]);
-  useEffect(() => { connectRef.current = connect; }, [connect]);
+  useEffect(() => { loadAccountsRef.current = loadAccounts; },   [loadAccounts]);
+  useEffect(() => { connectRef.current = connect; },             [connect]);
   useEffect(() => { closeAuthModalRef.current = closeAuthModal; }, [closeAuthModal]);
+
+  const stopPopupPoll = useCallback(() => {
+    if (popupPollRef.current) { clearInterval(popupPollRef.current); popupPollRef.current = null; }
+  }, []);
 
   const stopReadyPoll = useCallback(() => {
     if (readyPollRef.current) { clearTimeout(readyPollRef.current); readyPollRef.current = null; }
   }, []);
 
   useEffect(() => { statusRef.current = status; }, [status]);
-  useEffect(() => () => { stopReadyPoll(); }, [stopReadyPoll]);
+  useEffect(() => () => { stopPopupPoll(); stopReadyPoll(); }, [stopPopupPoll, stopReadyPoll]);
+
+  // postMessage from OAuth popup
+  useEffect(() => {
+    function onMessage(e: MessageEvent) {
+      if (!e.data || e.data.type !== "ctrader_oauth_result") return;
+      stopPopupPoll();
+      popupRef.current?.close();
+      popupRef.current = null;
+      if (e.data.status === "success") {
+        handleCTraderOAuthSuccess();
+      } else {
+        setStatus("error");
+        setErrorMsg(String(e.data.message || "cTrader OAuth failed"));
+      }
+    }
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleCTraderOAuthSuccess() {
+    setCtDiag(null);
+    setStatus("waiting_ready");
+    startReadinessPoll(Date.now());
+  }
 
   function startReadinessPoll(startMs: number) {
     readyPollRef.current = setTimeout(async () => {
@@ -93,7 +123,7 @@ function useBrokerConnect() {
             return;
           }
         }
-      } catch { /* network hiccup — continue polling */ }
+      } catch { /* network hiccup — retry */ }
 
       if (Date.now() - startMs > 35_000) {
         setStatus("error");
@@ -105,10 +135,55 @@ function useBrokerConnect() {
     }, 2000);
   }
 
-  function handleCTraderTokenSuccess() {
-    setCtDiag(null);
-    setStatus("waiting_ready");
-    startReadinessPoll(Date.now());
+  function openOAuthPopup(url: string): Window | null {
+    const popup = window.open(url, "ctrader_oauth", "width=560,height=700,resizable=yes,scrollbars=yes");
+    if (!popup) {
+      setStatus("error");
+      setErrorMsg("Popup was blocked. Please allow popups for this site and try again.");
+      return null;
+    }
+    popupRef.current = popup;
+    setStatus("waiting_oauth");
+    popupPollRef.current = setInterval(() => {
+      try {
+        if (popup.closed && statusRef.current === "waiting_oauth") {
+          stopPopupPoll();
+          setStatus("error");
+          setErrorMsg("OAuth window was closed before completing.");
+        }
+      } catch { /* cross-origin */ }
+    }, 800);
+    return popup;
+  }
+
+  async function startCTraderOAuth() {
+    setStatus("loading");
+    setErrorMsg("");
+    try {
+      const res  = await fetch("/api/ctrader/config", { credentials: "include" });
+      const data = await res.json() as { configured: boolean; authUrl: string | null; error?: string };
+
+      if (!data.configured || !data.authUrl) {
+        setStatus("error");
+        setErrorMsg(!data.configured
+          ? "cTrader OAuth is not configured on the server. Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET."
+          : "Could not generate OAuth URL — try again.");
+        return;
+      }
+
+      // Expo WebView bridge (tablet app)
+      const rnBridge = (window as { ReactNativeWebView?: { postMessage(s: string): void } }).ReactNativeWebView;
+      if (rnBridge) {
+        rnBridge.postMessage(JSON.stringify({ type: "ctrader_oauth_start", url: data.authUrl }));
+        setStatus("waiting_oauth");
+        return;
+      }
+
+      openOAuthPopup(data.authUrl);
+    } catch (err) {
+      setStatus("error");
+      setErrorMsg(String(err));
+    }
   }
 
   async function handleMt5Connect(e: React.FormEvent) {
@@ -122,11 +197,11 @@ function useBrokerConnect() {
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({
-          broker_id: "mt5",
-          mt5_server: mt5Server.trim(),
-          mt5_login: mt5Login.trim(),
+          broker_id:    "mt5",
+          mt5_server:   mt5Server.trim(),
+          mt5_login:    mt5Login.trim(),
           mt5_password: mt5Password.trim(),
-          label: mt5Label.trim() || "MT5 Account",
+          label:        mt5Label.trim() || "MT5 Account",
         }),
       });
       const data = await res.json() as {
@@ -155,20 +230,18 @@ function useBrokerConnect() {
     mt5Server, setMt5Server, mt5Login, setMt5Login,
     mt5Password, setMt5Password, mt5Label, setMt5Label,
     showMt5Pass, setShowMt5Pass,
-    ctDiag,
-    handleCTraderTokenSuccess, handleMt5Connect,
+    ctDiag, startCTraderOAuth, handleMt5Connect,
     closeAuthModal, openSelectModal,
   };
 }
 
-// ── Shared broker form content ───────────────────────────────────────────────
+// ── Shared broker form content ────────────────────────────────────────────────
 function BrokerFormContent({
   broker, status, setStatus, errorMsg, setErrorMsg,
   mt5Server, setMt5Server, mt5Login, setMt5Login,
   mt5Password, setMt5Password, mt5Label, setMt5Label,
   showMt5Pass, setShowMt5Pass,
-  ctDiag,
-  handleCTraderTokenSuccess, handleMt5Connect,
+  ctDiag, startCTraderOAuth, handleMt5Connect,
   onDone,
 }: ReturnType<typeof useBrokerConnect> & { onDone: () => void }) {
   if (!broker) return null;
@@ -179,8 +252,8 @@ function BrokerFormContent({
       <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24, flexWrap: "wrap" as const }}>
         {[
           { icon: <ShieldCheck size={13} />, label: "AES-256 encrypted" },
-          { icon: <Server size={13} />, label: "Backend-only signing" },
-          { icon: <Wifi size={13} />, label: "Live WS sync" },
+          { icon: <Server size={13} />,      label: "Backend-only signing" },
+          { icon: <Wifi size={13} />,        label: "Live WS sync" },
         ].map((item, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ color: "rgba(0,255,180,0.7)" }}>{item.icon}</span>
@@ -202,9 +275,11 @@ function BrokerFormContent({
           ? <SuccessBanner broker={broker} onClose={onDone} />
           : status === "waiting_ready"
           ? <CTraderReadinessPanel ctDiag={ctDiag} />
-          : <CTraderTokenForm
-              onSuccess={handleCTraderTokenSuccess}
-              onError={msg => { setStatus("error"); setErrorMsg(msg); }}
+          : <CTraderOAuthPanel
+              status={status}
+              errorMsg={errorMsg}
+              onConnect={startCTraderOAuth}
+              onRetry={() => { setStatus("idle"); setErrorMsg(""); }}
             />
       )}
 
@@ -214,11 +289,11 @@ function BrokerFormContent({
           ? <SuccessBanner broker={broker} onClose={onDone} />
           : <Mt5CredentialsForm
               status={status} errorMsg={errorMsg}
-              mt5Server={mt5Server} setMt5Server={setMt5Server}
-              mt5Login={mt5Login} setMt5Login={setMt5Login}
+              mt5Server={mt5Server}   setMt5Server={setMt5Server}
+              mt5Login={mt5Login}     setMt5Login={setMt5Login}
               mt5Password={mt5Password} setMt5Password={setMt5Password}
-              mt5Label={mt5Label} setMt5Label={setMt5Label}
-              showPass={showMt5Pass} setShowPass={setShowMt5Pass}
+              mt5Label={mt5Label}     setMt5Label={setMt5Label}
+              showPass={showMt5Pass}  setShowPass={setShowMt5Pass}
               onSubmit={handleMt5Connect}
               onRetry={() => { setStatus("idle"); setErrorMsg(""); }}
             />
@@ -227,40 +302,30 @@ function BrokerFormContent({
   );
 }
 
-// ── Mobile: full-screen broker setup page ────────────────────────────────────
+// ── Mobile: full-screen broker setup page ─────────────────────────────────────
 function MobileBrokerConnectPage() {
   const ctx = useBrokerConnect();
   const { broker, closeAuthModal, openSelectModal } = ctx;
   if (!broker) return null;
 
   const brokerTitle =
-    broker.id === "delta" ? "Delta Exchange" :
-    broker.id === "ctrader" ? "cTrader" : "MetaTrader 5";
-
-  function handleBack() {
-    closeAuthModal();
-    openSelectModal();
-  }
+    broker.id === "delta"   ? "Delta Exchange" :
+    broker.id === "ctrader" ? "cTrader"         : "MetaTrader 5";
 
   return (
     <div style={{
       position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-      zIndex: 201,
-      background: "#0B1017",
-      display: "flex", flexDirection: "column",
-      overflow: "hidden",
+      zIndex: 201, background: "#0B1017",
+      display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
-      {/* Mobile header */}
       <div style={{
         display: "flex", alignItems: "center", gap: 12,
-        padding: "0 16px",
-        height: 56,
-        flexShrink: 0,
+        padding: "0 16px", height: 56, flexShrink: 0,
         borderBottom: "1px solid rgba(255,255,255,0.06)",
         background: "rgba(11,16,23,0.98)",
       }}>
         <button
-          onClick={handleBack}
+          onClick={() => { closeAuthModal(); openSelectModal(); }}
           style={{
             width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer",
             background: "rgba(255,255,255,0.06)",
@@ -283,13 +348,9 @@ function MobileBrokerConnectPage() {
           </div>
         </div>
       </div>
-
-      {/* Scrollable form content */}
       <div style={{
-        flex: 1, minHeight: 0,
-        overflowY: "auto",
-        overscrollBehavior: "contain",
-        WebkitOverflowScrolling: "touch",
+        flex: 1, minHeight: 0, overflowY: "auto",
+        overscrollBehavior: "contain", WebkitOverflowScrolling: "touch",
       } as React.CSSProperties}>
         <BrokerFormContent {...ctx} onDone={closeAuthModal} />
       </div>
@@ -297,19 +358,18 @@ function MobileBrokerConnectPage() {
   );
 }
 
-// ── Desktop: modal overlay ───────────────────────────────────────────────────
+// ── Desktop: modal overlay ────────────────────────────────────────────────────
 function DesktopBrokerConnectModal() {
   const ctx = useBrokerConnect();
   const { broker, closeAuthModal } = ctx;
   if (!broker) return null;
 
+  const brokerGlow = broker.color + "18";
   const glassStyle: React.CSSProperties = {
     background: "rgba(18,18,18,0.72)",
     border: "1px solid rgba(255,255,255,0.08)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
+    backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
   };
-  const brokerGlow = broker.color + "18";
 
   return (
     <div
@@ -331,23 +391,20 @@ function DesktopBrokerConnectModal() {
           position: "absolute", top: 0, left: 0, right: 0, height: 1,
           background: `linear-gradient(90deg, transparent, ${broker.color}60, transparent)`,
         }} />
-
-        {/* Desktop header */}
         <div style={{ padding: "24px 24px 0", flexShrink: 0 }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 20 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <div style={{
                 width: 44, height: 44, borderRadius: 12, flexShrink: 0,
                 border: `1.5px solid ${broker.color}30`,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                overflow: "hidden",
+                display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
               }}>
                 <BrokerLogo brokerId={broker.id} size={44} />
               </div>
               <div>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", margin: 0 }}>
-                  {broker.id === "delta" ? "Connect Delta Exchange" :
-                   broker.id === "ctrader" ? "Connect cTrader" : "Connect MetaTrader 5"}
+                  {broker.id === "delta"   ? "Connect Delta Exchange" :
+                   broker.id === "ctrader" ? "Connect cTrader"         : "Connect MetaTrader 5"}
                 </h2>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>{broker.description}</p>
               </div>
@@ -359,10 +416,8 @@ function DesktopBrokerConnectModal() {
               <X size={18} />
             </button>
           </div>
-          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 20, marginBottom: 0 }} />
+          <div style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: 20 }} />
         </div>
-
-        {/* Scrollable form */}
         <div style={{ overflowY: "auto", overscrollBehavior: "contain", flex: 1, minHeight: 0 }}>
           <BrokerFormContent {...ctx} onDone={closeAuthModal} />
         </div>
@@ -371,16 +426,16 @@ function DesktopBrokerConnectModal() {
   );
 }
 
-// ── Entry point ──────────────────────────────────────────────────────────────
+// ── Entry point ───────────────────────────────────────────────────────────────
 export function BrokerConnectModal() {
   const isMobile = useIsMobile();
   return isMobile ? <MobileBrokerConnectPage /> : <DesktopBrokerConnectModal />;
 }
 
-// ── Re-export alias ──────────────────────────────────────────────────────────
 export { BrokerConnectModal as BrokerAuthModal };
 
-// ── Sub-components ───────────────────────────────────────────────────────────
+// ── Sub-components ────────────────────────────────────────────────────────────
+
 function SuccessBanner({ broker, onClose }: { broker: { name: string }; onClose: () => void }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, padding: "32px 0", textAlign: "center" }}>
@@ -406,6 +461,93 @@ function SuccessBanner({ broker, onClose }: { broker: { name: string }; onClose:
   );
 }
 
+function CTraderOAuthPanel({
+  status, errorMsg, onConnect, onRetry,
+}: { status: Status; errorMsg: string; onConnect: () => void; onRetry: () => void }) {
+  const isLoading = status === "loading" || status === "waiting_oauth";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {/* How it works */}
+      <div style={{
+        display: "flex", flexDirection: "column", gap: 12, padding: 16, borderRadius: 12,
+        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
+      }}>
+        <p style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)", margin: 0, textTransform: "uppercase" as const, letterSpacing: "0.06em" }}>
+          How it works
+        </p>
+        {[
+          "You'll be redirected to cTrader to authorize",
+          "We securely store your access + refresh tokens",
+          "Tokens auto-refresh — stay connected without re-authorizing",
+        ].map((step, i) => (
+          <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
+            <span style={{
+              flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              width: 20, height: 20, borderRadius: "50%", fontSize: 11, fontWeight: 600, marginTop: 1,
+              background: "rgba(239,68,68,0.15)", color: "#EF4444",
+            }}>{i + 1}</span>
+            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", lineHeight: 1.5 }}>{step}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Waiting for popup */}
+      {status === "waiting_oauth" && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10,
+          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+        }}>
+          <Loader2 size={15} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
+          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>Waiting for OAuth authorization in popup…</span>
+        </div>
+      )}
+
+      {/* Error */}
+      {status === "error" && (
+        <div style={{
+          display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 16px", borderRadius: 10,
+          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
+        }}>
+          <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
+          <p style={{ fontSize: 13, color: "#EF4444", margin: 0, lineHeight: 1.5 }}>{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div style={{ display: "flex", gap: 10 }}>
+        {status === "error" && (
+          <button onClick={onRetry} style={{
+            display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10,
+            fontSize: 13, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)",
+            border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
+          }}>
+            <RefreshCw size={13} /> Retry
+          </button>
+        )}
+        <button
+          onClick={onConnect}
+          disabled={isLoading}
+          style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: "14px 0", borderRadius: 12, fontSize: 14, fontWeight: 600,
+            background: isLoading
+              ? "rgba(239,68,68,0.2)"
+              : "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
+            color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
+            border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+            boxShadow: isLoading ? "none" : "0 0 24px rgba(239,68,68,0.25)",
+          }}
+        >
+          {isLoading
+            ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
+            : <><ExternalLink size={15} /> Connect via cTrader OAuth</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }) {
   const hasStepError = ctDiag?.steps.some(s => s.status === "error") ?? false;
 
@@ -425,10 +567,10 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
   });
 
   const defaultSteps: CTraderDiagStep[] = [
-    { id: "token",     label: "Token verified",              status: "done",    detail: "Access token stored" },
-    { id: "accounts",  label: "Trading account loaded",      status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
-    { id: "symbols",   label: "Symbol catalog downloaded",   status: "pending", detail: "Waiting…" },
-    { id: "websocket", label: "WebSocket session active",    status: "pending", detail: "Waiting…" },
+    { id: "oauth",     label: "OAuth authorized",          status: "done",    detail: "Access token stored" },
+    { id: "accounts",  label: "Trading account loaded",    status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
+    { id: "symbols",   label: "Symbol catalog downloaded", status: "pending", detail: "Waiting…" },
+    { id: "websocket", label: "WebSocket session active",  status: "pending", detail: "Waiting…" },
   ];
 
   const steps = ctDiag?.steps ?? defaultSteps;
@@ -442,9 +584,8 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
         border: `1px solid ${hasStepError ? "rgba(239,68,68,0.40)" : "rgba(239,68,68,0.18)"}`,
       }}>
         {hasStepError
-          ? <XCircle size={18} style={{ color: "#EF4444", flexShrink: 0 }} />
-          : <Loader2 size={18} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
-        }
+          ? <XCircle  size={18} style={{ color: "#EF4444", flexShrink: 0 }} />
+          : <Loader2  size={18} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />}
         <div>
           <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0 }}>
             {hasStepError ? "Connection failed" : "Initializing cTrader connection"}
@@ -452,13 +593,12 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
           <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>
             {hasStepError
               ? "See the failing step below for details"
-              : ctDiag ? `State: ${ctDiag.state}` : "Connecting to Spotware TLS endpoint…"
-            }
+              : ctDiag ? `State: ${ctDiag.state}` : "Connecting to Spotware TLS endpoint…"}
           </p>
         </div>
       </div>
 
-      {/* Step list */}
+      {/* Steps */}
       <div style={{
         display: "flex", flexDirection: "column", gap: 0,
         borderRadius: 12, overflow: "hidden",
@@ -467,8 +607,7 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
       }}>
         {steps.map((step, i) => (
           <div key={step.id} style={{
-            display: "flex", alignItems: "center", gap: 14,
-            padding: "14px 16px",
+            display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
             borderBottom: i < steps.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
             background: step.status === "error" ? "rgba(239,68,68,0.04)" : undefined,
           }}>
@@ -479,23 +618,21 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
                 ? <XCircle size={13} style={{ color: "#EF4444" }} />
                 : step.status === "active"
                 ? <Loader2 size={13} style={{ color: "#EF4444" }} className="animate-spin" />
-                : <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />
-              }
+                : <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <p style={{
                 fontSize: 13, fontWeight: 500, margin: 0,
-                color: step.status === "done"   ? "#00FFB4" :
-                       step.status === "error"  ? "#F87171" :
+                color: step.status === "done"   ? "#00FFB4"              :
+                       step.status === "error"  ? "#F87171"              :
                        step.status === "active" ? "rgba(255,255,255,0.9)" :
                        "rgba(255,255,255,0.35)",
               }}>
                 {step.label}
               </p>
               <p style={{
-                fontSize: 11, margin: "2px 0 0",
+                fontSize: 11, margin: "2px 0 0", wordBreak: "break-word" as const,
                 color: step.status === "error" ? "rgba(248,113,113,0.75)" : "rgba(255,255,255,0.3)",
-                wordBreak: "break-word" as const,
               }}>
                 {step.detail}
               </p>
@@ -504,11 +641,10 @@ function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }
         ))}
       </div>
 
-      {/* Live stats when available */}
+      {/* Live stats */}
       {ctDiag && (ctDiag.symbolCount > 0 || ctDiag.latencyMs > 0) && (
         <div style={{
-          display: "flex", gap: 12,
-          padding: "10px 14px", borderRadius: 10,
+          display: "flex", gap: 12, padding: "10px 14px", borderRadius: 10,
           background: "rgba(0,255,180,0.04)", border: "1px solid rgba(0,255,180,0.12)",
         }}>
           {ctDiag.symbolCount > 0 && (
@@ -552,11 +688,10 @@ function Mt5CredentialsForm({
   onRetry: () => void;
 }) {
   const isLoading = status === "loading";
-  const canSubmit = mt5Server.trim() && mt5Login.trim() && mt5Password.trim() && !isLoading;
+  const canSubmit = !!(mt5Server.trim() && mt5Login.trim() && mt5Password.trim() && !isLoading);
 
   const fieldStyle: React.CSSProperties = {
-    display: "flex", alignItems: "center", gap: 10,
-    padding: "12px 14px", borderRadius: 10,
+    display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10,
     background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
   };
   const inputStyle: React.CSSProperties = {
@@ -574,39 +709,36 @@ function Mt5CredentialsForm({
         <label style={labelStyle}>Server</label>
         <div style={fieldStyle}>
           <input type="text" value={mt5Server} onChange={e => setMt5Server(e.target.value)}
-            placeholder="e.g. MetaQuotes-Demo" disabled={isLoading} autoComplete="off"
-            style={inputStyle} />
+            placeholder="e.g. MetaQuotes-Demo" disabled={isLoading} autoComplete="off" style={inputStyle} />
         </div>
       </div>
-
       <div>
         <label style={labelStyle}>Login</label>
         <div style={fieldStyle}>
           <input type="text" value={mt5Login} onChange={e => setMt5Login(e.target.value)}
-            placeholder="e.g. 123456789" disabled={isLoading} autoComplete="off"
-            style={inputStyle} />
+            placeholder="e.g. 123456789" disabled={isLoading} autoComplete="off" style={inputStyle} />
         </div>
       </div>
-
       <div>
         <label style={labelStyle}>Password</label>
         <div style={fieldStyle}>
-          <input type={showPass ? "text" : "password"} value={mt5Password}
+          <input
+            type={showPass ? "text" : "password"} value={mt5Password}
             onChange={e => setMt5Password(e.target.value)}
             placeholder="MT5 account password" disabled={isLoading} autoComplete="new-password"
-            style={inputStyle} />
-          <button type="button" onClick={() => setShowPass(!showPass)} style={{ color: "rgba(255,255,255,0.35)", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
+            style={inputStyle}
+          />
+          <button type="button" onClick={() => setShowPass(!showPass)}
+            style={{ color: "rgba(255,255,255,0.35)", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
             {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
           </button>
         </div>
       </div>
-
       <div>
         <label style={labelStyle}>Label <span style={{ color: "rgba(255,255,255,0.28)", textTransform: "none" as const }}>(optional)</span></label>
         <div style={fieldStyle}>
           <input type="text" value={mt5Label} onChange={e => setMt5Label(e.target.value)}
-            placeholder="e.g. Main MT5" disabled={isLoading}
-            style={inputStyle} />
+            placeholder="e.g. Main MT5" disabled={isLoading} style={inputStyle} />
         </div>
       </div>
 
@@ -635,7 +767,9 @@ function Mt5CredentialsForm({
           border: "none", cursor: canSubmit ? "pointer" : "not-allowed",
           boxShadow: canSubmit ? "0 0 24px rgba(34,197,94,0.25)" : "none",
         }}>
-          {isLoading ? <><Loader2 size={15} className="animate-spin" /> Connecting…</> : "Connect MetaTrader 5"}
+          {isLoading
+            ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
+            : "Connect MetaTrader 5"}
         </button>
       </div>
     </form>

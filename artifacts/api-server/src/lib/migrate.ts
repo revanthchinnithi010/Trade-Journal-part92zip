@@ -178,6 +178,11 @@ const MIGRATIONS = [
 
   `CREATE INDEX IF NOT EXISTS idx_sessions_expire ON sessions (expire)`,
 
+  `CREATE TABLE IF NOT EXISTS ctrader_oauth_state (
+    state      TEXT PRIMARY KEY,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
+
   `CREATE TABLE IF NOT EXISTS drawings (
     id          SERIAL PRIMARY KEY,
     symbol      TEXT NOT NULL,
