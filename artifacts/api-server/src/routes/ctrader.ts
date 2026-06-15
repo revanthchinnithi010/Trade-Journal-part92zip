@@ -293,6 +293,10 @@ function popupHtml(status: "success" | "error", message: string | null): string 
   const redirectParam = status === "success"
     ? "ctrader_connected=true"
     : `ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
+  // Expo deep link — scheme matches app.json "scheme": "tradevault"
+  const deepLink = status === "success"
+    ? `tradevault://ctrader-connected?broker=ctrader&success=true`
+    : `tradevault://ctrader-error?broker=ctrader&error=${encodeURIComponent(message ?? "oauth_failed")}`;
 
   return `<!doctype html>
 <html>
@@ -311,20 +315,22 @@ function popupHtml(status: "success" | "error", message: string | null): string 
     <div class="icon">${status === "success" ? "✅" : "❌"}</div>
     <h2>${status === "success" ? "Connected!" : "Connection Failed"}</h2>
     ${safeMsg ? `<p>${safeMsg}</p>` : ""}
-    <p id="sub">${status === "success" ? "You can close this window." : "Please close this window and try again."}</p>
+    <p id="sub">${status === "success" ? "Returning to app\u2026" : "Please close this window and try again."}</p>
   </div>
   <script>
     (function () {
-      console.log('[cTrader OAuth callback] entered — status: ${status}');
+      var cbStatus = '${status}';
+      console.log('[cTrader OAuth callback] entered — status:', cbStatus);
+
       var openerAvailable = false;
       try { openerAvailable = !!(window.opener && window.opener.postMessage); } catch (_) {}
       console.log('[cTrader OAuth callback] window.opener available:', openerAvailable);
 
       if (openerAvailable) {
-        // Popup mode: notify parent via postMessage then close
+        // ── Web popup mode: notify parent window then close ──────────────────
         try {
           window.opener.postMessage(
-            { type: 'ctrader_oauth_result', status: '${status}', message: ${safeMessage} },
+            { type: 'ctrader_oauth_result', status: cbStatus, message: ${safeMessage} },
             '*'
           );
           console.log('[cTrader OAuth callback] postMessage sent to opener');
@@ -332,13 +338,26 @@ function popupHtml(status: "success" | "error", message: string | null): string 
           console.warn('[cTrader OAuth callback] postMessage failed:', e);
         }
         setTimeout(function () { window.close(); }, 1200);
+
       } else {
-        // Same-tab / mobile mode: redirect back to the app with result in URL
-        console.log('[cTrader OAuth callback] no opener — redirecting to app with ?${redirectParam}');
-        document.getElementById('sub').textContent = 'Returning to app…';
+        // ── Mobile / Expo mode: try deep link, fall back to web redirect ─────
+        var deepLink = '${deepLink}';
+        var webFallback = '/?${redirectParam}';
+        console.log('[cTrader OAuth callback] no opener — deep link:', deepLink);
+        document.getElementById('sub').textContent = 'Returning to app\u2026';
+
+        // Step 1 — Expo: navigate to tradevault:// so ASWebAuthenticationSession /
+        //          Chrome Custom Tab closes and resolves openAuthSessionAsync.
+        console.log('[cTrader OAuth callback] sending deep link');
+        window.location.href = deepLink;
+
+        // Step 2 — Fallback for plain mobile browsers (not Expo): redirect to
+        //          the web app after a short pause so the deep-link attempt has
+        //          time to work first.
         setTimeout(function () {
-          window.location.replace('/brokers?${redirectParam}');
-        }, 400);
+          console.log('[cTrader OAuth callback] deep-link fallback — redirecting to web app');
+          window.location.replace(webFallback);
+        }, 700);
       }
     })();
   </script>

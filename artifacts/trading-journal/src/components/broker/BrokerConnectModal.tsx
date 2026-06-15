@@ -121,6 +121,21 @@ function useBrokerConnect() {
         );
         return;
       }
+
+      // ── Expo WebView bridge ────────────────────────────────────────────────
+      // When running inside the Expo tablet WebView, window.ReactNativeWebView
+      // is injected by react-native-webview. Delegate OAuth to the native side
+      // so it can open a proper ASWebAuthenticationSession / Chrome Custom Tab
+      // and handle the tradevault:// deep-link redirect automatically.
+      const rnBridge = (window as { ReactNativeWebView?: { postMessage(s: string): void } }).ReactNativeWebView;
+      if (rnBridge) {
+        console.log("[cTrader OAuth] Expo WebView detected — sending ctrader_oauth_start to native bridge");
+        rnBridge.postMessage(JSON.stringify({ type: "ctrader_oauth_start", url: data.authUrl }));
+        setStatus("waiting_oauth");
+        return;
+      }
+      // ──────────────────────────────────────────────────────────────────────
+
       openOAuthPopup(data.authUrl, "ctrader_oauth");
     } catch (err) {
       setStatus("error");

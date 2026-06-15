@@ -1,7 +1,9 @@
-import React, { useEffect, useRef } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import WebView from "react-native-webview";
+import WebView, { type WebViewMessageEvent } from "react-native-webview";
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
 
 const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
 const WEB_URL = DOMAIN ? `https://${DOMAIN}/` : "/";
@@ -11,16 +13,6 @@ const TABLET_UA =
   "AppleWebKit/537.36 (KHTML, like Gecko) " +
   "Chrome/120.0.6099.230 Safari/537.36";
 
-/**
- * Inject a viewport <meta> that matches the device orientation, then — after
- * a short rAF+timeout so the browser has committed the new viewport — fire
- * both 'orientationchange' and 'resize'.  The web app's useIsMobile() hook
- * listens to all three events, so it will re-evaluate matchMedia and switch
- * between mobile (portrait) and desktop (landscape) layouts seamlessly.
- *
- * Portrait:  viewportWidth (430) < device height → portrait media query = true  → mobile layout
- * Landscape: viewportWidth (1340) > device height → portrait media query = false → desktop layout
- */
 function buildOrientationScript(isLandscape: boolean): string {
   const vpWidth = isLandscape ? 1340 : 430;
   return `
@@ -32,7 +24,6 @@ function buildOrientationScript(isLandscape: boolean): string {
     document.head.appendChild(meta);
   }
   meta.content = 'width=${vpWidth}, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
-  // Wait for the browser to repaint with the new viewport before firing events
   requestAnimationFrame(function() {
     setTimeout(function() {
       window.dispatchEvent(new Event('orientationchange'));
@@ -44,20 +35,116 @@ true;
 `;
 }
 
+function buildOAuthSuccessScript(): string {
+  return `
+(function() {
+  console.log('[cTrader OAuth] Deep link received in WebView — injecting success event');
+  try {
+    sessionStorage.setItem('ctrader_oauth_resume', 'true');
+    var evt = new MessageEvent('message', {
+      data: { type: 'ctrader_oauth_result', status: 'success', message: null },
+      origin: window.location.origin
+    });
+    window.dispatchEvent(evt);
+    console.log('[cTrader OAuth] Account loading started — dispatched ctrader_oauth_result');
+  } catch (e) {
+    console.error('[cTrader OAuth] injection error:', e);
+  }
+})();
+true;
+`;
+}
+
+function buildOAuthCancelScript(reason: string): string {
+  return `
+(function() {
+  console.log('[cTrader OAuth] OAuth cancelled or dismissed: ${reason}');
+  try {
+    var evt = new MessageEvent('message', {
+      data: { type: 'ctrader_oauth_result', status: 'error', message: 'OAuth was cancelled' },
+      origin: window.location.origin
+    });
+    window.dispatchEvent(evt);
+  } catch (e) {}
+})();
+true;
+`;
+}
+
 export default function TabletScreen() {
   const { width, height } = useWindowDimensions();
   const isLandscape = width >= height;
   const webViewRef = useRef<WebView>(null);
   const prevLandscape = useRef<boolean | null>(null);
+  const oauthActiveRef = useRef(false);
 
-  // Re-inject on every orientation flip
   useEffect(() => {
     if (prevLandscape.current === isLandscape) return;
     prevLandscape.current = isLandscape;
     webViewRef.current?.injectJavaScript(buildOrientationScript(isLandscape));
   }, [isLandscape]);
 
-  // Web platform — plain iframe; orientation handled by the browser natively
+  const injectOAuthSuccess = useCallback(() => {
+    console.log("[cTrader OAuth] Account loading started — injecting success into WebView");
+    webViewRef.current?.injectJavaScript(buildOAuthSuccessScript());
+    oauthActiveRef.current = false;
+  }, []);
+
+  const handleCTraderOAuthStart = useCallback(async (authUrl: string) => {
+    if (oauthActiveRef.current) {
+      console.log("[cTrader OAuth] OAuth already in progress — ignoring duplicate start");
+      return;
+    }
+    oauthActiveRef.current = true;
+    const redirectUrl = Linking.createURL("ctrader-connected");
+    console.log("[cTrader OAuth] Deep link: opening system browser");
+    console.log("[cTrader OAuth] Deep link: redirectUrl =", redirectUrl);
+    console.log("[cTrader OAuth] Deep link: authUrl =", authUrl.slice(0, 80) + "…");
+
+    try {
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUrl);
+      console.log("[cTrader OAuth] Browser result type:", result.type);
+
+      if (result.type === "success") {
+        console.log("[cTrader OAuth] Deep link received:", result.url);
+        console.log("[cTrader OAuth] Account loading started");
+        injectOAuthSuccess();
+      } else if (result.type === "cancel" || result.type === "dismiss") {
+        console.log("[cTrader OAuth] OAuth dismissed by user");
+        webViewRef.current?.injectJavaScript(buildOAuthCancelScript(result.type));
+        oauthActiveRef.current = false;
+      } else {
+        console.log("[cTrader OAuth] Browser closed without result:", result.type);
+        oauthActiveRef.current = false;
+      }
+    } catch (err) {
+      console.error("[cTrader OAuth] Error opening auth session:", err);
+      oauthActiveRef.current = false;
+    }
+  }, [injectOAuthSuccess]);
+
+  const handleWebViewMessage = useCallback((event: WebViewMessageEvent) => {
+    try {
+      const msg = JSON.parse(event.nativeEvent.data) as { type?: string; url?: string };
+      if (msg.type === "ctrader_oauth_start" && msg.url) {
+        console.log("[cTrader OAuth] Bridge message received: ctrader_oauth_start");
+        handleCTraderOAuthStart(msg.url);
+      }
+    } catch { /* non-JSON WebView messages are safe to ignore */ }
+  }, [handleCTraderOAuthStart]);
+
+  useEffect(() => {
+    const sub = Linking.addEventListener("url", ({ url }) => {
+      console.log("[cTrader OAuth] Linking event received:", url);
+      if (url.startsWith("tradevault://ctrader-connected") && oauthActiveRef.current) {
+        console.log("[cTrader OAuth] Deep link received via Linking fallback");
+        console.log("[cTrader OAuth] Account loading started (Linking path)");
+        injectOAuthSuccess();
+      }
+    });
+    return () => sub.remove();
+  }, [injectOAuthSuccess]);
+
   if (Platform.OS === "web") {
     return (
       <View style={styles.container}>
@@ -93,6 +180,7 @@ export default function TabletScreen() {
         overScrollMode="never"
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
+        onMessage={handleWebViewMessage}
         onContentProcessDidTerminate={() => {
           webViewRef.current?.reload();
         }}
