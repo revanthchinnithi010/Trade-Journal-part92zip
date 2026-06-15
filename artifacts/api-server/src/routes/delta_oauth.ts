@@ -8,6 +8,27 @@ import { logger } from "../lib/logger.js";
 const DELTA_AUTH_URL = "https://www.delta.exchange/app/oauth/authorize";
 const DELTA_TOKEN_URL = "https://api.delta.exchange/v2/auth/oauth/token";
 
+async function createDeltaOAuthState(): Promise<string> {
+  await pool.query(
+    `CREATE TABLE IF NOT EXISTS delta_oauth_state (
+      state TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`,
+  );
+  const state = randomBytes(16).toString("hex");
+  await pool.query("INSERT INTO delta_oauth_state (state) VALUES ($1)", [state]);
+  await pool.query("DELETE FROM delta_oauth_state WHERE created_at < NOW() - INTERVAL '15 minutes'");
+  return state;
+}
+
+async function validateDeltaOAuthState(state: string): Promise<boolean> {
+  const result = await pool.query(
+    "DELETE FROM delta_oauth_state WHERE state = $1 RETURNING state",
+    [state],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
 export function createDeltaOAuthRouter(): Router {
   const router = Router();
 
@@ -22,11 +43,7 @@ export function createDeltaOAuthRouter(): Router {
     let authUrl: string | null = null;
     if (configured) {
       try {
-        const state = randomBytes(16).toString("hex");
-        req.session.deltaOAuthState = state;
-        await new Promise<void>((resolve, reject) =>
-          req.session.save((err) => (err ? reject(err) : resolve())),
-        );
+        const state = await createDeltaOAuthState();
         const params = new URLSearchParams({
           client_id: clientId!,
           redirect_uri: redirectUri,
@@ -35,7 +52,7 @@ export function createDeltaOAuthRouter(): Router {
           state,
         });
         authUrl = `${DELTA_AUTH_URL}?${params.toString()}`;
-        logger.info({ state }, "delta/oauth/config: OAuth state stored, auth URL built");
+        logger.info({ state }, "delta/oauth/config: OAuth state stored in DB, auth URL built");
       } catch (err) {
         logger.warn({ err }, "delta/oauth/config: failed to build auth URL");
       }
@@ -59,12 +76,11 @@ export function createDeltaOAuthRouter(): Router {
     }
 
     if (state) {
-      const expected = req.session.deltaOAuthState;
-      if (!expected || expected !== state) {
-        logger.warn({ state, expected, sessionId: req.sessionID }, "delta/oauth/callback: CSRF state mismatch");
+      const valid = await validateDeltaOAuthState(state);
+      if (!valid) {
+        logger.warn({ state, sessionId: req.sessionID }, "delta/oauth/callback: CSRF state mismatch");
         return res.send(popupHtml("error", "session_expired_please_retry"));
       }
-      delete req.session.deltaOAuthState;
     }
 
     try {
@@ -150,13 +166,8 @@ export function createDeltaOAuthRouter(): Router {
         accountId = (row.rows[0] as { id: number }).id;
       }
 
-      req.session.pendingDeltaAccount = { accountId, apiToken, label };
-      await new Promise<void>((resolve, reject) =>
-        req.session.save((err) => (err ? reject(err) : resolve())),
-      );
-
       logger.info({ accountId, expiresAt }, "delta/oauth/callback: account saved successfully");
-      return res.send(popupHtml("success", null));
+      return res.send(popupHtml("success", null, { accountId, apiToken, label }));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown_error";
       logger.error({ err }, "delta/oauth/callback: unhandled error");
@@ -164,20 +175,22 @@ export function createDeltaOAuthRouter(): Router {
     }
   });
 
-  router.get("/delta/oauth/pending-account", (req, res) => {
-    const pending = req.session.pendingDeltaAccount;
-    if (!pending) {
-      res.status(404).json({ ok: false, error: "No pending Delta account in session" });
-      return;
+  router.get("/delta/oauth/pending-account", async (_req, res) => {
+    try {
+      const row = await pool.query(
+        `SELECT id, label, api_token FROM broker_accounts
+         WHERE broker_id = 'delta' AND is_active = true
+         ORDER BY id DESC LIMIT 1`,
+      );
+      if (row.rows.length > 0) {
+        const acc = row.rows[0] as { id: number; label: string; api_token: string };
+        return res.json({ ok: true, accountId: acc.id, apiToken: acc.api_token, label: acc.label });
+      }
+      res.status(404).json({ ok: false, error: "No pending Delta account" });
+    } catch (err) {
+      logger.warn({ err }, "delta/oauth/pending-account: DB error");
+      res.status(500).json({ ok: false, error: "DB error" });
     }
-    delete req.session.pendingDeltaAccount;
-    req.session.save(() => {});
-    res.json({
-      ok: true,
-      accountId: pending.accountId,
-      apiToken: pending.apiToken,
-      label: pending.label,
-    });
   });
 
   router.post("/delta/oauth/refresh", async (req, res) => {
@@ -287,8 +300,19 @@ export function createDeltaOAuthRouter(): Router {
   return router;
 }
 
-function popupHtml(status: "success" | "error", message: string | null): string {
+interface AccountPayload {
+  accountId: number;
+  apiToken: string;
+  label: string;
+}
+
+function popupHtml(status: "success" | "error", message: string | null, account?: AccountPayload): string {
   const safeMsg = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  const safeMessage = JSON.stringify(message ?? "");
+  const safeAccountId = account ? String(account.accountId) : "null";
+  const safeApiToken = account ? JSON.stringify(account.apiToken) : "null";
+  const safeLabel = account ? JSON.stringify(account.label) : "null";
+
   return `<!doctype html>
 <html>
 <head>
@@ -317,9 +341,21 @@ function popupHtml(status: "success" | "error", message: string | null): string 
   </div>
   <script>
     (function () {
+      var cbStatus = '${status}';
+      var accountId = ${safeAccountId};
+      var apiToken  = ${safeApiToken};
+      var label     = ${safeLabel};
+
       try {
         window.opener && window.opener.postMessage(
-          { type: 'delta_oauth_result', status: '${status}', message: ${JSON.stringify(message ?? "")} },
+          {
+            type: 'delta_oauth_result',
+            status: cbStatus,
+            message: ${safeMessage},
+            accountId: accountId,
+            apiToken: apiToken,
+            label: label,
+          },
           '*'
         );
       } catch (_) {}

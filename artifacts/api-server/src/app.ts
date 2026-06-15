@@ -80,7 +80,7 @@ export function createApp(deps: {
       store: new PgSession({
         pool,
         tableName: "sessions",
-        createTableIfMissing: false,
+        createTableIfMissing: true,
         pruneSessionInterval: 60 * 60,
       }),
       cookie: {

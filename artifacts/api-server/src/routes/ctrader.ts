@@ -28,13 +28,9 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     let authUrl: string | null = null;
     if (configured) {
       try {
-        const state = randomBytes(16).toString("hex");
-        req.session.ctraderOAuthState = state;
-        await new Promise<void>((resolve, reject) =>
-          req.session.save((err) => (err ? reject(err) : resolve())),
-        );
+        const state = await ctrader.createOAuthState();
         authUrl = ctrader.buildAuthUrl(redirectUri, state);
-        logger.info({ state, sessionId: req.sessionID }, "ctrader/config: OAuth state stored in session");
+        logger.info({ state, sessionId: req.sessionID }, "ctrader/config: OAuth state stored in DB");
       } catch (err) {
         logger.warn({ err }, "ctrader/config: failed to store OAuth state");
       }
@@ -72,25 +68,11 @@ export function createCTraderRouter(ctrader: CTraderService): Router {
     logger.info({ sessionId: req.sessionID, codeLength: code.length }, "ctrader/callback: authorization code received");
 
     if (state) {
-      const expected = req.session.ctraderOAuthState;
-      logger.info({
-        receivedState: state,
-        expectedState: expected ?? "(none)",
-        sessionId: req.sessionID,
-        match: state === expected,
-      }, "ctrader/callback: OAuth state check");
-
-      if (!expected || expected !== state) {
-        logger.warn(
-          { state, expected, sessionId: req.sessionID },
-          "ctrader/callback: ❌ OAuth state MISMATCH — session did not carry over from /config",
-        );
-        // State mismatch usually means session was lost. Continue anyway since
-        // we log the mismatch for diagnosis and the token exchange can still succeed.
-        // Return error only if state is present and wrong.
+      const valid = await ctrader.validateOAuthState(state);
+      if (!valid) {
+        logger.warn({ state, sessionId: req.sessionID }, "ctrader/callback: CSRF state mismatch");
         return res.send(popupHtml("error", "session_expired_please_retry"));
       }
-      delete req.session.ctraderOAuthState;
     }
 
     try {

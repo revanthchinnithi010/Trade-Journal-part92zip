@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Eye, EyeOff, Key, Lock, Tag, Loader2, CheckCircle2, XCircle, ExternalLink, Zap } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Eye, EyeOff, Key, Lock, Tag, Loader2, CheckCircle2, XCircle, ExternalLink, Zap, Shield } from "lucide-react";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 
@@ -23,6 +23,8 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
   const [errorMsg, setErrorMsg] = useState("");
   const [balanceInfo, setBalanceInfo] = useState<string | null>(null);
   const [hasImported, setHasImported] = useState(false);
+  const [oauthConfigured, setOauthConfigured] = useState(false);
+  const popupRef = useRef<Window | null>(null);
 
   useEffect(() => {
     fetch("/api/credentials/status", { credentials: "include" })
@@ -33,7 +35,140 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
         }
       })
       .catch(() => {});
+
+    fetch("/api/delta/oauth/config", { credentials: "include" })
+      .then(r => r.json())
+      .then((d: { configured: boolean }) => {
+        setOauthConfigured(d.configured);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    function handleMessage(event: MessageEvent) {
+      if (!event.data || event.data.type !== "delta_oauth_result") return;
+
+      const { status: cbStatus, message, accountId, apiToken, label: cbLabel } = event.data as {
+        status: string;
+        message: string | null;
+        accountId: number | null;
+        apiToken: string | null;
+        label: string | null;
+      };
+
+      if (popupRef.current) {
+        try { popupRef.current.close(); } catch { /* ignore */ }
+        popupRef.current = null;
+      }
+
+      if (cbStatus !== "success") {
+        const msg = message ?? "Delta OAuth failed — please try again";
+        setStatus("error");
+        setErrorMsg(msg);
+        onError(msg);
+        return;
+      }
+
+      if (accountId && apiToken) {
+        finishOAuthConnect(accountId, apiToken, cbLabel ?? "Delta Exchange");
+      } else {
+        fetch("/api/delta/oauth/pending-account", { credentials: "include" })
+          .then(r => r.json())
+          .then((d: { ok: boolean; accountId?: number; apiToken?: string; label?: string; error?: string }) => {
+            if (!d.ok || !d.accountId || !d.apiToken) {
+              const msg = d.error ?? "Could not retrieve Delta account after OAuth";
+              setStatus("error");
+              setErrorMsg(msg);
+              onError(msg);
+              return;
+            }
+            finishOAuthConnect(d.accountId, d.apiToken, d.label ?? "Delta Exchange");
+          })
+          .catch((err) => {
+            const msg = `Network error: ${String(err)}`;
+            setStatus("error");
+            setErrorMsg(msg);
+            onError(msg);
+          });
+      }
+    }
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, []);
+
+  async function finishOAuthConnect(accountId: number, apiToken: string, accountLabel: string) {
+    try {
+      localStorage.setItem(`${LS_TOKEN_PREFIX}${accountId}`, apiToken);
+    } catch { /* ignore */ }
+
+    setStatus("success");
+    await loadAccounts();
+
+    const account: BrokerAccount = {
+      id: accountId,
+      broker_id: "delta",
+      label: accountLabel,
+      is_active: true,
+      api_token: apiToken,
+      created_at: new Date().toISOString(),
+    };
+    connect(account);
+
+    try {
+      await fetch("/api/broker/delta/ws/start", {
+        method: "POST", credentials: "include",
+        headers: { "X-Broker-Account-Id": String(accountId), "X-Broker-Token": apiToken },
+      });
+    } catch { /* non-fatal */ }
+
+    setTimeout(() => { onSuccess(); }, 1200);
+  }
+
+  async function startDeltaOAuth() {
+    setStatus("connecting");
+    setErrorMsg("");
+
+    try {
+      const res = await fetch("/api/delta/oauth/config", { credentials: "include" });
+      const data = await res.json() as { configured: boolean; authUrl: string | null };
+
+      if (!data.configured || !data.authUrl) {
+        const msg = "Delta OAuth is not configured. Set DELTA_CLIENT_ID and DELTA_CLIENT_SECRET.";
+        setStatus("error");
+        setErrorMsg(msg);
+        onError(msg);
+        return;
+      }
+
+      const popup = window.open(data.authUrl, "delta_oauth", "width=560,height=700,resizable=yes");
+      if (!popup) {
+        const msg = "Popup blocked — allow popups for this site and retry.";
+        setStatus("error");
+        setErrorMsg(msg);
+        onError(msg);
+        return;
+      }
+
+      popupRef.current = popup;
+      setStatus("connecting");
+
+      const pollInterval = setInterval(() => {
+        if (popup.closed) {
+          clearInterval(pollInterval);
+          popupRef.current = null;
+          if (status === "connecting") {
+            setStatus("idle");
+          }
+        }
+      }, 800);
+    } catch (err) {
+      const msg = `Network error: ${String(err)}`;
+      setStatus("error");
+      setErrorMsg(msg);
+      onError(msg);
+    }
+  }
 
   const isLoading = status === "connecting";
   const canSubmit = apiKey.trim().length > 0 && apiSecret.trim().length > 0 && !isLoading;
@@ -135,7 +270,6 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
       }
 
       setStatus("success");
-
       await loadAccounts();
 
       const account: BrokerAccount = {
@@ -195,6 +329,44 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
 
   return (
     <form onSubmit={handleConnect} className="flex flex-col gap-4" autoComplete="off">
+      {/* OAuth connect — shown when DELTA_CLIENT_ID + SECRET are configured */}
+      {oauthConfigured && (
+        <div style={{
+          padding: "14px 16px", borderRadius: 12,
+          background: "rgba(183,255,90,0.05)", border: "1px solid rgba(183,255,90,0.2)",
+          display: "flex", flexDirection: "column", gap: 10,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Shield size={14} style={{ color: "#B7FF5A", flexShrink: 0 }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: "#B7FF5A", margin: 0 }}>Connect via OAuth 2.0</p>
+              <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "2px 0 0" }}>
+                Authorize securely without entering your API keys here.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={startDeltaOAuth}
+            disabled={isLoading}
+            style={{
+              width: "100%", padding: "10px 0", borderRadius: 9, fontSize: 13, fontWeight: 700,
+              background: isLoading ? "rgba(183,255,90,0.1)" : "linear-gradient(135deg, #B7FF5A 0%, #7FCC00 100%)",
+              color: isLoading ? "rgba(183,255,90,0.5)" : "#0B1017",
+              border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            }}
+          >
+            {isLoading ? <><Loader2 size={14} className="animate-spin" /> Authorizing…</> : <>Connect with OAuth</>}
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>or use API key below</span>
+            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+          </div>
+        </div>
+      )}
+
       {/* One-click connect when credentials are already imported */}
       {hasImported && (
         <div style={{
@@ -225,11 +397,13 @@ export function DeltaApiConnectForm({ onSuccess, onError }: DeltaApiConnectFormP
           >
             {isLoading ? <><Loader2 size={14} className="animate-spin" /> Connecting…</> : <>Connect with Imported Key</>}
           </button>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-            <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>or enter manually below</span>
-            <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
-          </div>
+          {!oauthConfigured && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", whiteSpace: "nowrap" }}>or enter manually below</span>
+              <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.07)" }} />
+            </div>
+          )}
         </div>
       )}
 
