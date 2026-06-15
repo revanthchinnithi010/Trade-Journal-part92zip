@@ -13,9 +13,7 @@ import { AlertEngine } from "./services/AlertEngine.js";
 import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
-
-console.log(`CTRADER_CLIENT_ID loaded: ${process.env["CTRADER_CLIENT_ID"] ? "YES" : "NO"}`);
-console.log(`CTRADER_CLIENT_SECRET loaded: ${process.env["CTRADER_CLIENT_SECRET"] ? "YES" : "NO"}`);
+import { AppConfigService } from "./services/AppConfigService.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -94,6 +92,15 @@ healthMonitor.start();
   } catch (err) {
     logger.error({ err }, "DB migration failed — services may have limited functionality");
   }
+
+  // Inject credentials stored via the credential-import UI into process.env BEFORE
+  // any service init reads them.  This must run after migrations so the app_config
+  // table exists, but before ctrader/delta/telegram init so they pick up the values.
+  await AppConfigService.injectToEnv();
+  logger.info({
+    CTRADER_CLIENT_ID:     process.env["CTRADER_CLIENT_ID"]     ? "SET" : "NOT SET",
+    CTRADER_CLIENT_SECRET: process.env["CTRADER_CLIENT_SECRET"] ? "SET" : "NOT SET",
+  }, "Startup: credential injection complete — env status after inject");
 
   await new Promise<void>((resolve, reject) => {
     server.listen(port, (err?: Error) => {

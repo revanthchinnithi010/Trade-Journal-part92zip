@@ -574,11 +574,16 @@ export class CTraderService extends EventEmitter {
     // ── [5] app_auth request payload diagnostics ─────────────────────────────
     const clientIdOk     = id.length > 0;
     const clientSecretOk = secret.length > 0;
+    const maskValue = (s: string) => s.length <= 8
+      ? "*".repeat(s.length)
+      : s.slice(0, 4) + "…" + s.slice(-4);
     logger.info({
       "[1] clientIdLoaded":     clientIdOk,
       "[1] clientIdLength":     id.length,
+      "[1] clientIdMasked":     clientIdOk ? maskValue(id) : "(empty — WILL FAIL)",
       "[2] clientSecretLoaded": clientSecretOk,
       "[2] clientSecretLength": secret.length,
+      "[2] clientSecretMasked": clientSecretOk ? maskValue(secret) : "(empty — WILL FAIL)",
     }, "CTraderService [DIAG] App Auth — credential check");
 
     if (!clientIdOk || !clientSecretOk) {
