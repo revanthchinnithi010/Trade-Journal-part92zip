@@ -188,7 +188,14 @@ export class MarketFeedManager extends EventEmitter {
         this.symbolClasses.set(s, "crypto");
         this.routingReasons.set(s, "Crypto symbols always use Delta Exchange");
         logger.info({ symbol: s }, "MarketFeedManager: auto-routed new crypto symbol → delta");
+      } else if (this.providers.has("finnhub")) {
+        providerName = "finnhub";
+        this.symbolRouting.set(s, "finnhub");
+        this.symbolClasses.set(s, cls);
+        this.routingReasons.set(s, `Routed to Finnhub: ${cls}`);
+        logger.info({ symbol: s, cls }, "MarketFeedManager: auto-routed symbol → finnhub");
       } else {
+        logger.debug({ symbol: s, cls }, "MarketFeedManager: no provider available for symbol");
         return false;
       }
     }

@@ -216,6 +216,13 @@ const MIGRATIONS = [
   `CREATE INDEX IF NOT EXISTS idx_trades_exit_date ON trades (exit_date DESC)`,
   `CREATE INDEX IF NOT EXISTS idx_trades_outcome ON trades (outcome)`,
   `CREATE INDEX IF NOT EXISTS idx_trades_created_at ON trades (created_at DESC)`,
+
+  `CREATE TABLE IF NOT EXISTS live_prices (
+    symbol     TEXT PRIMARY KEY,
+    price      REAL NOT NULL,
+    provider   TEXT NOT NULL DEFAULT '',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`,
 ];
 
 export async function runMigrations(): Promise<void> {

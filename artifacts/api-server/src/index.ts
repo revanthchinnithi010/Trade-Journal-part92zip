@@ -13,6 +13,7 @@ import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
 import { AppConfigService } from "./services/AppConfigService.js";
+import type { ProviderTick } from "./services/providers/BaseProvider.js";
 
 const rawPort = process.env["PORT"];
 if (!rawPort) throw new Error("PORT environment variable is required but was not provided.");
@@ -29,11 +30,44 @@ const delta            = new DeltaService(marketData);
 const alertEngine      = new AlertEngine(marketData, telegram, wsManager);
 const healthMonitor    = new FeedHealthMonitor(marketData, wsManager, telegram);
 
-marketData.on("tick", (tick) => {
+// Batch buffer: latest price per symbol — flushed every 5 s
+const livePriceBatch = new Map<string, { price: number; provider: string }>();
+
+marketData.on("tick", (tick: ProviderTick) => {
   wsManager.clearCandleCache();
   candleAggregator.ingestTick(tick);
   wsManager.broadcast({ type: "tick", ...tick });
+
+  // Collect latest price for batch DB write
+  livePriceBatch.set(tick.symbol, { price: tick.price, provider: tick.provider });
 });
+
+async function flushLivePrices(): Promise<void> {
+  if (livePriceBatch.size === 0) return;
+  const entries = [...livePriceBatch.entries()];
+  livePriceBatch.clear();
+  try {
+    const { db: dbClient, livePricesTable } = await import("@workspace/db");
+    const { sql } = await import("drizzle-orm");
+    for (const [symbol, { price, provider }] of entries) {
+      await dbClient
+        .insert(livePricesTable)
+        .values({ symbol, price, provider, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: livePricesTable.symbol,
+          set: {
+            price,
+            provider,
+            updatedAt: sql`NOW()`,
+          },
+        });
+    }
+  } catch (err) {
+    logger.warn({ err }, "live_prices: batch flush error (non-fatal)");
+  }
+}
+
+setInterval(() => { flushLivePrices().catch(() => {}); }, 5_000);
 
 candleAggregator.on("candle_update", (update: { symbol: string; interval: string; bar: object }) => {
   wsManager.broadcastCandleUpdate(update.symbol, update.interval, update.bar);
@@ -128,5 +162,7 @@ process.on("SIGTERM", () => {
   marketData.stop();
   alertEngine.stop().catch(() => {});
   healthMonitor.stop();
-  server.close(() => process.exit(0));
+  flushLivePrices().catch(() => {}).finally(() => {
+    server.close(() => process.exit(0));
+  });
 });

@@ -10,3 +10,4 @@ export * from "./calendar_events";
 export * from "./chart_layouts";
 export * from "./broker_accounts";
 export * from "./app_config";
+export * from "./live_prices";
