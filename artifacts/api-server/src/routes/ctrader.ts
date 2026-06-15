@@ -290,13 +290,18 @@ function resolveRedirectUri(req: import("express").Request): string {
 function popupHtml(status: "success" | "error", message: string | null): string {
   const safeMsg = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
   const safeMessage = JSON.stringify(message ?? "");
-  const redirectParam = status === "success"
-    ? "ctrader_connected=true"
-    : `ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
   // Expo deep link — scheme matches app.json "scheme": "tradevault"
   const deepLink = status === "success"
     ? `tradevault://ctrader-connected?broker=ctrader&success=true`
     : `tradevault://ctrader-error?broker=ctrader&error=${encodeURIComponent(message ?? "oauth_failed")}`;
+  // Web fallbacks — desktop goes to root (layout detects ctrader_connected=true),
+  // mobile/no-opener goes to /brokers so FusionPanel detects ctrader=connected.
+  const desktopFallback = status === "success"
+    ? `/?ctrader_connected=true`
+    : `/?ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
+  const mobileFallback = status === "success"
+    ? `/brokers?ctrader=connected`
+    : `/brokers?ctrader_error=${encodeURIComponent(message ?? "oauth_failed")}`;
 
   return `<!doctype html>
 <html>
@@ -315,19 +320,20 @@ function popupHtml(status: "success" | "error", message: string | null): string 
     <div class="icon">${status === "success" ? "✅" : "❌"}</div>
     <h2>${status === "success" ? "Connected!" : "Connection Failed"}</h2>
     ${safeMsg ? `<p>${safeMsg}</p>` : ""}
-    <p id="sub">${status === "success" ? "Returning to app\u2026" : "Please close this window and try again."}</p>
+    <p id="sub">Returning to app\u2026</p>
   </div>
   <script>
     (function () {
       var cbStatus = '${status}';
-      console.log('[cTrader OAuth callback] entered — status:', cbStatus);
+      console.log('[cTrader OAuth callback] status:', cbStatus);
 
       var openerAvailable = false;
       try { openerAvailable = !!(window.opener && window.opener.postMessage); } catch (_) {}
       console.log('[cTrader OAuth callback] window.opener available:', openerAvailable);
 
       if (openerAvailable) {
-        // ── Web popup mode: notify parent window then close ──────────────────
+        // ── Web popup mode ────────────────────────────────────────────────────
+        // 1. Fast path: postMessage so BrokerConnectModal can catch it instantly
         try {
           window.opener.postMessage(
             { type: 'ctrader_oauth_result', status: cbStatus, message: ${safeMessage} },
@@ -337,26 +343,39 @@ function popupHtml(status: "success" | "error", message: string | null): string 
         } catch (e) {
           console.warn('[cTrader OAuth callback] postMessage failed:', e);
         }
-        setTimeout(function () { window.close(); }, 1200);
+
+        // 2. Reliable fallback: navigate the OPENER window to /?ctrader_connected=true
+        //    This triggers layout.tsx detection even if postMessage was missed
+        //    (e.g. BrokerConnectModal was closed, or cross-iframe postMessage blocked).
+        if (cbStatus === 'success') {
+          try {
+            window.opener.location.href = '${desktopFallback}';
+            console.log('[cTrader OAuth callback] opener redirected to ${desktopFallback}');
+          } catch (e) {
+            console.warn('[cTrader OAuth callback] opener location change failed:', e);
+          }
+        }
+
+        // 3. Close popup
+        setTimeout(function () {
+          console.log('[cTrader OAuth callback] closing popup');
+          window.close();
+        }, 900);
 
       } else {
         // ── Mobile / Expo mode: try deep link, fall back to web redirect ─────
         var deepLink = '${deepLink}';
-        var webFallback = '/?${redirectParam}';
-        console.log('[cTrader OAuth callback] no opener — deep link:', deepLink);
-        document.getElementById('sub').textContent = 'Returning to app\u2026';
+        console.log('[cTrader OAuth callback] no opener — trying deep link then web redirect');
 
         // Step 1 — Expo: navigate to tradevault:// so ASWebAuthenticationSession /
         //          Chrome Custom Tab closes and resolves openAuthSessionAsync.
-        console.log('[cTrader OAuth callback] sending deep link');
         window.location.href = deepLink;
 
-        // Step 2 — Fallback for plain mobile browsers (not Expo): redirect to
-        //          the web app after a short pause so the deep-link attempt has
-        //          time to work first.
+        // Step 2 — Fallback for plain mobile browsers: redirect to /brokers page
+        //          so FusionPanel detects ctrader=connected and triggers the flow.
         setTimeout(function () {
-          console.log('[cTrader OAuth callback] deep-link fallback — redirecting to web app');
-          window.location.replace(webFallback);
+          console.log('[cTrader OAuth callback] deep-link fallback — redirecting to brokers page');
+          window.location.replace('${mobileFallback}');
         }, 700);
       }
     })();

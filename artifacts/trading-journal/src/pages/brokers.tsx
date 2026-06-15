@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useBrokerStore } from "@/store/brokerStore";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Wifi, WifiOff, RefreshCw, CheckCircle2, X, Upload, Shield,
@@ -598,11 +599,17 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
     const ct = params.get("ctrader");
     const err = params.get("ctrader_error");
     if (ct === "connected") {
-      addLog("OAuth success — authorization code received", "success");
-      addLog("Token received — access & refresh tokens stored", "success");
+      addLog("OAuth Success — authorization code received", "success");
+      addLog("Token Saved — access token stored encrypted in DB", "success");
       setOauthSuccess(true);
       pollStatus();
-      setTimeout(() => setOauthSuccess(false), 5000);
+      setTimeout(() => setOauthSuccess(false), 6000);
+
+      // Trigger the full OAuth handoff via BrokerConnectModal:
+      // set sessionStorage flag then open the cTrader auth modal so it auto-calls
+      // handleCTraderOAuthSuccess() → fetches pending-account → polls diagnostics.
+      sessionStorage.setItem("ctrader_oauth_resume", "true");
+      useBrokerStore.getState().openAuthModal("ctrader");
     }
     if (err) {
       addLog(`OAuth error: ${decodeURIComponent(err)}`, "error");
@@ -614,6 +621,7 @@ function FusionPanel({ connected: _connected, onConnect, onDisconnect }: { conne
       url.searchParams.delete("ctrader_error");
       window.history.replaceState({}, "", url.toString());
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleConnect = () => {

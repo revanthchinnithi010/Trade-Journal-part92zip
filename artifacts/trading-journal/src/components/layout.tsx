@@ -146,21 +146,27 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // Detect cTrader same-tab OAuth redirect (?ctrader_connected=true or ?ctrader_error=...)
+  // Detect cTrader same-tab OAuth redirect:
+  //   ?ctrader_connected=true  — from popup opener navigation (desktop fallback)
+  //   ?ctrader_error=<msg>     — from popup opener navigation on failure
+  // Note: ?ctrader=connected is handled by brokers.tsx FusionPanel directly.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const connected = params.get("ctrader_connected");
     const error     = params.get("ctrader_error");
     if (connected === "true" || error) {
-      console.log("[cTrader OAuth] startup param detected — connected:", connected, "error:", error);
+      console.log("[cTrader OAuth] ✅ OAuth Success — URL param detected, redirecting to brokers");
       // Strip params from URL before doing anything else
       const clean = new URL(window.location.href);
       clean.searchParams.delete("ctrader_connected");
       clean.searchParams.delete("ctrader_error");
+      // Navigate to /brokers so user lands on the broker page
+      clean.pathname = "/brokers";
       window.history.replaceState({}, "", clean.toString());
       // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume
       if (connected === "true") {
         sessionStorage.setItem("ctrader_oauth_resume", "true");
+        console.log("[cTrader OAuth] Token Saved — ctrader_oauth_resume flag set");
       } else if (error) {
         sessionStorage.setItem("ctrader_oauth_error", error);
       }

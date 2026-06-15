@@ -51,6 +51,7 @@ function useBrokerConnect() {
   const pendingAccountRef = useRef<BrokerAccount | null>(null);
   const statusRef = useRef<Status>("idle");
   const prevDiagRef = useRef<CTraderDiagnostics | null>(null);
+  const oauthHandledRef = useRef(false);
   // Stable refs for store callbacks (Zustand actions are stable but keep ref for safety)
   const loadAccountsRef = useRef(loadAccounts);
   const connectRef = useRef(connect);
@@ -77,8 +78,13 @@ function useBrokerConnect() {
         stopPopupPoll();
         popupRef.current?.close();
         popupRef.current = null;
-        if (e.data.status === "success") handleCTraderOAuthSuccess();
-        else { setStatus("error"); setErrorMsg(String(e.data.message || "cTrader OAuth failed")); }
+        if (e.data.status === "success") {
+          console.log("[cTrader OAuth] ✅ OAuth Success — postMessage received from popup");
+          handleCTraderOAuthSuccess();
+        } else {
+          setStatus("error");
+          setErrorMsg(String(e.data.message || "cTrader OAuth failed"));
+        }
       }
     }
     window.addEventListener("message", onMessage);
@@ -157,11 +163,22 @@ function useBrokerConnect() {
           // Log step transitions once
           const symbolStep = diag.steps.find(s => s.id === "symbols");
           const prevSymbolStep = prev?.steps.find(s => s.id === "symbols");
+          const wsStep = diag.steps.find(s => s.id === "websocket");
+          const prevWsStep = prev?.steps.find(s => s.id === "websocket");
+          const accountStep = diag.steps.find(s => s.id === "accounts");
+          const prevAccountStep = prev?.steps.find(s => s.id === "accounts");
+
+          if (accountStep?.status === "done" && prevAccountStep?.status !== "done") {
+            console.log("[cTrader OAuth] ✅ Account Loaded — ID:", diag.activeAccountId);
+          }
           if (symbolStep?.status === "done" && prevSymbolStep?.status !== "done") {
-            console.log("[cTrader OAuth] Symbol catalog loaded —", diag.symbolCount, "symbols");
+            console.log("[cTrader OAuth] ✅ Symbol Catalog Loaded —", diag.symbolCount, "symbols");
+          }
+          if (wsStep?.status === "done" && prevWsStep?.status !== "done") {
+            console.log("[cTrader OAuth] ✅ WS Connected — latency:", diag.latencyMs, "ms");
           }
           if (diag.connected && !prev?.connected) {
-            console.log("[cTrader OAuth] WebSocket connected — latency:", diag.latencyMs, "ms");
+            console.log("[cTrader OAuth] ✅ WS Authenticated — broker connection fully ready");
           }
           prevDiagRef.current = diag;
 
@@ -198,20 +215,43 @@ function useBrokerConnect() {
   }
 
   async function handleCTraderOAuthSuccess() {
-    console.log("[cTrader OAuth] Account loading started");
+    // Guard: prevent double-execution when both postMessage and opener redirect fire
+    if (oauthHandledRef.current) {
+      console.log("[cTrader OAuth] ⚠️ handleCTraderOAuthSuccess called again — skipping (already in progress)");
+      return;
+    }
+    oauthHandledRef.current = true;
+
+    console.log("[cTrader OAuth] ✅ OAuth Success — starting account load");
     setStatus("loading");
     try {
       const res = await fetch("/api/ctrader/pending-account", { credentials: "include" });
-      const data = await res.json() as {
-        ok: boolean; accountId?: number; apiToken?: string; label?: string; error?: string;
-      };
-      if (!data.ok || !data.accountId || !data.apiToken) {
+      const rawText = await res.text();
+      let data: { ok: boolean; accountId?: number; apiToken?: string; label?: string; error?: string };
+      try {
+        data = JSON.parse(rawText) as typeof data;
+      } catch {
         setStatus("error");
-        setErrorMsg(data.error ?? "Could not retrieve account details — try again");
+        setErrorMsg(`Server returned non-JSON: ${rawText.slice(0, 200)}`);
+        oauthHandledRef.current = false;
         return;
       }
-      console.log("[cTrader OAuth] Account loading completed — accountId:", data.accountId, "label:", data.label);
-      try { localStorage.setItem(`${LS_TOKEN_PREFIX}${data.accountId}`, data.apiToken); } catch { /* ignore */ }
+
+      if (!res.ok || !data.ok || !data.accountId || !data.apiToken) {
+        const errMsg = data.error ?? `HTTP ${res.status}: ${rawText.slice(0, 300)}`;
+        console.error("[cTrader OAuth] ❌ Account load failed:", errMsg);
+        setStatus("error");
+        setErrorMsg(errMsg);
+        oauthHandledRef.current = false;
+        return;
+      }
+
+      console.log("[cTrader OAuth] ✅ Account Loaded — accountId:", data.accountId, "label:", data.label);
+
+      try {
+        localStorage.setItem(`${LS_TOKEN_PREFIX}${data.accountId}`, data.apiToken);
+        console.log("[cTrader OAuth] ✅ Token Saved — localStorage key:", `${LS_TOKEN_PREFIX}${data.accountId}`);
+      } catch { /* ignore */ }
 
       const accountDetails: BrokerAccount = {
         id: data.accountId,
@@ -223,26 +263,28 @@ function useBrokerConnect() {
       };
       pendingAccountRef.current = accountDetails;
 
-      // Show diagnostics panel and wait for the cTrader TLS session to be fully ready
-      // before calling connect() — prevents premature balance/positions calls
+      console.log("[cTrader OAuth] ⏳ Waiting for cTrader TLS session — polling diagnostics…");
       setCtDiag(null);
       setStatus("waiting_ready");
       scheduleCTraderReadyPoll(Date.now(), accountDetails);
     } catch (err) {
+      console.error("[cTrader OAuth] ❌ Exception in account load:", err);
       setStatus("error");
       setErrorMsg(String(err));
+      oauthHandledRef.current = false;
     }
   }
 
   // Auto-resume: when opened after a same-tab OAuth redirect, sessionStorage will
-  // have a "ctrader_oauth_resume" flag set by Layout's startup detection.
+  // have a "ctrader_oauth_resume" flag set by Layout's startup detection OR by
+  // brokers.tsx FusionPanel when it detects the ?ctrader=connected URL param.
   useEffect(() => {
     if (authBrokerId !== "ctrader") return;
     const resume = sessionStorage.getItem("ctrader_oauth_resume");
     const errMsg = sessionStorage.getItem("ctrader_oauth_error");
     if (resume === "true") {
       sessionStorage.removeItem("ctrader_oauth_resume");
-      console.log("[cTrader OAuth] Token exchange successful — resuming from same-tab redirect");
+      console.log("[cTrader OAuth] ✅ OAuth Success — resuming from same-tab/broker-page redirect");
       handleCTraderOAuthSuccess();
     } else if (errMsg) {
       sessionStorage.removeItem("ctrader_oauth_error");
