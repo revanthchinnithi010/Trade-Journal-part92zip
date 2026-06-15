@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type BrokerName = "delta" | "ctrader" | "finnhub";
+export type BrokerName = "delta" | "finnhub";
 export type WsStatus   = "connected" | "reconnecting" | "disconnected" | "error";
 
 export interface LiveTick {
@@ -200,10 +200,6 @@ export const useMarketStore = create<MarketStoreState>((set, get) => ({
         if (data["delta"]) {
           const d = data["delta"] as { symbols: SymbolInfo[] };
           get().setSymbolCatalog("delta", d.symbols);
-        }
-        if (data["ctrader"]) {
-          const c = data["ctrader"] as { symbols: SymbolInfo[] };
-          get().setSymbolCatalog("ctrader", c.symbols);
         }
       }
     } catch { /* non-fatal — catalog is a convenience feature */ }

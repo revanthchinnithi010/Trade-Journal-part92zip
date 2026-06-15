@@ -1,6 +1,5 @@
 export { BrokerWsOrchestrator } from "./BrokerWsOrchestrator";
 export { DeltaWsClient } from "./DeltaWsClient";
-export { CTraderWsClient } from "./CTraderWsClient";
 export { LivePnlTracker } from "./LivePnlTracker";
 export { SubscriptionManager } from "./SubscriptionManager";
 export { HeartbeatManager } from "./HeartbeatManager";

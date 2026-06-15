@@ -8,15 +8,13 @@ import {
 
 interface SystemStatus {
   db:       "ok" | "error" | "loading";
-  ctrader:  "connected" | "disconnected" | "loading";
   delta:    "connected" | "disconnected" | "loading";
   telegram: "configured" | "not_configured" | "loading";
 }
 
 interface ServerInfo {
-  ip:          string | null;
-  redirectUri: string | null;
-  loading:     boolean;
+  ip:      string | null;
+  loading: boolean;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -164,8 +162,6 @@ function CopyField({
   );
 }
 
-// ── Shared section header ────────────────────────────────────────────────────
-
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p style={{
@@ -187,11 +183,10 @@ interface Props {
 export function SidebarSystemSections({ open }: Props) {
   const [status, setStatus] = useState<SystemStatus>({
     db:       "loading",
-    ctrader:  "loading",
     delta:    "loading",
     telegram: "loading",
   });
-  const [serverInfo, setServerInfo] = useState<ServerInfo>({ ip: null, redirectUri: null, loading: true });
+  const [serverInfo, setServerInfo] = useState<ServerInfo>({ ip: null, loading: true });
   const [exportBusy, setExportBusy] = useState(false);
   const [importBusy, setImportBusy] = useState(false);
   const [importResult, setImportResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -203,16 +198,14 @@ export function SidebarSystemSections({ open }: Props) {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const [health, ct, dlt, tg] = await Promise.all([
+      const [health, dlt, tg] = await Promise.all([
         fetch("/api/health").then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch("/api/ctrader/status").then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/delta/status").then(r => r.ok ? r.json() : null).catch(() => null),
         fetch("/api/telegram/status").then(r => r.ok ? r.json() : null).catch(() => null),
       ]);
       if (!mountedRef.current) return;
       setStatus({
         db:       health?.database?.connected ? "ok" : "error",
-        ctrader:  ct?.connected ? "connected" : "disconnected",
         delta:    dlt?.connected ? "connected" : "disconnected",
         telegram: tg?.configured ? "configured" : "not_configured",
       });
@@ -221,15 +214,11 @@ export function SidebarSystemSections({ open }: Props) {
 
   const fetchServerInfo = useCallback(async () => {
     try {
-      const [ipRes, cfgRes] = await Promise.all([
-        fetch("/api/my-ip").then(r => r.ok ? r.json() : null).catch(() => null),
-        fetch("/api/ctrader/config").then(r => r.ok ? r.json() : null).catch(() => null),
-      ]);
+      const ipRes = await fetch("/api/my-ip").then(r => r.ok ? r.json() : null).catch(() => null);
       if (!mountedRef.current) return;
       setServerInfo({
-        ip:          ipRes?.ip ?? null,
-        redirectUri: cfgRes?.redirectUri ?? null,
-        loading:     false,
+        ip:      ipRes?.ip ?? null,
+        loading: false,
       });
     } catch {
       if (mountedRef.current) setServerInfo(p => ({ ...p, loading: false }));
@@ -302,7 +291,6 @@ export function SidebarSystemSections({ open }: Props) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 8 }}>
 
-      {/* ── Divider ── */}
       <div style={{ height: 1, background: DIVIDER, marginLeft: 8, marginRight: 8 }} />
 
       {/* ── Section 1: System Status ── */}
@@ -322,18 +310,16 @@ export function SidebarSystemSections({ open }: Props) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 3, padding: "0 4px" }}>
           <StatusRow icon={Database}  label="Database"        status={status.db}       />
-          <StatusRow icon={Activity}  label="cTrader"         status={status.ctrader}  />
           <StatusRow icon={Wifi}      label="Delta Exchange"  status={status.delta}    />
           <StatusRow icon={Bot}       label="Telegram"        status={status.telegram} />
         </div>
       </div>
 
-      {/* ── Section 2: Server IP & Redirect URL ── */}
+      {/* ── Section 2: Server IP ── */}
       <div>
         <SectionLabel>Server Info</SectionLabel>
         <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "0 4px" }}>
-          <CopyField label="Backend Server IP"         value={serverInfo.ip}          loading={serverInfo.loading} />
-          <CopyField label="cTrader Redirect URL"      value={serverInfo.redirectUri} loading={serverInfo.loading} />
+          <CopyField label="Backend Server IP" value={serverInfo.ip} loading={serverInfo.loading} />
         </div>
       </div>
 
@@ -341,7 +327,6 @@ export function SidebarSystemSections({ open }: Props) {
       <div>
         <SectionLabel>Backup & Restore</SectionLabel>
         <div style={{ display: "flex", flexDirection: "column", gap: 6, padding: "0 4px" }}>
-          {/* Toast */}
           {(exportResult || importResult) && (
             <div style={{
               padding: "6px 10px", borderRadius: 8, fontSize: 11, fontWeight: 500,
@@ -354,7 +339,6 @@ export function SidebarSystemSections({ open }: Props) {
             </div>
           )}
 
-          {/* Export */}
           <button
             onClick={handleExport}
             disabled={exportBusy}
@@ -373,7 +357,6 @@ export function SidebarSystemSections({ open }: Props) {
             {exportBusy ? "Exporting…" : "Export Backup"}
           </button>
 
-          {/* Import */}
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={importBusy}

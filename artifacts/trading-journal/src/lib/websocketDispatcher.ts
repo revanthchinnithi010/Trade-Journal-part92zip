@@ -27,8 +27,6 @@ export type WsMessageType =
   | "provider_status"
   | "subscription_update"
   | "alert_triggered"
-  | "ctrader_tick"
-  | "ctrader_status"
   | (string & Record<never, never>); // allow arbitrary extension types
 
 export type Priority = "realtime" | "ui" | "system";

@@ -30,8 +30,6 @@ function decryptValue(ciphertext: string): string {
 }
 
 export const SUPPORTED_KEYS = [
-  "CTRADER_CLIENT_ID",
-  "CTRADER_CLIENT_SECRET",
   "BROKER_ENCRYPTION_KEY",
   "DELTA_API_KEY",
   "DELTA_API_SECRET",

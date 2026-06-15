@@ -2799,7 +2799,6 @@ function MarketWatchlistSheet({
   const [activeTab, setActiveTab]           = useState<MktTab>("Watchlist");
   const [search, setSearch]                 = useState("");
   const [deltaSymbols, setDeltaSymbols]     = useState<MktSymbolInfo[]>([]);
-  const [ctraderSymbols, setCtraderSymbols] = useState<MktSymbolInfo[]>([]);
   const [loadingBroker, setLoadingBroker]   = useState(false);
 
   const { items: wlItems, addSymbol, toggleFavorite } = useWatchlist();
@@ -2813,13 +2812,9 @@ function MarketWatchlistSheet({
 
   useEffect(() => {
     setLoadingBroker(true);
-    Promise.all([
-      fetch(`${BASE}/api/symbols?broker=delta`).then(r => r.json()),
-      fetch(`${BASE}/api/symbols?broker=ctrader`).then(r => r.json()),
-    ])
-      .then(([d, c]) => {
+    fetch(`${BASE}/api/symbols?broker=delta`).then(r => r.json())
+      .then(d => {
         setDeltaSymbols((d as { symbols: MktSymbolInfo[] }).symbols ?? []);
-        setCtraderSymbols((c as { symbols: MktSymbolInfo[] }).symbols ?? []);
       })
       .catch(() => {})
       .finally(() => setLoadingBroker(false));
@@ -2867,18 +2862,18 @@ function MarketWatchlistSheet({
     } else if (activeTab === "Crypto") {
       r = deltaSymbols;
     } else if (activeTab === "Forex") {
-      r = ctraderSymbols.filter(s => s.contractType === "forex" || s.contractType === "metal");
+      r = [];
     } else if (activeTab === "Indices") {
-      r = ctraderSymbols.filter(s => s.contractType === "index");
+      r = [];
     } else {
-      r = ctraderSymbols.filter(s => s.contractType === "commodity");
+      r = [];
     }
     if (search.trim()) {
       const q = search.trim().toUpperCase();
       r = r.filter(row => row.symbol.toUpperCase().includes(q) || row.name.toUpperCase().includes(q));
     }
     return r;
-  }, [activeTab, search, wlItems, deltaSymbols, ctraderSymbols]);
+  }, [activeTab, search, wlItems, deltaSymbols]);
 
   // ── Reuse the exact BottomSheet used by Drawing Tools ──────────────────────
   // Tabs + search + column headers are sticky inside the BottomSheet's scroll

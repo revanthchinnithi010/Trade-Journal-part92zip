@@ -8,8 +8,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useBrokerStore } from "@/store/brokerStore";
 
 interface ParsedCredentials {
-  CTRADER_CLIENT_ID?: string;
-  CTRADER_CLIENT_SECRET?: string;
   BROKER_ENCRYPTION_KEY?: string;
   DELTA_API_KEY?: string;
   DELTA_API_SECRET?: string;
@@ -20,8 +18,6 @@ interface ParsedCredentials {
 }
 
 interface CredStatus {
-  CTRADER_CLIENT_ID: boolean;
-  CTRADER_CLIENT_SECRET: boolean;
   BROKER_ENCRYPTION_KEY: boolean;
   DELTA_API_KEY: boolean;
   DELTA_API_SECRET: boolean;
@@ -35,12 +31,6 @@ interface CredStatus {
 type Screen = "upload" | "review" | "confirm" | "done";
 
 const CREDENTIAL_GROUPS = [
-  {
-    label: "cTrader Credentials",
-    keys: ["CTRADER_CLIENT_ID", "CTRADER_CLIENT_SECRET"] as const,
-    color: "#EF4444",
-    bg: "rgba(239,68,68,0.12)",
-  },
   {
     label: "Delta Exchange Credentials",
     keys: ["DELTA_API_KEY", "DELTA_API_SECRET"] as const,
@@ -70,7 +60,7 @@ const CREDENTIAL_GROUPS = [
 function parseCredentialsFile(content: string): ParsedCredentials {
   const parsed: ParsedCredentials = {};
   const supported = [
-    "CTRADER_CLIENT_ID", "CTRADER_CLIENT_SECRET", "BROKER_ENCRYPTION_KEY",
+    "BROKER_ENCRYPTION_KEY",
     "DELTA_API_KEY", "DELTA_API_SECRET", "TELEGRAM_BOT_TOKEN",
     "TELEGRAM_CHAT_ID", "SESSION_SECRET", "DATABASE_URL",
   ];
@@ -773,12 +763,6 @@ export function ConnectionStatusPanel({ onImport }: ConnectionStatusPanelProps) 
   }
 
   const services = [
-    {
-      key: "ctrader",
-      label: "cTrader",
-      configured: !!(st.status.CTRADER_CLIENT_ID && st.status.CTRADER_CLIENT_SECRET),
-      color: "#EF4444",
-    },
     {
       key: "delta",
       label: "Delta Exchange",

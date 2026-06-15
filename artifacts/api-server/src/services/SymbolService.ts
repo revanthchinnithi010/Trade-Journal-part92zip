@@ -20,7 +20,7 @@ interface DeltaProduct {
 }
 
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
-const CACHE_TTL_MS = 10 * 60 * 1_000; // 10 minutes
+const CACHE_TTL_MS = 10 * 60 * 1_000;
 
 interface DeltaCacheEntry {
   symbols:  SymbolInfo[];
@@ -30,9 +30,6 @@ interface DeltaCacheEntry {
 export class SymbolService {
   private deltaCache: DeltaCacheEntry | null = null;
   private fetchPromise: Promise<SymbolInfo[]> | null = null;
-
-  /** Live cTrader symbol catalog — populated from the connected broker account. */
-  private ctraderSymbols: SymbolInfo[] = [];
 
   async getDeltaSymbols(forceRefresh = false): Promise<SymbolInfo[]> {
     if (!forceRefresh && this.deltaCache && Date.now() - this.deltaCache.fetchedAt < CACHE_TTL_MS) {
@@ -119,25 +116,8 @@ export class SymbolService {
     }));
   }
 
-  /**
-   * Called by MarketFeedManager when CTraderService emits "symbols_loaded".
-   * Replaces the cTrader catalog with the live broker symbol list.
-   */
-  setCTraderSymbols(symbols: SymbolInfo[]): void {
-    this.ctraderSymbols = symbols;
-    logger.info({ count: symbols.length }, "SymbolService: cTrader catalog updated from live broker");
-  }
-
-  /**
-   * Returns the live cTrader symbol catalog.
-   * Empty until the broker account connects and loads symbols.
-   */
-  getCTraderSymbols(): SymbolInfo[] {
-    return this.ctraderSymbols;
-  }
-
-  async getAllSymbols(): Promise<{ delta: SymbolInfo[]; ctrader: SymbolInfo[] }> {
+  async getAllSymbols(): Promise<{ delta: SymbolInfo[] }> {
     const delta = await this.getDeltaSymbols();
-    return { delta, ctrader: this.ctraderSymbols };
+    return { delta };
   }
 }

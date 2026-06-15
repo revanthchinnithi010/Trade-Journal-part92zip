@@ -1769,7 +1769,7 @@ export default function Charts() {
                 boxShadow: `0 0 5px ${brokerStatus === "connected" ? "#4ade80" : "#f59e0b"}`,
               }} />
               <span style={{ fontSize: 12, fontWeight: 700, color: brokerStatus === "connected" ? "#4ade80" : "#f59e0b" }}>
-                {activeAccount.broker_id === "delta" ? "Δ Delta" : activeAccount.broker_id === "ctrader" ? "cTrader" : "MT5"}
+                {activeAccount.broker_id === "delta" ? "Δ Delta" : "MT5"}
               </span>
             </>
           ) : (

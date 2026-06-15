@@ -1,5 +1,5 @@
-import type { BrokerPosition } from "@/types/broker";
-import type { PnlEvent, BrokerEventHandler, BrokerId } from "./types";
+import type { BrokerPosition, BrokerId } from "@/types/broker";
+import type { PnlEvent, BrokerEventHandler } from "./types";
 
 interface PnlRecord {
   entryPrice: number;
@@ -23,8 +23,8 @@ export class LivePnlTracker {
   setPositions(broker: BrokerId, positions: BrokerPosition[]): void {
     const map = new Map<string, PnlRecord>();
     for (const pos of positions) {
-      const entry = parseFloat(String(pos.entryPrice ?? pos.avgPrice ?? "0"));
-      const qty   = parseFloat(String(pos.size ?? pos.qty ?? "0"));
+      const entry = parseFloat(String(pos.entryPrice ?? "0"));
+      const qty   = parseFloat(String(pos.size ?? "0"));
       const side  = (pos.side?.toLowerCase() ?? "buy") as "buy" | "sell";
       if (!isFinite(entry) || !isFinite(qty)) continue;
       map.set(pos.symbol, { entryPrice: entry, qty, side, unrealisedPnl: 0 });

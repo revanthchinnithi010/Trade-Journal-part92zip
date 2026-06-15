@@ -1,7 +1,6 @@
 import { EventEmitter } from "events";
 import { MarketFeedManager, type UnifiedTick } from "./MarketFeedManager.js";
 import type { ProviderStats } from "./providers/BaseProvider.js";
-import type { CTraderService } from "./CTraderService.js";
 import { logger } from "../lib/logger.js";
 
 export type { UnifiedTick as LatestTick };
@@ -51,9 +50,6 @@ export class MarketDataService extends EventEmitter {
 
   enableDelta(symbols: string[]): void                   { this.feedManager.enableDelta(symbols); }
   disableDelta(): void                                   { this.feedManager.disableDelta(); }
-
-  enableCTrader(ctrader: CTraderService): void           { this.feedManager.enableCTrader(ctrader); }
-  disableCTrader(): void                                 { this.feedManager.disableCTrader(); }
 
   getSymbolService()                                     { return this.feedManager.symbolService; }
   getDiagnostics()                                       { return this.feedManager.getDiagnostics(); }

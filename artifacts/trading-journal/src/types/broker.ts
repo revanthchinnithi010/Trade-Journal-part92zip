@@ -1,4 +1,4 @@
-export type BrokerId = "delta" | "ctrader" | "mt5";
+export type BrokerId = "delta" | "mt5";
 export type BrokerAuthType = "api_key" | "oauth" | "credentials";
 
 export interface BrokerInfo {
@@ -20,15 +20,6 @@ export const BROKERS: BrokerInfo[] = [
     description: "Crypto derivatives exchange — BTC, ETH, SOL perpetuals",
     color: "#F97316",
     authType: "api_key",
-  },
-  {
-    id: "ctrader",
-    name: "cTrader",
-    logo: "cT",
-    image: "/broker-ctrader.png",
-    description: "Forex & CFD platform — FX, Indices, Commodities via OAuth",
-    color: "#EF4444",
-    authType: "oauth",
   },
   {
     id: "mt5",

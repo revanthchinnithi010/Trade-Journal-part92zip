@@ -8,7 +8,6 @@ export interface BrokerContext {
   adapter:   BrokerAdapter;
 }
 
-// Augment Express Request so downstream handlers have full type safety
 declare global {
   namespace Express {
     interface Request {
@@ -17,16 +16,6 @@ declare global {
   }
 }
 
-/**
- * Validates X-Broker-Account-Id + X-Broker-Token headers, loads (and caches)
- * the matching adapter, then attaches it to req.brokerCtx.
- *
- * Responds with 400/401/403/500 on any auth failure — the route handler
- * can safely do `if (!req.brokerCtx) return;` as a fast-exit.
- *
- * optionalBrokerId: if set, the middleware also verifies the loaded adapter
- * matches the expected broker type (e.g. "delta"), responding 400 otherwise.
- */
 export function brokerAuthMiddleware(optionalBrokerId?: string) {
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const accountIdStr = (req.headers["x-broker-account-id"] as string | undefined)?.trim();
@@ -86,8 +75,6 @@ export function brokerAuthMiddleware(optionalBrokerId?: string) {
   };
 }
 
-/** Convenience: middleware that requires a specific broker type */
-export const requireDelta   = brokerAuthMiddleware("delta");
-export const requireCTrader = brokerAuthMiddleware("ctrader");
-export const requireMT5     = brokerAuthMiddleware("mt5");
-export const requireAny     = brokerAuthMiddleware();
+export const requireDelta = brokerAuthMiddleware("delta");
+export const requireMT5   = brokerAuthMiddleware("mt5");
+export const requireAny   = brokerAuthMiddleware();

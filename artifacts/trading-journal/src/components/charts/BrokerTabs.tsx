@@ -13,13 +13,6 @@ const BROKERS: { id: BrokerName; label: string; shortLabel: string; color: strin
     color:      "#00BFFF",
     glow:       "rgba(0,191,255,0.18)",
   },
-  {
-    id:         "ctrader",
-    label:      "cTrader",
-    shortLabel: "cTrader",
-    color:      "#B7FF5A",
-    glow:       "rgba(183,255,90,0.18)",
-  },
 ];
 
 export const BrokerTabs = memo(function BrokerTabs({ className }: BrokerTabsProps) {

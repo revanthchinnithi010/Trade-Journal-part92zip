@@ -7,7 +7,7 @@ import { useBrokerStore } from "@/store/brokerStore";
  * Bridges LiveMarketContext → brokerStore for:
  *  - websocketStatus  (mirrors the global WS state)
  *  - connectionLatency (from pong messages)
- *  - broker-specific WS messages (ctrader_status, delta_oauth_result, etc.)
+ *  - broker-specific WS messages (delta_oauth_result, etc.)
  */
 export function useBrokerWsSync() {
   const { wsStatus, latencyMs, subscribeToMessages } = useLiveMarketContext();

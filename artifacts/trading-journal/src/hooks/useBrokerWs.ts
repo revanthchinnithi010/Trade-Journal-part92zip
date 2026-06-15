@@ -51,7 +51,7 @@ export function useBrokerWs() {
     if (!orch || !connectedBroker) return;
     orch.connectBroker(connectedBroker);
     return () => {
-      orch.disconnectBroker(connectedBroker.broker_id as "delta" | "ctrader");
+      orch.disconnectBroker(connectedBroker.broker_id as "delta");
     };
   }, [connectedBroker?.id]);
 

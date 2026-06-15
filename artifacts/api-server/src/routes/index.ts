@@ -8,7 +8,6 @@ import { createTrendlinesRouter } from "./trendlines.js";
 import { createTelegramRouter } from "./telegram.js";
 import { createFinnhubRouter } from "./finnhub.js";
 import { createDeltaRouter } from "./delta.js";
-import { createCTraderRouter } from "./ctrader.js";
 import { createMarketRouter } from "./market.js";
 import { createAnalyticsRouter } from "./analytics.js";
 import { configRouter } from "./config.js";
@@ -22,7 +21,6 @@ import chartLayoutsRouter from "./chart_layouts.js";
 import { brokerAccountsRouter } from "./broker_accounts.js";
 import { brokerDeltaRouter } from "./broker_delta.js";
 import { brokerBybitRouter } from "./broker_bybit.js";
-import { brokerCTraderRouter } from "./broker_ctrader.js";
 import { brokerMT5Router } from "./broker_mt5.js";
 import { brokerConnectionRouter } from "./broker_connection.js";
 import { myIpRouter } from "./my_ip.js";
@@ -35,7 +33,6 @@ import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
 import type { TelegramService } from "../services/TelegramService.js";
 import type { FinnhubService } from "../services/FinnhubService.js";
 import type { DeltaService } from "../services/DeltaService.js";
-import type { CTraderService } from "../services/CTraderService.js";
 import type { WSManager } from "../ws/WSManager.js";
 import type { CandleAggregator } from "../services/CandleAggregator.js";
 
@@ -46,7 +43,6 @@ export function createRouter(deps: {
   telegram: TelegramService;
   finnhub: FinnhubService;
   delta: DeltaService;
-  ctrader: CTraderService;
   wsManager: WSManager;
   candleAggregator: CandleAggregator;
 }): IRouter {
@@ -69,7 +65,6 @@ export function createRouter(deps: {
   router.use(createTelegramRouter(deps.telegram));
   router.use(createFinnhubRouter(deps.finnhub));
   router.use(createDeltaRouter(deps.delta));
-  router.use(createCTraderRouter(deps.ctrader));
   router.use(createMarketRouter(deps.marketData, deps.healthMonitor));
   router.use(createCandlesRouter(deps.candleAggregator, deps.marketData));
   router.use(createAnalyticsRouter());
@@ -80,7 +75,6 @@ export function createRouter(deps: {
   router.use(brokerAccountsRouter);
   router.use(brokerDeltaRouter);
   router.use(brokerBybitRouter);
-  router.use(brokerCTraderRouter);
   router.use(brokerMT5Router);
   router.use(brokerConnectionRouter);
   router.use(myIpRouter);

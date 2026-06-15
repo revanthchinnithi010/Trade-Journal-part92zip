@@ -51,7 +51,6 @@ const CLASS_COLOR: Record<AssetClass, string> = {
 
 const PROVIDER_COLOR: Record<string, string> = {
   delta:   "#8B5CF6",
-  ctrader: "#F59E0B",
   unknown: "rgba(255,255,255,0.35)",
 };
 
@@ -127,7 +126,7 @@ export function FeedDiagnostics({ symbol }: Props) {
     tickCountRef.current  = 0;
     prevTickTsRef.current = 0;
     const unsub = useTickStore.subscribe((state) => {
-      const ts = state.ticks[symbol]?.ts ?? 0;
+      const ts = state.ticks[symbol]?.lastTick ?? 0;
       if (ts !== prevTickTsRef.current) {
         prevTickTsRef.current = ts;
         tickCountRef.current++;

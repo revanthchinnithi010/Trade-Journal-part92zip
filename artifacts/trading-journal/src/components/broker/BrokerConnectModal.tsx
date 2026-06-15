@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState } from "react";
 import {
-  CheckCircle2, XCircle, Loader2, ExternalLink,
+  CheckCircle2, XCircle, Loader2,
   RefreshCw, Eye, EyeOff, Server, ShieldCheck, Wifi,
-  ChevronLeft, X, Copy, Check,
+  ChevronLeft, X,
 } from "lucide-react";
 import { BrokerLogo } from "@/components/broker/BrokerLogos";
 import { BROKERS } from "@/types/broker";
@@ -11,23 +11,7 @@ import type { BrokerAccount } from "@/types/broker";
 import { DeltaApiConnectForm } from "./DeltaApiConnectForm";
 import { useIsMobile } from "@/hooks/use-mobile";
 
-type Status = "idle" | "loading" | "waiting_oauth" | "waiting_ready" | "success" | "error";
-
-interface CTraderDiagStep {
-  id: string;
-  label: string;
-  status: "done" | "active" | "error" | "pending";
-  detail: string;
-}
-
-interface CTraderDiagnostics {
-  state: string;
-  connected: boolean;
-  steps: CTraderDiagStep[];
-  error: string | null;
-  symbolCount: number;
-  latencyMs: number;
-}
+type Status = "idle" | "loading" | "success" | "error";
 
 const LS_TOKEN_PREFIX = "tj_broker_token_";
 
@@ -43,162 +27,6 @@ function useBrokerConnect() {
   const [mt5Password, setMt5Password] = useState("");
   const [mt5Label,    setMt5Label]    = useState("");
   const [showMt5Pass, setShowMt5Pass] = useState(false);
-  const [ctDiag,         setCtDiag]         = useState<CTraderDiagnostics | null>(null);
-  const [ctRedirectUri,  setCtRedirectUri]  = useState<string>("");
-
-  // Pre-fetch config as soon as the cTrader panel mounts so the
-  // redirect URI is visible for the user to register before clicking Connect
-  useEffect(() => {
-    if (authBrokerId !== "ctrader") return;
-    fetch("/api/ctrader/config", { credentials: "include" })
-      .then(r => r.json())
-      .then((d: { configured?: boolean; redirectUri?: string }) => {
-        if (d.redirectUri) setCtRedirectUri(d.redirectUri);
-      })
-      .catch(() => { /* non-fatal */ });
-  }, [authBrokerId]);
-
-  const popupRef     = useRef<Window | null>(null);
-  const popupPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const readyPollRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const statusRef    = useRef<Status>("idle");
-
-  const loadAccountsRef   = useRef(loadAccounts);
-  const connectRef        = useRef(connect);
-  const closeAuthModalRef = useRef(closeAuthModal);
-  useEffect(() => { loadAccountsRef.current = loadAccounts; },   [loadAccounts]);
-  useEffect(() => { connectRef.current = connect; },             [connect]);
-  useEffect(() => { closeAuthModalRef.current = closeAuthModal; }, [closeAuthModal]);
-
-  const stopPopupPoll = useCallback(() => {
-    if (popupPollRef.current) { clearInterval(popupPollRef.current); popupPollRef.current = null; }
-  }, []);
-
-  const stopReadyPoll = useCallback(() => {
-    if (readyPollRef.current) { clearTimeout(readyPollRef.current); readyPollRef.current = null; }
-  }, []);
-
-  useEffect(() => { statusRef.current = status; }, [status]);
-  useEffect(() => () => { stopPopupPoll(); stopReadyPoll(); }, [stopPopupPoll, stopReadyPoll]);
-
-  // postMessage from OAuth popup
-  useEffect(() => {
-    function onMessage(e: MessageEvent) {
-      if (!e.data || e.data.type !== "ctrader_oauth_result") return;
-      stopPopupPoll();
-      popupRef.current?.close();
-      popupRef.current = null;
-      if (e.data.status === "success") {
-        handleCTraderOAuthSuccess();
-      } else {
-        setStatus("error");
-        setErrorMsg(String(e.data.message || "cTrader OAuth failed"));
-      }
-    }
-    window.addEventListener("message", onMessage);
-    return () => window.removeEventListener("message", onMessage);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  function handleCTraderOAuthSuccess() {
-    setCtDiag(null);
-    setStatus("waiting_ready");
-    startReadinessPoll(Date.now());
-  }
-
-  function startReadinessPoll(startMs: number) {
-    readyPollRef.current = setTimeout(async () => {
-      readyPollRef.current = null;
-      if (statusRef.current !== "waiting_ready") return;
-
-      try {
-        const res = await fetch("/api/ctrader/diagnostics", { credentials: "include" });
-        if (res.ok) {
-          const diag = await res.json() as CTraderDiagnostics;
-          setCtDiag(diag);
-
-          if (diag.connected) {
-            setStatus("success");
-            await loadAccountsRef.current();
-            const { connectedAccounts } = useBrokerStore.getState();
-            const ctAccount = Object.values(connectedAccounts).find(
-              (a: BrokerAccount) => a.broker_id === "ctrader",
-            );
-            setTimeout(() => {
-              if (ctAccount) connectRef.current(ctAccount);
-              closeAuthModalRef.current();
-            }, 1200);
-            return;
-          }
-
-          if (diag.error) {
-            setStatus("error");
-            setErrorMsg(`cTrader error: ${diag.error}`);
-            return;
-          }
-        }
-      } catch { /* network hiccup — retry */ }
-
-      if (Date.now() - startMs > 35_000) {
-        setStatus("error");
-        setErrorMsg("cTrader connection timed out. Check server logs for the exact failing step.");
-        return;
-      }
-
-      startReadinessPoll(startMs);
-    }, 2000);
-  }
-
-  function openOAuthPopup(url: string): Window | null {
-    const popup = window.open(url, "ctrader_oauth", "width=560,height=700,resizable=yes,scrollbars=yes");
-    if (!popup) {
-      setStatus("error");
-      setErrorMsg("Popup was blocked. Please allow popups for this site and try again.");
-      return null;
-    }
-    popupRef.current = popup;
-    setStatus("waiting_oauth");
-    popupPollRef.current = setInterval(() => {
-      try {
-        if (popup.closed && statusRef.current === "waiting_oauth") {
-          stopPopupPoll();
-          setStatus("error");
-          setErrorMsg("OAuth window was closed before completing.");
-        }
-      } catch { /* cross-origin */ }
-    }, 800);
-    return popup;
-  }
-
-  async function startCTraderOAuth() {
-    setStatus("loading");
-    setErrorMsg("");
-    try {
-      const res  = await fetch("/api/ctrader/config", { credentials: "include" });
-      const data = await res.json() as { configured: boolean; authUrl: string | null; redirectUri?: string; error?: string };
-      if (data.redirectUri) setCtRedirectUri(data.redirectUri);
-
-      if (!data.configured || !data.authUrl) {
-        setStatus("error");
-        setErrorMsg(!data.configured
-          ? "cTrader OAuth is not configured on the server. Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET."
-          : "Could not generate OAuth URL — try again.");
-        return;
-      }
-
-      // Expo WebView bridge (tablet app)
-      const rnBridge = (window as { ReactNativeWebView?: { postMessage(s: string): void } }).ReactNativeWebView;
-      if (rnBridge) {
-        rnBridge.postMessage(JSON.stringify({ type: "ctrader_oauth_start", url: data.authUrl }));
-        setStatus("waiting_oauth");
-        return;
-      }
-
-      openOAuthPopup(data.authUrl);
-    } catch (err) {
-      setStatus("error");
-      setErrorMsg(String(err));
-    }
-  }
 
   async function handleMt5Connect(e: React.FormEvent) {
     e.preventDefault();
@@ -244,7 +72,7 @@ function useBrokerConnect() {
     mt5Server, setMt5Server, mt5Login, setMt5Login,
     mt5Password, setMt5Password, mt5Label, setMt5Label,
     showMt5Pass, setShowMt5Pass,
-    ctDiag, ctRedirectUri, startCTraderOAuth, handleMt5Connect,
+    handleMt5Connect,
     closeAuthModal, openSelectModal,
   };
 }
@@ -255,7 +83,7 @@ function BrokerFormContent({
   mt5Server, setMt5Server, mt5Login, setMt5Login,
   mt5Password, setMt5Password, mt5Label, setMt5Label,
   showMt5Pass, setShowMt5Pass,
-  ctDiag, ctRedirectUri, startCTraderOAuth, handleMt5Connect,
+  handleMt5Connect,
   onDone,
 }: ReturnType<typeof useBrokerConnect> & { onDone: () => void }) {
   if (!broker) return null;
@@ -283,21 +111,6 @@ function BrokerFormContent({
           : <DeltaApiConnectForm onSuccess={onDone} onError={msg => { setStatus("error"); setErrorMsg(msg); }} />
       )}
 
-      {/* cTrader */}
-      {broker.id === "ctrader" && (
-        status === "success"
-          ? <SuccessBanner broker={broker} onClose={onDone} />
-          : status === "waiting_ready"
-          ? <CTraderReadinessPanel ctDiag={ctDiag} />
-          : <CTraderOAuthPanel
-              status={status}
-              errorMsg={errorMsg}
-              redirectUri={ctRedirectUri}
-              onConnect={startCTraderOAuth}
-              onRetry={() => { setStatus("idle"); setErrorMsg(""); }}
-            />
-      )}
-
       {/* MT5 */}
       {broker.id === "mt5" && (
         status === "success"
@@ -323,9 +136,7 @@ function MobileBrokerConnectPage() {
   const { broker, closeAuthModal, openSelectModal } = ctx;
   if (!broker) return null;
 
-  const brokerTitle =
-    broker.id === "delta"   ? "Delta Exchange" :
-    broker.id === "ctrader" ? "cTrader"         : "MetaTrader 5";
+  const brokerTitle = broker.id === "delta" ? "Delta Exchange" : "MetaTrader 5";
 
   return (
     <div style={{
@@ -418,8 +229,7 @@ function DesktopBrokerConnectModal() {
               </div>
               <div>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", margin: 0 }}>
-                  {broker.id === "delta"   ? "Connect Delta Exchange" :
-                   broker.id === "ctrader" ? "Connect cTrader"         : "Connect MetaTrader 5"}
+                  {broker.id === "delta" ? "Connect Delta Exchange" : "Connect MetaTrader 5"}
                 </h2>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>{broker.description}</p>
               </div>
@@ -476,141 +286,101 @@ function SuccessBanner({ broker, onClose }: { broker: { name: string }; onClose:
   );
 }
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      onClick={() => {
-        navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        }).catch(() => { /* ignore */ });
-      }}
-      title="Copy to clipboard"
-      style={{
-        display: "flex", alignItems: "center", gap: 5, padding: "5px 10px",
-        borderRadius: 7, fontSize: 11, fontWeight: 500, flexShrink: 0,
-        background: copied ? "rgba(0,255,180,0.12)" : "rgba(255,255,255,0.07)",
-        color: copied ? "#00FFB4" : "rgba(255,255,255,0.55)",
-        border: `1px solid ${copied ? "rgba(0,255,180,0.25)" : "rgba(255,255,255,0.10)"}`,
-        cursor: "pointer", transition: "all 0.15s",
-      }}
-    >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
+// ── MT5 credentials form ──────────────────────────────────────────────────────
+
+interface Mt5FormProps {
+  status: Status;
+  errorMsg: string;
+  mt5Server: string; setMt5Server: (v: string) => void;
+  mt5Login: string; setMt5Login: (v: string) => void;
+  mt5Password: string; setMt5Password: (v: string) => void;
+  mt5Label: string; setMt5Label: (v: string) => void;
+  showPass: boolean; setShowPass: (v: boolean) => void;
+  onSubmit: (e: React.FormEvent) => void;
+  onRetry: () => void;
 }
 
-function CTraderOAuthPanel({
-  status, errorMsg, redirectUri, onConnect, onRetry,
-}: { status: Status; errorMsg: string; redirectUri: string; onConnect: () => void; onRetry: () => void }) {
-  const isLoading = status === "loading" || status === "waiting_oauth";
+function Mt5CredentialsForm({
+  status, errorMsg,
+  mt5Server, setMt5Server, mt5Login, setMt5Login,
+  mt5Password, setMt5Password, mt5Label, setMt5Label,
+  showPass, setShowPass, onSubmit, onRetry,
+}: Mt5FormProps) {
+  const isLoading = status === "loading";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-
-      {/* ── Step 1: Register redirect URI ─────────────────────────────────── */}
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 10, padding: 14, borderRadius: 12,
-        background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.22)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
-            background: "rgba(251,191,36,0.2)", color: "#FBBF24",
-          }}>1</span>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(251,191,36,0.9)", margin: 0 }}>
-            Register this Redirect URI in the Spotware portal first
-          </p>
-        </div>
-        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", margin: 0, lineHeight: 1.5 }}>
-          Go to{" "}
-          <a
-            href="https://openapi.ctrader.com/apps"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "#FBBF24", textDecoration: "none" }}
-          >
-            openapi.ctrader.com/apps
-          </a>
-          {" "}→ your app → <strong style={{ color: "rgba(255,255,255,0.6)" }}>Redirect URIs</strong> and add the exact URL below.
-        </p>
-
-        {redirectUri ? (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 9,
-            background: "rgba(0,0,0,0.3)", border: "1px solid rgba(255,255,255,0.08)",
-          }}>
-            <code style={{
-              flex: 1, fontSize: 12, color: "rgba(255,255,255,0.85)", wordBreak: "break-all" as const,
-              fontFamily: "ui-monospace, monospace", lineHeight: 1.4,
-            }}>
-              {redirectUri}
-            </code>
-            <CopyButton text={redirectUri} />
+    <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {[
+          { label: "Server", value: mt5Server, set: setMt5Server, placeholder: "e.g. MetaQuotes-Demo", type: "text" },
+          { label: "Login",  value: mt5Login,  set: setMt5Login,  placeholder: "Account number",       type: "text" },
+        ].map(({ label, value, set, placeholder, type }) => (
+          <div key={label} style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em" }}>{label}</label>
+            <input
+              type={type}
+              value={value}
+              onChange={e => set(e.target.value)}
+              placeholder={placeholder}
+              required
+              disabled={isLoading}
+              style={{
+                height: 40, padding: "0 12px", borderRadius: 9, fontSize: 13,
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+                color: "#fff", outline: "none", fontFamily: "monospace",
+              }}
+            />
           </div>
-        ) : (
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 9,
-            background: "rgba(0,0,0,0.2)", border: "1px solid rgba(255,255,255,0.06)",
-          }}>
-            <Loader2 size={12} style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0 }} className="animate-spin" />
-            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Loading redirect URI…</span>
+        ))}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em" }}>Password</label>
+          <div style={{ position: "relative" }}>
+            <input
+              type={showPass ? "text" : "password"}
+              value={mt5Password}
+              onChange={e => setMt5Password(e.target.value)}
+              placeholder="Account password"
+              required
+              disabled={isLoading}
+              style={{
+                height: 40, padding: "0 40px 0 12px", borderRadius: 9, fontSize: 13, width: "100%",
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+                color: "#fff", outline: "none", fontFamily: "monospace", boxSizing: "border-box",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPass(!showPass)}
+              style={{
+                position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)",
+                background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", padding: 4,
+              }}
+            >
+              {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
           </div>
-        )}
-      </div>
-
-      {/* ── Step 2: Also set CTRADER_REDIRECT_URI env var ─────────────────── */}
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 8, padding: 14, borderRadius: 12,
-        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
-            background: "rgba(239,68,68,0.18)", color: "#EF4444",
-          }}>2</span>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", margin: 0 }}>
-            Pin the URI in your server secrets (recommended)
-          </p>
         </div>
-        <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: 0, lineHeight: 1.5 }}>
-          Add <code style={{ color: "rgba(255,255,255,0.65)", background: "rgba(255,255,255,0.06)", padding: "1px 5px", borderRadius: 4, fontFamily: "monospace" }}>CTRADER_REDIRECT_URI</code> to your Replit Secrets with the exact URL above. This ensures the redirect URI stays consistent after redeployment.
-        </p>
-      </div>
 
-      {/* ── Step 3: Authorize ─────────────────────────────────────────────── */}
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 8, padding: 14, borderRadius: 12,
-        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{
-            display: "flex", alignItems: "center", justifyContent: "center",
-            width: 18, height: 18, borderRadius: "50%", fontSize: 10, fontWeight: 700, flexShrink: 0,
-            background: "rgba(239,68,68,0.18)", color: "#EF4444",
-          }}>3</span>
-          <p style={{ fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.7)", margin: 0 }}>
-            Authorize — tokens are stored and auto-refreshed
-          </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em" }}>
+            Label <span style={{ color: "rgba(255,255,255,0.25)" }}>(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={mt5Label}
+            onChange={e => setMt5Label(e.target.value)}
+            placeholder="My MT5 Account"
+            disabled={isLoading}
+            style={{
+              height: 40, padding: "0 12px", borderRadius: 9, fontSize: 13,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+              color: "#fff", outline: "none",
+            }}
+          />
         </div>
       </div>
 
-      {/* Waiting for popup */}
-      {status === "waiting_oauth" && (
-        <div style={{
-          display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderRadius: 10,
-          background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
-        }}>
-          <Loader2 size={15} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />
-          <span style={{ fontSize: 13, color: "rgba(255,255,255,0.7)" }}>Waiting for OAuth authorization in popup…</span>
-        </div>
-      )}
-
-      {/* Error */}
       {status === "error" && (
         <div style={{
           display: "flex", flexDirection: "column", gap: 8, padding: "12px 16px", borderRadius: 10,
@@ -620,252 +390,10 @@ function CTraderOAuthPanel({
             <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
             <p style={{ fontSize: 13, color: "#EF4444", margin: 0, lineHeight: 1.5 }}>{errorMsg}</p>
           </div>
-          {/redirect/i.test(errorMsg) && (
-            <p style={{ fontSize: 12, color: "rgba(255,255,255,0.45)", margin: 0, paddingLeft: 23, lineHeight: 1.5 }}>
-              Make sure the URI above is added to your app's allowed Redirect URIs at{" "}
-              <a href="https://openapi.ctrader.com/apps" target="_blank" rel="noopener noreferrer"
-                style={{ color: "#FBBF24", textDecoration: "none" }}>openapi.ctrader.com/apps</a>.
-            </p>
-          )}
         </div>
       )}
 
-      {/* Actions */}
       <div style={{ display: "flex", gap: 10 }}>
-        {status === "error" && (
-          <button onClick={onRetry} style={{
-            display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10,
-            fontSize: 13, background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.6)",
-            border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer",
-          }}>
-            <RefreshCw size={13} /> Retry
-          </button>
-        )}
-        <button
-          onClick={onConnect}
-          disabled={isLoading}
-          style={{
-            flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-            padding: "14px 0", borderRadius: 12, fontSize: 14, fontWeight: 600,
-            background: isLoading
-              ? "rgba(239,68,68,0.2)"
-              : "linear-gradient(135deg, #EF4444 0%, #DC2626 100%)",
-            color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
-            border: "none", cursor: isLoading ? "not-allowed" : "pointer",
-            boxShadow: isLoading ? "none" : "0 0 24px rgba(239,68,68,0.25)",
-          }}
-        >
-          {isLoading
-            ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
-            : <><ExternalLink size={15} /> Connect via cTrader OAuth</>}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CTraderReadinessPanel({ ctDiag }: { ctDiag: CTraderDiagnostics | null }) {
-  const hasStepError = ctDiag?.steps.some(s => s.status === "error") ?? false;
-
-  const stepIconStyle = (s: "done" | "active" | "error" | "pending"): React.CSSProperties => ({
-    width: 28, height: 28, borderRadius: "50%", flexShrink: 0,
-    display: "flex", alignItems: "center", justifyContent: "center",
-    background:
-      s === "done"   ? "rgba(0,255,180,0.12)" :
-      s === "error"  ? "rgba(239,68,68,0.16)" :
-      s === "active" ? "rgba(239,68,68,0.08)" :
-      "rgba(255,255,255,0.05)",
-    border:
-      s === "done"   ? "1.5px solid rgba(0,255,180,0.35)" :
-      s === "error"  ? "1.5px solid rgba(239,68,68,0.55)" :
-      s === "active" ? "1.5px solid rgba(239,68,68,0.25)" :
-      "1.5px solid rgba(255,255,255,0.08)",
-  });
-
-  const defaultSteps: CTraderDiagStep[] = [
-    { id: "oauth",     label: "OAuth authorized",          status: "done",    detail: "Access token stored" },
-    { id: "accounts",  label: "Trading account loaded",    status: "active",  detail: "Connecting to Spotware TLS endpoint…" },
-    { id: "symbols",   label: "Symbol catalog downloaded", status: "pending", detail: "Waiting…" },
-    { id: "websocket", label: "WebSocket session active",  status: "pending", detail: "Waiting…" },
-  ];
-
-  const steps = ctDiag?.steps ?? defaultSteps;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      {/* Header */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "14px 16px", borderRadius: 12,
-        background: hasStepError ? "rgba(239,68,68,0.10)" : "rgba(239,68,68,0.07)",
-        border: `1px solid ${hasStepError ? "rgba(239,68,68,0.40)" : "rgba(239,68,68,0.18)"}`,
-      }}>
-        {hasStepError
-          ? <XCircle  size={18} style={{ color: "#EF4444", flexShrink: 0 }} />
-          : <Loader2  size={18} style={{ color: "#EF4444", flexShrink: 0 }} className="animate-spin" />}
-        <div>
-          <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.9)", margin: 0 }}>
-            {hasStepError ? "Connection failed" : "Initializing cTrader connection"}
-          </p>
-          <p style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>
-            {hasStepError
-              ? "See the failing step below for details"
-              : ctDiag ? `State: ${ctDiag.state}` : "Connecting to Spotware TLS endpoint…"}
-          </p>
-        </div>
-      </div>
-
-      {/* Steps */}
-      <div style={{
-        display: "flex", flexDirection: "column", gap: 0,
-        borderRadius: 12, overflow: "hidden",
-        border: "1px solid rgba(255,255,255,0.07)",
-        background: "rgba(255,255,255,0.02)",
-      }}>
-        {steps.map((step, i) => (
-          <div key={step.id} style={{
-            display: "flex", alignItems: "center", gap: 14, padding: "14px 16px",
-            borderBottom: i < steps.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
-            background: step.status === "error" ? "rgba(239,68,68,0.04)" : undefined,
-          }}>
-            <div style={stepIconStyle(step.status)}>
-              {step.status === "done"
-                ? <CheckCircle2 size={14} style={{ color: "#00FFB4" }} />
-                : step.status === "error"
-                ? <XCircle size={13} style={{ color: "#EF4444" }} />
-                : step.status === "active"
-                ? <Loader2 size={13} style={{ color: "#EF4444" }} className="animate-spin" />
-                : <div style={{ width: 7, height: 7, borderRadius: "50%", background: "rgba(255,255,255,0.15)" }} />}
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{
-                fontSize: 13, fontWeight: 500, margin: 0,
-                color: step.status === "done"   ? "#00FFB4"              :
-                       step.status === "error"  ? "#F87171"              :
-                       step.status === "active" ? "rgba(255,255,255,0.9)" :
-                       "rgba(255,255,255,0.35)",
-              }}>
-                {step.label}
-              </p>
-              <p style={{
-                fontSize: 11, margin: "2px 0 0", wordBreak: "break-word" as const,
-                color: step.status === "error" ? "rgba(248,113,113,0.75)" : "rgba(255,255,255,0.3)",
-              }}>
-                {step.detail}
-              </p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Live stats */}
-      {ctDiag && (ctDiag.symbolCount > 0 || ctDiag.latencyMs > 0) && (
-        <div style={{
-          display: "flex", gap: 12, padding: "10px 14px", borderRadius: 10,
-          background: "rgba(0,255,180,0.04)", border: "1px solid rgba(0,255,180,0.12)",
-        }}>
-          {ctDiag.symbolCount > 0 && (
-            <div style={{ textAlign: "center" as const, flex: 1 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: "#00FFB4", margin: 0 }}>
-                {ctDiag.symbolCount.toLocaleString()}
-              </p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", margin: "2px 0 0" }}>symbols</p>
-            </div>
-          )}
-          {ctDiag.latencyMs > 0 && (
-            <div style={{ textAlign: "center" as const, flex: 1 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: "#00FFB4", margin: 0 }}>
-                {ctDiag.latencyMs}ms
-              </p>
-              <p style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", margin: "2px 0 0" }}>latency</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      <p style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", textAlign: "center" as const, margin: 0 }}>
-        This typically takes 15–30 seconds · Do not close this window
-      </p>
-    </div>
-  );
-}
-
-function Mt5CredentialsForm({
-  status, errorMsg, mt5Server, setMt5Server, mt5Login, setMt5Login,
-  mt5Password, setMt5Password, mt5Label, setMt5Label,
-  showPass, setShowPass, onSubmit, onRetry,
-}: {
-  status: Status; errorMsg: string;
-  mt5Server: string; setMt5Server: (v: string) => void;
-  mt5Login: string; setMt5Login: (v: string) => void;
-  mt5Password: string; setMt5Password: (v: string) => void;
-  mt5Label: string; setMt5Label: (v: string) => void;
-  showPass: boolean; setShowPass: (v: boolean) => void;
-  onSubmit: (e: React.FormEvent) => void;
-  onRetry: () => void;
-}) {
-  const isLoading = status === "loading";
-  const canSubmit = !!(mt5Server.trim() && mt5Login.trim() && mt5Password.trim() && !isLoading);
-
-  const fieldStyle: React.CSSProperties = {
-    display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10,
-    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-  };
-  const inputStyle: React.CSSProperties = {
-    flex: 1, background: "transparent", border: "none", outline: "none",
-    fontSize: 14, color: "rgba(255,255,255,0.9)",
-  };
-  const labelStyle: React.CSSProperties = {
-    fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.5)",
-    textTransform: "uppercase" as const, letterSpacing: "0.06em", marginBottom: 6, display: "block",
-  };
-
-  return (
-    <form onSubmit={onSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }} autoComplete="off">
-      <div>
-        <label style={labelStyle}>Server</label>
-        <div style={fieldStyle}>
-          <input type="text" value={mt5Server} onChange={e => setMt5Server(e.target.value)}
-            placeholder="e.g. MetaQuotes-Demo" disabled={isLoading} autoComplete="off" style={inputStyle} />
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>Login</label>
-        <div style={fieldStyle}>
-          <input type="text" value={mt5Login} onChange={e => setMt5Login(e.target.value)}
-            placeholder="e.g. 123456789" disabled={isLoading} autoComplete="off" style={inputStyle} />
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>Password</label>
-        <div style={fieldStyle}>
-          <input
-            type={showPass ? "text" : "password"} value={mt5Password}
-            onChange={e => setMt5Password(e.target.value)}
-            placeholder="MT5 account password" disabled={isLoading} autoComplete="new-password"
-            style={inputStyle}
-          />
-          <button type="button" onClick={() => setShowPass(!showPass)}
-            style={{ color: "rgba(255,255,255,0.35)", background: "transparent", border: "none", cursor: "pointer", padding: 0 }}>
-            {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
-          </button>
-        </div>
-      </div>
-      <div>
-        <label style={labelStyle}>Label <span style={{ color: "rgba(255,255,255,0.28)", textTransform: "none" as const }}>(optional)</span></label>
-        <div style={fieldStyle}>
-          <input type="text" value={mt5Label} onChange={e => setMt5Label(e.target.value)}
-            placeholder="e.g. Main MT5" disabled={isLoading} style={inputStyle} />
-        </div>
-      </div>
-
-      {status === "error" && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "12px 14px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)" }}>
-          <XCircle size={15} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
-          <p style={{ fontSize: 13, color: "#EF4444", margin: 0, lineHeight: 1.5 }}>{errorMsg}</p>
-        </div>
-      )}
-
-      <div style={{ display: "flex", gap: 10, paddingTop: 4 }}>
         {status === "error" && (
           <button type="button" onClick={onRetry} style={{
             display: "flex", alignItems: "center", gap: 6, padding: "10px 16px", borderRadius: 10,
@@ -875,17 +403,23 @@ function Mt5CredentialsForm({
             <RefreshCw size={13} /> Retry
           </button>
         )}
-        <button type="submit" disabled={!canSubmit} style={{
-          flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-          padding: "14px 0", borderRadius: 12, fontSize: 14, fontWeight: 600,
-          background: canSubmit ? "linear-gradient(135deg, #22C55E 0%, #16A34A 100%)" : "rgba(34,197,94,0.2)",
-          color: canSubmit ? "#fff" : "rgba(255,255,255,0.4)",
-          border: "none", cursor: canSubmit ? "pointer" : "not-allowed",
-          boxShadow: canSubmit ? "0 0 24px rgba(34,197,94,0.25)" : "none",
-        }}>
+        <button
+          type="submit"
+          disabled={isLoading}
+          style={{
+            flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            padding: "14px 0", borderRadius: 12, fontSize: 14, fontWeight: 600,
+            background: isLoading
+              ? "rgba(34,197,94,0.2)"
+              : "linear-gradient(135deg, #22C55E 0%, #16A34A 100%)",
+            color: isLoading ? "rgba(255,255,255,0.4)" : "#fff",
+            border: "none", cursor: isLoading ? "not-allowed" : "pointer",
+            boxShadow: isLoading ? "none" : "0 0 24px rgba(34,197,94,0.25)",
+          }}
+        >
           {isLoading
             ? <><Loader2 size={15} className="animate-spin" /> Connecting…</>
-            : "Connect MetaTrader 5"}
+            : "Connect MT5"}
         </button>
       </div>
     </form>

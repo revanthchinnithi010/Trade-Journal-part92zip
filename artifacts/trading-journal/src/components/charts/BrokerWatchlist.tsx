@@ -25,11 +25,11 @@ const BROKER_CONFIG: Record<BrokerName, { label: string; shortLabel: string; col
     color:      "#00BFFF",
     badgeBg:    "rgba(0,191,255,0.12)",
   },
-  ctrader: {
-    label:      "cTrader",
-    shortLabel: "cTrader",
-    color:      "#B7FF5A",
-    badgeBg:    "rgba(183,255,90,0.10)",
+  finnhub: {
+    label:      "Finnhub",
+    shortLabel: "Finnhub",
+    color:      "#3B82F6",
+    badgeBg:    "rgba(59,130,246,0.12)",
   },
 };
 
@@ -356,7 +356,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
 
       {/* ── Broker tabs ── */}
       <div style={{ display: "flex", gap: 3, padding: "8px 10px 0", flexShrink: 0 }}>
-        {(["delta", "ctrader"] as BrokerName[]).map(b => {
+        {(["delta", "finnhub"] as BrokerName[]).map(b => {
           const bc  = BROKER_CONFIG[b];
           const act = b === broker;
           return (

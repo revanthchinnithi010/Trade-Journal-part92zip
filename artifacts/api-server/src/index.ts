@@ -8,7 +8,6 @@ import { CandleAggregator } from "./services/CandleAggregator.js";
 import { TelegramService } from "./services/TelegramService.js";
 import { FinnhubService } from "./services/FinnhubService.js";
 import { DeltaService } from "./services/DeltaService.js";
-import { CTraderService } from "./services/CTraderService.js";
 import { AlertEngine } from "./services/AlertEngine.js";
 import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
@@ -27,31 +26,17 @@ const candleAggregator = new CandleAggregator();
 const telegram         = new TelegramService();
 const finnhub          = new FinnhubService(marketData);
 const delta            = new DeltaService(marketData);
-const ctrader          = new CTraderService();
 const alertEngine      = new AlertEngine(marketData, telegram, wsManager);
 const healthMonitor    = new FeedHealthMonitor(marketData, wsManager, telegram);
 
 marketData.on("tick", (tick) => {
-  // Clear per-tick candle payload cache before aggregation so each new tick
-  // gets fresh serialisation (avoids stale bar data leaking across ticks).
   wsManager.clearCandleCache();
   candleAggregator.ingestTick(tick);
   wsManager.broadcast({ type: "tick", ...tick });
 });
 
 candleAggregator.on("candle_update", (update: { symbol: string; interval: string; bar: object }) => {
-  // Per-client filtered broadcast — only sends to clients subscribed to this
-  // symbol:interval, eliminating ~89% of candle_update WS traffic vs the old
-  // "broadcast everything to everyone" approach.
   wsManager.broadcastCandleUpdate(update.symbol, update.interval, update.bar);
-});
-
-ctrader.on("tick", (tick) => {
-  wsManager.broadcast({ type: "ctrader_tick", ...tick });
-});
-
-ctrader.on("status_change", (status) => {
-  wsManager.broadcast({ type: "ctrader_status", ...status });
 });
 
 marketData.on("feed_status", (status) => {
@@ -70,14 +55,7 @@ marketData.start([]).catch(err =>
   logger.error({ err }, "MarketDataService: async start error"),
 );
 
-ctrader.on("status_change", (status) => {
-  if (status.connected) {
-    marketData.enableCTrader(ctrader);
-    logger.info("index: cTrader connected — market data bridged");
-  }
-});
-
-const app    = createApp({ alertEngine, marketData, healthMonitor, telegram, finnhub, delta, ctrader, wsManager, candleAggregator });
+const app    = createApp({ alertEngine, marketData, healthMonitor, telegram, finnhub, delta, wsManager, candleAggregator });
 const server = createServer(app);
 
 server.on("upgrade", (req, socket, head) => {
@@ -93,22 +71,10 @@ healthMonitor.start();
     logger.error({ err }, "DB migration failed — services may have limited functionality");
   }
 
-  // Inject credentials stored via the credential-import UI into process.env BEFORE
-  // any service init reads them.  This must run after migrations so the app_config
-  // table exists, but before ctrader/delta/telegram init so they pick up the values.
   await AppConfigService.injectToEnv();
-  const ctraderEnv = process.env["CTRADER_ENV"] ?? "(not set — defaults to live, auto-probes demo)";
   logger.info({
-    CTRADER_CLIENT_ID:     process.env["CTRADER_CLIENT_ID"]     ? "SET" : "NOT SET",
-    CTRADER_CLIENT_SECRET: process.env["CTRADER_CLIENT_SECRET"] ? "SET" : "NOT SET",
-    CTRADER_ENV:           ctraderEnv,
+    DELTA_CLIENT_ID: process.env["DELTA_CLIENT_ID"] ? "SET" : "NOT SET",
   }, "Startup: credential injection complete — env status after inject");
-  if (!process.env["CTRADER_ENV"]) {
-    logger.warn(
-      "CTRADER_ENV is not set. Defaulting to 'live' (live.ctraderapi.com:5036). " +
-      "If you have a DEMO Open API app or demo trading account, set CTRADER_ENV=demo in Secrets.",
-    );
-  }
 
   await new Promise<void>((resolve, reject) => {
     server.listen(port, (err?: Error) => {
@@ -132,9 +98,6 @@ healthMonitor.start();
     delta.init().then(() => {
       logger.info("DeltaService: init complete");
     }),
-    ctrader.init().then(() => {
-      logger.info({ state: ctrader.connectionState }, "CTraderService: init complete");
-    }),
   ]).catch((err) => {
     logger.warn({ err }, "Service init warning");
   });
@@ -145,7 +108,6 @@ healthMonitor.start();
     logger.error({ err }, "AlertEngine: failed to start");
   });
 
-  // Subscribe all saved watchlist symbols so they stream as soon as a provider connects
   try {
     const { db: dbClient, watchlistTable } = await import("@workspace/db");
     const { asc } = await import("drizzle-orm");

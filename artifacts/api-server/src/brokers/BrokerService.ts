@@ -1,7 +1,6 @@
 import { BrokerAdapter } from "./BrokerAdapter.js";
 import { DeltaTradingAdapter, type DeltaAuthMode } from "./DeltaTradingAdapter.js";
 import { BybitTradingAdapter } from "./BybitTradingAdapter.js";
-import { CTraderTradingAdapter } from "./CTraderTradingAdapter.js";
 import { MT5TradingAdapter } from "./MT5TradingAdapter.js";
 import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
@@ -73,15 +72,13 @@ class BrokerServiceSingleton {
   ): BrokerAdapter {
     if (brokerId === "delta") {
       const authMode  = (meta["auth_mode"]  as DeltaAuthMode | undefined) ?? "api_key";
-      // base_url stored during connect; fall back to International if absent (legacy rows)
       const baseOrigin = typeof meta["base_url"] === "string"
         ? meta["base_url"]
         : "https://api.delta.exchange";
       return new DeltaTradingAdapter(apiKey, apiSecret, authMode, baseOrigin);
     }
-    if (brokerId === "bybit")   return new BybitTradingAdapter(apiKey, apiSecret);
-    if (brokerId === "ctrader") return new CTraderTradingAdapter(apiKey, apiSecret);
-    if (brokerId === "mt5")     return new MT5TradingAdapter(apiKey, apiSecret);
+    if (brokerId === "bybit") return new BybitTradingAdapter(apiKey, apiSecret);
+    if (brokerId === "mt5")   return new MT5TradingAdapter(apiKey, apiSecret);
     throw new Error(`Unknown broker: ${brokerId}`);
   }
 

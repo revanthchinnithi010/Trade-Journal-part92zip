@@ -147,58 +147,6 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
 
-  // Detect cTrader same-tab OAuth redirect:
-  //   ?ctrader_connected=true  — from popup opener navigation (desktop fallback)
-  //   ?ctrader_error=<msg>     — from popup opener navigation on failure
-  // Note: ?ctrader=connected is handled by brokers.tsx FusionPanel directly.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const connected = params.get("ctrader_connected");
-    const error     = params.get("ctrader_error");
-    if (connected === "true" || error) {
-      // ── Restore the page that launched OAuth ────────────────────────────────
-      // BrokerConnectModal saves the originating route before opening the popup.
-      // Fall back to /brokers only if OAuth wasn't launched from a known page.
-      const sourceRoute = sessionStorage.getItem("ctrader_oauth_source_route") ?? "/brokers";
-      sessionStorage.removeItem("ctrader_oauth_source_route");
-      sessionStorage.removeItem("ctrader_oauth_source_broker");
-      console.log("[cTrader OAuth] OAuth source route:", sourceRoute, "— restoring");
-      // ────────────────────────────────────────────────────────────────────────
-
-      // Strip params from URL before doing anything else
-      const clean = new URL(window.location.href);
-      clean.searchParams.delete("ctrader_connected");
-      clean.searchParams.delete("ctrader_error");
-      clean.searchParams.delete("ct_token");
-      clean.searchParams.delete("ct_acct");
-      clean.searchParams.delete("ct_label");
-      // Restore originating page (Charts, Brokers, or wherever OAuth was started)
-      clean.pathname = sourceRoute;
-      window.history.replaceState({}, "", clean.toString());
-      console.log("[cTrader OAuth] Restored route:", sourceRoute);
-      // Signal to BrokerConnectModal via sessionStorage so it knows to auto-resume.
-      // Also forward any account payload embedded in the URL (avoids session lookup).
-      if (connected === "true") {
-        const ctToken = params.get("ct_token");
-        const ctAcct  = params.get("ct_acct");
-        const ctLabel = params.get("ct_label");
-        if (ctToken && ctAcct) {
-          sessionStorage.setItem("ctrader_oauth_token",   ctToken);
-          sessionStorage.setItem("ctrader_oauth_account", ctAcct);
-          sessionStorage.setItem("ctrader_oauth_label",   ctLabel ?? "cTrader");
-          console.log("[cTrader OAuth] ✅ Account payload stored in sessionStorage — accountId:", ctAcct);
-        }
-        sessionStorage.setItem("ctrader_oauth_resume", "true");
-        console.log("[cTrader OAuth] Restored sheet state: broker=ctrader modal=open on route:", sourceRoute);
-      } else if (error) {
-        sessionStorage.setItem("ctrader_oauth_error", error);
-      }
-      // Reopen the Connect Broker Sheet on the restored page
-      useBrokerStore.getState().openAuthModal("ctrader");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Close sidebar on route change
   const prevLocationRef = useRef(location);
   useEffect(() => {

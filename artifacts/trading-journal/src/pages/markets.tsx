@@ -257,7 +257,6 @@ export default function Markets() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const [deltaSymbols,   setDeltaSymbols]   = useState<SymbolInfo[]>([]);
-  const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
   const [loading,        setLoading]        = useState(false);
   const [loadError,      setLoadError]      = useState<string | null>(null);
 
@@ -287,13 +286,9 @@ export default function Markets() {
   // Load broker symbol catalogs once
   useEffect(() => {
     setLoading(true);
-    Promise.all([
-      fetch("/api/symbols?broker=delta").then(r => r.json()),
-      fetch("/api/symbols?broker=ctrader").then(r => r.json()),
-    ])
-      .then(([d, c]) => {
+    fetch("/api/symbols?broker=delta").then(r => r.json())
+      .then(d => {
         setDeltaSymbols((d as { symbols: SymbolInfo[] }).symbols ?? []);
-        setCtraderSymbols((c as { symbols: SymbolInfo[] }).symbols ?? []);
         setLoadError(null);
       })
       .catch(err => setLoadError(String(err)))
@@ -358,17 +353,11 @@ export default function Markets() {
     } else if (activeTab === "Crypto") {
       r = deltaSymbols.map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
     } else if (activeTab === "Forex") {
-      r = ctraderSymbols
-        .filter(s => s.contractType === "forex" || s.contractType === "metal")
-        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+      r = [];
     } else if (activeTab === "Indices") {
-      r = ctraderSymbols
-        .filter(s => s.contractType === "index")
-        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+      r = [];
     } else {
-      r = ctraderSymbols
-        .filter(s => s.contractType === "commodity")
-        .map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
+      r = [];
     }
 
     if (search.trim()) {
@@ -378,7 +367,7 @@ export default function Markets() {
       );
     }
     return r;
-  }, [activeTab, search, items, deltaSymbols, ctraderSymbols]);
+  }, [activeTab, search, items, deltaSymbols]);
 
   return (
     <div style={{

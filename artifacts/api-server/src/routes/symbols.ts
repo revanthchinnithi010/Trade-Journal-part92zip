@@ -5,11 +5,9 @@ import { logger } from "../lib/logger.js";
 /**
  * GET /api/symbols
  * GET /api/symbols?broker=delta
- * GET /api/symbols?broker=ctrader
  *
- * Returns the full tradable symbol catalog for one or both brokers.
+ * Returns the full tradable symbol catalog for Delta Exchange.
  * Delta India symbols are fetched live from the REST API and cached 10 min.
- * cTrader symbols are a curated static list (forex, metals, indices).
  */
 export function createSymbolsRouter(marketData: MarketDataService): IRouter {
   const router: IRouter = Router();
@@ -25,22 +23,15 @@ export function createSymbolsRouter(marketData: MarketDataService): IRouter {
     try {
       const svc = marketData.getSymbolService();
 
-      if (broker === "delta") {
+      if (broker === "delta" || !broker) {
         const symbols = await svc.getDeltaSymbols(forceRefresh);
         res.json({ broker: "delta", count: symbols.length, symbols });
         return;
       }
 
-      if (broker === "ctrader") {
-        const symbols = svc.getCTraderSymbols();
-        res.json({ broker: "ctrader", count: symbols.length, symbols });
-        return;
-      }
-
-      const { delta, ctrader } = await svc.getAllSymbols();
+      const { delta } = await svc.getAllSymbols();
       res.json({
-        delta:   { count: delta.length,   symbols: delta },
-        ctrader: { count: ctrader.length, symbols: ctrader },
+        delta: { count: delta.length, symbols: delta },
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -12,14 +12,12 @@ import type { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import type { TelegramService } from "./services/TelegramService.js";
 import type { FinnhubService } from "./services/FinnhubService.js";
 import type { DeltaService } from "./services/DeltaService.js";
-import type { CTraderService } from "./services/CTraderService.js";
 import type { WSManager } from "./ws/WSManager.js";
 import type { CandleAggregator } from "./services/CandleAggregator.js";
 import { createRouter } from "./routes/index.js";
 
 declare module "express-session" {
   interface SessionData {
-    ctraderOAuthState?: string;
     deltaOAuthState?: string;
     pendingBrokerAccount?: {
       accountId: number;
@@ -43,7 +41,6 @@ export function createApp(deps: {
   telegram: TelegramService;
   finnhub: FinnhubService;
   delta: DeltaService;
-  ctrader: CTraderService;
   wsManager: WSManager;
   candleAggregator: CandleAggregator;
 }): Express {

@@ -36,7 +36,6 @@ function brokerHeaders(account: BrokerAccount): Record<string, string> {
 
 const POLL_INTERVAL: Record<string, number> = {
   delta:   3_000,
-  ctrader: 5_000,
   default: 4_000,
 };
 
@@ -259,7 +258,7 @@ export interface BrokerState {
   activeTimeframe: string;
 
   livePnl:        Record<string, number>;
-  wsClientStates: { delta: WsClientState | null; ctrader: WsClientState | null };
+  wsClientStates: { delta: WsClientState | null };
 
   showSelectModal:  boolean;
   showAuthModal:    boolean;
@@ -353,7 +352,7 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
   activeTimeframe: "60",
 
   livePnl:        {},
-  wsClientStates: { delta: null, ctrader: null },
+  wsClientStates: { delta: null },
 
   showSelectModal:  false,
   showAuthModal:    false,
@@ -697,25 +696,6 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
       return;
     }
 
-    if (m.type === "ctrader_status") {
-      const { connectedAccounts } = get();
-      if (!connectedAccounts["ctrader"]) return;
-      const st = m as { connected?: boolean };
-      if (st.connected === true && get().brokerStatuses["ctrader"] !== "connected") {
-        set(s => {
-          const brokerStatuses = { ...s.brokerStatuses, ctrader: "connected" as ConnectionStatus };
-          return { brokerStatuses, ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId), error: null };
-        });
-      } else if (st.connected === false && get().brokerStatuses["ctrader"] === "connected") {
-        set(s => {
-          const brokerStatuses = { ...s.brokerStatuses, ctrader: "error" as ConnectionStatus };
-          return { brokerStatuses, ...deriveLegacy(s.connectedAccounts, brokerStatuses, s.brokerBalances, s.brokerPositions, s.brokerOrders, s.activeBrokerId) };
-        });
-        get().reconnect();
-      }
-      return;
-    }
-
     if (m.type === "delta_ws_status") {
       const { connectedAccounts } = get();
       if (!connectedAccounts["delta"]) return;
@@ -793,7 +773,7 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
           const brokerPositions = { ...s.brokerPositions, [brokerId]: event.positions };
           return { brokerPositions, ...deriveLegacy(s.connectedAccounts, s.brokerStatuses, s.brokerBalances, brokerPositions, s.brokerOrders, s.activeBrokerId), lastSuccessfulPoll: event.ts };
         });
-        _orchestrator?.updatePositions(event.broker as "delta" | "ctrader", event.positions);
+        _orchestrator?.updatePositions(event.broker as "delta", event.positions);
         break;
       }
       case "orders": {
@@ -842,7 +822,7 @@ export const useBrokerStore = create<BrokerState>((set, get) => ({
 
   setOrchestratorRef: (orch: BrokerWsOrchestrator | null) => {
     _orchestrator = orch;
-    set({ wsClientStates: orch?.state ?? { delta: null, ctrader: null } });
+    set({ wsClientStates: orch?.state ?? { delta: null } });
   },
 
   setActiveSymbol:    (s: string) => set({ activeSymbol: s }),

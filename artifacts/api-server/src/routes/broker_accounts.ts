@@ -47,14 +47,6 @@ router.post("/broker-accounts", async (req, res) => {
     return;
   }
 
-  if (broker_id === "ctrader") {
-    res.status(400).json({
-      ok: false,
-      error: "cTrader uses OAuth — click 'Connect via OAuth' in the modal.",
-    });
-    return;
-  }
-
   let apiKeyValue: string;
   let apiSecretValue: string;
   let metaValue: Record<string, unknown> = {};

@@ -72,41 +72,6 @@ export class DeltaAdapter implements IBrokerAdapter {
   }
 }
 
-export class CTraderAdapter implements IBrokerAdapter {
-  readonly id: BrokerId = "ctrader";
-  readonly balancePath = "/api/broker/ctrader/balance";
-  readonly positionsPath = "/api/broker/ctrader/positions";
-  readonly ordersPath = "/api/broker/ctrader/orders";
-
-  normalizeBalance = passBalance;
-  normalizePositions = passPositions;
-  normalizeOrders = passOrders;
-
-  buildOrderBody(req: PlaceOrderRequest): PlaceOrderParams {
-    return {
-      symbol: req.symbol,
-      side: req.side,
-      orderType: req.orderType,
-      qty: req.qty,
-      ...(req.orderType === "Limit" && req.price ? { price: req.price } : {}),
-      ...(req.stopLoss ? { stopLoss: req.stopLoss } : {}),
-      ...(req.takeProfit ? { takeProfit: req.takeProfit } : {}),
-    };
-  }
-
-  closePositionConfig(pos: BrokerPosition): { path: string; method: "DELETE"; body: unknown } {
-    return {
-      path: `/api/broker/ctrader/position/${pos.id}`,
-      method: "DELETE",
-      body: { symbol: pos.symbol, side: pos.side, qty: String(pos.size) },
-    };
-  }
-
-  cancelOrderConfig(ord: BrokerOrder): { path: string; method: "DELETE"; body?: unknown } {
-    return { path: `/api/broker/ctrader/order/${ord.id}`, method: "DELETE" };
-  }
-}
-
 export class MT5Adapter implements IBrokerAdapter {
   readonly id: BrokerId = "mt5";
   readonly balancePath = "/api/broker/mt5/balance";
@@ -142,9 +107,8 @@ export class MT5Adapter implements IBrokerAdapter {
   }
 }
 
-const ADAPTERS: Map<BrokerId, IBrokerAdapter> = new Map([
+const ADAPTERS: Map<BrokerId, IBrokerAdapter> = new Map<BrokerId, IBrokerAdapter>([
   ["delta", new DeltaAdapter()],
-  ["ctrader", new CTraderAdapter()],
   ["mt5", new MT5Adapter()],
 ]);
 
