@@ -47,8 +47,8 @@ async function fetchWithTimeout(input: RequestInfo, init?: RequestInit): Promise
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,
-      gcTime: 5 * 60_000,
+      staleTime: 5 * 60_000,
+      gcTime: 10 * 60_000,
       retry: 1,
       retryDelay: 500,
       refetchOnWindowFocus: false,

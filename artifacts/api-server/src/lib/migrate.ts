@@ -212,6 +212,10 @@ const MIGRATIONS = [
 
   `ALTER TABLE broker_accounts ADD COLUMN IF NOT EXISTS api_token TEXT NOT NULL DEFAULT ''`,
   `ALTER TABLE broker_accounts ADD COLUMN IF NOT EXISTS meta JSONB`,
+
+  `CREATE INDEX IF NOT EXISTS idx_trades_exit_date ON trades (exit_date DESC)`,
+  `CREATE INDEX IF NOT EXISTS idx_trades_outcome ON trades (outcome)`,
+  `CREATE INDEX IF NOT EXISTS idx_trades_created_at ON trades (created_at DESC)`,
 ];
 
 export async function runMigrations(): Promise<void> {

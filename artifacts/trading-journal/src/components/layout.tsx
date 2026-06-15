@@ -253,7 +253,10 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
   const { theme, toggleTheme } = useTheme();
   const { currency, setCurrency, fetchRate } = useCurrencyStore();
 
-  useEffect(() => { fetchRate(); }, [fetchRate]);
+  useEffect(() => {
+    const id = setTimeout(() => { fetchRate(); }, 1500);
+    return () => clearTimeout(id);
+  }, [fetchRate]);
 
   const initials   = getInitials(profile.name);
   const badgeCount = unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;

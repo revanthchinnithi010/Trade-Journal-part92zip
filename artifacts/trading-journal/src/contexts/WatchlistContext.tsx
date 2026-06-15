@@ -156,7 +156,10 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const id = setTimeout(() => { load(); }, 1500);
+    return () => clearTimeout(id);
+  }, [load]);
 
   /**
    * Optimistic add: inserts a temp entry immediately so the UI reflects the
