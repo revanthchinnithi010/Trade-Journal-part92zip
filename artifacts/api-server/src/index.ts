@@ -97,10 +97,18 @@ healthMonitor.start();
   // any service init reads them.  This must run after migrations so the app_config
   // table exists, but before ctrader/delta/telegram init so they pick up the values.
   await AppConfigService.injectToEnv();
+  const ctraderEnv = process.env["CTRADER_ENV"] ?? "(not set — defaults to live, auto-probes demo)";
   logger.info({
     CTRADER_CLIENT_ID:     process.env["CTRADER_CLIENT_ID"]     ? "SET" : "NOT SET",
     CTRADER_CLIENT_SECRET: process.env["CTRADER_CLIENT_SECRET"] ? "SET" : "NOT SET",
+    CTRADER_ENV:           ctraderEnv,
   }, "Startup: credential injection complete — env status after inject");
+  if (!process.env["CTRADER_ENV"]) {
+    logger.warn(
+      "CTRADER_ENV is not set. Defaulting to 'live' (live.ctraderapi.com:5036). " +
+      "If you have a DEMO Open API app or demo trading account, set CTRADER_ENV=demo in Secrets.",
+    );
+  }
 
   await new Promise<void>((resolve, reject) => {
     server.listen(port, (err?: Error) => {

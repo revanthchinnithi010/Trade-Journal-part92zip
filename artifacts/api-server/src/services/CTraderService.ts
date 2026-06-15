@@ -286,12 +286,27 @@ export class CTraderService extends EventEmitter {
     }, "CTraderService: access token received — saving and connecting");
 
     await this.saveToken();
+    // Tear down any existing socket BEFORE resetting state.
+    // Without this, the old socket's pending 'close' event fires after the new
+    // connection starts, sees state="app_auth" and slams it back to "error".
+    if (this.socket) {
+      logger.info("CTraderService: handleOAuthCode — destroying stale socket before reconnect");
+      this.intentionalDisconnect = true;
+      this.socket.destroy();
+      this.socket = null;
+    }
+    this.clearTimers();
     // Reset any previous error so connect() can proceed
     this.lastError = null;
     this.lastStuckStep = null;
-    if (this.state !== "disconnected") {
-      this.state = "disconnected";
-    }
+    this.endpointProbe = 0;
+    this.liveEndpointUpgradeAttempted = false;
+    this.state = "disconnected";
+    logger.info({
+      stateBeforeConnect: "disconnected",
+      hasToken: !!this.accessToken,
+      CTRADER_ENV: process.env["CTRADER_ENV"] ?? "(not set — will default to live, auto-probes demo)",
+    }, "CTraderService: handleOAuthCode ── calling connect() now");
     this.connect();
   }
 
@@ -335,6 +350,13 @@ export class CTraderService extends EventEmitter {
   private connect(): void {
     if (this.state !== "disconnected" && this.state !== "error") return;
     this.clearTimers();
+    // Destroy any stale socket defensively — its lingering 'close' event would
+    // call onDisconnected() mid-auth and corrupt the new connection's state.
+    if (this.socket) {
+      this.intentionalDisconnect = true;
+      this.socket.destroy();
+      this.socket = null;
+    }
     this.state = "connecting";
     this.rxBuf = Buffer.alloc(0);
 
