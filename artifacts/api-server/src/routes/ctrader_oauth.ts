@@ -1,0 +1,395 @@
+import { Router } from "express";
+import { randomBytes } from "crypto";
+import { pool } from "@workspace/db";
+import { encrypt, decrypt } from "../services/BrokerEncryption.js";
+import { logger } from "../lib/logger.js";
+
+const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
+const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
+const CTRADER_API_BASE  = "https://api.openapi.ctrader.com/v2";
+
+const ENSURE_TOKENS_TABLE = `
+  CREATE TABLE IF NOT EXISTS ctrader_tokens (
+    id               SERIAL PRIMARY KEY,
+    access_token_enc TEXT NOT NULL,
+    refresh_token_enc TEXT NOT NULL,
+    expires_at       BIGINT NOT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  )`;
+
+async function ensureTokensTable(): Promise<void> {
+  await pool.query(ENSURE_TOKENS_TABLE);
+}
+
+async function createCtraderOAuthState(): Promise<string> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS ctrader_oauth_state (
+      state      TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )`);
+  const state = randomBytes(16).toString("hex");
+  await pool.query("INSERT INTO ctrader_oauth_state (state) VALUES ($1)", [state]);
+  await pool.query("DELETE FROM ctrader_oauth_state WHERE created_at < NOW() - INTERVAL '15 minutes'");
+  return state;
+}
+
+async function validateCtraderOAuthState(state: string): Promise<boolean> {
+  const result = await pool.query(
+    "DELETE FROM ctrader_oauth_state WHERE state = $1 RETURNING state",
+    [state],
+  );
+  return result.rowCount !== null && result.rowCount > 0;
+}
+
+async function getStoredToken(): Promise<{ token: string; expiresAt: number } | null> {
+  await ensureTokensTable();
+  const row = await pool.query(
+    "SELECT access_token_enc, expires_at FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+  );
+  if (!row.rows.length) return null;
+  const r = row.rows[0] as { access_token_enc: string; expires_at: number };
+  const token = decrypt(r.access_token_enc);
+  if (!token) return null;
+  return { token, expiresAt: r.expires_at };
+}
+
+export function createCtraderOAuthRouter(): Router {
+  const router = Router();
+
+  router.get("/ctrader/oauth/config", async (req, res) => {
+    const clientId = process.env["CTRADER_CLIENT_ID"];
+    const configured = !!(clientId && process.env["CTRADER_CLIENT_SECRET"]);
+
+    const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
+    const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
+    const redirectUri = `${proto}://${host}/api/ctrader/oauth/callback`;
+
+    let authUrl: string | null = null;
+    if (configured) {
+      try {
+        const state = await createCtraderOAuthState();
+        const params = new URLSearchParams({
+          client_id:     clientId!,
+          redirect_uri:  redirectUri,
+          response_type: "code",
+          scope:         "accounts",
+          state,
+        });
+        authUrl = `${CTRADER_AUTH_URL}?${params.toString()}`;
+        logger.info({ state }, "ctrader/oauth/config: auth URL built");
+      } catch (err) {
+        logger.warn({ err }, "ctrader/oauth/config: failed to build auth URL");
+      }
+    } else {
+      logger.warn("ctrader/oauth/config: CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not set");
+    }
+
+    res.json({ configured, redirectUri, authUrl });
+  });
+
+  router.get("/ctrader/oauth/callback", async (req, res) => {
+    const { code, error, error_description, state } = req.query as Record<string, string>;
+
+    if (error) {
+      logger.warn({ error, error_description }, "ctrader/oauth/callback: provider returned error");
+      return res.send(popupHtml("error", error_description ?? error));
+    }
+    if (!code) return res.send(popupHtml("error", "missing_authorization_code"));
+
+    if (state) {
+      const valid = await validateCtraderOAuthState(state);
+      if (!valid) {
+        logger.warn({ state }, "ctrader/oauth/callback: CSRF state mismatch");
+        return res.send(popupHtml("error", "session_expired_please_retry"));
+      }
+    }
+
+    try {
+      const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
+      const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
+      const redirectUri = `${proto}://${host}/api/ctrader/oauth/callback`;
+
+      const clientId     = process.env["CTRADER_CLIENT_ID"]!;
+      const clientSecret = process.env["CTRADER_CLIENT_SECRET"]!;
+
+      logger.info("ctrader/oauth/callback: exchanging code for tokens");
+
+      const tokenRes = await fetch(CTRADER_TOKEN_URL, {
+        method:  "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type:    "authorization_code",
+          code,
+          redirect_uri:  redirectUri,
+          client_id:     clientId,
+          client_secret: clientSecret,
+        }).toString(),
+      });
+
+      type TokenPayload = {
+        access_token?:  string;
+        refresh_token?: string;
+        expires_in?:    number;
+        error?:         string;
+        error_description?: string;
+      };
+      const tokenData = (await tokenRes.json()) as TokenPayload;
+
+      if (!tokenRes.ok || !tokenData.access_token) {
+        const msg = tokenData.error ?? `HTTP ${tokenRes.status}`;
+        logger.error({ status: tokenRes.status, msg }, "ctrader/oauth/callback: token exchange failed");
+        throw new Error(`Token exchange failed: ${msg}`);
+      }
+
+      const accessToken  = tokenData.access_token;
+      const refreshToken = tokenData.refresh_token ?? "";
+      const expiresIn    = tokenData.expires_in ?? 3600;
+      const expiresAt    = Math.floor(Date.now() / 1000) + expiresIn;
+
+      await ensureTokensTable();
+      const existing = await pool.query("SELECT id FROM ctrader_tokens LIMIT 1");
+      if (existing.rows.length > 0) {
+        await pool.query(
+          "UPDATE ctrader_tokens SET access_token_enc=$1, refresh_token_enc=$2, expires_at=$3, updated_at=NOW() WHERE id=$4",
+          [encrypt(accessToken), encrypt(refreshToken), expiresAt, (existing.rows[0] as { id: number }).id],
+        );
+      } else {
+        await pool.query(
+          "INSERT INTO ctrader_tokens (access_token_enc, refresh_token_enc, expires_at) VALUES ($1,$2,$3)",
+          [encrypt(accessToken), encrypt(refreshToken), expiresAt],
+        );
+      }
+
+      const maskedToken = `${accessToken.slice(0, 12)}...${accessToken.slice(-6)}`;
+      logger.info({ expiresAt, maskedToken }, "ctrader/oauth/callback: tokens stored");
+      return res.send(popupHtml("success", null, { maskedToken, expiresAt }));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown_error";
+      logger.error({ err }, "ctrader/oauth/callback: unhandled error");
+      return res.send(popupHtml("error", msg));
+    }
+  });
+
+  router.get("/ctrader/oauth/status", async (_req, res) => {
+    try {
+      await ensureTokensTable();
+      const row = await pool.query(
+        "SELECT id, expires_at, updated_at FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+      );
+      if (!row.rows.length) return res.json({ connected: false });
+      const r   = row.rows[0] as { id: number; expires_at: number; updated_at: Date };
+      const now = Math.floor(Date.now() / 1000);
+      return res.json({
+        connected:  true,
+        id:         r.id,
+        expires_at: r.expires_at,
+        expired:    r.expires_at < now,
+        updated_at: r.updated_at,
+      });
+    } catch (err) {
+      logger.warn({ err }, "ctrader/oauth/status: DB error");
+      res.status(500).json({ connected: false, error: "DB error" });
+    }
+  });
+
+  router.get("/ctrader/oauth/token", async (_req, res) => {
+    try {
+      const stored = await getStoredToken();
+      if (!stored) return res.status(404).json({ ok: false, error: "No token stored" });
+      const masked = `${stored.token.slice(0, 12)}...${stored.token.slice(-6)}`;
+      return res.json({
+        ok:           true,
+        masked_token: masked,
+        full_token:   stored.token,
+        expires_at:   stored.expiresAt,
+        expired:      stored.expiresAt < Math.floor(Date.now() / 1000),
+      });
+    } catch (err) {
+      logger.warn({ err }, "ctrader/oauth/token: error");
+      res.status(500).json({ ok: false, error: "Server error" });
+    }
+  });
+
+  router.get("/ctrader/oauth/accounts", async (_req, res) => {
+    try {
+      const stored = await getStoredToken();
+      if (!stored) return res.status(401).json({ ok: false, error: "Not authenticated — run OAuth first" });
+
+      logger.info("ctrader/oauth/accounts: querying cTrader REST API");
+
+      const url = `${CTRADER_API_BASE}/tradingaccounts?accessToken=${encodeURIComponent(stored.token)}`;
+      const accountRes = await fetch(url, { headers: { Accept: "application/json" } });
+      const body = await accountRes.text();
+      logger.info({ status: accountRes.status, body: body.slice(0, 400) }, "ctrader/oauth/accounts: raw response");
+
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(body); } catch { /* keep null */ }
+
+      return res.json({
+        ok:          accountRes.ok,
+        http_status: accountRes.status,
+        accounts:    accountRes.ok ? parsed : null,
+        raw:         body,
+        note:        accountRes.ok ? null : "Full account list requires ProtoOA WebSocket. REST returns limited data.",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      logger.error({ err }, "ctrader/oauth/accounts: error");
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  router.get("/ctrader/oauth/symbols/:accountId", async (req, res) => {
+    const { accountId } = req.params;
+    try {
+      const stored = await getStoredToken();
+      if (!stored) return res.status(401).json({ ok: false, error: "Not authenticated — run OAuth first" });
+
+      logger.info({ accountId }, "ctrader/oauth/symbols: querying symbol list");
+
+      const url = `${CTRADER_API_BASE}/symbol?ctidTraderAccountId=${accountId}&accessToken=${encodeURIComponent(stored.token)}`;
+      const symRes = await fetch(url, { headers: { Accept: "application/json" } });
+      const body = await symRes.text();
+      logger.info({ status: symRes.status, body: body.slice(0, 400) }, "ctrader/oauth/symbols: raw response");
+
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(body); } catch { /* keep null */ }
+
+      if (!symRes.ok) {
+        return res.json({
+          ok:          false,
+          http_status: symRes.status,
+          raw:         body,
+          note:        "Symbol list via REST requires a valid ctidTraderAccountId. Full list needs ProtoOA WS.",
+        });
+      }
+
+      const arr = Array.isArray(parsed)
+        ? parsed
+        : ((parsed as { symbol?: unknown[]; symbols?: unknown[] })?.symbol
+            ?? (parsed as { symbol?: unknown[]; symbols?: unknown[] })?.symbols
+            ?? []);
+      return res.json({
+        ok:     true,
+        count:  arr.length,
+        sample: arr.slice(0, 20),
+        raw:    body,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      logger.error({ err }, "ctrader/oauth/symbols: error");
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  router.post("/ctrader/oauth/refresh", async (_req, res) => {
+    try {
+      await ensureTokensTable();
+      const row = await pool.query(
+        "SELECT id, refresh_token_enc FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+      );
+      if (!row.rows.length) return res.status(404).json({ ok: false, error: "No token stored" });
+      const r            = row.rows[0] as { id: number; refresh_token_enc: string };
+      const refreshToken = decrypt(r.refresh_token_enc);
+      if (!refreshToken) return res.status(400).json({ ok: false, error: "No refresh token — please reconnect" });
+
+      const clientId     = process.env["CTRADER_CLIENT_ID"]!;
+      const clientSecret = process.env["CTRADER_CLIENT_SECRET"]!;
+
+      const tokenRes = await fetch(CTRADER_TOKEN_URL, {
+        method:  "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type:    "refresh_token",
+          refresh_token: refreshToken,
+          client_id:     clientId,
+          client_secret: clientSecret,
+        }).toString(),
+      });
+
+      type RefreshPayload = {
+        access_token?:  string;
+        refresh_token?: string;
+        expires_in?:    number;
+        error?:         string;
+      };
+      const tokenData = (await tokenRes.json()) as RefreshPayload;
+      if (!tokenRes.ok || !tokenData.access_token) {
+        throw new Error(tokenData.error ?? `HTTP ${tokenRes.status}`);
+      }
+
+      const newAccess    = tokenData.access_token;
+      const newRefresh   = tokenData.refresh_token ?? refreshToken;
+      const expiresAt    = Math.floor(Date.now() / 1000) + (tokenData.expires_in ?? 3600);
+
+      await pool.query(
+        "UPDATE ctrader_tokens SET access_token_enc=$1, refresh_token_enc=$2, expires_at=$3, updated_at=NOW() WHERE id=$4",
+        [encrypt(newAccess), encrypt(newRefresh), expiresAt, r.id],
+      );
+
+      logger.info({ expiresAt }, "ctrader/oauth/refresh: tokens refreshed");
+      return res.json({ ok: true, expires_at: expiresAt });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      logger.error({ err }, "ctrader/oauth/refresh: failed");
+      res.status(502).json({ ok: false, error: msg });
+    }
+  });
+
+  router.post("/ctrader/oauth/disconnect", async (_req, res) => {
+    try {
+      await ensureTokensTable();
+      await pool.query("DELETE FROM ctrader_tokens");
+      logger.info("ctrader/oauth/disconnect: tokens cleared");
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  return router;
+}
+
+interface PopupToken { maskedToken: string; expiresAt: number }
+
+function popupHtml(status: "success" | "error", message: string | null, token?: PopupToken): string {
+  const safeMsg     = message ? message.replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
+  const safeMessage = JSON.stringify(message ?? "");
+  const safeMasked  = token ? JSON.stringify(token.maskedToken) : "null";
+  const safeExpires = token ? String(token.expiresAt)          : "null";
+  const ok          = status === "success";
+
+  return `<!doctype html><html><head>
+  <meta charset="utf-8"/><title>cTrader OAuth</title>
+  <style>
+    body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;
+         min-height:100vh;margin:0;background:#0D1117;color:#F3FFF3;text-align:center}
+    .icon{font-size:48px;margin-bottom:12px}
+    h2{margin:0 0 8px;font-size:20px}
+    p{color:rgba(167,184,169,0.7);font-size:13px;margin-top:8px}
+    .badge{display:inline-block;margin-top:12px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:600;
+           background:${ok?"rgba(183,255,90,0.12)":"rgba(239,68,68,0.12)"};
+           color:${ok?"#B7FF5A":"#f87171"};
+           border:1px solid ${ok?"rgba(183,255,90,0.3)":"rgba(239,68,68,0.3)"}}
+  </style>
+</head><body>
+  <div>
+    <div class="icon">${ok?"✅":"❌"}</div>
+    <h2>${ok?"cTrader Connected!":"Connection Failed"}</h2>
+    ${safeMsg?`<p>${safeMsg}</p>`:""}
+    <div class="badge">${ok?"OAuth 2.0 authenticated":"Authentication error"}</div>
+    <p>${ok?"You can close this window.":"Please close this window and try again."}</p>
+  </div>
+  <script>
+    (function(){
+      try{window.opener&&window.opener.postMessage(
+        {type:'ctrader_oauth_result',status:'${status}',message:${safeMessage},maskedToken:${safeMasked},expiresAt:${safeExpires}},
+        '*'
+      );}catch(_){}
+      setTimeout(function(){window.close();},1500);
+    })();
+  </script>
+</body></html>`;
+}

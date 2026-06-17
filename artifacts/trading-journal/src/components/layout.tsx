@@ -4,7 +4,7 @@ import {
   BookOpen, Settings, Menu, X, Zap, Search, Bell, ChevronDown,
   TrendingUp, Link2, BellRing, Bitcoin, Globe, Crosshair,
   Layers, ShieldCheck, CandlestickChart, WifiOff, Loader2,
-  Sun, Moon,
+  Sun, Moon, FlaskConical,
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
@@ -38,9 +38,10 @@ const NAV_SECTIONS = [
   {
     label: "Tools",
     items: [
-      { href: "/calendar", label: "Calendar",           icon: CalendarIcon     },
-      { href: "/notebook", label: "Notebook",           icon: BookOpen         },
-      { href: "/settings", label: "Settings",           icon: Settings         },
+      { href: "/calendar",      label: "Calendar",          icon: CalendarIcon  },
+      { href: "/notebook",      label: "Notebook",          icon: BookOpen      },
+      { href: "/settings",      label: "Settings",          icon: Settings      },
+      { href: "/ctrader-test",  label: "cTrader OAuth Test",icon: FlaskConical  },
     ],
   },
   {
