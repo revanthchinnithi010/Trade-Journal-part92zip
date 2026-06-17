@@ -20,7 +20,14 @@ run = "pnpm --filter @workspace/trading-journal-tablet run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/trading-journal-tablet", "run", "build" ]
-run = [ "node", "artifacts/trading-journal-tablet/server/serve.js" ]
+
+[services.production.run]
+args = [ "node", "artifacts/trading-journal-tablet/server/serve.js" ]
+
+[services.production.run.env]
+PORT = "23996"
+BASE_PATH = "/tablet/"
+NODE_ENV = "production"
 
 [services.env]
 PORT = "23996"
