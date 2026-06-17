@@ -33,6 +33,10 @@ export function createHealthRouter(deps: {
 }): IRouter {
   const router: IRouter = Router();
 
+  router.get("/", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+
   router.get("/healthz", (_req, res) => {
     res.json({ status: "ok" });
   });
