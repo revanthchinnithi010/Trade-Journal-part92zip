@@ -8,14 +8,12 @@ import { useSymbolTick } from "@/store/tickStore";
 import { useLocation } from "wouter";
 import { useChartStore } from "@/store/chartStore";
 import { tapStart, recordUi, getEvents, subscribe as diagSubscribe } from "@/lib/starDiag";
+import {
+  REGISTRY_FOREX, REGISTRY_METALS, REGISTRY_COMMODITIES, REGISTRY_INDICES,
+} from "@/lib/symbolRegistry";
 
 type Tab = "Watchlist" | "Crypto" | "Forex" | "Metals" | "Indices" | "Commodities";
 const TABS: Tab[] = ["Watchlist", "Crypto", "Forex", "Metals", "Indices", "Commodities"];
-
-const FOREX_SYMBOLS       = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF"];
-const METALS_SYMBOLS      = ["XAUUSD", "XAGUSD"];
-const COMMODITIES_SYMBOLS = ["USOIL", "UKOIL", "NATGAS"];
-const INDICES_SYMBOLS     = ["US30", "NAS100", "US500", "GER40", "UK100"];
 
 interface SymbolInfo {
   symbol:       string;
@@ -365,29 +363,13 @@ export default function Markets() {
     } else if (activeTab === "Crypto") {
       r = deltaSymbols.map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
     } else if (activeTab === "Forex") {
-      r = FOREX_SYMBOLS.map(sym => ({
-        symbol:       sym,
-        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
-        contractType: "forex",
-      }));
+      r = REGISTRY_FOREX;
     } else if (activeTab === "Metals") {
-      r = METALS_SYMBOLS.map(sym => ({
-        symbol:       sym,
-        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
-        contractType: "metal",
-      }));
+      r = REGISTRY_METALS;
     } else if (activeTab === "Indices") {
-      r = INDICES_SYMBOLS.map(sym => ({
-        symbol:       sym,
-        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
-        contractType: "indices",
-      }));
+      r = REGISTRY_INDICES;
     } else {
-      r = COMMODITIES_SYMBOLS.map(sym => ({
-        symbol:       sym,
-        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
-        contractType: "commodities",
-      }));
+      r = REGISTRY_COMMODITIES;
     }
 
     if (search.trim()) {

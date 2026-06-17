@@ -11,6 +11,9 @@ import {
   Star, Search, TrendingUp, RefreshCw,
   LayoutTemplate, Link2, Unlink2,
 } from "lucide-react";
+import {
+  REGISTRY_FOREX, REGISTRY_METALS, REGISTRY_COMMODITIES, REGISTRY_INDICES,
+} from "@/lib/symbolRegistry";
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
 import { SymbolPickerSheet } from "./SymbolPickerSheet";
 import CustomChart from "./CustomChart";
@@ -2665,8 +2668,8 @@ const MiniWatchlistRow = memo(function MiniWatchlistRow({
 });
 
 // ── Market Watchlist Sheet ─────────────────────────────────────────────────
-type MktTab = "Watchlist" | "Crypto" | "Forex" | "Indices" | "Commodities";
-const MKT_TABS: MktTab[] = ["Watchlist", "Crypto", "Forex", "Indices", "Commodities"];
+type MktTab = "Watchlist" | "Crypto" | "Forex" | "Metals" | "Commodities" | "Indices";
+const MKT_TABS: MktTab[] = ["Watchlist", "Crypto", "Forex", "Metals", "Commodities", "Indices"];
 
 const MKT_CONTRACT_LABELS: Record<string, string> = {
   perpetual_futures: "Perp",
@@ -2862,11 +2865,13 @@ function MarketWatchlistSheet({
     } else if (activeTab === "Crypto") {
       r = deltaSymbols;
     } else if (activeTab === "Forex") {
-      r = [];
-    } else if (activeTab === "Indices") {
-      r = [];
+      r = REGISTRY_FOREX;
+    } else if (activeTab === "Metals") {
+      r = REGISTRY_METALS;
+    } else if (activeTab === "Commodities") {
+      r = REGISTRY_COMMODITIES;
     } else {
-      r = [];
+      r = REGISTRY_INDICES;
     }
     if (search.trim()) {
       const q = search.trim().toUpperCase();
