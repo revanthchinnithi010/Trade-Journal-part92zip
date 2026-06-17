@@ -23,7 +23,6 @@ import { brokerDeltaRouter } from "./broker_delta.js";
 import { brokerBybitRouter } from "./broker_bybit.js";
 import { brokerMT5Router } from "./broker_mt5.js";
 import { brokerConnectionRouter } from "./broker_connection.js";
-import { createCtraderOAuthRouter } from "./ctrader_oauth.js";
 import { myIpRouter } from "./my_ip.js";
 import { backupRouter } from "./backup.js";
 import { createSymbolsRouter } from "./symbols.js";
@@ -78,7 +77,6 @@ export function createRouter(deps: {
   router.use(brokerBybitRouter);
   router.use(brokerMT5Router);
   router.use(brokerConnectionRouter);
-  router.use(createCtraderOAuthRouter());
   router.use(myIpRouter);
   router.use(backupRouter);
   router.use(createSymbolsRouter(deps.marketData));

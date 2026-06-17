@@ -9,7 +9,6 @@ import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 import { DeltaApiConnectForm } from "./DeltaApiConnectForm";
-import { CtraderOAuthConnectForm } from "./CtraderOAuthConnectForm";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -128,10 +127,6 @@ function BrokerFormContent({
             />
       )}
 
-      {/* cTrader */}
-      {broker.id === "ctrader" && (
-        <CtraderOAuthConnectForm onSuccess={onDone} onError={msg => { setStatus("error"); setErrorMsg(msg); }} />
-      )}
     </div>
   );
 }

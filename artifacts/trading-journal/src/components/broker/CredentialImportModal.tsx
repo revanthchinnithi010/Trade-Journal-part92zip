@@ -382,9 +382,7 @@ function UploadScreen({
         <pre style={{
           fontSize: 11, color: "rgba(255,255,255,0.5)", margin: 0,
           fontFamily: "monospace", lineHeight: 1.7, overflowX: "auto",
-        }}>{`CTRADER_CLIENT_ID=your_client_id
-CTRADER_CLIENT_SECRET=your_secret
-BROKER_ENCRYPTION_KEY=your_key
+        }}>{`BROKER_ENCRYPTION_KEY=your_key
 
 DELTA_API_KEY=your_api_key
 DELTA_API_SECRET=your_api_secret
@@ -554,7 +552,6 @@ function ConfirmScreen({
           { icon: <Lock size={13} />, text: "All secrets encrypted with AES-256-CBC before storage" },
           { icon: <Database size={13} />, text: "Credentials never displayed again after this screen" },
           { icon: <Wifi size={13} />, text: "Delta Exchange: one-click connect using imported key" },
-          { icon: <RefreshCw size={13} />, text: "cTrader: OAuth flow uses imported Client ID & Secret" },
         ].map((item, i) => (
           <div key={i} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: i < 3 ? 8 : 0 }}>
             <span style={{ color: "#00FFB4", flexShrink: 0, marginTop: 1 }}>{item.icon}</span>
@@ -623,8 +620,7 @@ function DoneScreen({ onClose }: { onClose: () => void }) {
         background: "rgba(0,255,180,0.05)", border: "1px solid rgba(0,255,180,0.12)",
       }}>
         <p style={{ fontSize: 12, color: "rgba(255,255,255,0.5)", margin: 0, lineHeight: 1.6 }}>
-          Use <strong style={{ color: "rgba(255,255,255,0.8)" }}>Connect Delta Exchange</strong> or{" "}
-          <strong style={{ color: "rgba(255,255,255,0.8)" }}>Connect cTrader</strong> to activate your broker connections.
+          Use <strong style={{ color: "rgba(255,255,255,0.8)" }}>Connect Delta Exchange</strong> to activate your broker connections.
         </p>
       </div>
       <button onClick={onClose} style={{
