@@ -28,10 +28,15 @@ async function validateCtraderOAuthState(state: string): Promise<boolean> {
   return result.rowCount !== null && result.rowCount > 0;
 }
 
-function getRedirectUri(req: { headers: Record<string, string | string[] | undefined>; protocol: string; hostname: string }): string {
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-  const host = (req.headers["x-forwarded-host"] as string | undefined) ?? req.hostname;
-  return `${proto}://${host}/api/ctrader/oauth/callback`;
+function getRedirectUri(_req?: unknown): string {
+  const override = process.env["CTRADER_REDIRECT_URI"];
+  if (override) {
+    logger.info({ redirectUri: override }, "ctrader: using CTRADER_REDIRECT_URI override");
+    return override;
+  }
+  throw new Error(
+    "CTRADER_REDIRECT_URI is not set. Set it to https://<your-domain>/api/ctrader/oauth/callback",
+  );
 }
 
 export function createCtraderOAuthRouter(): Router {
@@ -40,7 +45,13 @@ export function createCtraderOAuthRouter(): Router {
   router.get("/ctrader/oauth/config", async (req, res) => {
     const clientId = process.env["CTRADER_CLIENT_ID"];
     const configured = !!(clientId && process.env["CTRADER_CLIENT_SECRET"]);
-    const redirectUri = getRedirectUri(req);
+    let redirectUri: string;
+    try {
+      redirectUri = getRedirectUri();
+    } catch (err) {
+      logger.error({ err }, "ctrader/oauth/config: redirect URI not configured");
+      return res.status(500).json({ configured: false, error: "CTRADER_REDIRECT_URI is not set" });
+    }
 
     let authUrl: string | null = null;
     if (configured) {
@@ -86,7 +97,7 @@ export function createCtraderOAuthRouter(): Router {
     }
 
     try {
-      const redirectUri = getRedirectUri(req);
+      const redirectUri = getRedirectUri();
       const clientId = process.env["CTRADER_CLIENT_ID"]!;
       const clientSecret = process.env["CTRADER_CLIENT_SECRET"]!;
 
