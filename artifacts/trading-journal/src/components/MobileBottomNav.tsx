@@ -19,20 +19,20 @@ import {
   Globe,
   ArrowLeftRight,
   BarChart2,
-  Menu,
+  Bell,
 } from "lucide-react";
+import { useNotifications } from "@/contexts/NotificationsContext";
 
 type NavTab =
   | { kind: "link"; href: string; label: string; Icon: React.ElementType }
   | { kind: "action"; label: string; Icon: React.ElementType; onTap: () => void };
 
 const TABS: NavTab[] = [
-  { kind: "link",   href: "/",       label: "Home",    Icon: LayoutDashboard },
-  { kind: "link",   href: "/markets", label: "Markets", Icon: Globe           },
-  { kind: "link",   href: "/trade",  label: "Trade",   Icon: ArrowLeftRight   },
-  { kind: "link",   href: "/charts", label: "Charts",  Icon: BarChart2        },
-  { kind: "action", label: "Menu",   Icon: Menu,
-    onTap: () => window.dispatchEvent(new CustomEvent("tj:open-sidebar")) },
+  { kind: "link", href: "/",        label: "Home",    Icon: LayoutDashboard },
+  { kind: "link", href: "/markets", label: "Markets", Icon: Globe           },
+  { kind: "link", href: "/trades",  label: "Trade",   Icon: ArrowLeftRight  },
+  { kind: "link", href: "/charts",  label: "Charts",  Icon: BarChart2       },
+  { kind: "link", href: "/alerts",  label: "Alerts",  Icon: Bell            },
 ];
 
 const N          = TABS.length;
@@ -121,18 +121,16 @@ function spawnBubbles(container: HTMLElement, cx: number, cy: number) {
 
 export function MobileBottomNav() {
   const [location] = useLocation();
+  const { unreadCount } = useNotifications();
   const pillRef    = useRef<HTMLDivElement>(null);
   const outerRef   = useRef<HTMLDivElement>(null);
   const [tabW, setTabW] = useState(0);
   const controls    = useAnimation();
   const initialized = useRef(false);
   const prevCircleX = useRef<number | null>(null);
-  const isAnimating = useRef(false);
   const revertTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeIdx = TABS.findIndex(t => t.kind === "link" && t.href === location);
-  // visualIdx drives the bubble — normally mirrors activeIdx, but can temporarily
-  // point at the Menu tab (index 4) so the bubble travels there on tap.
   const [visualIdx, setVisualIdx] = useState(activeIdx >= 0 ? activeIdx : 0);
 
   useEffect(() => {
@@ -319,95 +317,14 @@ export function MobileBottomNav() {
       >
         {/* ── Icons + labels (z-index 10 keeps them above bubble) ── */}
         {TABS.map((tab, idx) => {
-          // Use visualIdx so Menu icon glows when bubble is there
-          const active = idx === visualIdx;
-          const key    = tab.kind === "link" ? tab.href : `action-${idx}`;
-
-          const inner = (
-            <motion.div
-              className="tj-cnav-tab"
-              onPointerDown={handleTap}
-              whileTap={{ scale: 0.88 }}
-              transition={{ type: "spring", stiffness: 600, damping: 25 }}
-              style={{
-                width:          "100%",
-                height:         "100%",
-                display:        "flex",
-                flexDirection:  "column",
-                alignItems:     "center",
-                justifyContent: "center",
-                gap:            4,
-                cursor:         "pointer",
-                userSelect:     "none",
-              }}
-            >
-              <motion.div
-                animate={{ scale: active ? 1.16 : 1 }}
-                transition={{ type: "spring", stiffness: 550, damping: 28 }}
-              >
-                <tab.Icon
-                  style={{
-                    width:      22,
-                    height:     22,
-                    flexShrink: 0,
-                    color:      active ? "#ffffff" : "rgba(148,163,184,0.44)",
-                    filter:     active
-                      ? "drop-shadow(0 0 5px rgba(200,215,255,0.90)) drop-shadow(0 0 11px rgba(165,180,252,0.55)) drop-shadow(0 0 20px rgba(99,102,241,0.32))"
-                      : "none",
-                    transition: "color 0.22s ease, filter 0.22s ease",
-                    display:    "block",
-                  }}
-                />
-              </motion.div>
-              <span
-                style={{
-                  fontSize:      10,
-                  lineHeight:    1,
-                  fontWeight:    active ? 600 : 400,
-                  color:         active ? "rgba(255,255,255,0.92)" : "rgba(148,163,184,0.40)",
-                  letterSpacing: active ? "0.04em" : "0.01em",
-                  transition:    "color 0.22s ease",
-                  whiteSpace:    "nowrap",
-                }}
-              >
-                {tab.label}
-              </span>
-            </motion.div>
-          );
-
-          if (tab.kind === "action") {
-            return (
-              <div
-                key={key}
-                onClick={() => {
-                  // Move bubble to Menu, then revert to current route after animation
-                  if (revertTimer.current) clearTimeout(revertTimer.current);
-                  setVisualIdx(idx);
-                  revertTimer.current = setTimeout(() => {
-                    setVisualIdx(prev => activeIdx >= 0 ? activeIdx : prev);
-                    revertTimer.current = null;
-                  }, 520);
-                  tab.onTap();
-                }}
-                style={{
-                  flex:                    1,
-                  display:                 "flex",
-                  WebkitTapHighlightColor: "transparent",
-                  outline:                 "none",
-                  position:                "relative",
-                  zIndex:                  10,
-                  cursor:                  "pointer",
-                }}
-              >
-                {inner}
-              </div>
-            );
-          }
+          const active   = idx === visualIdx;
+          const isAlerts = tab.kind === "link" && tab.href === "/alerts";
+          const badge    = isAlerts && unreadCount > 0 ? unreadCount : 0;
 
           return (
             <Link
-              key={key}
-              href={tab.href}
+              key={tab.kind === "link" ? tab.href : `action-${idx}`}
+              href={tab.kind === "link" ? tab.href : "/"}
               style={{
                 flex:                    1,
                 display:                 "flex",
@@ -418,7 +335,80 @@ export function MobileBottomNav() {
                 zIndex:                  10,
               } as React.CSSProperties}
             >
-              {inner}
+              <motion.div
+                className="tj-cnav-tab"
+                onPointerDown={handleTap}
+                whileTap={{ scale: 0.88 }}
+                transition={{ type: "spring", stiffness: 600, damping: 25 }}
+                style={{
+                  width:          "100%",
+                  height:         "100%",
+                  display:        "flex",
+                  flexDirection:  "column",
+                  alignItems:     "center",
+                  justifyContent: "center",
+                  gap:            4,
+                  cursor:         "pointer",
+                  userSelect:     "none",
+                }}
+              >
+                <motion.div
+                  animate={{ scale: active ? 1.16 : 1 }}
+                  transition={{ type: "spring", stiffness: 550, damping: 28 }}
+                  style={{ position: "relative" }}
+                >
+                  <tab.Icon
+                    style={{
+                      width:      22,
+                      height:     22,
+                      flexShrink: 0,
+                      color:      active ? "#ffffff" : "rgba(148,163,184,0.44)",
+                      filter:     active
+                        ? "drop-shadow(0 0 5px rgba(200,215,255,0.90)) drop-shadow(0 0 11px rgba(165,180,252,0.55)) drop-shadow(0 0 20px rgba(99,102,241,0.32))"
+                        : "none",
+                      transition: "color 0.22s ease, filter 0.22s ease",
+                      display:    "block",
+                    }}
+                  />
+                  {badge > 0 && (
+                    <span style={{
+                      position:        "absolute",
+                      top:             -5,
+                      right:           -6,
+                      minWidth:        14,
+                      height:          14,
+                      borderRadius:    9999,
+                      background:      "#ef4444",
+                      boxShadow:       "0 0 6px rgba(239,68,68,0.55)",
+                      display:         "flex",
+                      alignItems:      "center",
+                      justifyContent:  "center",
+                      fontSize:        8,
+                      fontWeight:      700,
+                      color:           "#fff",
+                      lineHeight:      1,
+                      padding:         "0 3px",
+                      border:          "1.5px solid rgba(12,14,19,0.9)",
+                      pointerEvents:   "none",
+                    }}>
+                      {badge > 99 ? "99+" : badge}
+                    </span>
+                  )}
+                </motion.div>
+                <span
+                  style={{
+                    fontSize:      10,
+                    lineHeight:    1,
+                    fontWeight:    active ? 600 : 400,
+                    color:         active ? "rgba(255,255,255,0.92)" : "rgba(148,163,184,0.40)",
+                    letterSpacing: active ? "0.04em" : "0.01em",
+                    transition:    "color 0.22s ease",
+                    whiteSpace:    "nowrap",
+                  }}
+                >
+                  {tab.label}
+                </span>
+              </motion.div>
             </Link>
           );
         })}
