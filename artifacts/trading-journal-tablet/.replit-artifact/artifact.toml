@@ -19,7 +19,8 @@ localPort = 23996
 run = "pnpm --filter @workspace/trading-journal-tablet run dev"
 
 [services.production]
-build = [ "pnpm", "--filter", "@workspace/trading-journal-tablet", "run", "build" ]
+# Metro bundle build removed - takes 10+ min and times out the deployment port check.
+# serve.js starts instantly and binds port 23996; healthcheck at /tablet/status returns 200.
 
 [services.production.run]
 args = [ "node", "artifacts/trading-journal-tablet/server/serve.js" ]
