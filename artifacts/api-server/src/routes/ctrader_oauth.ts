@@ -224,6 +224,73 @@ export function createCtraderOAuthRouter(): Router {
     }
   });
 
+  // Clean alias: GET /api/ctrader/accounts (called from frontend)
+  router.get("/ctrader/accounts", async (_req, res) => {
+    return handleFetchAccounts(res);
+  });
+
+  async function handleFetchAccounts(res: import("express").Response): Promise<void> {
+    try {
+      const stored = await getStoredToken();
+      if (!stored) {
+        res.status(401).json({
+          ok: false, error: "Not authenticated — complete OAuth first",
+          raw: "", http_status: 401, accounts: null,
+        });
+        return;
+      }
+
+      const tokenPreview = `${stored.token.slice(0, 12)}...${stored.token.slice(-6)}`;
+      const url = `${CTRADER_API_BASE}/tradingaccounts?accessToken=${encodeURIComponent(stored.token)}`;
+
+      logger.info({ tokenPreview, endpoint: "GET /v2/tradingaccounts" }, "ctrader/accounts: calling cTrader REST server-side");
+
+      let body = "";
+      let httpStatus = 0;
+      let accountRes: Response | null = null;
+
+      try {
+        accountRes = await fetch(url, {
+          headers: {
+            "Accept":        "application/json",
+            "Authorization": `Bearer ${stored.token}`,
+          },
+        });
+        httpStatus = accountRes.status;
+        body = await accountRes.text();
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        logger.error({ err: fetchErr }, "ctrader/accounts: fetch to cTrader REST failed");
+        res.status(502).json({
+          ok: false, error: `Server-side fetch failed: ${msg}`,
+          raw: "", http_status: 0, accounts: null,
+        });
+        return;
+      }
+
+      logger.info(
+        { http_status: httpStatus, body_length: body.length, body_preview: body.slice(0, 600) },
+        "ctrader/accounts: cTrader REST response",
+      );
+
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(body); } catch { /* keep null */ }
+
+      const ok = accountRes?.ok ?? false;
+      res.json({
+        ok,
+        http_status: httpStatus,
+        accounts:    ok ? parsed : null,
+        raw:         body,
+        note: ok ? null : "If HTTP 401/403: token may have expired — re-run OAuth. If HTTP 0: server network error.",
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "unknown";
+      logger.error({ err }, "ctrader/accounts: unhandled error");
+      res.status(500).json({ ok: false, error: msg, raw: "", http_status: 500, accounts: null });
+    }
+  }
+
   router.get("/ctrader/oauth/accounts", async (_req, res) => {
     try {
       const stored = await getStoredToken();

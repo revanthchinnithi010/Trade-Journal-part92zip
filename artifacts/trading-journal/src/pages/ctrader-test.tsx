@@ -439,16 +439,16 @@ export default function CtraderTestPage() {
     log("step", "Fetching cTrader account list via REST API…");
     setStepStates(p => ({ ...p, accounts: "loading" }));
     try {
-      const res  = await fetch(`${BASE}/api/ctrader/oauth/accounts`);
+      const res  = await fetch(`${BASE}/api/ctrader/accounts`);
       const data = (await res.json()) as AccountsResult;
       if (!mountedRef.current) return;
       setAccounts(data);
       if (data.ok) {
         log("success", `Accounts received — HTTP ${data.http_status}`);
-        log("info", `Raw response: ${data.raw.slice(0, 300)}`);
+        log("info", `Raw response: ${(data.raw ?? "").slice(0, 300)}`);
         setStepStates(p => ({ ...p, accounts: "success" }));
       } else {
-        log("warn", `Accounts HTTP ${data.http_status}: ${data.raw.slice(0, 200)}`);
+        log("warn", `Accounts HTTP ${data.http_status}: ${data.error ?? (data.raw ?? "").slice(0, 200)}`);
         if (data.note) log("info", `Note: ${data.note}`);
         setStepStates(p => ({ ...p, accounts: "error" }));
       }
@@ -479,7 +479,7 @@ export default function CtraderTestPage() {
         }
         setStepStates(p => ({ ...p, symbols: "success" }));
       } else {
-        log("warn", `Symbols HTTP ${data.http_status ?? "?"}: ${data.raw.slice(0, 200)}`);
+        log("warn", `Symbols HTTP ${data.http_status ?? "?"}: ${data.error ?? (data.raw ?? "").slice(0, 200)}`);
         if (data.note) log("info", `Note: ${data.note}`);
         setStepStates(p => ({ ...p, symbols: "error" }));
       }
