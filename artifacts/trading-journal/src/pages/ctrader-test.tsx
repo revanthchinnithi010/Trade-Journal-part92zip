@@ -39,12 +39,13 @@ interface OAuthStatus {
 }
 
 interface AccountsResult {
-  ok:          boolean;
-  http_status: number;
-  accounts:    unknown;
-  raw:         string;
-  note?:       string;
-  error?:      string;
+  ok:           boolean;
+  http_status:  number;
+  accounts:     unknown;
+  raw?:         string;
+  note?:        string;
+  error?:       string;
+  endpoint_url?: string;
 }
 
 interface SymbolsResult {
@@ -52,7 +53,7 @@ interface SymbolsResult {
   http_status?: number;
   count?:      number;
   sample?:     unknown[];
-  raw:         string;
+  raw?:        string;
   note?:       string;
   error?:      string;
 }
@@ -676,7 +677,7 @@ export default function CtraderTestPage() {
             </ActionBtn>
             {accounts && (
               <>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Badge
                     label={`HTTP ${accounts.http_status}`}
                     color={accounts.ok ? "#34d399" : "#fbbf24"}
@@ -684,11 +685,20 @@ export default function CtraderTestPage() {
                     dot={false}
                   />
                   <Badge
-                    label={accounts.ok ? "Success" : "Failed / REST limitation"}
+                    label={accounts.ok ? "Success" : "Failed"}
                     color={accounts.ok ? "#34d399" : "#f87171"}
                     bg={accounts.ok ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"}
                   />
                 </div>
+                {accounts.error && (
+                  <div style={{
+                    padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6,
+                    background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)",
+                    color: "#f87171",
+                  }}>
+                    ❌ {accounts.error}
+                  </div>
+                )}
                 {accounts.note && (
                   <div style={{
                     padding: "8px 10px", borderRadius: 8, fontSize: 11, lineHeight: 1.5,
@@ -698,7 +708,35 @@ export default function CtraderTestPage() {
                     ℹ️ {accounts.note}
                   </div>
                 )}
-                <MonoBox label="Raw Response" value={accounts.raw.slice(0, 600) + (accounts.raw.length > 600 ? "\n…(truncated)" : "")} />
+                {/* Test API Response section */}
+                <div style={{
+                  display: "flex", flexDirection: "column", gap: 6,
+                  padding: "10px 12px", borderRadius: 10,
+                  background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.07)",
+                }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
+                    Test API Response
+                  </span>
+                  {accounts.endpoint_url && (
+                    <MonoBox label="Endpoint Called" value={accounts.endpoint_url} copyable />
+                  )}
+                  <MonoBox
+                    label={`Raw Response (HTTP ${accounts.http_status})`}
+                    value={
+                      accounts.raw
+                        ? accounts.raw.slice(0, 800) + (accounts.raw.length > 800 ? "\n…(truncated)" : "")
+                        : "(empty response body)"
+                    }
+                    copyable
+                  />
+                  {accounts.ok && accounts.accounts !== null && (
+                    <MonoBox
+                      label="Parsed Accounts JSON"
+                      value={JSON.stringify(accounts.accounts, null, 2).slice(0, 800)}
+                      copyable
+                    />
+                  )}
+                </div>
               </>
             )}
           </>
@@ -768,7 +806,15 @@ export default function CtraderTestPage() {
                     ℹ️ {symbols.note}
                   </div>
                 )}
-                <MonoBox label="Raw Response" value={symbols.raw.slice(0, 600) + (symbols.raw.length > 600 ? "\n…(truncated)" : "")} />
+                <MonoBox
+                  label={`Raw Response (HTTP ${symbols.http_status ?? "?"})`}
+                  value={
+                    symbols.raw
+                      ? symbols.raw.slice(0, 800) + (symbols.raw.length > 800 ? "\n…(truncated)" : "")
+                      : "(empty response body)"
+                  }
+                  copyable
+                />
               </>
             )}
           </>

@@ -227,29 +227,64 @@ export function createCtraderOAuthRouter(): Router {
   router.get("/ctrader/oauth/accounts", async (_req, res) => {
     try {
       const stored = await getStoredToken();
-      if (!stored) return res.status(401).json({ ok: false, error: "Not authenticated — run OAuth first" });
+      if (!stored) {
+        return res.status(401).json({
+          ok: false, error: "Not authenticated — run OAuth first",
+          raw: "", http_status: 401, accounts: null,
+        });
+      }
 
-      logger.info("ctrader/oauth/accounts: querying cTrader REST API");
-
+      const tokenPreview = `${stored.token.slice(0, 12)}...${stored.token.slice(-6)}`;
       const url = `${CTRADER_API_BASE}/tradingaccounts?accessToken=${encodeURIComponent(stored.token)}`;
-      const accountRes = await fetch(url, { headers: { Accept: "application/json" } });
-      const body = await accountRes.text();
-      logger.info({ status: accountRes.status, body: body.slice(0, 400) }, "ctrader/oauth/accounts: raw response");
+
+      logger.info({ url: url.slice(0, 120), tokenPreview }, "ctrader/oauth/accounts: calling REST API");
+
+      let body = "";
+      let httpStatus = 0;
+      let accountRes: Response | null = null;
+
+      try {
+        accountRes = await fetch(url, {
+          headers: {
+            "Accept":        "application/json",
+            "Authorization": `Bearer ${stored.token}`,
+          },
+        });
+        httpStatus = accountRes.status;
+        body = await accountRes.text();
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        logger.error({ err: fetchErr, url }, "ctrader/oauth/accounts: fetch failed");
+        return res.status(502).json({
+          ok: false, error: `Network error: ${msg}`,
+          raw: "", http_status: 0, accounts: null, endpoint_url: url,
+        });
+      }
+
+      logger.info(
+        { http_status: httpStatus, body_length: body.length, body_preview: body.slice(0, 600) },
+        "ctrader/oauth/accounts: raw response received",
+      );
 
       let parsed: unknown = null;
       try { parsed = JSON.parse(body); } catch { /* keep null */ }
 
+      const ok = accountRes?.ok ?? false;
       return res.json({
-        ok:          accountRes.ok,
-        http_status: accountRes.status,
-        accounts:    accountRes.ok ? parsed : null,
+        ok,
+        http_status: httpStatus,
+        accounts:    ok ? parsed : null,
         raw:         body,
-        note:        accountRes.ok ? null : "Full account list requires ProtoOA WebSocket. REST returns limited data.",
+        endpoint_url: url.replace(/accessToken=[^&]+/, "accessToken=***"),
+        note: ok ? null : "If you get 401/403, the token may have expired. Re-run OAuth. Full account list may require ProtoOA WebSocket.",
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";
-      logger.error({ err }, "ctrader/oauth/accounts: error");
-      res.status(500).json({ ok: false, error: msg });
+      logger.error({ err }, "ctrader/oauth/accounts: unhandled error");
+      res.status(500).json({
+        ok: false, error: msg,
+        raw: "", http_status: 500, accounts: null,
+      });
     }
   });
 
@@ -257,22 +292,50 @@ export function createCtraderOAuthRouter(): Router {
     const { accountId } = req.params;
     try {
       const stored = await getStoredToken();
-      if (!stored) return res.status(401).json({ ok: false, error: "Not authenticated — run OAuth first" });
-
-      logger.info({ accountId }, "ctrader/oauth/symbols: querying symbol list");
+      if (!stored) {
+        return res.status(401).json({
+          ok: false, error: "Not authenticated — run OAuth first",
+          raw: "", http_status: 401,
+        });
+      }
 
       const url = `${CTRADER_API_BASE}/symbol?ctidTraderAccountId=${accountId}&accessToken=${encodeURIComponent(stored.token)}`;
-      const symRes = await fetch(url, { headers: { Accept: "application/json" } });
-      const body = await symRes.text();
-      logger.info({ status: symRes.status, body: body.slice(0, 400) }, "ctrader/oauth/symbols: raw response");
+      logger.info({ accountId, url: url.slice(0, 120) }, "ctrader/oauth/symbols: querying symbol list");
+
+      let body = "";
+      let httpStatus = 0;
+      let symRes: Response | null = null;
+
+      try {
+        symRes = await fetch(url, {
+          headers: {
+            "Accept":        "application/json",
+            "Authorization": `Bearer ${stored.token}`,
+          },
+        });
+        httpStatus = symRes.status;
+        body = await symRes.text();
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        logger.error({ err: fetchErr }, "ctrader/oauth/symbols: fetch failed");
+        return res.status(502).json({
+          ok: false, error: `Network error: ${msg}`,
+          raw: "", http_status: 0,
+        });
+      }
+
+      logger.info(
+        { http_status: httpStatus, body_length: body.length, body_preview: body.slice(0, 600) },
+        "ctrader/oauth/symbols: raw response received",
+      );
 
       let parsed: unknown = null;
       try { parsed = JSON.parse(body); } catch { /* keep null */ }
 
-      if (!symRes.ok) {
+      if (!symRes?.ok) {
         return res.json({
           ok:          false,
-          http_status: symRes.status,
+          http_status: httpStatus,
           raw:         body,
           note:        "Symbol list via REST requires a valid ctidTraderAccountId. Full list needs ProtoOA WS.",
         });
@@ -284,15 +347,16 @@ export function createCtraderOAuthRouter(): Router {
             ?? (parsed as { symbol?: unknown[]; symbols?: unknown[] })?.symbols
             ?? []);
       return res.json({
-        ok:     true,
-        count:  arr.length,
-        sample: arr.slice(0, 20),
-        raw:    body,
+        ok:          true,
+        http_status: httpStatus,
+        count:       arr.length,
+        sample:      arr.slice(0, 20),
+        raw:         body,
       });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";
       logger.error({ err }, "ctrader/oauth/symbols: error");
-      res.status(500).json({ ok: false, error: msg });
+      res.status(500).json({ ok: false, error: msg, raw: "", http_status: 500 });
     }
   });
 
