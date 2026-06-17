@@ -1,70 +1,74 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypto";
 import { logger } from "../lib/logger.js";
 
-const ALGO = "aes-256-cbc";
+const ALGO    = "aes-256-cbc";
+const IS_PROD = process.env["NODE_ENV"] === "production";
 
-// ─── Key derivation ──────────────────────────────────────────────────────────
+// ─── Key resolution (once at module load) ────────────────────────────────────
+
+const rawSecret: string | undefined =
+  process.env["BROKER_ENCRYPTION_KEY"] ??
+  process.env["ENCRYPTION_SECRET"] ??
+  undefined;
+
+if (!rawSecret) {
+  if (IS_PROD) {
+    logger.error(
+      "BROKER_ENCRYPTION_KEY is not set. Broker credential storage is disabled in production. " +
+      "Generate a key with: openssl rand -hex 32 — then add it to Replit Secrets.",
+    );
+  } else {
+    logger.warn(
+      "BROKER_ENCRYPTION_KEY is not set — using insecure dev key. " +
+      "Set BROKER_ENCRYPTION_KEY in Replit Secrets before deploying.",
+    );
+  }
+}
+
+// ─── Named error class ───────────────────────────────────────────────────────
+
+export class EncryptionKeyMissingError extends Error {
+  override readonly name = "EncryptionKeyMissingError";
+  constructor() {
+    super(
+      "BROKER_ENCRYPTION_KEY is not configured. " +
+      "Generate a 32-byte hex key with: openssl rand -hex 32 — " +
+      "then add it to Replit Secrets (Tools → Secrets).",
+    );
+  }
+}
+
+// ─── Public readiness helper ─────────────────────────────────────────────────
 
 /**
- * NEW (current) key derivation: SHA-256 of the raw secret.
- * Always produces exactly 32 bytes regardless of input length / encoding.
+ * Returns true when a real encryption key is available.
+ * Check this in routes/middleware before touching encrypted credentials to
+ * surface a clear 503 instead of a cryptic decrypt failure.
  */
-function deriveKey(): Buffer {
-  const raw = getRawSecret();
-  if (!raw) return deriveDevKey();
-  return createHash("sha256").update(raw).digest();
+export function isEncryptionReady(): boolean {
+  return rawSecret !== undefined;
+}
+
+// ─── Key derivation (internal) ───────────────────────────────────────────────
+
+function deriveCurrentKey(): Buffer {
+  const src = rawSecret ?? "tj-dev-insecure-key-not-for-prod";
+  return createHash("sha256").update(src).digest();
 }
 
 /**
- * LEGACY key derivation used by code written before the SHA-256 migration.
- * The old code did Buffer.from(raw.slice(0, 32), "utf8") which works only for
- * ASCII secrets whose first 32 characters are all single-byte.
- *
- * Returns null when the legacy derivation would not produce exactly 32 bytes
- * (e.g. short secret, multi-byte chars, or no secret set).
+ * Legacy derivation used before the SHA-256 migration.
+ * Tries Buffer.from(slice(0,32)) only when the raw secret is long enough.
+ * Returns null when it cannot produce a valid 32-byte key.
  */
 function deriveLegacyKey(): Buffer | null {
-  const raw = getRawSecret();
-  if (!raw) {
-    // Old dev fallback: "tj-dev-key-only-not-for-prod-!!" — 31 chars → 31 bytes
-    // which is invalid for AES-256, so the legacy dev path was always broken.
-    // Return null; we cannot recover credentials encrypted with a broken key.
-    return null;
-  }
-
-  if (raw.length < 32) return null;
-
+  if (!rawSecret || rawSecret.length < 32) return null;
   try {
-    const buf = Buffer.from(raw.slice(0, 32), "utf8");
-    if (buf.length !== 32) return null; // multi-byte chars → fewer than 32 bytes
-    return buf;
+    const buf = Buffer.from(rawSecret.slice(0, 32), "utf8");
+    return buf.length === 32 ? buf : null;
   } catch {
     return null;
   }
-}
-
-function getRawSecret(): string | undefined {
-  return (
-    process.env["BROKER_ENCRYPTION_KEY"] ??
-    process.env["ENCRYPTION_SECRET"] ??
-    undefined
-  );
-}
-
-function deriveDevKey(): Buffer {
-  logger.warn(
-    "BrokerEncryption: no BROKER_ENCRYPTION_KEY set — using insecure dev key. " +
-    "Set BROKER_ENCRYPTION_KEY in Replit Secrets before deploying.",
-  );
-  if (process.env["NODE_ENV"] === "production") {
-    throw new Error(
-      "BROKER_ENCRYPTION_KEY (or ENCRYPTION_SECRET) env var must be set in production. " +
-      "Generate a strong value with: openssl rand -hex 32",
-    );
-  }
-  // Hash the dev key string so it's always exactly 32 bytes, matching the
-  // same code path used in production.
-  return createHash("sha256").update("tj-dev-insecure-key-not-for-prod").digest();
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -72,13 +76,9 @@ function deriveDevKey(): Buffer {
 function parseHexParts(ciphertext: string): { iv: Buffer; enc: Buffer } | null {
   const colonIdx = ciphertext.indexOf(":");
   if (colonIdx === -1) return null;
-
   const ivHex  = ciphertext.slice(0, colonIdx);
   const encHex = ciphertext.slice(colonIdx + 1);
-
-  if (!ivHex || !encHex) return null;
-  if (ivHex.length !== 32) return null; // 16 bytes = 32 hex chars
-
+  if (!ivHex || !encHex || ivHex.length !== 32) return null;
   try {
     return { iv: Buffer.from(ivHex, "hex"), enc: Buffer.from(encHex, "hex") };
   } catch {
@@ -96,23 +96,27 @@ function tryDecrypt(key: Buffer, iv: Buffer, enc: Buffer): string | null {
   }
 }
 
-// ─── Public API ──────────────────────────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
  * Encrypt a plaintext string with AES-256-CBC.
  * Output format: "<iv-hex>:<ciphertext-hex>"
+ *
+ * Throws EncryptionKeyMissingError in production when BROKER_ENCRYPTION_KEY
+ * is not set. In development it logs a warning and uses a static fallback key.
  */
 export function encrypt(plaintext: string): string {
   if (typeof plaintext !== "string") {
     throw new TypeError("encrypt: plaintext must be a string");
   }
+  if (IS_PROD && !rawSecret) {
+    throw new EncryptionKeyMissingError();
+  }
 
-  const key = deriveKey();
-  const iv  = randomBytes(16);
-
+  const key       = deriveCurrentKey();
+  const iv        = randomBytes(16);
   const cipher    = createCipheriv(ALGO, key, iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
-
   return iv.toString("hex") + ":" + encrypted.toString("hex");
 }
 
@@ -123,13 +127,17 @@ export function encrypt(plaintext: string): string {
  * legacy slice-to-32 derivation used before the SHA-256 migration, so that
  * credentials stored with the old algorithm continue to work.
  *
- * Throws only when ALL derivation strategies have been exhausted.
+ * Throws EncryptionKeyMissingError in production when BROKER_ENCRYPTION_KEY
+ * is not set. Throws a descriptive Error when all decryption strategies fail.
  */
 export function decrypt(ciphertext: string): string {
   if (typeof ciphertext !== "string" || !ciphertext.includes(":")) {
     throw new Error(
       "BrokerEncryption.decrypt: malformed ciphertext — expected \"<iv-hex>:<data-hex>\"",
     );
+  }
+  if (IS_PROD && !rawSecret) {
+    throw new EncryptionKeyMissingError();
   }
 
   const parts = parseHexParts(ciphertext);
@@ -142,14 +150,9 @@ export function decrypt(ciphertext: string): string {
 
   const { iv, enc } = parts;
 
-  // ── Attempt 1: current SHA-256 key ─────────────────────────────────────────
-  const currentKey  = deriveKey();
-  const currentResult = tryDecrypt(currentKey, iv, enc);
+  const currentResult = tryDecrypt(deriveCurrentKey(), iv, enc);
   if (currentResult !== null) return currentResult;
 
-  // ── Attempt 2: legacy slice-to-32 key ─────────────────────────────────────
-  // Used by the codebase before the SHA-256 migration. Only possible when the
-  // raw secret is at least 32 ASCII characters long.
   const legacyKey = deriveLegacyKey();
   if (legacyKey) {
     const legacyResult = tryDecrypt(legacyKey, iv, enc);
@@ -162,7 +165,6 @@ export function decrypt(ciphertext: string): string {
     }
   }
 
-  // ── All strategies failed ──────────────────────────────────────────────────
   throw new Error(
     "BrokerEncryption.decrypt: decryption failed with all key derivations. " +
     "Possible causes: wrong BROKER_ENCRYPTION_KEY, data encrypted on a different " +

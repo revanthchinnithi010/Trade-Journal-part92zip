@@ -3,7 +3,7 @@ import { DeltaTradingAdapter, type DeltaAuthMode } from "./DeltaTradingAdapter.j
 import { BybitTradingAdapter } from "./BybitTradingAdapter.js";
 import { MT5TradingAdapter } from "./MT5TradingAdapter.js";
 import { pool } from "@workspace/db";
-import { decrypt } from "../services/BrokerEncryption.js";
+import { decrypt, EncryptionKeyMissingError } from "../services/BrokerEncryption.js";
 
 interface CachedAdapter {
   adapter: BrokerAdapter;
@@ -119,23 +119,32 @@ export async function getBrokerAdapter(
     const adapter = await BrokerService.getAdapter(accountId, apiToken);
     return { adapter, brokerId: adapter.brokerId };
   } catch (err) {
-    const msg = String(err);
-    if (msg.includes("not found") || msg.includes("Invalid")) {
-      res.status(403).json({ ok: false, error: "Broker account access denied" });
-    } else if (
-      msg.includes("decryption failed") ||
-      msg.includes("BrokerEncryption") ||
-      msg.includes("Invalid key length")
-    ) {
-      res.status(401).json({
+    if (err instanceof EncryptionKeyMissingError) {
+      res.status(503).json({
         ok: false,
         error:
-          "Cannot decrypt stored credentials — the encryption key changed or is missing. " +
-          "Set BROKER_ENCRYPTION_KEY in Replit Secrets (Tools → Secrets), then reconnect " +
-          "your broker account to re-encrypt with the current key.",
+          "Broker credential encryption is not configured. " +
+          "Set BROKER_ENCRYPTION_KEY in Replit Secrets (Tools → Secrets) and redeploy.",
       });
     } else {
-      res.status(500).json({ ok: false, error: msg });
+      const msg = String(err);
+      if (msg.includes("not found") || msg.includes("Invalid")) {
+        res.status(403).json({ ok: false, error: "Broker account access denied" });
+      } else if (
+        msg.includes("decryption failed") ||
+        msg.includes("BrokerEncryption") ||
+        msg.includes("Invalid key length")
+      ) {
+        res.status(401).json({
+          ok: false,
+          error:
+            "Cannot decrypt stored credentials — the encryption key changed or is missing. " +
+            "Set BROKER_ENCRYPTION_KEY in Replit Secrets (Tools → Secrets), then reconnect " +
+            "your broker account to re-encrypt with the current key.",
+        });
+      } else {
+        res.status(500).json({ ok: false, error: msg });
+      }
     }
     return null;
   }
