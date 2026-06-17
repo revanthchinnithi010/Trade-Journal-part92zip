@@ -55,21 +55,76 @@ export class CandleAggregator extends EventEmitter {
     const { symbol, price, timestamp } = tick;
     const tsMs = timestamp ?? Date.now();
 
+    // Guard: reject clearly invalid prices
+    if (!Number.isFinite(price) || price <= 0) return;
+
     for (const interval of SUPPORTED_INTERVALS) {
       const barStart = getBarStartSec(tsMs, interval);
       const b        = this.getOrCreate(symbol, interval);
 
       if (!b.current) {
+        // First tick ever for this symbol+interval
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
+
+        logger.debug({
+          symbol, interval,
+          timestamp: tsMs,
+          price,
+          candleStart: barStart,
+          open: price, high: price, low: price, close: price,
+          event: "new_bar",
+        }, "CandleAggregator: new bar (first tick)");
+
+      } else if (barStart < b.current.time) {
+        // ── Out-of-order tick: timestamp is OLDER than the current bar ──────
+        // Accepting it would either corrupt the current bar or resurrect a
+        // completed bar. Silently discard — the next in-order tick will be fine.
+        logger.debug({
+          symbol, interval,
+          tickBarStart: barStart,
+          currentBarStart: b.current.time,
+          priceDrop: price,
+        }, "CandleAggregator: out-of-order tick discarded");
+        continue;
+
       } else if (b.current.time !== barStart) {
-        b.completed.push(b.current);
+        // ── New candle boundary ───────────────────────────────────────────────
+        const closed = { ...b.current };
+        b.completed.push(closed);
         if (b.completed.length > MAX_BARS) b.completed.shift();
         b.current = { time: barStart, open: price, high: price, low: price, close: price, volume: 1 };
+
+        logger.debug({
+          symbol, interval,
+          timestamp: tsMs,
+          price,
+          candleStart: barStart,
+          open: price, high: price, low: price, close: price,
+          closedBar: closed,
+          event: "new_bar",
+        }, "CandleAggregator: bar closed, new bar opened");
+
       } else {
+        // ── Update existing candle in-place (O(1), no allocation) ────────────
         if (price > b.current.high) b.current.high = price;
         if (price < b.current.low)  b.current.low  = price;
         b.current.close   = price;
         b.current.volume += 1;
+
+        // Log tick details at debug level for the 1m interval only
+        // (logging all 9 intervals would be prohibitively verbose)
+        if (interval === "1") {
+          logger.debug({
+            symbol,
+            timestamp: tsMs,
+            price,
+            candleStart: b.current.time,
+            open:  b.current.open,
+            high:  b.current.high,
+            low:   b.current.low,
+            close: b.current.close,
+          }, "CandleAggregator: tick");
+        }
       }
 
       this.emit("candle_update", { symbol, interval, bar: { ...b.current } });

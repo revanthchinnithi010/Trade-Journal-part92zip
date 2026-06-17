@@ -2,7 +2,24 @@
  * yahooFinanceService.ts
  *
  * Fetches OHLCV from Yahoo Finance for non-crypto symbols (indices, commodities, forex).
- * No API key required. Used as a fallback when the symbol is not a Delta Exchange perpetual.
+ * No API key required. Used as a fallback when Finnhub REST is not available.
+ *
+ * INTERVAL MAPPING NOTES
+ * ──────────────────────
+ * Yahoo Finance does not have every interval the app uses. The strategy is:
+ *   - Use the finest available Yahoo resolution that ≤ the target interval.
+ *   - For intervals without a direct Yahoo match (3m, 2H, 4H), fetch finer bars
+ *     and resample server-side into proper OHLCV buckets.
+ *
+ * Yahoo resolution availability:
+ *   1m  → last 7 days only
+ *   2m  → last 60 days
+ *   5m  → last 60 days
+ *   15m → last 60 days
+ *   30m → last 60 days
+ *   60m → last 730 days
+ *   1d  → unlimited
+ *   1wk → unlimited
  */
 
 import type { OHLCBar } from "./CandleAggregator.js";
@@ -26,33 +43,100 @@ export const YAHOO_SYMBOL_MAP: Record<string, string> = {
   USDCAD: "CAD=X",
 };
 
-/** Map app interval → Yahoo Finance interval string */
-const YAHOO_INTERVAL: Record<string, string> = {
-  "1":   "2m",
-  "3":   "5m",
+/**
+ * Yahoo resolution to fetch for each app interval.
+ *
+ * For intervals without a direct Yahoo match we fetch a finer resolution and
+ * resample with resampleBars(). The resample target is in RESAMPLE_SECS below.
+ *
+ *  app interval | Yahoo fetch | resample target
+ *  -------------|-------------|----------------
+ *  1m           | 1m          | — (native)
+ *  3m           | 1m          | 3m  (3 × 1m)
+ *  5m           | 5m          | — (native)
+ *  15m          | 15m         | — (native)
+ *  30m          | 30m         | — (native)
+ *  60m (1H)     | 60m         | — (native)
+ *  120m (2H)    | 60m         | 2H  (2 × 1H)
+ *  240m (4H)    | 60m         | 4H  (4 × 1H)
+ *  D            | 1d          | — (native)
+ *  W            | 1wk         | — (native)
+ */
+const YAHOO_FETCH_INTERVAL: Record<string, string> = {
+  "1":   "1m",
+  "3":   "1m",   // fetch 1m → resample to 3m
   "5":   "5m",
   "15":  "15m",
   "30":  "30m",
-  "60":  "1h",
-  "120": "1h",
-  "240": "1d",
+  "60":  "60m",
+  "120": "60m",  // fetch 1h → resample to 2h
+  "240": "60m",  // fetch 1h → resample to 4h
   "D":   "1d",
   "W":   "1wk",
 };
 
-/** Map app interval → Yahoo Finance range (how far back to fetch) */
+/** How far back to fetch (must be enough for 500 resampled bars + market gaps) */
 const YAHOO_RANGE: Record<string, string> = {
-  "1":   "7d",
-  "3":   "7d",
+  "1":   "7d",    // 1m native — Yahoo 1m limit is 7 days
+  "3":   "7d",    // 1m fetch → 7d covers ~6720 1m bars → ~2240 3m bars after resample
   "5":   "60d",
   "15":  "60d",
   "30":  "60d",
   "60":  "730d",
-  "120": "730d",
-  "240": "730d",
+  "120": "730d",  // 1h fetch → 730 days covers ~8760 1h bars → ~4380 2h bars
+  "240": "730d",  // 1h fetch → 730 days covers ~8760 1h bars → ~2190 4h bars
   "D":   "730d",
   "W":   "730d",
 };
+
+/**
+ * Resample target in seconds.  0 = no resampling needed (native Yahoo interval).
+ * Resampling groups consecutive fine bars into coarser OHLCV bars aligned to
+ * standard boundaries (same alignment used by CandleAggregator and RealtimeTradeAggregator).
+ */
+const RESAMPLE_SECS: Record<string, number> = {
+  "3":   180,    // 3 minutes
+  "120": 7200,   // 2 hours
+  "240": 14400,  // 4 hours
+};
+
+/**
+ * Resample fine bars into coarser OHLCV bars.
+ *
+ * Groups bars into buckets aligned to targetSecs boundaries (UTC epoch).
+ * Open  = first bar's open in the bucket.
+ * High  = max high across all bars in the bucket.
+ * Low   = min low across all bars in the bucket.
+ * Close = last bar's close in the bucket.
+ * Volume = sum.
+ *
+ * This matches the CandleAggregator / RealtimeTradeAggregator alignment so
+ * historical bars mesh correctly with live tick-built candles.
+ */
+function resampleBars(bars: OHLCBar[], targetSecs: number): OHLCBar[] {
+  if (bars.length === 0) return [];
+  const buckets = new Map<number, OHLCBar>();
+  for (const bar of bars) {
+    const t = Math.floor(bar.time / targetSecs) * targetSecs;
+    const b = buckets.get(t);
+    if (!b) {
+      buckets.set(t, {
+        time:   t,
+        open:   bar.open,
+        high:   bar.high,
+        low:    bar.low,
+        close:  bar.close,
+        volume: bar.volume,
+      });
+    } else {
+      if (bar.high > b.high) b.high = bar.high;
+      if (bar.low  < b.low)  b.low  = bar.low;
+      b.close   = bar.close;   // last bar wins
+      b.volume += bar.volume;
+    }
+  }
+  return [...buckets.values()].sort((a, b) => a.time - b.time);
+}
 
 export function isYahooSymbol(symbol: string): boolean {
   return symbol in YAHOO_SYMBOL_MAP;
@@ -89,8 +173,9 @@ export async function fetchYahooCandles(
     return [];
   }
 
-  const yahooInterval = YAHOO_INTERVAL[interval] ?? "1d";
-  const yahooRange    = YAHOO_RANGE[interval]    ?? "730d";
+  const yahooInterval = YAHOO_FETCH_INTERVAL[interval] ?? "1d";
+  const yahooRange    = YAHOO_RANGE[interval]           ?? "730d";
+  const resampleSec   = RESAMPLE_SECS[interval]         ?? 0;
 
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}` +
     `?interval=${yahooInterval}&range=${yahooRange}&includeTimestamps=true`;
@@ -163,15 +248,20 @@ export async function fetchYahooCandles(
     return [];
   }
 
-  const sorted = bars.sort((a, b) => a.time - b.time);
-  const deduped = [...new Map(sorted.map(b => [b.time, b])).values()];
+  // Deduplicate + sort by timestamp ascending
+  const sorted = [...new Map(bars.map(b => [b.time, b])).values()]
+    .sort((a, b) => a.time - b.time);
 
-  const filtered = beforeSec && beforeSec > 0
-    ? deduped.filter(b => b.time < beforeSec)
-    : deduped;
+  // Resample to coarser interval if needed (3m, 2H, 4H)
+  const processed = resampleSec > 0 ? resampleBars(sorted, resampleSec) : sorted;
+
+  // Apply beforeSec filter for pagination
+  const filtered = (beforeSec && beforeSec > 0)
+    ? processed.filter(b => b.time < beforeSec)
+    : processed;
 
   logger.info(
-    { symbol, ticker, total: deduped.length, returned: filtered.length },
+    { symbol, ticker, total: sorted.length, resampled: processed.length, returned: Math.min(filtered.length, 500) },
     "Yahoo Finance: bars loaded ✓",
   );
 

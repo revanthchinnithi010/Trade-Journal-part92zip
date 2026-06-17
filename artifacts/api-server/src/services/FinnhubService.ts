@@ -117,6 +117,11 @@ export class FinnhubService {
     return valid.ok ? { success: true } : { success: false, error: valid.error };
   }
 
+  /** Returns the raw API key — used by the candles router for Finnhub REST history calls. */
+  getApiKey(): string | undefined {
+    return this.apiKey;
+  }
+
   getStatus(): {
     configured: boolean;
     status: FinnhubStatus;

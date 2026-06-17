@@ -66,7 +66,7 @@ export function createRouter(deps: {
   router.use(createFinnhubRouter(deps.finnhub));
   router.use(createDeltaRouter(deps.delta));
   router.use(createMarketRouter(deps.marketData, deps.healthMonitor));
-  router.use(createCandlesRouter(deps.candleAggregator, deps.marketData));
+  router.use(createCandlesRouter(deps.candleAggregator, deps.marketData, deps.finnhub));
   router.use(createAnalyticsRouter());
   router.use(configRouter);
   router.use(calendarEventsRouter);

@@ -39,3 +39,4 @@
 - [Market feed subscription queuing](feed-subscription-queuing.md) — MarketFeedManager.subscribe() must add to subscribedSymbols BEFORE checking provider existence; enableDelta uses subscribedSymbols to re-subscribe queued symbols when provider connects
 - [Broker-aware symbol routing](broker-symbol-routing.md) — only "delta" provider remains; BrokerName = "delta" | "finnhub"; BrokerId = "delta" | "mt5"; cTrader fully removed
 - [cTrader removal complete](ctrader-removed.md) — cTrader fully removed from both artifacts; BrokerId="delta"|"mt5"; FusionPanel is now a CSV-import placeholder; migrate.ts still has ctrader_oauth_state table (safe to keep)
+- [Candle data source routing](candle-data-routing.md) — forex/index/commodity: Finnhub REST preferred (when key set), Yahoo fallback; crypto: Delta Exchange; Yahoo intervals were wrong ("1"→"2m","240"→"1d"), now fixed; 3m/2H/4H resample from finer resolution
