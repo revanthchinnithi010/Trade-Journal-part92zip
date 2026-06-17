@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
+import { fetchSymbolsViaProtoOA } from "../lib/ctraderProtoOA.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
@@ -270,6 +271,53 @@ export function createCtraderOAuthRouter(): Router {
   // ── GET /api/ctrader/accounts (clean path used by frontend) ───────────────
   router.get("/ctrader/accounts", async (_req, res) => {
     return handleFetchAccounts(res);
+  });
+
+  // ── ProtoOA WebSocket symbol fetch (replaces broken REST /symbol endpoint) ──
+  router.get("/ctrader/symbols/:accountId", async (req, res) => {
+    const ctidTraderAccountId = parseInt(req.params.accountId, 10);
+    const isLive = req.query.isLive === "true";
+
+    if (isNaN(ctidTraderAccountId) || ctidTraderAccountId <= 0) {
+      return res.status(400).json({ ok: false, error: "Invalid ctidTraderAccountId" });
+    }
+
+    const stored = await getStoredToken().catch(() => null);
+    if (!stored) {
+      return res.status(401).json({ ok: false, error: "Not authenticated — complete OAuth first" });
+    }
+
+    const clientId     = process.env.CTRADER_CLIENT_ID;
+    const clientSecret = process.env.CTRADER_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ ok: false, error: "CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not configured" });
+    }
+
+    logger.info({ ctidTraderAccountId, isLive }, "ctrader/symbols: starting ProtoOA WS flow");
+
+    try {
+      const symbols = await fetchSymbolsViaProtoOA({
+        ctidTraderAccountId,
+        isLive,
+        accessToken:  stored.token,
+        clientId,
+        clientSecret,
+        timeoutMs:    25_000,
+      });
+
+      logger.info({ ctidTraderAccountId, count: symbols.length }, "ctrader/symbols: ProtoOA fetch complete");
+
+      return res.json({
+        ok:      true,
+        via:     "protoa_ws",
+        count:   symbols.length,
+        symbols,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err, ctidTraderAccountId, isLive }, "ctrader/symbols: ProtoOA error");
+      return res.status(502).json({ ok: false, error: msg });
+    }
   });
 
   async function handleFetchAccounts(res: import("express").Response): Promise<void> {

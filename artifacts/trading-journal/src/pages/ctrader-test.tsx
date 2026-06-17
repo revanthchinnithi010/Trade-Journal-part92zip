@@ -48,14 +48,23 @@ interface AccountsResult {
   endpoint_url?: string;
 }
 
+interface CtraderSymbol {
+  symbolId:    number;
+  symbolName:  string;
+  description: string;
+  pipPosition: number;
+  digits:      number;
+}
+
 interface SymbolsResult {
-  ok:          boolean;
+  ok:       boolean;
+  via?:     string;
+  count?:   number;
+  symbols?: CtraderSymbol[];
+  error?:   string;
+  raw?:     string;
+  note?:    string;
   http_status?: number;
-  count?:      number;
-  sample?:     unknown[];
-  raw?:        string;
-  note?:       string;
-  error?:      string;
 }
 
 type StepState = "idle" | "loading" | "success" | "error";
@@ -265,6 +274,7 @@ export default function CtraderTestPage() {
   const [accounts, setAccounts] = useState<AccountsResult | null>(null);
   const [symbols,  setSymbols]  = useState<SymbolsResult | null>(null);
   const [accountIdInput, setAccountIdInput] = useState("");
+  const [selectedIsLive, setSelectedIsLive] = useState(false);
 
   const [stepStates, setStepStates] = useState<Record<string, StepState>>({
     config: "idle", token: "idle", accounts: "idle", symbols: "idle",
@@ -461,25 +471,28 @@ export default function CtraderTestPage() {
     }
   }, [accountsLoading, log]);
 
-  const fetchSymbols = useCallback(async () => {
-    if (symbolsLoading || !accountIdInput.trim()) return;
+  const fetchSymbols = useCallback(async (overrideId?: string, overrideIsLive?: boolean) => {
+    const id     = overrideId     ?? accountIdInput.trim();
+    const isLive = overrideIsLive ?? selectedIsLive;
+    if (symbolsLoading || !id) return;
     setSymbolsLoading(true);
-    const id = accountIdInput.trim();
-    log("step", `Fetching symbol list for ctidTraderAccountId: ${id}`);
+    log("step", `ProtoOA WS — fetching symbols for ctidTraderAccountId: ${id} (${isLive ? "live" : "demo"})`);
     setStepStates(p => ({ ...p, symbols: "loading" }));
     try {
-      const res  = await fetch(`${BASE}/api/ctrader/oauth/symbols/${encodeURIComponent(id)}`);
+      const url  = `${BASE}/api/ctrader/symbols/${encodeURIComponent(id)}?isLive=${isLive}`;
+      const res  = await fetch(url);
       const data = (await res.json()) as SymbolsResult;
       if (!mountedRef.current) return;
       setSymbols(data);
       if (data.ok) {
-        log("success", `Symbols received — ${data.count} total`);
-        if (data.sample?.length) {
-          log("info", `Sample: ${JSON.stringify(data.sample.slice(0, 5))}`);
+        log("success", `Symbols received via ${data.via ?? "?"} — ${data.count} total`);
+        if (data.symbols?.length) {
+          const sample = data.symbols.slice(0, 8).map(s => s.symbolName).join(", ");
+          log("info", `Sample: ${sample}${(data.count ?? 0) > 8 ? " …" : ""}`);
         }
         setStepStates(p => ({ ...p, symbols: "success" }));
       } else {
-        log("warn", `Symbols HTTP ${data.http_status ?? "?"}: ${data.error ?? (data.raw ?? "").slice(0, 200)}`);
+        log("warn", `Symbols error: ${data.error ?? "unknown"}`);
         if (data.note) log("info", `Note: ${data.note}`);
         setStepStates(p => ({ ...p, symbols: "error" }));
       }
@@ -490,7 +503,7 @@ export default function CtraderTestPage() {
     } finally {
       if (mountedRef.current) setSymbolsLoading(false);
     }
-  }, [symbolsLoading, accountIdInput, log]);
+  }, [symbolsLoading, accountIdInput, selectedIsLive, log]);
 
   const connected = oaStatus?.connected && !oaStatus.expired;
 
@@ -699,52 +712,79 @@ export default function CtraderTestPage() {
                     ❌ {accounts.error}
                   </div>
                 )}
-                {accounts.note && (
-                  <div style={{
-                    padding: "8px 10px", borderRadius: 8, fontSize: 11, lineHeight: 1.5,
-                    background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)",
-                    color: "#fbbf24",
-                  }}>
-                    ℹ️ {accounts.note}
+                {accounts.ok && Array.isArray(accounts.accounts) && (accounts.accounts as unknown[]).length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
+                      Select Account → Auto-fetch Symbols
+                    </span>
+                    {(accounts.accounts as Array<{
+                      ctidTraderAccountId: number;
+                      traderLogin: number;
+                      isLive: boolean;
+                      brokerName?: string;
+                      depositCurrency?: string;
+                    }>).map(acct => (
+                      <div key={acct.ctidTraderAccountId} style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "9px 12px", borderRadius: 9,
+                        background: accountIdInput === String(acct.ctidTraderAccountId)
+                          ? "rgba(96,165,250,0.10)" : "rgba(0,0,0,0.20)",
+                        border: `1px solid ${accountIdInput === String(acct.ctidTraderAccountId)
+                          ? "rgba(96,165,250,0.30)" : "rgba(255,255,255,0.07)"}`,
+                        transition: "all 0.12s",
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                            <span style={{ fontFamily: "monospace", fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
+                              {acct.traderLogin ?? acct.ctidTraderAccountId}
+                            </span>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99,
+                              background: acct.isLive ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
+                              color: acct.isLive ? "#f87171" : "#60a5fa",
+                              border: `1px solid ${acct.isLive ? "rgba(239,68,68,0.25)" : "rgba(59,130,246,0.25)"}`,
+                            }}>
+                              {acct.isLive ? "LIVE" : "DEMO"}
+                            </span>
+                            {acct.brokerName && (
+                              <span style={{ fontSize: 10, color: "rgba(148,163,184,0.55)" }}>{acct.brokerName}</span>
+                            )}
+                            {acct.depositCurrency && (
+                              <span style={{ fontSize: 10, color: "rgba(148,163,184,0.40)" }}>{acct.depositCurrency}</span>
+                            )}
+                          </div>
+                          <div style={{ fontSize: 10, color: "rgba(148,163,184,0.40)", marginTop: 2, fontFamily: "monospace" }}>
+                            ctidTraderAccountId: {acct.ctidTraderAccountId}
+                          </div>
+                        </div>
+                        <ActionBtn
+                          variant={accountIdInput === String(acct.ctidTraderAccountId) ? "ghost" : "primary"}
+                          onClick={() => {
+                            const id = String(acct.ctidTraderAccountId);
+                            setAccountIdInput(id);
+                            setSelectedIsLive(acct.isLive);
+                            fetchSymbols(id, acct.isLive);
+                          }}
+                          loading={symbolsLoading && accountIdInput === String(acct.ctidTraderAccountId)}
+                        >
+                          <BookOpen style={{ width: 11, height: 11 }} />
+                          {accountIdInput === String(acct.ctidTraderAccountId) ? "Selected" : "Select"}
+                        </ActionBtn>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {/* Test API Response section */}
-                <div style={{
-                  display: "flex", flexDirection: "column", gap: 6,
-                  padding: "10px 12px", borderRadius: 10,
-                  background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.07)",
-                }}>
-                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
-                    Test API Response
-                  </span>
-                  {accounts.endpoint_url && (
-                    <MonoBox label="Endpoint Called" value={accounts.endpoint_url} copyable />
-                  )}
-                  <MonoBox
-                    label={`Raw Response (HTTP ${accounts.http_status})`}
-                    value={
-                      accounts.raw
-                        ? accounts.raw.slice(0, 800) + (accounts.raw.length > 800 ? "\n…(truncated)" : "")
-                        : "(empty response body)"
-                    }
-                    copyable
-                  />
-                  {accounts.ok && accounts.accounts !== null && (
-                    <MonoBox
-                      label="Parsed Accounts JSON"
-                      value={JSON.stringify(accounts.accounts, null, 2).slice(0, 800)}
-                      copyable
-                    />
-                  )}
-                </div>
+                {accounts.endpoint_url && (
+                  <MonoBox label="Endpoint Called" value={accounts.endpoint_url} copyable />
+                )}
               </>
             )}
           </>
         )}
       </StepCard>
 
-      {/* ── Step 4: Account Auth / Symbol List ── */}
-      <StepCard icon={STEP_ICON.symbols!} title="Step 4 — Symbol List (ctidTraderAccountId)" state={stepStates.symbols!}>
+      {/* ── Step 4: Symbol List via ProtoOA WebSocket ── */}
+      <StepCard icon={STEP_ICON.symbols!} title="Step 4 — Symbol List via ProtoOA WebSocket" state={stepStates.symbols!}>
         {!oaStatus?.connected ? (
           <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.50)" }}>
             Complete Step 2 first.
@@ -752,13 +792,10 @@ export default function CtraderTestPage() {
         ) : (
           <>
             <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.60)", lineHeight: 1.6 }}>
-              Calls{" "}
-              <code style={{ background: "rgba(255,255,255,0.07)", padding: "1px 5px", borderRadius: 4 }}>
-                GET /v2/symbol?ctidTraderAccountId=…
-              </code>.
-              Enter the numeric account ID from Step 3.
+              Connects via ProtoOA WebSocket (port 5036), authenticates, and fetches the symbol list.
+              Select an account in Step 3 to auto-populate — or enter an ID manually.
             </p>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
                 type="text"
                 placeholder="ctidTraderAccountId"
@@ -771,11 +808,19 @@ export default function CtraderTestPage() {
                   color: "rgba(255,255,255,0.80)", fontFamily: "monospace", outline: "none",
                 }}
               />
-              <ActionBtn
-                onClick={fetchSymbols}
-                loading={symbolsLoading}
-                disabled={!accountIdInput.trim()}
+              <button
+                onClick={() => setSelectedIsLive(v => !v)}
+                style={{
+                  padding: "7px 11px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                  background: selectedIsLive ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)",
+                  border: `1px solid ${selectedIsLive ? "rgba(239,68,68,0.25)" : "rgba(59,130,246,0.25)"}`,
+                  color: selectedIsLive ? "#f87171" : "#60a5fa",
+                  cursor: "pointer",
+                }}
               >
+                {selectedIsLive ? "LIVE" : "DEMO"}
+              </button>
+              <ActionBtn onClick={() => fetchSymbols()} loading={symbolsLoading} disabled={!accountIdInput.trim()}>
                 <BookOpen style={{ width: 12, height: 12 }} />
                 Fetch
               </ActionBtn>
@@ -784,37 +829,75 @@ export default function CtraderTestPage() {
               <>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   <Badge
-                    label={`HTTP ${symbols.http_status ?? "?"}`}
-                    color={symbols.ok ? "#34d399" : "#fbbf24"}
-                    bg={symbols.ok ? "rgba(16,185,129,0.10)" : "rgba(245,158,11,0.10)"}
-                    dot={false}
+                    label={symbols.ok ? "Success" : "Failed"}
+                    color={symbols.ok ? "#34d399" : "#f87171"}
+                    bg={symbols.ok ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"}
                   />
+                  {symbols.via && (
+                    <Badge label={symbols.via} color="#a78bfa" bg="rgba(139,92,246,0.10)" dot={false} />
+                  )}
                   {symbols.ok && symbols.count !== undefined && (
-                    <Badge
-                      label={`${symbols.count} symbols`}
-                      color="#60a5fa"
-                      bg="rgba(59,130,246,0.10)"
-                    />
+                    <Badge label={`${symbols.count} symbols`} color="#60a5fa" bg="rgba(59,130,246,0.10)" dot={false} />
                   )}
                 </div>
-                {symbols.note && (
+                {symbols.error && (
                   <div style={{
-                    padding: "8px 10px", borderRadius: 8, fontSize: 11, lineHeight: 1.5,
-                    background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.15)",
-                    color: "#fbbf24",
+                    padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6,
+                    background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)",
+                    color: "#f87171",
                   }}>
-                    ℹ️ {symbols.note}
+                    ❌ {symbols.error}
                   </div>
                 )}
-                <MonoBox
-                  label={`Raw Response (HTTP ${symbols.http_status ?? "?"})`}
-                  value={
-                    symbols.raw
-                      ? symbols.raw.slice(0, 800) + (symbols.raw.length > 800 ? "\n…(truncated)" : "")
-                      : "(empty response body)"
-                  }
-                  copyable
-                />
+                {symbols.ok && symbols.symbols && symbols.symbols.length > 0 && (
+                  <div style={{
+                    borderRadius: 10, overflow: "hidden",
+                    border: "1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <div style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 80px 60px 60px",
+                      padding: "6px 12px",
+                      background: "rgba(0,0,0,0.30)",
+                      borderBottom: "1px solid rgba(255,255,255,0.07)",
+                    }}>
+                      {["Symbol", "Pip Pos", "Digits", "ID"].map(h => (
+                        <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
+                          {h}
+                        </span>
+                      ))}
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: "auto" }}>
+                      {symbols.symbols.slice(0, 200).map((s, i) => (
+                        <div key={s.symbolId} style={{
+                          display: "grid",
+                          gridTemplateColumns: "1fr 80px 60px 60px",
+                          padding: "5px 12px",
+                          background: i % 2 === 0 ? "rgba(0,0,0,0.15)" : "transparent",
+                          borderBottom: "1px solid rgba(255,255,255,0.03)",
+                        }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.82)", fontFamily: "monospace" }}>
+                            {s.symbolName}
+                          </span>
+                          <span style={{ fontSize: 11, color: "rgba(148,163,184,0.70)", fontFamily: "monospace" }}>
+                            {s.pipPosition}
+                          </span>
+                          <span style={{ fontSize: 11, color: "rgba(148,163,184,0.70)", fontFamily: "monospace" }}>
+                            {s.digits}
+                          </span>
+                          <span style={{ fontSize: 10, color: "rgba(148,163,184,0.40)", fontFamily: "monospace" }}>
+                            {s.symbolId}
+                          </span>
+                        </div>
+                      ))}
+                      {(symbols.count ?? 0) > 200 && (
+                        <div style={{ padding: "6px 12px", fontSize: 10, color: "rgba(148,163,184,0.40)", textAlign: "center" }}>
+                          … {(symbols.count ?? 0) - 200} more symbols
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </>
