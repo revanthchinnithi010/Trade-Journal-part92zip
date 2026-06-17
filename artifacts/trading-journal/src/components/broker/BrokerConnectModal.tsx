@@ -9,6 +9,7 @@ import { BROKERS } from "@/types/broker";
 import { useBrokerStore } from "@/store/brokerStore";
 import type { BrokerAccount } from "@/types/broker";
 import { DeltaApiConnectForm } from "./DeltaApiConnectForm";
+import { CtraderOAuthConnectForm } from "./CtraderOAuthConnectForm";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type Status = "idle" | "loading" | "success" | "error";
@@ -126,6 +127,11 @@ function BrokerFormContent({
               onRetry={() => { setStatus("idle"); setErrorMsg(""); }}
             />
       )}
+
+      {/* cTrader */}
+      {broker.id === "ctrader" && (
+        <CtraderOAuthConnectForm onSuccess={onDone} onError={msg => { setStatus("error"); setErrorMsg(msg); }} />
+      )}
     </div>
   );
 }
@@ -136,7 +142,7 @@ function MobileBrokerConnectPage() {
   const { broker, closeAuthModal, openSelectModal } = ctx;
   if (!broker) return null;
 
-  const brokerTitle = broker.id === "delta" ? "Delta Exchange" : "MetaTrader 5";
+  const brokerTitle = broker.name;
 
   return (
     <div style={{
@@ -229,7 +235,7 @@ function DesktopBrokerConnectModal() {
               </div>
               <div>
                 <h2 style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.95)", margin: 0 }}>
-                  {broker.id === "delta" ? "Connect Delta Exchange" : "Connect MetaTrader 5"}
+                  Connect {broker.name}
                 </h2>
                 <p style={{ fontSize: 12, color: "rgba(255,255,255,0.4)", margin: "3px 0 0" }}>{broker.description}</p>
               </div>
