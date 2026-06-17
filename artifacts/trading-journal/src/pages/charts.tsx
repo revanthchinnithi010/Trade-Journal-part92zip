@@ -705,8 +705,19 @@ function useChartLayout() {
     fetch(`${BASE}/api/chart-layouts/${LAYOUT_SLOT}`)
       .then(r => r.ok ? r.json() : null)
       .then((data: ChartLayout | null) => {
-        if (data) setLayout({ symbol: data.symbol, interval: data.interval, market: data.market,
-          bottomOpen: data.bottomOpen, bottomHeight: data.bottomHeight });
+        if (data) setLayout({
+          // localStorage wins over DB for symbol/interval/market: navigation flows
+          // (Markets, Watchlist, Search) write to localStorage *before* routing here,
+          // so the localStorage value is always the user's intended selection.
+          // The DB value may be stale if the user navigated away before the 600ms
+          // saveToDb debounce flushed. bottomOpen/bottomHeight are UI-only prefs
+          // not written to localStorage by navigation flows, so DB wins for those.
+          symbol:       localStorage.getItem("tv_symbol")   ?? data.symbol,
+          interval:     localStorage.getItem("tv_interval") ?? data.interval,
+          market:       localStorage.getItem("tv_market")   ?? data.market,
+          bottomOpen:   data.bottomOpen,
+          bottomHeight: data.bottomHeight,
+        });
       })
       .catch(() => {});
   }, []);
