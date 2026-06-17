@@ -6,7 +6,10 @@ import { logger } from "../lib/logger.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
-const CTRADER_API_BASE  = "https://api.openapi.ctrader.com/v2";
+// REST API lives on api.spotware.com (api.openapi.ctrader.com does NOT resolve in all environments)
+const CTRADER_API_BASE  = "https://api.spotware.com";
+// Parameter name for Spotware REST is oauth_token (not accessToken)
+const CTRADER_TOKEN_PARAM = "oauth_token";
 
 const ENSURE_TOKENS_TABLE = `
   CREATE TABLE IF NOT EXISTS ctrader_tokens (
@@ -224,7 +227,47 @@ export function createCtraderOAuthRouter(): Router {
     }
   });
 
-  // Clean alias: GET /api/ctrader/accounts (called from frontend)
+  // ── Connectivity probe ────────────────────────────────────────────────────
+  router.get("/ctrader/ping", async (_req, res) => {
+    const targets = [
+      "https://api.spotware.com",
+      "https://api.spotware.com/connect/tradingaccounts",
+      "https://openapi.ctrader.com",
+    ];
+    const results: Record<string, unknown> = {};
+
+    for (const url of targets) {
+      try {
+        const r = await fetch(url, {
+          signal:   AbortSignal.timeout(8_000),
+          redirect: "manual",
+        });
+        const body = await r.text();
+        results[url] = {
+          ok:          r.ok,
+          http_status: r.status,
+          body_length: body.length,
+          body_preview: body.slice(0, 200),
+          content_type: r.headers.get("content-type"),
+        };
+      } catch (e: unknown) {
+        const err = e as Error & { cause?: Error & { code?: string } };
+        results[url] = {
+          ok:         false,
+          error_name: err.name,
+          error_msg:  err.message,
+          cause_msg:  err.cause?.message,
+          cause_code: err.cause?.code,
+          stack:      err.stack?.slice(0, 400),
+        };
+      }
+    }
+
+    logger.info({ results }, "ctrader/ping: connectivity probe");
+    res.json({ results });
+  });
+
+  // ── GET /api/ctrader/accounts (clean path used by frontend) ───────────────
   router.get("/ctrader/accounts", async (_req, res) => {
     return handleFetchAccounts(res);
   });
@@ -241,36 +284,67 @@ export function createCtraderOAuthRouter(): Router {
       }
 
       const tokenPreview = `${stored.token.slice(0, 12)}...${stored.token.slice(-6)}`;
-      const url = `${CTRADER_API_BASE}/tradingaccounts?accessToken=${encodeURIComponent(stored.token)}`;
+      // Correct Spotware REST endpoint — api.openapi.ctrader.com does not resolve universally
+      const url = `${CTRADER_API_BASE}/connect/tradingaccounts?${CTRADER_TOKEN_PARAM}=${encodeURIComponent(stored.token)}`;
+      const maskedUrl = url.replace(/oauth_token=[^&]+/, "oauth_token=***");
 
-      logger.info({ tokenPreview, endpoint: "GET /v2/tradingaccounts" }, "ctrader/accounts: calling cTrader REST server-side");
+      logger.info(
+        { url: maskedUrl, tokenPreview, base: CTRADER_API_BASE },
+        "ctrader/accounts: calling Spotware REST server-side",
+      );
 
       let body = "";
       let httpStatus = 0;
+      let responseHeaders: Record<string, string> = {};
       let accountRes: Response | null = null;
 
       try {
         accountRes = await fetch(url, {
+          signal:  AbortSignal.timeout(10_000),
           headers: {
             "Accept":        "application/json",
             "Authorization": `Bearer ${stored.token}`,
           },
         });
         httpStatus = accountRes.status;
+        responseHeaders = Object.fromEntries(accountRes.headers);
         body = await accountRes.text();
-      } catch (fetchErr) {
-        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
-        logger.error({ err: fetchErr }, "ctrader/accounts: fetch to cTrader REST failed");
+      } catch (fetchErr: unknown) {
+        const e = fetchErr as Error & { cause?: Error & { code?: string } };
+        logger.error(
+          {
+            error_name:  e.name,
+            error_msg:   e.message,
+            cause_msg:   e.cause?.message,
+            cause_code:  e.cause?.code,
+            stack:       e.stack?.slice(0, 600),
+            url:         maskedUrl,
+          },
+          "ctrader/accounts: server-side fetch failed",
+        );
         res.status(502).json({
-          ok: false, error: `Server-side fetch failed: ${msg}`,
-          raw: "", http_status: 0, accounts: null,
+          ok:          false,
+          error:       `Server-side fetch failed: ${e.message}`,
+          error_name:  e.name,
+          cause:       e.cause?.message,
+          cause_code:  e.cause?.code,
+          stack:       e.stack?.slice(0, 600),
+          url_called:  maskedUrl,
+          raw:         "",
+          http_status: 0,
+          accounts:    null,
         });
         return;
       }
 
       logger.info(
-        { http_status: httpStatus, body_length: body.length, body_preview: body.slice(0, 600) },
-        "ctrader/accounts: cTrader REST response",
+        {
+          http_status:   httpStatus,
+          body_length:   body.length,
+          response_headers: responseHeaders,
+          body_preview:  body.slice(0, 600),
+        },
+        "ctrader/accounts: Spotware REST response received",
       );
 
       let parsed: unknown = null;
@@ -279,15 +353,17 @@ export function createCtraderOAuthRouter(): Router {
       const ok = accountRes?.ok ?? false;
       res.json({
         ok,
-        http_status: httpStatus,
-        accounts:    ok ? parsed : null,
-        raw:         body,
-        note: ok ? null : "If HTTP 401/403: token may have expired — re-run OAuth. If HTTP 0: server network error.",
+        http_status:      httpStatus,
+        response_headers: responseHeaders,
+        accounts:         ok ? parsed : null,
+        raw:              body,
+        url_called:       maskedUrl,
+        note:             ok ? null : "HTTP 401/403 = token expired (re-run OAuth). HTTP 400 = wrong param. HTTP 0 = DNS/network.",
       });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "unknown";
+      const e = err as Error;
       logger.error({ err }, "ctrader/accounts: unhandled error");
-      res.status(500).json({ ok: false, error: msg, raw: "", http_status: 500, accounts: null });
+      res.status(500).json({ ok: false, error: e.message, stack: e.stack?.slice(0, 400), raw: "", http_status: 500, accounts: null });
     }
   }
 
@@ -302,9 +378,9 @@ export function createCtraderOAuthRouter(): Router {
       }
 
       const tokenPreview = `${stored.token.slice(0, 12)}...${stored.token.slice(-6)}`;
-      const url = `${CTRADER_API_BASE}/tradingaccounts?accessToken=${encodeURIComponent(stored.token)}`;
+      const url = `${CTRADER_API_BASE}/connect/tradingaccounts?${CTRADER_TOKEN_PARAM}=${encodeURIComponent(stored.token)}`;
 
-      logger.info({ url: url.slice(0, 120), tokenPreview }, "ctrader/oauth/accounts: calling REST API");
+      logger.info({ url: url.replace(/oauth_token=[^&]+/, "oauth_token=***"), tokenPreview }, "ctrader/oauth/accounts: calling REST API");
 
       let body = "";
       let httpStatus = 0;
@@ -366,8 +442,8 @@ export function createCtraderOAuthRouter(): Router {
         });
       }
 
-      const url = `${CTRADER_API_BASE}/symbol?ctidTraderAccountId=${accountId}&accessToken=${encodeURIComponent(stored.token)}`;
-      logger.info({ accountId, url: url.slice(0, 120) }, "ctrader/oauth/symbols: querying symbol list");
+      const url = `${CTRADER_API_BASE}/connect/symbol?ctidTraderAccountId=${accountId}&${CTRADER_TOKEN_PARAM}=${encodeURIComponent(stored.token)}`;
+      logger.info({ accountId, url: url.replace(/oauth_token=[^&]+/, "oauth_token=***") }, "ctrader/oauth/symbols: querying symbol list");
 
       let body = "";
       let httpStatus = 0;
