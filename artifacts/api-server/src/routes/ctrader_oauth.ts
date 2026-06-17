@@ -57,6 +57,19 @@ async function getStoredToken(): Promise<{ token: string; expiresAt: number } | 
 export function createCtraderOAuthRouter(): Router {
   const router = Router();
 
+  router.get("/ctrader/debug-config", (req, res) => {
+    const clientId     = process.env["CTRADER_CLIENT_ID"];
+    const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+    const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
+    const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
+    res.json({
+      hasClientId:     !!clientId,
+      hasClientSecret: !!clientSecret,
+      clientIdLength:  clientId?.length ?? 0,
+      redirectUri:     `${proto}://${host}/api/ctrader/oauth/callback`,
+    });
+  });
+
   router.get("/ctrader/oauth/config", async (req, res) => {
     const clientId = process.env["CTRADER_CLIENT_ID"];
     const configured = !!(clientId && process.env["CTRADER_CLIENT_SECRET"]);
