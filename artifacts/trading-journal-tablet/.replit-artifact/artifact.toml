@@ -29,6 +29,9 @@ PORT = "23996"
 BASE_PATH = "/tablet/"
 NODE_ENV = "production"
 
+[services.production.health.startup]
+path = "/tablet/status"
+
 [services.env]
 PORT = "23996"
 BASE_PATH = "/tablet/"

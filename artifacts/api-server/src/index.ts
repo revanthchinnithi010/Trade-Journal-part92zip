@@ -99,17 +99,7 @@ server.on("upgrade", (req, socket, head) => {
 healthMonitor.start();
 
 (async () => {
-  try {
-    await runMigrations();
-  } catch (err) {
-    logger.error({ err }, "DB migration failed — services may have limited functionality");
-  }
-
-  await AppConfigService.injectToEnv();
-  logger.info({
-    DELTA_CLIENT_ID: process.env["DELTA_CLIENT_ID"] ? "SET" : "NOT SET",
-  }, "Startup: credential injection complete — env status after inject");
-
+  // Start listening FIRST so health checks succeed during migration/injection
   await new Promise<void>((resolve, reject) => {
     server.listen(port, (err?: Error) => {
       if (err) {
@@ -121,6 +111,17 @@ healthMonitor.start();
       resolve();
     });
   });
+
+  try {
+    await runMigrations();
+  } catch (err) {
+    logger.error({ err }, "DB migration failed — services may have limited functionality");
+  }
+
+  await AppConfigService.injectToEnv();
+  logger.info({
+    DELTA_CLIENT_ID: process.env["DELTA_CLIENT_ID"] ? "SET" : "NOT SET",
+  }, "Startup: credential injection complete — env status after inject");
 
   await Promise.all([
     telegram.init().then(() => {

@@ -53,6 +53,6 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-CTRADER_REDIRECT_URI = "https://workspace.cryonith.replit.app/api/ctrader/oauth/callback"
+CTRADER_REDIRECT_URI = "https://trade-journal-part-92-zip--vortiqo.replit.app/api/ctrader/oauth/callback"
 
 [userenv.production]
