@@ -21,7 +21,10 @@ import {
   type BrokerName,
 } from "@/data/brokerData";
 
-type ActiveTab = "delta" | "fusion" | "groww";
+type ActiveTab = "delta" | "fusion" | "groww" | "ctrader";
+
+const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
 type SyncStatus = "idle" | "syncing" | "success" | "error";
 type ImportStatus = "idle" | "importing" | "success" | "error";
 
@@ -565,6 +568,127 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
 }
 
 
+function CTraderPanel() {
+  const [redirectUri, setRedirectUri] = useState<string | null>(null);
+  const [uriStatus, setUriStatus] = useState<"loading" | "detected" | "missing">("loading");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    fetch(`${BASE}/api/ctrader/oauth/config`)
+      .then(r => r.json())
+      .then((data: { redirectUri?: string }) => {
+        if (data.redirectUri) {
+          setRedirectUri(data.redirectUri);
+          setUriStatus("detected");
+        } else {
+          setUriStatus("missing");
+        }
+      })
+      .catch(() => setUriStatus("missing"));
+  }, []);
+
+  const handleCopy = () => {
+    if (!redirectUri) return;
+    navigator.clipboard.writeText(redirectUri).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  return (
+    <motion.div key="ctrader" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="space-y-5">
+      {/* OAuth Config Card */}
+      <div className="glass-card p-5 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">
+            <Link2 className="w-3.5 h-3.5 text-violet-400" />
+          </div>
+          <span className="text-[13px] font-bold text-white">OAuth Configuration</span>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <label className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider">
+              Redirect URL
+            </label>
+            {uriStatus === "loading" && (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
+                Detecting…
+              </span>
+            )}
+            {uriStatus === "detected" && (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-400 px-2.5 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
+                <CheckCircle2 className="w-3 h-3" />
+                Redirect URL Detected ✓
+              </span>
+            )}
+            {uriStatus === "missing" && (
+              <span className="flex items-center gap-1.5 text-[10px] font-bold text-red-400 px-2.5 py-1 rounded-full bg-red-500/10 border border-red-500/20">
+                <AlertCircle className="w-3 h-3" />
+                Redirect URL Missing ✗
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={
+                uriStatus === "loading"
+                  ? "Detecting…"
+                  : (redirectUri ?? "Unable to detect — API server may be offline")
+              }
+              className="flex-1 h-10 px-3 rounded-xl text-[12px] bg-white/[0.04] border border-white/[0.09] text-muted-foreground/80 outline-none font-mono cursor-default select-all"
+              style={{ caretColor: "transparent" }}
+            />
+            <button
+              onClick={handleCopy}
+              disabled={!redirectUri}
+              title="Copy redirect URL"
+              className="h-10 px-3 rounded-xl border border-white/[0.09] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+            >
+              {copied
+                ? <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Copied!</>
+                : <><Copy className="w-3.5 h-3.5" /> Copy</>}
+            </button>
+          </div>
+
+          <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
+            Auto-generated from your current environment. Register this exact URL in your cTrader Open API app under{" "}
+            <span className="text-violet-400/80 font-medium">Redirect URIs</span> — no manual entry required.
+          </p>
+        </div>
+      </div>
+
+      {/* Setup Instructions */}
+      <div className="glass-card p-5 space-y-3">
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-6 h-6 rounded-md bg-white/[0.05] flex items-center justify-center">
+            <FileText className="w-3.5 h-3.5 text-muted-foreground/60" />
+          </div>
+          <span className="text-[13px] font-bold text-white">Setup Instructions</span>
+        </div>
+        {[
+          { step: 1, text: "Register a new application at connect.spotware.com" },
+          { step: 2, text: "Add the Redirect URL above to your app's allowed redirect URIs" },
+          { step: 3, text: "Copy your Client ID and Client Secret" },
+          { step: 4, text: "Set CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET in Replit Secrets" },
+        ].map(({ step, text }) => (
+          <div key={step} className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[10px] font-black text-violet-400">{step}</span>
+            </div>
+            <p className="text-[12px] text-muted-foreground leading-relaxed">{text}</p>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+
 const BROKER_FILTER_OPTIONS: Array<{ label: string; value: BrokerName | "all" }> = [
   { label: "All Brokers", value: "all" },
   { label: "Delta Exchange", value: "Delta Exchange" },
@@ -579,6 +703,7 @@ export default function Brokers() {
   const [deltaConnected, setDeltaConnected] = useState(true);
   const [fusionConnected, setFusionConnected] = useState(false);
   const [growwConnected, setGrowwConnected] = useState(false);
+  const [ctraderConnected, _setCtraderConnected] = useState(false);
   const [tradeFilter, setTradeFilter] = useState<BrokerName | "all">("all");
   const filteredTrades = SAMPLE_SYNCED_TRADES.filter(
     t => tradeFilter === "all" || t.broker === tradeFilter
@@ -645,6 +770,18 @@ export default function Brokers() {
           onSelect={() => setActiveTab("groww")}
           onToggleConnect={() => setGrowwConnected(v => !v)}
         />
+        <BrokerCard
+          name="cTrader"
+          tag="ctrader"
+          active={activeTab === "ctrader"}
+          connected={ctraderConnected}
+          lastSync="Never"
+          tradesCount={0}
+          accentColor="transparent"
+          icon={<span style={{ fontSize: 20, fontWeight: 900, color: "#a78bfa" }}>cT</span>}
+          onSelect={() => setActiveTab("ctrader")}
+          onToggleConnect={() => setActiveTab("ctrader")}
+        />
       </div>
 
       {/* Tab Switcher */}
@@ -653,6 +790,7 @@ export default function Brokers() {
           { key: "delta" as ActiveTab, label: "Delta Exchange", color: "text-orange-400" },
           { key: "fusion" as ActiveTab, label: "FusionMarkets", color: "text-blue-400" },
           { key: "groww" as ActiveTab, label: "Groww", color: "text-teal-400" },
+          { key: "ctrader" as ActiveTab, label: "cTrader", color: "text-violet-400" },
         ].map(tab => (
           <button
             key={tab.key}
@@ -678,6 +816,9 @@ export default function Brokers() {
           )}
           {activeTab === "groww" && (
             <GrowwPanel key="groww" connected={growwConnected} onConnect={() => setGrowwConnected(true)} onDisconnect={() => setGrowwConnected(false)} />
+          )}
+          {activeTab === "ctrader" && (
+            <CTraderPanel key="ctrader" />
           )}
         </AnimatePresence>
       </div>
