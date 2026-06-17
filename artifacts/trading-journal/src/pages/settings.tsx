@@ -155,7 +155,7 @@ function FinnhubPanel() {
           </div>
           <div>
             <p className="font-semibold text-white text-[14px] leading-tight">Finnhub / OANDA</p>
-            <p className="text-[11px] text-muted-foreground">NAS100 · US30 · XAUUSD · EURUSD · GBPJPY · USOIL · UKOIL</p>
+            <p className="text-[11px] text-muted-foreground">EURUSD · GBPUSD · USDJPY · AUDUSD · USDCHF · XAUUSD · XAGUSD · USOIL · UKOIL · NATGAS · US30 · NAS100 · US500 · GER40 · UK100</p>
           </div>
         </div>
         <StatusBadge status={status} />

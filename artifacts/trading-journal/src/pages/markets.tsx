@@ -9,8 +9,13 @@ import { useLocation } from "wouter";
 import { useChartStore } from "@/store/chartStore";
 import { tapStart, recordUi, getEvents, subscribe as diagSubscribe } from "@/lib/starDiag";
 
-type Tab = "Watchlist" | "Crypto" | "Forex" | "Indices" | "Commodities";
-const TABS: Tab[] = ["Watchlist", "Crypto", "Forex", "Indices", "Commodities"];
+type Tab = "Watchlist" | "Crypto" | "Forex" | "Metals" | "Indices" | "Commodities";
+const TABS: Tab[] = ["Watchlist", "Crypto", "Forex", "Metals", "Indices", "Commodities"];
+
+const FOREX_SYMBOLS       = ["EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF"];
+const METALS_SYMBOLS      = ["XAUUSD", "XAGUSD"];
+const COMMODITIES_SYMBOLS = ["USOIL", "UKOIL", "NATGAS"];
+const INDICES_SYMBOLS     = ["US30", "NAS100", "US500", "GER40", "UK100"];
 
 interface SymbolInfo {
   symbol:       string;
@@ -55,11 +60,12 @@ const SymbolRow = memo(function SymbolRow({
 }) {
   totalRowRenders++;
 
-  const tick      = useSymbolTick(symbol);
-  const price     = tick?.price;
-  const changePct = tick?.changePct ?? 0;
-  const isUp      = changePct >= 0;
-  const tag       = CONTRACT_LABELS[contractType] ?? contractType;
+  const tick       = useSymbolTick(symbol);
+  const price      = tick?.price;
+  const changePct  = tick?.changePct ?? 0;
+  const changeDollar = tick?.change ?? 0;
+  const isUp       = changePct >= 0;
+  const tag        = CONTRACT_LABELS[contractType] ?? contractType;
 
   // ── Optimistic star visual — fills at pointer-down, zero latency ──────────
   const [visualFav, setVisualFav] = useState(isFavorite);
@@ -140,11 +146,10 @@ const SymbolRow = memo(function SymbolRow({
         </div>
       </div>
 
-      {/* Change badge */}
+      {/* Change badge — % on top, $ below */}
       <div style={{
-        minWidth: 60, padding: "5px 7px", borderRadius: 6,
-        textAlign: "center", fontSize: 12, fontWeight: 700,
-        fontVariantNumeric: "tabular-nums", flexShrink: 0,
+        minWidth: 66, padding: "5px 7px", borderRadius: 6,
+        textAlign: "center", flexShrink: 0,
         background: tick
           ? isUp ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)"
           : "rgba(148,163,184,0.07)",
@@ -155,7 +160,14 @@ const SymbolRow = memo(function SymbolRow({
           ? isUp ? "1px solid rgba(16,185,129,0.22)" : "1px solid rgba(239,68,68,0.22)"
           : "1px solid rgba(148,163,184,0.1)",
       }}>
-        {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+        <div style={{ fontSize: 12, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
+          {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+        </div>
+        {tick && (
+          <div style={{ fontSize: 10, fontWeight: 600, fontVariantNumeric: "tabular-nums", opacity: 0.8, marginTop: 1 }}>
+            {isUp ? "+" : ""}{formatPrice(Math.abs(changeDollar))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -353,11 +365,29 @@ export default function Markets() {
     } else if (activeTab === "Crypto") {
       r = deltaSymbols.map(s => ({ symbol: s.symbol, name: s.name, contractType: s.contractType }));
     } else if (activeTab === "Forex") {
-      r = [];
+      r = FOREX_SYMBOLS.map(sym => ({
+        symbol:       sym,
+        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
+        contractType: "forex",
+      }));
+    } else if (activeTab === "Metals") {
+      r = METALS_SYMBOLS.map(sym => ({
+        symbol:       sym,
+        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
+        contractType: "metal",
+      }));
     } else if (activeTab === "Indices") {
-      r = [];
+      r = INDICES_SYMBOLS.map(sym => ({
+        symbol:       sym,
+        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
+        contractType: "indices",
+      }));
     } else {
-      r = [];
+      r = COMMODITIES_SYMBOLS.map(sym => ({
+        symbol:       sym,
+        name:         SYMBOL_CATALOG[sym]?.label ?? sym,
+        contractType: "commodities",
+      }));
     }
 
     if (search.trim()) {
@@ -499,7 +529,7 @@ export default function Markets() {
             </p>
             {activeTab === "Watchlist" && (
               <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
-                Tap ★ on any symbol in Crypto, Forex,{"\n"}Indices or Commodities to add it here
+                Tap ★ on any symbol in Crypto, Forex, Metals,{"\n"}Indices or Commodities to add it here
               </p>
             )}
           </div>

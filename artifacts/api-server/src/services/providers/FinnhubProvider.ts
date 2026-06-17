@@ -35,6 +35,9 @@ const STATIC_SYMBOL_MAP: Record<string, string> = {
   NAS100: "OANDA:NAS100_USD",
   US30:   "OANDA:US30_USD",
   SPX500: "OANDA:SPX500_USD",
+  US500:  "OANDA:SPX500_USD",
+  GER40:  "OANDA:DE30_EUR",
+  UK100:  "OANDA:UK100_GBP",
   // Metals via OANDA
   XAUUSD: "OANDA:XAU_USD",
   XAGUSD: "OANDA:XAG_USD",
@@ -42,6 +45,7 @@ const STATIC_SYMBOL_MAP: Record<string, string> = {
   USOIL:  "OANDA:WTICO_USD",
   UKOIL:  "OANDA:BCO_USD",
   NGAS:   "OANDA:NATGAS_USD",
+  NATGAS: "OANDA:NATGAS_USD",
   // Crypto via Binance (highest liquidity on Finnhub)
   BTCUSD:  "BINANCE:BTCUSDT",
   ETHUSD:  "BINANCE:ETHUSDT",

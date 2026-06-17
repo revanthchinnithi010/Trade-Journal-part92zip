@@ -5,7 +5,16 @@ import type { MarketDataService } from "./MarketDataService.js";
 
 const KEY_API_KEY = "finnhub_api_key";
 
-const FINNHUB_SYMBOLS = ["NAS100", "US30", "XAUUSD", "EURUSD", "GBPJPY", "USOIL", "UKOIL"];
+const FINNHUB_SYMBOLS = [
+  // Forex
+  "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF",
+  // Metals
+  "XAUUSD", "XAGUSD",
+  // Commodities
+  "USOIL", "UKOIL", "NATGAS",
+  // Indices
+  "US30", "NAS100", "US500", "GER40", "UK100",
+];
 
 function maskKey(key: string): string {
   if (key.length <= 12) return "***";

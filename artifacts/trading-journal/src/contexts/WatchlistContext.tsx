@@ -38,14 +38,19 @@ export const SYMBOL_CATALOG: Record<string, CatalogEntry> = {
   USDJPY:  { tv: "OANDA:USDJPY",     label: "USD/JPY",  badge: "JPY",  market: "Forex" },
   AUDUSD:  { tv: "OANDA:AUDUSD",     label: "AUD/USD",  badge: "AUD",  market: "Forex" },
   USDCAD:  { tv: "OANDA:USDCAD",     label: "USD/CAD",  badge: "CAD",  market: "Forex" },
+  USDCHF:  { tv: "OANDA:USDCHF",     label: "USD/CHF",  badge: "CHF",  market: "Forex" },
   NAS100:  { tv: "OANDA:NAS100USD",  label: "NAS100",   badge: "NAS",  market: "Indices" },
-  US30:    { tv: "OANDA:US30USD",    label: "US30",     badge: "DJI",  market: "Indices" },
+  US30:    { tv: "OANDA:US30USD",    label: "US 30",    badge: "DJI",  market: "Indices" },
+  US500:   { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices" },
   SPX500:  { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices" },
+  GER40:   { tv: "OANDA:DE30EUR",    label: "GER 40",   badge: "DAX",  market: "Indices" },
   DE40:    { tv: "OANDA:DE30EUR",    label: "DAX 40",   badge: "DAX",  market: "Indices" },
+  UK100:   { tv: "OANDA:UK100GBP",   label: "UK 100",   badge: "FTSE", market: "Indices" },
   XAUUSD:  { tv: "OANDA:XAUUSD",     label: "XAU/USD",  badge: "GOLD", market: "Commodities" },
   XAGUSD:  { tv: "OANDA:XAGUSD",     label: "XAG/USD",  badge: "SILV", market: "Commodities" },
   USOIL:   { tv: "TVC:USOIL",        label: "US Oil",   badge: "OIL",  market: "Commodities" },
   UKOIL:   { tv: "TVC:UKOIL",        label: "UK Oil",   badge: "BRENT",market: "Commodities" },
+  NATGAS:  { tv: "TVC:NATGAS",       label: "Nat Gas",  badge: "GAS",  market: "Commodities" },
 };
 
 const DEFAULT_SYMBOLS = [
