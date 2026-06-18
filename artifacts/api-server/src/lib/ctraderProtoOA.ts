@@ -2,9 +2,11 @@ import WebSocket from "ws";
 import { logger } from "./logger.js";
 
 // ── ProtoOA WebSocket endpoints ────────────────────────────────────────────────
+// Port 5035 = TLS/WSS ProtoOA endpoint (correct for both demo & live)
+// Port 5036 is open but is a different service
 const DEMO_HOST = "demo.ctraderapi.com";
 const LIVE_HOST = "live.ctraderapi.com";
-const PORT      = 5036;
+const PORT      = 5035;
 
 // ── Payload type IDs ───────────────────────────────────────────────────────────
 const PT = {
@@ -19,16 +21,24 @@ const PT = {
   ERROR_RES:        2142,
 } as const;
 
-// ── Minimal protobuf encoder ───────────────────────────────────────────────────
+// Known payload type names for logging
+const PT_NAME: Record<number, string> = {
+  2100: "APP_AUTH_REQ",   2101: "APP_AUTH_RES",
+  2102: "ACCT_AUTH_REQ",  2103: "ACCT_AUTH_RES",
+  2115: "SYMBOL_LIST_REQ", 2116: "SYMBOL_LIST_RES",
+  2117: "SYMBOL_BY_ID_REQ", 2118: "SYMBOL_BY_ID_RES",
+  2142: "ERROR_RES",
+  51:   "HEARTBEAT_EVENT",
+};
+
+// ── Protobuf encoder ───────────────────────────────────────────────────────────
 function varint(n: number): number[] {
   const out: number[] = [];
   while (n > 0x7F) { out.push((n & 0x7F) | 0x80); n >>>= 7; }
   out.push(n & 0x7F);
   return out;
 }
-// uint32 varint field  (wire type 0)
 function u32f(fn: number, v: number): number[]  { return [...varint((fn << 3) | 0), ...varint(v)]; }
-// string / bytes field (wire type 2)
 function strf(fn: number, s: string): number[] {
   const b = Buffer.from(s, "utf8");
   return [...varint((fn << 3) | 2), ...varint(b.length), ...b];
@@ -37,7 +47,7 @@ function bytesf(fn: number, b: Buffer): number[] {
   return [...varint((fn << 3) | 2), ...varint(b.length), ...b];
 }
 
-// Wrap inner bytes in ProtoMessage + 4-byte BE length prefix
+// 4-byte BE length + ProtoMessage{payloadType(1), payload(2)}
 function buildFrame(payloadType: number, inner: number[]): Buffer {
   const innerBuf = Buffer.from(inner);
   const outer    = Buffer.from([...u32f(1, payloadType), ...bytesf(2, innerBuf)]);
@@ -47,7 +57,7 @@ function buildFrame(payloadType: number, inner: number[]): Buffer {
   return out;
 }
 
-// ── Minimal protobuf decoder ───────────────────────────────────────────────────
+// ── Protobuf decoder ───────────────────────────────────────────────────────────
 function readVarint(buf: Buffer, off: number): [number, number] {
   let v = 0, s = 0;
   while (off < buf.length) {
@@ -75,20 +85,16 @@ function parseMsg(buf: Buffer): PbField[] {
       let len: number; [len, o] = readVarint(buf, o);
       out.push({ fn, wt, v: buf.slice(o, o + len) });
       o += len;
-    } else if (wt === 1) {
-      o += 8;  // 64-bit fixed — skip
-    } else if (wt === 5) {
-      o += 4;  // 32-bit fixed — skip
-    } else {
-      break;   // unknown wire type — stop parsing
-    }
+    } else if (wt === 1) { o += 8; }
+    else if (wt === 5)   { o += 4; }
+    else break;
   }
   return out;
 }
 
-function decodeFrame(buf: Buffer): { payloadType: number; payload: Buffer } | null {
+function decodeFrame(raw: Buffer): { payloadType: number; payload: Buffer } | null {
   try {
-    const fields  = parseMsg(buf);
+    const fields  = parseMsg(raw);
     const ptField = fields.find(f => f.fn === 1 && f.wt === 0);
     const plField = fields.find(f => f.fn === 2 && f.wt === 2);
     if (!ptField) return null;
@@ -100,32 +106,59 @@ function decodeFrame(buf: Buffer): { payloadType: number; payload: Buffer } | nu
 }
 
 // ── Typed message builders ─────────────────────────────────────────────────────
-const mkAppAuthReq = (clientId: string, clientSecret: string) =>
-  buildFrame(PT.APP_AUTH_REQ, [
+function mkAppAuthReq(clientId: string, clientSecret: string): Buffer {
+  // ProtoOAApplicationAuthReq: field1=payloadType, field2=clientId, field3=clientSecret
+  return buildFrame(PT.APP_AUTH_REQ, [
     ...u32f(1, PT.APP_AUTH_REQ),
     ...strf(2, clientId),
     ...strf(3, clientSecret),
   ]);
+}
 
-const mkAcctAuthReq = (ctidTraderAccountId: number, accessToken: string) =>
-  buildFrame(PT.ACCT_AUTH_REQ, [
+function mkAcctAuthReq(ctidTraderAccountId: number, accessToken: string): Buffer {
+  // ProtoOAAccountAuthReq: field1=payloadType, field2=ctidTraderAccountId, field3=accessToken
+  return buildFrame(PT.ACCT_AUTH_REQ, [
     ...u32f(1, PT.ACCT_AUTH_REQ),
     ...u32f(2, ctidTraderAccountId),
     ...strf(3, accessToken),
   ]);
+}
 
-const mkSymbolListReq = (ctidTraderAccountId: number) =>
-  buildFrame(PT.SYMBOL_LIST_REQ, [
+function mkSymbolListReq(ctidTraderAccountId: number): Buffer {
+  // ProtoOASymbolsListReq: field1=payloadType, field2=ctidTraderAccountId
+  return buildFrame(PT.SYMBOL_LIST_REQ, [
     ...u32f(1, PT.SYMBOL_LIST_REQ),
     ...u32f(2, ctidTraderAccountId),
   ]);
+}
 
-const mkSymbolByIdReq = (ctidTraderAccountId: number, ids: number[]) =>
-  buildFrame(PT.SYMBOL_BY_ID_REQ, [
+function mkSymbolByIdReq(ctidTraderAccountId: number, ids: number[]): Buffer {
+  // ProtoOASymbolByIdReq: field1=payloadType, field2=ctidTraderAccountId, field3=symbolId(repeated)
+  return buildFrame(PT.SYMBOL_BY_ID_REQ, [
     ...u32f(1, PT.SYMBOL_BY_ID_REQ),
     ...u32f(2, ctidTraderAccountId),
     ...ids.flatMap(id => u32f(3, id)),
   ]);
+}
+
+// ── Debug helpers ──────────────────────────────────────────────────────────────
+function hexSnippet(buf: Buffer, maxBytes = 64): string {
+  const slice = buf.slice(0, maxBytes);
+  const hex   = slice.toString("hex").replace(/(.{2})/g, "$1 ").trim();
+  return buf.length > maxBytes ? `${hex} … (${buf.length} bytes total)` : `${hex} (${buf.length} bytes)`;
+}
+
+function ptName(pt: number): string {
+  return PT_NAME[pt] ? `${PT_NAME[pt]}(${pt})` : `UNKNOWN(${pt})`;
+}
+
+function parseErrorRes(payload: Buffer): { errorCode: number | string; description: string } {
+  const fields = parseMsg(payload);
+  const code   = fields.find(f => f.fn === 2 && f.wt === 0)?.v ?? "?";
+  const descF  = fields.find(f => f.fn === 3 && f.wt === 2);
+  const desc   = descF ? (descF.v as Buffer).toString("utf8") : "(no description)";
+  return { errorCode: code as number | string, description: desc };
+}
 
 // ── Public interface ───────────────────────────────────────────────────────────
 export interface CtraderSymbol {
@@ -152,18 +185,31 @@ export async function fetchSymbolsViaProtoOA(opts: {
   const host = isLive ? LIVE_HOST : DEMO_HOST;
   const url  = `wss://${host}:${PORT}`;
 
-  logger.info({ url, ctidTraderAccountId, isLive }, "ProtoOA: connecting…");
+  // ── Credential sanity check ────────────────────────────────────────────────
+  logger.info({
+    url,
+    ctidTraderAccountId,
+    isLive,
+    clientIdPresent:     !!clientId,
+    clientIdLen:         clientId.length,
+    clientIdPreview:     clientId.slice(0, 6) + "…",
+    clientSecretPresent: !!clientSecret,
+    clientSecretLen:     clientSecret.length,
+    accessTokenLen:      accessToken.length,
+    accessTokenPreview:  accessToken.slice(0, 12) + "…",
+  }, "ProtoOA: initiating connection");
 
   return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url);
+    const ws = new WebSocket(url, { rejectUnauthorized: false });
     let recvBuf = Buffer.alloc(0);
     type Step = "app_auth" | "acct_auth" | "symbol_list" | "symbol_detail" | "done";
     let step: Step = "app_auth";
     let lightSymbols: Array<{ symbolId: number; symbolName: string; enabled: boolean }> = [];
 
     const timer = setTimeout(() => {
+      logger.error({ step, timeoutMs }, "ProtoOA: timeout — terminating");
       ws.terminate();
-      reject(new Error(`ProtoOA timeout (${timeoutMs}ms) — stalled at step: ${step}`));
+      reject(new Error(`ProtoOA timeout (${timeoutMs}ms) at step: ${step}`));
     }, timeoutMs);
 
     const finish = (result: CtraderSymbol[] | Error) => {
@@ -174,74 +220,145 @@ export async function fetchSymbolsViaProtoOA(opts: {
       else resolve(result);
     };
 
+    // ── Send helper with hex logging ──────────────────────────────────────────
+    function send(label: string, buf: Buffer) {
+      logger.info({
+        label,
+        frameHex: hexSnippet(buf),
+        totalBytes: buf.length,
+        msgLen: buf.readUInt32BE(0),
+      }, `ProtoOA: → SEND ${label}`);
+      ws.send(buf);
+    }
+
     // ── WebSocket events ──────────────────────────────────────────────────────
     ws.on("open", () => {
-      logger.info({ url }, "ProtoOA: WebSocket connected ✓");
-      ws.send(mkAppAuthReq(clientId, clientSecret));
-      logger.info("ProtoOA: ApplicationAuthReq → sent");
+      logger.info({ url, port: PORT }, "ProtoOA: ✓ WebSocket OPEN");
+      const frame = mkAppAuthReq(clientId, clientSecret);
+      send("ApplicationAuthReq", frame);
     });
 
     ws.on("message", (data: Buffer) => {
       recvBuf = Buffer.concat([recvBuf, data]);
-      // Consume all complete frames from the buffer
+
+      // Log raw incoming bytes
+      logger.info({
+        rawHex: hexSnippet(data),
+        totalBuffered: recvBuf.length,
+      }, "ProtoOA: ← RAW incoming bytes");
+
       while (recvBuf.length >= 4) {
         const msgLen = recvBuf.readUInt32BE(0);
         if (recvBuf.length < 4 + msgLen) break;
-        const raw = recvBuf.slice(4, 4 + msgLen);
-        recvBuf  = recvBuf.slice(4 + msgLen);
+        const raw    = recvBuf.slice(4, 4 + msgLen);
+        recvBuf      = recvBuf.slice(4 + msgLen);
+
+        logger.info({
+          msgLen,
+          rawHex: hexSnippet(raw),
+        }, "ProtoOA: ← decoded frame (before ProtoMessage parse)");
+
         const msg = decodeFrame(raw);
-        if (msg) onMessage(msg);
+        if (!msg) {
+          logger.warn({ rawHex: hexSnippet(raw) }, "ProtoOA: failed to decode ProtoMessage — skipping");
+          continue;
+        }
+
+        logger.info({
+          payloadType: msg.payloadType,
+          payloadTypeName: ptName(msg.payloadType),
+          payloadLen:  msg.payload.length,
+          payloadHex:  hexSnippet(msg.payload, 48),
+          step,
+        }, "ProtoOA: ← decoded message");
+
+        onMessage(msg);
       }
     });
 
     ws.on("error", err => {
-      logger.error({ err }, "ProtoOA: WebSocket error");
+      logger.error({ err: String(err), step }, "ProtoOA: WebSocket ERROR event");
       finish(err instanceof Error ? err : new Error(String(err)));
     });
 
     ws.on("close", (code, reason) => {
+      const reasonStr = reason ? reason.toString() : "(none)";
+      logger.warn({
+        code,
+        reason: reasonStr,
+        step,
+        note: code === 1000 && reasonStr === "Bye"
+          ? "Server closed cleanly — likely rejected ApplicationAuthReq. Check clientId/clientSecret and that they match the app registered on id.ctrader.com. Also verify the account is on the CORRECT environment (demo vs live)."
+          : undefined,
+      }, "ProtoOA: WebSocket CLOSE event");
+
       if (step !== "done") {
-        finish(new Error(`ProtoOA: connection closed at step=${step} code=${code} reason=${reason}`));
+        finish(new Error(
+          `ProtoOA: connection closed at step=${step} (code=${code}, reason="${reasonStr}")`
+        ));
       }
     });
 
     // ── Message state machine ─────────────────────────────────────────────────
     function onMessage(msg: { payloadType: number; payload: Buffer }) {
-      logger.info({ payloadType: msg.payloadType, step, payloadBytes: msg.payload.length }, "ProtoOA: ← received");
-
-      // Handle errors from any step
+      // ERROR_RES: log details before anything else
       if (msg.payloadType === PT.ERROR_RES) {
-        const f    = parseMsg(msg.payload);
-        const code = f.find(x => x.fn === 2)?.v ?? "?";
-        const dBuf = f.find(x => x.fn === 3 && x.wt === 2)?.v;
-        const desc = dBuf ? (dBuf as Buffer).toString("utf8") : "unknown";
-        logger.error({ errorCode: code, description: desc }, "ProtoOA: ERROR_RES received");
-        finish(new Error(`ProtoOA error ${code}: ${desc}`));
+        const { errorCode, description } = parseErrorRes(msg.payload);
+        logger.error({
+          errorCode,
+          description,
+          payloadHex: hexSnippet(msg.payload),
+          step,
+        }, "ProtoOA: ✗ ERROR_RES received");
+        finish(new Error(`ProtoOA ERROR_RES: code=${errorCode}, description=${description}`));
+        return;
+      }
+
+      // Heartbeat — reply and continue
+      if (msg.payloadType === 51) {
+        logger.info("ProtoOA: heartbeat received — ignoring (no reply needed for WS)");
         return;
       }
 
       switch (step) {
+        // ── Step 1: App auth ──────────────────────────────────────────────────
         case "app_auth": {
-          if (msg.payloadType !== PT.APP_AUTH_RES) return;
-          logger.info("ProtoOA: Application authorized ✓");
+          if (msg.payloadType !== PT.APP_AUTH_RES) {
+            logger.warn({
+              unexpected: ptName(msg.payloadType),
+              expected:   ptName(PT.APP_AUTH_RES),
+            }, "ProtoOA: unexpected message while waiting for APP_AUTH_RES — ignoring");
+            return;
+          }
+          logger.info("ProtoOA: ✓ ApplicationAuthRes — application authorized");
           step = "acct_auth";
-          ws.send(mkAcctAuthReq(ctidTraderAccountId, accessToken));
-          logger.info({ ctidTraderAccountId }, "ProtoOA: AccountAuthReq → sent");
+          const frame = mkAcctAuthReq(ctidTraderAccountId, accessToken);
+          send("AccountAuthReq", frame);
           break;
         }
 
+        // ── Step 2: Account auth ──────────────────────────────────────────────
         case "acct_auth": {
-          if (msg.payloadType !== PT.ACCT_AUTH_RES) return;
-          logger.info({ ctidTraderAccountId }, "ProtoOA: Account authorized ✓");
+          if (msg.payloadType !== PT.ACCT_AUTH_RES) {
+            logger.warn({
+              unexpected: ptName(msg.payloadType),
+              expected:   ptName(PT.ACCT_AUTH_RES),
+            }, "ProtoOA: unexpected message while waiting for ACCT_AUTH_RES — ignoring");
+            return;
+          }
+          logger.info({ ctidTraderAccountId }, "ProtoOA: ✓ AccountAuthRes — account authorized");
           step = "symbol_list";
-          ws.send(mkSymbolListReq(ctidTraderAccountId));
-          logger.info("ProtoOA: SymbolsListReq → sent");
+          const frame = mkSymbolListReq(ctidTraderAccountId);
+          send("SymbolsListReq", frame);
           break;
         }
 
+        // ── Step 3: Symbol list ───────────────────────────────────────────────
         case "symbol_list": {
-          if (msg.payloadType !== PT.SYMBOL_LIST_RES) return;
-
+          if (msg.payloadType !== PT.SYMBOL_LIST_RES) {
+            logger.warn({ unexpected: ptName(msg.payloadType) }, "ProtoOA: unexpected during symbol_list — ignoring");
+            return;
+          }
           const fields = parseMsg(msg.payload);
           lightSymbols = fields
             .filter(f => f.fn === 3 && f.wt === 2)
@@ -252,32 +369,35 @@ export async function fetchSymbolsViaProtoOA(opts: {
               const en     = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 1;
               return {
                 symbolId:   id,
-                symbolName: namBuf ? (namBuf as Buffer).toString("utf8") : `symbol_${id}`,
+                symbolName: namBuf ? (namBuf as Buffer).toString("utf8") : `sym_${id}`,
                 enabled:    en !== 0,
               };
             });
 
           const enabled = lightSymbols.filter(s => s.enabled);
-          logger.info(
-            { total: lightSymbols.length, enabled: enabled.length },
-            "ProtoOA: Symbols list received ✓",
-          );
+          logger.info({
+            total:   lightSymbols.length,
+            enabled: enabled.length,
+            sample:  enabled.slice(0, 10).map(s => s.symbolName),
+          }, "ProtoOA: ✓ SymbolListRes received");
 
           if (enabled.length === 0) { finish([]); return; }
 
-          // Fetch full details (digits + pipPosition) — cap at 1000 to limit request size
           const ids = enabled.slice(0, 1000).map(s => s.symbolId);
           step = "symbol_detail";
-          ws.send(mkSymbolByIdReq(ctidTraderAccountId, ids));
-          logger.info({ count: ids.length }, "ProtoOA: SymbolByIdReq → sent");
+          const frame = mkSymbolByIdReq(ctidTraderAccountId, ids);
+          send(`SymbolByIdReq(${ids.length} symbols)`, frame);
           break;
         }
 
+        // ── Step 4: Symbol details ────────────────────────────────────────────
         case "symbol_detail": {
-          if (msg.payloadType !== PT.SYMBOL_BY_ID_RES) return;
-
-          const fields     = parseMsg(msg.payload);
-          const detailMap  = new Map<number, { digits: number; pipPosition: number }>();
+          if (msg.payloadType !== PT.SYMBOL_BY_ID_RES) {
+            logger.warn({ unexpected: ptName(msg.payloadType) }, "ProtoOA: unexpected during symbol_detail — ignoring");
+            return;
+          }
+          const fields    = parseMsg(msg.payload);
+          const detailMap = new Map<number, { digits: number; pipPosition: number }>();
 
           fields
             .filter(f => f.fn === 3 && f.wt === 2)
@@ -289,7 +409,7 @@ export async function fetchSymbolsViaProtoOA(opts: {
               detailMap.set(id, { digits: dig, pipPosition: pip });
             });
 
-          logger.info({ count: detailMap.size }, "ProtoOA: Symbol details received ✓");
+          logger.info({ count: detailMap.size }, "ProtoOA: ✓ SymbolByIdRes received");
 
           const result: CtraderSymbol[] = lightSymbols
             .filter(s => s.enabled)
@@ -306,13 +426,17 @@ export async function fetchSymbolsViaProtoOA(opts: {
             })
             .sort((a, b) => a.symbolName.localeCompare(b.symbolName));
 
-          logger.info({ total: result.length }, "ProtoOA: Symbol merge complete ✓");
+          logger.info({
+            total:  result.length,
+            sample: result.slice(0, 8).map(s => `${s.symbolName}(pip=${s.pipPosition},d=${s.digits})`),
+          }, "ProtoOA: ✓ Symbol merge complete");
+
           finish(result);
           break;
         }
 
         default:
-          // Heartbeats and other unsolicited messages — ignore silently
+          logger.info({ payloadType: ptName(msg.payloadType), step }, "ProtoOA: ignoring message in step done");
           break;
       }
     }
