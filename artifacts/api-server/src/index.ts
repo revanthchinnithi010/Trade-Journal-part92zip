@@ -155,7 +155,9 @@ healthMonitor.start();
 
   await AppConfigService.injectToEnv();
   logger.info({
-    DELTA_CLIENT_ID: process.env["DELTA_CLIENT_ID"] ? "SET" : "NOT SET",
+    DELTA_CLIENT_ID:        process.env["DELTA_CLIENT_ID"]        ? "SET" : "NOT SET",
+    CTRADER_CLIENT_ID:      process.env["CTRADER_CLIENT_ID"]      ? `SET (${process.env["CTRADER_CLIENT_ID"]!.length} chars)` : "NOT SET ⚠️",
+    CTRADER_CLIENT_SECRET:  process.env["CTRADER_CLIENT_SECRET"]  ? `SET (${process.env["CTRADER_CLIENT_SECRET"]!.length} chars)` : "NOT SET ⚠️",
   }, "Startup: credential injection complete — env status after inject");
 
   await Promise.all([
