@@ -41,7 +41,7 @@ const NAV_SECTIONS = [
       { href: "/calendar",      label: "Calendar",          icon: CalendarIcon  },
       { href: "/notebook",      label: "Notebook",          icon: BookOpen      },
       { href: "/settings",      label: "Settings",          icon: Settings      },
-      { href: "/ctrader-test",  label: "cTrader OAuth Test",icon: FlaskConical  },
+      { href: "/ctrader-test",  label: "cTrader Connect",   icon: FlaskConical  },
     ],
   },
   {

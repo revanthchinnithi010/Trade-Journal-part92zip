@@ -44,6 +44,7 @@ import { useBrokerStore } from "@/store/brokerStore";
 import { BrokerSelectModal, BrokerListContent } from "@/components/broker/BrokerSelectModal";
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
+import { BrokerIntegrationModal } from "@/components/charts/BrokerIntegrationModal";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -3374,7 +3375,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   // ── Sheet visibility ──
   const [showDrawingSheet,  setShowDrawingSheet]  = useState(false);
   const [showSettings,      setShowSettings]      = useState(false);
-  const [showBrokerSheet,   setShowBrokerSheet]   = useState(false);
+  const [showBrokerIntegration, setShowBrokerIntegration] = useState(false);
   const [showTFSheet,       setShowTFSheet]       = useState(false);
   const [showChartType,     setShowChartType]     = useState(false);
   const [showMoreSheet,     setShowMoreSheet]     = useState(false);
@@ -3415,11 +3416,10 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const wlEntry  = watchlistItems.find(i => i.symbol === activeKey);
   const badge    = wlEntry?.badge ?? catEntry?.badge ?? activeKey.slice(0,4).toUpperCase();
 
-  // ── Fix: BrokerAuthModal renders at zIndex 201, BottomSheet at zIndex 300.
-  // When the auth modal opens, the form would be invisible behind the BrokerSheet.
-  // Close BrokerSheet the moment showAuthModal becomes true so the auth page is visible.
+  // ── Fix: BrokerAuthModal renders at zIndex 201, BrokerIntegrationModal at zIndex 9200.
+  // Close the integration modal when the Delta auth modal opens so it's clearly visible.
   useEffect(() => {
-    if (showAuthModal) setShowBrokerSheet(false);
+    if (showAuthModal) setShowBrokerIntegration(false);
   }, [showAuthModal]);
 
   // ── Stable sheet close handlers — MUST be useCallback so memo'd sheets
@@ -3484,7 +3484,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   // new references on every render and defeat memo's equality check.
   const handleOpenTFSheet      = useCallback(() => setShowTFSheet(true),      []);
   const handleOpenDrawingSheet = useCallback(() => setShowDrawingSheet(true),  []);
-  const handleOpenBrokerSheet  = useCallback(() => setShowBrokerSheet(true),   []);
+  const handleOpenBrokerSheet  = useCallback(() => setShowBrokerIntegration(true), []);
   const handleOpenMoreSheet    = useCallback(() => setShowMoreSheet(true),     []);
 
   // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
@@ -3661,7 +3661,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
 
       {/* ── Sheets & modals ── */}
       {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
-      {showBrokerSheet  && <BrokerSheet onClose={() => setShowBrokerSheet(false)} />}
+      {showBrokerIntegration && <BrokerIntegrationModal onClose={() => setShowBrokerIntegration(false)} />}
       {showTFSheet      && <TFSheet interval={activeSlotInterval} onSelect={handleSelectInterval} onClose={() => setShowTFSheet(false)} />}
       {showChartType    && <ChartTypeSheet current={chartType ?? "candles"} onSelect={t => setChartType(t)} onClose={() => setShowChartType(false)} />}
       {showSelectModal  && <BrokerSelectModal />}
