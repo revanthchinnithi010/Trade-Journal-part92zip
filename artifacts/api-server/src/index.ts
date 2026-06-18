@@ -13,6 +13,10 @@ import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
 import { AppConfigService } from "./services/AppConfigService.js";
+import { ctraderTickEngine } from "./services/CtraderTickEngine.js";
+import { autoStartCtraderEngine } from "./routes/ctrader_spots.js";
+import type { CtraderTick } from "./services/CtraderTickEngine.js";
+import type { EngineStatusPayload } from "./services/CtraderTickEngine.js";
 import type { ProviderTick } from "./services/providers/BaseProvider.js";
 
 const rawPort = process.env["PORT"];
@@ -85,6 +89,26 @@ marketData.on("subscription_update", (update) => {
   wsManager.broadcast({ type: "subscription_update", ...update });
 });
 
+// ── cTrader tick engine → WebSocket broadcast ─────────────────────────────
+ctraderTickEngine.on("tick", (tick: CtraderTick) => {
+  wsManager.broadcast({
+    type:     "ctrader_tick",
+    symbol:   tick.symbol,
+    symbolId: tick.symbolId,
+    bid:      tick.bid,
+    ask:      tick.ask,
+    spread:   tick.spread,
+    mid:      tick.mid,
+    price:    tick.mid,
+    timestamp: tick.timestamp,
+    provider: "ctrader",
+  });
+});
+
+ctraderTickEngine.on("status", (status: EngineStatusPayload) => {
+  wsManager.broadcast({ type: "ctrader_status", ...status });
+});
+
 marketData.start([]).catch(err =>
   logger.error({ err }, "MarketDataService: async start error"),
 );
@@ -141,6 +165,11 @@ healthMonitor.start();
     logger.info("AlertEngine: started");
   }).catch((err) => {
     logger.error({ err }, "AlertEngine: failed to start");
+  });
+
+  // cTrader: auto-start if credentials + symbols are ready
+  autoStartCtraderEngine().catch((err) => {
+    logger.warn({ err }, "cTrader auto-start: unexpected error (non-fatal)");
   });
 
   try {

@@ -4,6 +4,7 @@ import {
 } from "react";
 import { useTickStore } from "@/store/tickStore";
 import type { TickState, FlashDir } from "@/store/tickStore";
+import { useCtraderSpotStore } from "@/store/ctraderSpotStore";
 // Re-export for backward compat — all consumers can import from here or tickStore
 export type { FlashDir, TickState } from "@/store/tickStore";
 
@@ -233,6 +234,30 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
             setLatencyMs(Date.now() - connectTimeRef.current);
             connectTimeRef.current = 0;
           }
+        } else if (msg.type === "ctrader_tick" && typeof msg.symbol === "string" && typeof msg.price === "number") {
+          handleTick(msg.symbol as string, msg.price as number);
+          useCtraderSpotStore.getState().setSpotTick({
+            symbol:     msg.symbol    as string,
+            symbolId:   (msg.symbolId as number) ?? 0,
+            bid:        (msg.bid      as number) ?? 0,
+            ask:        (msg.ask      as number) ?? 0,
+            spread:     (msg.spread   as number) ?? 0,
+            mid:        (msg.mid      as number) ?? msg.price as number,
+            timestamp:  (msg.timestamp as number) ?? Date.now(),
+            receivedAt: Date.now(),
+          });
+        } else if (msg.type === "ctrader_status") {
+          useCtraderSpotStore.getState().setStatus({
+            connStatus:      msg.status         as string,
+            accountId:       (msg.accountId     as number) ?? 0,
+            isLive:          (msg.isLive        as boolean) ?? false,
+            subscribedCount: (msg.subscribedCount as number) ?? 0,
+            reconnectCount:  (msg.reconnectCount as number) ?? 0,
+            connectedAt:     (msg.connectedAt   as number | null) ?? null,
+            lastTickAt:      (msg.lastTickAt    as number | null) ?? null,
+            tickCounts:      (msg.tickCounts    as Record<string, number>) ?? {},
+            error:           msg.error          as string | undefined,
+          });
         } else if (msg.type === "pong") {
           if (pingTimeRef.current !== null) {
             setLatencyMs(Date.now() - pingTimeRef.current);

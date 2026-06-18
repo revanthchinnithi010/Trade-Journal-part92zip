@@ -1,10 +1,14 @@
 import {
   memo, useState, useEffect, useRef, useCallback, useMemo,
 } from "react";
-import { X, Search, Star } from "lucide-react";
+import { X, Search, Star, Zap, WifiOff, Loader2 } from "lucide-react";
 import { fmtPrice } from "@/contexts/LiveMarketContext";
 import { useTickStore } from "@/store/tickStore";
 import { useMarketStore, type BrokerName, type SymbolInfo } from "@/store/marketStore";
+import {
+  useCtraderSpotStore, useCtraderSpot,
+  type CtraderConnStatus,
+} from "@/store/ctraderSpotStore";
 
 const FAV_KEY = "bwl_favs_v1";
 
@@ -16,6 +20,30 @@ function loadFavs(): Set<string> {
 }
 function saveFavs(s: Set<string>) {
   try { localStorage.setItem(FAV_KEY, JSON.stringify([...s])); } catch { /* ignore */ }
+}
+
+// ── cTrader connection status helpers ─────────────────────────────────────────
+function ctraderStatusColor(s: CtraderConnStatus): string {
+  if (s === "streaming")   return "#22C55E";
+  if (s === "reconnecting" || s === "connecting" || s === "app_auth" || s === "acct_auth" || s === "subscribing") return "#F59E0B";
+  if (s === "error")       return "#EF4444";
+  return "rgba(167,184,169,0.35)";
+}
+
+function ctraderStatusLabel(s: CtraderConnStatus): string {
+  if (s === "streaming")    return "Live";
+  if (s === "connecting")   return "Connecting…";
+  if (s === "app_auth")     return "Authenticating…";
+  if (s === "acct_auth")    return "Auth account…";
+  if (s === "subscribing")  return "Subscribing…";
+  if (s === "reconnecting") return "Reconnecting…";
+  if (s === "error")        return "Error";
+  if (s === "stopped")      return "Stopped";
+  return "Disconnected";
+}
+
+function ctraderStatusSpinning(s: CtraderConnStatus): boolean {
+  return ["connecting", "app_auth", "acct_auth", "subscribing", "reconnecting"].includes(s);
 }
 
 const BROKER_CONFIG: Record<BrokerName, { label: string; shortLabel: string; color: string; badgeBg: string }> = {
@@ -87,6 +115,10 @@ const SymbolRow = memo(function SymbolRow({
     [sym.symbol],
   ));
 
+  // ── cTrader bid/ask subscription (only for ctrader rows) ─────────────────
+  const ctraderSpot = useCtraderSpot(sym.symbol);
+  const isCtrader   = broker === "ctrader";
+
   const price     = tick?.price     ?? null;
   const changePct = tick?.changePct ?? null;
   const flashDir  = tick?.flashDir  ?? null;
@@ -95,8 +127,19 @@ const SymbolRow = memo(function SymbolRow({
   const badge    = getBadge(sym);
   const label    = getLabel(sym);
   const isPos    = (changePct ?? 0) >= 0;
-  const priceStr = price !== null ? fmtPrice(price, sym.symbol) : "—";
+
+  // For cTrader rows prefer bid/ask display; others use mid price
+  const bidStr  = isCtrader && ctraderSpot ? fmtPrice(ctraderSpot.bid, sym.symbol) : null;
+  const askStr  = isCtrader && ctraderSpot ? fmtPrice(ctraderSpot.ask, sym.symbol) : null;
+  const priceStr = isCtrader
+    ? (ctraderSpot ? fmtPrice(ctraderSpot.mid, sym.symbol) : (price !== null ? fmtPrice(price, sym.symbol) : "—"))
+    : (price !== null ? fmtPrice(price, sym.symbol) : "—");
   const pctStr   = changePct !== null ? `${isPos ? "+" : ""}${changePct.toFixed(2)}%` : "";
+
+  // cTrader spread in pips
+  const spreadStr = isCtrader && ctraderSpot && ctraderSpot.spread > 0
+    ? `${(ctraderSpot.spread / Math.pow(10, -(sym.symbol.includes("JPY") ? 3 : 5))).toFixed(1)}p`
+    : null;
 
   // ── Flash animation (DOM mutation — no setState) ──────────────────────────
   const rowRef      = useRef<HTMLDivElement>(null);
@@ -189,25 +232,45 @@ const SymbolRow = memo(function SymbolRow({
         </p>
       </div>
 
-      {/* Price + % column */}
+      {/* Price + % column (or bid/ask for cTrader) */}
       <div style={{ textAlign: "right", flexShrink: 0 }}>
-        <p style={{
-          margin:             0, fontSize: 11.5, fontWeight: 700,
-          color:              price !== null ? "#F3FFF3" : "rgba(167,184,169,0.3)",
-          fontVariantNumeric: "tabular-nums",
-          lineHeight:         1.2,
-        }}>
-          {priceStr}
-        </p>
-        {pctStr && (
-          <p style={{
-            margin:             0, fontSize: 9.5, fontWeight: 600,
-            color:              isPos ? "#B7FF5A" : "#EF4444",
-            lineHeight:         1.3, marginTop: 1,
-            fontVariantNumeric: "tabular-nums",
-          }}>
-            {pctStr}
-          </p>
+        {isCtrader && bidStr && askStr ? (
+          <>
+            <div style={{
+              display: "flex", gap: 4, justifyContent: "flex-end",
+              fontVariantNumeric: "tabular-nums", lineHeight: 1.2,
+            }}>
+              <span style={{ margin: 0, fontSize: 10, fontWeight: 600, color: "#EF4444" }}>{bidStr}</span>
+              <span style={{ margin: 0, fontSize: 9, color: "rgba(167,184,169,0.3)", alignSelf: "center" }}>|</span>
+              <span style={{ margin: 0, fontSize: 10, fontWeight: 600, color: "#22C55E" }}>{askStr}</span>
+            </div>
+            {spreadStr && (
+              <p style={{ margin: 0, fontSize: 9, color: "rgba(167,184,169,0.4)", lineHeight: 1.3, marginTop: 1 }}>
+                {spreadStr}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <p style={{
+              margin:             0, fontSize: 11.5, fontWeight: 700,
+              color:              price !== null ? "#F3FFF3" : "rgba(167,184,169,0.3)",
+              fontVariantNumeric: "tabular-nums",
+              lineHeight:         1.2,
+            }}>
+              {priceStr}
+            </p>
+            {pctStr && (
+              <p style={{
+                margin:             0, fontSize: 9.5, fontWeight: 600,
+                color:              isPos ? "#B7FF5A" : "#EF4444",
+                lineHeight:         1.3, marginTop: 1,
+                fontVariantNumeric: "tabular-nums",
+              }}>
+                {pctStr}
+              </p>
+            )}
+          </>
         )}
       </div>
 
@@ -262,6 +325,20 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
   const [search, setSearch] = useState("");
   const { favs, toggle: toggleFav } = useFavorites();
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // ── cTrader connection status ─────────────────────────────────────────────
+  const ctraderStatus = useCtraderSpotStore(s => s.connStatus);
+  const ctraderSubCount = useCtraderSpotStore(s => s.subscribedCount);
+  const [connecting, setConnecting] = useState(false);
+
+  const handleCtraderConnect = useCallback(async () => {
+    setConnecting(true);
+    try {
+      await fetch("/api/ctrader/spots/start", { method: "POST", headers: { "Content-Type": "application/json" } });
+    } catch { /* ignore */ } finally {
+      setConnecting(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!catalogLoaded[broker]) {
@@ -383,6 +460,48 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
           );
         })}
       </div>
+
+      {/* ── cTrader connection status bar ── */}
+      {broker === "ctrader" && (
+        <div style={{
+          display:      "flex", alignItems: "center",
+          padding:      "6px 12px",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          flexShrink:   0, gap: 6,
+        }}>
+          {ctraderStatusSpinning(ctraderStatus) ? (
+            <Loader2 style={{
+              width: 8, height: 8, color: ctraderStatusColor(ctraderStatus),
+              animation: "spin 0.8s linear infinite", flexShrink: 0,
+            }} />
+          ) : ctraderStatus === "streaming" ? (
+            <Zap style={{ width: 8, height: 8, color: "#22C55E", flexShrink: 0 }} />
+          ) : (
+            <WifiOff style={{ width: 8, height: 8, color: ctraderStatusColor(ctraderStatus), flexShrink: 0 }} />
+          )}
+          <span style={{
+            fontSize: 9.5, fontWeight: 600, color: ctraderStatusColor(ctraderStatus), flex: 1,
+          }}>
+            {ctraderStatusLabel(ctraderStatus)}
+            {ctraderStatus === "streaming" && ctraderSubCount > 0 && ` · ${ctraderSubCount} symbols`}
+          </span>
+          {(ctraderStatus === "unknown" || ctraderStatus === "idle" || ctraderStatus === "stopped" || ctraderStatus === "error") && (
+            <button
+              onClick={handleCtraderConnect}
+              disabled={connecting}
+              style={{
+                height: 20, padding: "0 8px", borderRadius: 6,
+                border: "1px solid rgba(245,158,11,0.4)",
+                background: connecting ? "rgba(245,158,11,0.08)" : "rgba(245,158,11,0.12)",
+                color: "#F59E0B", fontSize: 9.5, fontWeight: 700,
+                cursor: connecting ? "default" : "pointer", flexShrink: 0,
+              }}
+            >
+              {connecting ? "Starting…" : "Connect"}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* ── Search ── */}
       <div style={{ padding: "8px 10px 4px", flexShrink: 0 }}>

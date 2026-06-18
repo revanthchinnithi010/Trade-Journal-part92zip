@@ -530,16 +530,34 @@ export default function CtraderTestPage() {
     setWireLoading(true);
     log("step", `Wiring ${allSymbols.length} symbols to cTrader Broker Watchlist…`);
     try {
+      const accountId = accountIdInput ? Number(accountIdInput) : undefined;
       const res  = await fetch(`${BASE}/api/ctrader/symbols-cache`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ symbols: allSymbols }),
+        body:    JSON.stringify({ symbols: allSymbols, accountId, isLive: selectedIsLive }),
       });
       const data = await res.json() as { ok: boolean; cached?: number; error?: string };
       if (!mountedRef.current) return;
       if (data.ok) {
         setWiredCount(data.cached ?? allSymbols.length);
         log("success", `Wired ${data.cached ?? allSymbols.length} symbols → cTrader tab in Broker Watchlist`);
+        // Auto-start the spot engine now that symbols + accountId are stored
+        if (accountId) {
+          try {
+            const startRes  = await fetch(`${BASE}/api/ctrader/spots/start`, {
+              method: "POST", headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ accountId, isLive: selectedIsLive }),
+            });
+            const startData = await startRes.json() as { ok: boolean; symbolCount?: number; error?: string };
+            if (startData.ok) {
+              log("success", `Live tick engine started — subscribing ${startData.symbolCount ?? "all"} symbols`);
+            } else {
+              log("warn", `Spot engine start: ${startData.error ?? "unknown error"}`);
+            }
+          } catch (startErr) {
+            log("warn", `Spot engine start error: ${String(startErr)}`);
+          }
+        }
       } else {
         log("error", `Wire failed: ${data.error ?? "unknown"}`);
       }

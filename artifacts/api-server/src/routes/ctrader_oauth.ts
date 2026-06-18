@@ -474,12 +474,31 @@ export function createCtraderOAuthRouter(): Router {
 
   // ── Wire (cache) cTrader symbols into DB so the broker watchlist can load them
   router.post("/ctrader/symbols-cache", async (req, res) => {
-    const { symbols } = req.body as { symbols?: CtraderSymbol[] };
+    const body = req.body as { symbols?: CtraderSymbol[]; accountId?: number; isLive?: boolean };
+    const { symbols, accountId, isLive } = body;
     if (!Array.isArray(symbols) || symbols.length === 0) {
       return res.status(400).json({ ok: false, error: "No symbols provided" });
     }
     try {
       await cacheCtraderSymbols(symbols);
+
+      // Persist account config so the spot engine can auto-start
+      if (accountId) {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS ctrader_spot_config (
+            id         INTEGER PRIMARY KEY DEFAULT 1,
+            account_id BIGINT  NOT NULL,
+            is_live    BOOLEAN NOT NULL DEFAULT false,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`);
+        await pool.query(`
+          INSERT INTO ctrader_spot_config (id, account_id, is_live, updated_at)
+          VALUES (1, $1, $2, NOW())
+          ON CONFLICT (id) DO UPDATE SET account_id=$1, is_live=$2, updated_at=NOW()
+        `, [accountId, Boolean(isLive)]);
+        logger.info({ accountId, isLive }, "ctrader/symbols-cache: saved spot config");
+      }
+
       logger.info({ count: symbols.length }, "ctrader/symbols-cache: saved to DB");
       return res.json({ ok: true, cached: symbols.length });
     } catch (err) {

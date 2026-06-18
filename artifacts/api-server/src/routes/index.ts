@@ -28,6 +28,7 @@ import { backupRouter } from "./backup.js";
 import { createSymbolsRouter } from "./symbols.js";
 import { createFeedDiagnosticsRouter } from "./feed_diagnostics.js";
 import { createCtraderOAuthRouter } from "./ctrader_oauth.js";
+import { createCtraderSpotsRouter } from "./ctrader_spots.js";
 import type { AlertEngine } from "../services/AlertEngine.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
@@ -83,6 +84,7 @@ export function createRouter(deps: {
   router.use(createSymbolsRouter(deps.marketData));
   router.use(createFeedDiagnosticsRouter(deps.marketData));
   router.use(createCtraderOAuthRouter());
+  router.use(createCtraderSpotsRouter());
 
   return router;
 }
