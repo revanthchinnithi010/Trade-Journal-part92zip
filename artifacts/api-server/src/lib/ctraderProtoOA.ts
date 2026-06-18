@@ -2,13 +2,24 @@ import WebSocket from "ws";
 import { logger } from "./logger.js";
 
 // ── ProtoOA WebSocket endpoints ────────────────────────────────────────────────
-// Port 5035 = TLS/WSS ProtoOA endpoint (correct for both demo & live)
-// Port 5036 is open but is a different service
+// Official Spotware OpenAPI docs: wss://{demo|live}.ctraderapi.com:5035
+// Port 5035 = WSS ProtoOA (HTTP Upgrade + TLS)
+// Port 5036 = different service (open but wrong)
 const DEMO_HOST = "demo.ctraderapi.com";
 const LIVE_HOST = "live.ctraderapi.com";
 const PORT      = 5035;
 
-// ── Payload type IDs ───────────────────────────────────────────────────────────
+// ── Payload type IDs (from OpenApiMessages.proto, confirmed) ──────────────────
+// ProtoOAPayloadType enum values:
+//   PROTO_OA_APPLICATION_AUTH_REQ = 2100
+//   PROTO_OA_APPLICATION_AUTH_RES = 2101
+//   PROTO_OA_ACCOUNT_AUTH_REQ     = 2102
+//   PROTO_OA_ACCOUNT_AUTH_RES     = 2103
+//   PROTO_OA_SYMBOLS_LIST_REQ     = 2115
+//   PROTO_OA_SYMBOLS_LIST_RES     = 2116
+//   PROTO_OA_SYMBOL_BY_ID_REQ     = 2117
+//   PROTO_OA_SYMBOL_BY_ID_RES     = 2118
+//   PROTO_OA_ERROR_RES            = 2142
 const PT = {
   APP_AUTH_REQ:     2100,
   APP_AUTH_RES:     2101,
@@ -21,10 +32,9 @@ const PT = {
   ERROR_RES:        2142,
 } as const;
 
-// Known payload type names for logging
 const PT_NAME: Record<number, string> = {
-  2100: "APP_AUTH_REQ",   2101: "APP_AUTH_RES",
-  2102: "ACCT_AUTH_REQ",  2103: "ACCT_AUTH_RES",
+  2100: "APP_AUTH_REQ",    2101: "APP_AUTH_RES",
+  2102: "ACCT_AUTH_REQ",   2103: "ACCT_AUTH_RES",
   2115: "SYMBOL_LIST_REQ", 2116: "SYMBOL_LIST_RES",
   2117: "SYMBOL_BY_ID_REQ", 2118: "SYMBOL_BY_ID_RES",
   2142: "ERROR_RES",
@@ -32,6 +42,9 @@ const PT_NAME: Record<number, string> = {
 };
 
 // ── Protobuf encoder ───────────────────────────────────────────────────────────
+// Proto2 wire format:
+//   wire type 0 = varint  → tag = (field_number << 3) | 0
+//   wire type 2 = length-delimited → tag = (field_number << 3) | 2
 function varint(n: number): number[] {
   const out: number[] = [];
   while (n > 0x7F) { out.push((n & 0x7F) | 0x80); n >>>= 7; }
@@ -47,7 +60,7 @@ function bytesf(fn: number, b: Buffer): number[] {
   return [...varint((fn << 3) | 2), ...varint(b.length), ...b];
 }
 
-// 4-byte BE length + ProtoMessage{payloadType(1), payload(2)}
+// Frame = [4-byte BE length][ProtoMessage{field1=payloadType(varint), field2=payload(bytes)}]
 function buildFrame(payloadType: number, inner: number[]): Buffer {
   const innerBuf = Buffer.from(inner);
   const outer    = Buffer.from([...u32f(1, payloadType), ...bytesf(2, innerBuf)]);
@@ -105,9 +118,12 @@ function decodeFrame(raw: Buffer): { payloadType: number; payload: Buffer } | nu
   } catch { return null; }
 }
 
-// ── Typed message builders ─────────────────────────────────────────────────────
+// ── Message builders ───────────────────────────────────────────────────────────
+// ProtoOAApplicationAuthReq (official proto, confirmed):
+//   optional ProtoOAPayloadType payloadType = 1 [default = PROTO_OA_APPLICATION_AUTH_REQ]
+//   required string clientId = 2     ← "The unique Client ID provided during the registration"
+//   required string clientSecret = 3 ← "The unique Client Secret provided during the registration"
 function mkAppAuthReq(clientId: string, clientSecret: string): Buffer {
-  // ProtoOAApplicationAuthReq: field1=payloadType, field2=clientId, field3=clientSecret
   return buildFrame(PT.APP_AUTH_REQ, [
     ...u32f(1, PT.APP_AUTH_REQ),
     ...strf(2, clientId),
@@ -115,8 +131,11 @@ function mkAppAuthReq(clientId: string, clientSecret: string): Buffer {
   ]);
 }
 
+// ProtoOAAccountAuthReq:
+//   optional ProtoOAPayloadType payloadType = 1
+//   required int64 ctidTraderAccountId = 2
+//   required string accessToken = 3
 function mkAcctAuthReq(ctidTraderAccountId: number, accessToken: string): Buffer {
-  // ProtoOAAccountAuthReq: field1=payloadType, field2=ctidTraderAccountId, field3=accessToken
   return buildFrame(PT.ACCT_AUTH_REQ, [
     ...u32f(1, PT.ACCT_AUTH_REQ),
     ...u32f(2, ctidTraderAccountId),
@@ -124,16 +143,21 @@ function mkAcctAuthReq(ctidTraderAccountId: number, accessToken: string): Buffer
   ]);
 }
 
+// ProtoOASymbolsListReq:
+//   optional ProtoOAPayloadType payloadType = 1
+//   required int64 ctidTraderAccountId = 2
 function mkSymbolListReq(ctidTraderAccountId: number): Buffer {
-  // ProtoOASymbolsListReq: field1=payloadType, field2=ctidTraderAccountId
   return buildFrame(PT.SYMBOL_LIST_REQ, [
     ...u32f(1, PT.SYMBOL_LIST_REQ),
     ...u32f(2, ctidTraderAccountId),
   ]);
 }
 
+// ProtoOASymbolByIdReq:
+//   optional ProtoOAPayloadType payloadType = 1
+//   required int64 ctidTraderAccountId = 2
+//   repeated int64 symbolId = 3
 function mkSymbolByIdReq(ctidTraderAccountId: number, ids: number[]): Buffer {
-  // ProtoOASymbolByIdReq: field1=payloadType, field2=ctidTraderAccountId, field3=symbolId(repeated)
   return buildFrame(PT.SYMBOL_BY_ID_REQ, [
     ...u32f(1, PT.SYMBOL_BY_ID_REQ),
     ...u32f(2, ctidTraderAccountId),
@@ -158,6 +182,63 @@ function parseErrorRes(payload: Buffer): { errorCode: number | string; descripti
   const descF  = fields.find(f => f.fn === 3 && f.wt === 2);
   const desc   = descF ? (descF.v as Buffer).toString("utf8") : "(no description)";
   return { errorCode: code as number | string, description: desc };
+}
+
+// Decode a built frame back to human-readable fields (pre-send self-check)
+function selfDecodeFrame(buf: Buffer): object {
+  try {
+    const msgLen     = buf.readUInt32BE(0);
+    const outerFields = parseMsg(buf.slice(4, 4 + msgLen));
+    const result: Record<string, unknown> = {
+      frameTotalBytes: buf.length,
+      innerMsgBytes:   msgLen,
+    };
+    for (const f of outerFields) {
+      if (f.fn === 1 && f.wt === 0) {
+        result["outer.field1.payloadType"] = `${f.v} (${ptName(f.v as number)})`;
+      } else if (f.fn === 2 && f.wt === 2) {
+        const inner = parseMsg(f.v as Buffer);
+        const innerResult: Record<string, unknown> = {};
+        for (const if_ of inner) {
+          if (if_.wt === 0) {
+            innerResult[`field${if_.fn}(varint)`] = if_.fn === 1
+              ? `${if_.v} (${ptName(if_.v as number)})`
+              : if_.v;
+          } else if (if_.wt === 2) {
+            const strVal = (if_.v as Buffer).toString("utf8");
+            const hexVal = (if_.v as Buffer).toString("hex").replace(/(.{2})/g, "$1 ").trim();
+            innerResult[`field${if_.fn}(string)`] = {
+              utf8:    strVal,
+              length:  (if_.v as Buffer).length,
+              hexBytes: hexVal,
+            };
+          }
+        }
+        result["inner(ProtoOAApplicationAuthReq)"] = innerResult;
+      }
+    }
+    return result;
+  } catch (e) {
+    return { decodeError: String(e) };
+  }
+}
+
+// Inspect a string for hidden characters (whitespace, BOM, newlines, etc.)
+function inspectString(label: string, s: string): object {
+  const buf       = Buffer.from(s, "utf8");
+  const trimmed   = s.trim();
+  const charCodes = Array.from(s.slice(0, 20)).map(c => c.charCodeAt(0));
+  return {
+    label,
+    length:         s.length,
+    trimmedLength:  trimmed.length,
+    hasPadding:     s !== trimmed,
+    startsWithBOM:  buf[0] === 0xEF && buf[1] === 0xBB && buf[2] === 0xBF,
+    first6chars:    s.slice(0, 6),
+    last4chars:     s.slice(-4),
+    first20charCodes: charCodes,
+    hexFirst20bytes: buf.slice(0, 20).toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+  };
 }
 
 // ── Public interface ───────────────────────────────────────────────────────────
@@ -185,19 +266,21 @@ export async function fetchSymbolsViaProtoOA(opts: {
   const host = isLive ? LIVE_HOST : DEMO_HOST;
   const url  = `wss://${host}:${PORT}`;
 
-  // ── Credential sanity check ────────────────────────────────────────────────
+  // ── Credential byte-level inspection (catches hidden chars, BOM, newlines) ──
   logger.info({
     url,
+    port: PORT,
     ctidTraderAccountId,
     isLive,
-    clientIdPresent:     !!clientId,
-    clientIdLen:         clientId.length,
-    clientIdPreview:     clientId.slice(0, 6) + "…",
-    clientSecretPresent: !!clientSecret,
-    clientSecretLen:     clientSecret.length,
-    accessTokenLen:      accessToken.length,
-    accessTokenPreview:  accessToken.slice(0, 12) + "…",
-  }, "ProtoOA: initiating connection");
+    clientId:     inspectString("CTRADER_CLIENT_ID",     clientId),
+    clientSecret: inspectString("CTRADER_CLIENT_SECRET", clientSecret),
+    accessToken:  inspectString("accessToken",           accessToken),
+    protoSchema: {
+      "ProtoOAApplicationAuthReq.field2": "string clientId  (= Client ID from id.ctrader.com)",
+      "ProtoOAApplicationAuthReq.field3": "string clientSecret",
+      note: "clientId is the string shown as 'Client ID' in the cTrader Open API portal, e.g. '12345' or a UUID",
+    },
+  }, "ProtoOA: CREDENTIAL INSPECTION — check for hidden chars, wrong length, padding");
 
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(url, { rejectUnauthorized: false });
@@ -220,75 +303,115 @@ export async function fetchSymbolsViaProtoOA(opts: {
       else resolve(result);
     };
 
-    // ── Send helper with hex logging ──────────────────────────────────────────
+    // ── Send helper: logs frame hex + self-decoded fields ─────────────────────
     function send(label: string, buf: Buffer) {
       logger.info({
         label,
-        frameHex: hexSnippet(buf),
-        totalBytes: buf.length,
-        msgLen: buf.readUInt32BE(0),
+        fullFrameHex:  hexSnippet(buf, 128),
+        totalBytes:    buf.length,
+        msgLen:        buf.readUInt32BE(0),
+        selfDecode:    selfDecodeFrame(buf),
       }, `ProtoOA: → SEND ${label}`);
       ws.send(buf);
     }
 
-    // ── WebSocket events ──────────────────────────────────────────────────────
+    // ── WebSocket open ────────────────────────────────────────────────────────
     ws.on("open", () => {
       logger.info({ url, port: PORT }, "ProtoOA: ✓ WebSocket OPEN");
+
+      // Build the ApplicationAuthReq
       const frame = mkAppAuthReq(clientId, clientSecret);
+
+      // Log exact values being encoded into the message
+      logger.info({
+        messageType: "ProtoOAApplicationAuthReq",
+        payloadType: `${PT.APP_AUTH_REQ} (PROTO_OA_APPLICATION_AUTH_REQ)`,
+        "field2.clientId": {
+          value:   clientId,
+          length:  clientId.length,
+          hexBytes: Buffer.from(clientId, "utf8").toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+        },
+        "field3.clientSecret": {
+          length:         clientSecret.length,
+          first4hexBytes: Buffer.from(clientSecret, "utf8").slice(0, 4).toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+          last4hexBytes:  Buffer.from(clientSecret, "utf8").slice(-4).toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+        },
+      }, "ProtoOA: EXACT PAYLOAD BEING SENT — verify field values match cTrader portal");
+
       send("ApplicationAuthReq", frame);
     });
 
+    // ── Incoming messages ─────────────────────────────────────────────────────
     ws.on("message", (data: Buffer) => {
       recvBuf = Buffer.concat([recvBuf, data]);
 
-      // Log raw incoming bytes
       logger.info({
-        rawHex: hexSnippet(data),
+        rawHex:        hexSnippet(data, 128),
+        chunkBytes:    data.length,
         totalBuffered: recvBuf.length,
-      }, "ProtoOA: ← RAW incoming bytes");
+        step,
+      }, "ProtoOA: ← RAW chunk received");
 
       while (recvBuf.length >= 4) {
         const msgLen = recvBuf.readUInt32BE(0);
+
+        // Guard against corrupt length prefix
+        if (msgLen > 1_000_000) {
+          logger.error({ msgLen, rawHex: hexSnippet(recvBuf, 32) }, "ProtoOA: implausible msgLen — possible non-ProtoOA data");
+          break;
+        }
+
         if (recvBuf.length < 4 + msgLen) break;
         const raw    = recvBuf.slice(4, 4 + msgLen);
         recvBuf      = recvBuf.slice(4 + msgLen);
 
         logger.info({
           msgLen,
-          rawHex: hexSnippet(raw),
-        }, "ProtoOA: ← decoded frame (before ProtoMessage parse)");
+          rawPayloadHex: hexSnippet(raw, 64),
+        }, "ProtoOA: ← decoded length-prefixed frame");
 
         const msg = decodeFrame(raw);
         if (!msg) {
-          logger.warn({ rawHex: hexSnippet(raw) }, "ProtoOA: failed to decode ProtoMessage — skipping");
+          logger.warn({ rawHex: hexSnippet(raw) }, "ProtoOA: ✗ failed to parse ProtoMessage — skipping");
           continue;
         }
 
         logger.info({
-          payloadType: msg.payloadType,
+          payloadType:     msg.payloadType,
           payloadTypeName: ptName(msg.payloadType),
-          payloadLen:  msg.payload.length,
-          payloadHex:  hexSnippet(msg.payload, 48),
+          payloadLen:      msg.payload.length,
+          payloadHex:      hexSnippet(msg.payload, 64),
           step,
-        }, "ProtoOA: ← decoded message");
+        }, `ProtoOA: ← ${ptName(msg.payloadType)}`);
 
         onMessage(msg);
       }
     });
 
+    // ── WS errors ─────────────────────────────────────────────────────────────
     ws.on("error", err => {
       logger.error({ err: String(err), step }, "ProtoOA: WebSocket ERROR event");
       finish(err instanceof Error ? err : new Error(String(err)));
     });
 
+    // ── WS close ──────────────────────────────────────────────────────────────
     ws.on("close", (code, reason) => {
       const reasonStr = reason ? reason.toString() : "(none)";
+      const isByeBye  = code === 1000 && reasonStr === "Bye";
+
       logger.warn({
         code,
         reason: reasonStr,
         step,
-        note: code === 1000 && reasonStr === "Bye"
-          ? "Server closed cleanly — likely rejected ApplicationAuthReq. Check clientId/clientSecret and that they match the app registered on id.ctrader.com. Also verify the account is on the CORRECT environment (demo vs live)."
+        diagnosis: isByeBye
+          ? [
+              "Server deliberately closed after receiving ApplicationAuthReq.",
+              "This means: (1) clientId or clientSecret does not match what is registered",
+              "            on https://id.ctrader.com/account/applications",
+              "            (2) OR the app Environment=Demo but account is Live (or vice versa)",
+              "Check the selfDecode log above — verify field2(clientId) and field3(clientSecret)",
+              "match EXACTLY the values shown in the cTrader portal (no spaces, no newlines).",
+            ]
           : undefined,
       }, "ProtoOA: WebSocket CLOSE event");
 
@@ -301,7 +424,6 @@ export async function fetchSymbolsViaProtoOA(opts: {
 
     // ── Message state machine ─────────────────────────────────────────────────
     function onMessage(msg: { payloadType: number; payload: Buffer }) {
-      // ERROR_RES: log details before anything else
       if (msg.payloadType === PT.ERROR_RES) {
         const { errorCode, description } = parseErrorRes(msg.payload);
         logger.error({
@@ -314,46 +436,36 @@ export async function fetchSymbolsViaProtoOA(opts: {
         return;
       }
 
-      // Heartbeat — reply and continue
       if (msg.payloadType === 51) {
-        logger.info("ProtoOA: heartbeat received — ignoring (no reply needed for WS)");
+        logger.info("ProtoOA: heartbeat received");
         return;
       }
 
       switch (step) {
-        // ── Step 1: App auth ──────────────────────────────────────────────────
         case "app_auth": {
           if (msg.payloadType !== PT.APP_AUTH_RES) {
-            logger.warn({
-              unexpected: ptName(msg.payloadType),
-              expected:   ptName(PT.APP_AUTH_RES),
-            }, "ProtoOA: unexpected message while waiting for APP_AUTH_RES — ignoring");
+            logger.warn({ unexpected: ptName(msg.payloadType), expected: ptName(PT.APP_AUTH_RES) },
+              "ProtoOA: unexpected message while waiting for APP_AUTH_RES — ignoring");
             return;
           }
           logger.info("ProtoOA: ✓ ApplicationAuthRes — application authorized");
           step = "acct_auth";
-          const frame = mkAcctAuthReq(ctidTraderAccountId, accessToken);
-          send("AccountAuthReq", frame);
+          send("AccountAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
           break;
         }
 
-        // ── Step 2: Account auth ──────────────────────────────────────────────
         case "acct_auth": {
           if (msg.payloadType !== PT.ACCT_AUTH_RES) {
-            logger.warn({
-              unexpected: ptName(msg.payloadType),
-              expected:   ptName(PT.ACCT_AUTH_RES),
-            }, "ProtoOA: unexpected message while waiting for ACCT_AUTH_RES — ignoring");
+            logger.warn({ unexpected: ptName(msg.payloadType), expected: ptName(PT.ACCT_AUTH_RES) },
+              "ProtoOA: unexpected message while waiting for ACCT_AUTH_RES — ignoring");
             return;
           }
           logger.info({ ctidTraderAccountId }, "ProtoOA: ✓ AccountAuthRes — account authorized");
           step = "symbol_list";
-          const frame = mkSymbolListReq(ctidTraderAccountId);
-          send("SymbolsListReq", frame);
+          send("SymbolsListReq", mkSymbolListReq(ctidTraderAccountId));
           break;
         }
 
-        // ── Step 3: Symbol list ───────────────────────────────────────────────
         case "symbol_list": {
           if (msg.payloadType !== PT.SYMBOL_LIST_RES) {
             logger.warn({ unexpected: ptName(msg.payloadType) }, "ProtoOA: unexpected during symbol_list — ignoring");
@@ -363,10 +475,10 @@ export async function fetchSymbolsViaProtoOA(opts: {
           lightSymbols = fields
             .filter(f => f.fn === 3 && f.wt === 2)
             .map(f => {
-              const sf     = parseMsg(f.v as Buffer);
-              const id     = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
+              const sf    = parseMsg(f.v as Buffer);
+              const id    = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
               const namBuf = sf.find(x => x.fn === 2 && x.wt === 2)?.v;
-              const en     = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 1;
+              const en    = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 1;
               return {
                 symbolId:   id,
                 symbolName: namBuf ? (namBuf as Buffer).toString("utf8") : `sym_${id}`,
@@ -375,22 +487,18 @@ export async function fetchSymbolsViaProtoOA(opts: {
             });
 
           const enabled = lightSymbols.filter(s => s.enabled);
-          logger.info({
-            total:   lightSymbols.length,
-            enabled: enabled.length,
-            sample:  enabled.slice(0, 10).map(s => s.symbolName),
+          logger.info({ total: lightSymbols.length, enabled: enabled.length,
+            sample: enabled.slice(0, 10).map(s => s.symbolName),
           }, "ProtoOA: ✓ SymbolListRes received");
 
           if (enabled.length === 0) { finish([]); return; }
 
           const ids = enabled.slice(0, 1000).map(s => s.symbolId);
           step = "symbol_detail";
-          const frame = mkSymbolByIdReq(ctidTraderAccountId, ids);
-          send(`SymbolByIdReq(${ids.length} symbols)`, frame);
+          send(`SymbolByIdReq(${ids.length} symbols)`, mkSymbolByIdReq(ctidTraderAccountId, ids));
           break;
         }
 
-        // ── Step 4: Symbol details ────────────────────────────────────────────
         case "symbol_detail": {
           if (msg.payloadType !== PT.SYMBOL_BY_ID_RES) {
             logger.warn({ unexpected: ptName(msg.payloadType) }, "ProtoOA: unexpected during symbol_detail — ignoring");
@@ -399,15 +507,13 @@ export async function fetchSymbolsViaProtoOA(opts: {
           const fields    = parseMsg(msg.payload);
           const detailMap = new Map<number, { digits: number; pipPosition: number }>();
 
-          fields
-            .filter(f => f.fn === 3 && f.wt === 2)
-            .forEach(f => {
-              const sf  = parseMsg(f.v as Buffer);
-              const id  = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
-              const dig = sf.find(x => x.fn === 2 && x.wt === 0)?.v as number ?? 5;
-              const pip = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 4;
-              detailMap.set(id, { digits: dig, pipPosition: pip });
-            });
+          fields.filter(f => f.fn === 3 && f.wt === 2).forEach(f => {
+            const sf  = parseMsg(f.v as Buffer);
+            const id  = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
+            const dig = sf.find(x => x.fn === 2 && x.wt === 0)?.v as number ?? 5;
+            const pip = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 4;
+            detailMap.set(id, { digits: dig, pipPosition: pip });
+          });
 
           logger.info({ count: detailMap.size }, "ProtoOA: ✓ SymbolByIdRes received");
 
@@ -436,7 +542,6 @@ export async function fetchSymbolsViaProtoOA(opts: {
         }
 
         default:
-          logger.info({ payloadType: ptName(msg.payloadType), step }, "ProtoOA: ignoring message in step done");
           break;
       }
     }
