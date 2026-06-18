@@ -216,6 +216,39 @@ export class CtraderTickEngine extends EventEmitter {
 
   configure(opts: EngineOptions): void { this.opts = opts; }
 
+  /**
+   * Dynamically add new symbol IDs to the subscription.
+   * - Updates the internal symbol map + ID list (idempotent — skips duplicates).
+   * - If already streaming, immediately sends SUBSCRIBE_SPOTS_REQ for the new IDs.
+   * - If not yet streaming, the symbols will be included in the next connect sequence.
+   */
+  addSymbols(newSymbolIds: number[], newSymbolMap?: Map<number, string>): void {
+    if (!this.opts) {
+      logger.warn({ newSymbolIds }, "CtraderTickEngine.addSymbols: engine not configured");
+      return;
+    }
+    const added: number[] = [];
+    for (const id of newSymbolIds) {
+      if (!this.opts.symbolIds.includes(id)) {
+        this.opts.symbolIds.push(id);
+        added.push(id);
+      }
+    }
+    if (newSymbolMap) {
+      for (const [id, name] of newSymbolMap) {
+        this.opts.symbolMap.set(id, name);
+      }
+    }
+    if (added.length === 0) {
+      logger.info({ newSymbolIds }, "CtraderTickEngine.addSymbols: already subscribed, noop");
+      return;
+    }
+    logger.info({ added, engineStatus: this._status }, "CtraderTickEngine.addSymbols: subscribing new symbols");
+    if (this._status === "streaming" && this.conn) {
+      this.conn.write(this._buildSubscribeSpotsReq(added));
+    }
+  }
+
   start(): void {
     if (!this.opts) throw new Error("CtraderTickEngine: call configure() before start()");
     this.stopped = false;

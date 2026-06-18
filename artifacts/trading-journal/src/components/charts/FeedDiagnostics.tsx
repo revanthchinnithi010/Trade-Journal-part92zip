@@ -5,6 +5,7 @@ import {
   type AssetClass, type DataProvider,
 } from "@/lib/assetClass";
 import { useTickStore } from "@/store/tickStore";
+import { useCtraderSpotStore } from "@/store/ctraderSpotStore";
 import { Activity, Wifi, WifiOff, ChevronDown, ChevronUp } from "lucide-react";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
@@ -51,6 +52,7 @@ const CLASS_COLOR: Record<AssetClass, string> = {
 
 const PROVIDER_COLOR: Record<string, string> = {
   delta:   "#8B5CF6",
+  ctrader: "#F59E0B",
   finnhub: "#3B82F6",
   unknown: "rgba(255,255,255,0.35)",
 };
@@ -86,16 +88,24 @@ export function FeedDiagnostics({ symbol }: Props) {
   const prevCountRef  = useRef(0);
   const prevTickTsRef = useRef(0);
 
+  // Live cTrader spot data — real-time bid/ask/spread/tickCount (no 3s poll delay)
+  const ctraderSpot      = useCtraderSpotStore(s => s.spots[symbol] ?? null);
+  const ctraderTickCount = useCtraderSpotStore(s => s.tickCounts[symbol] ?? 0);
+  const ctraderConnStatus = useCtraderSpotStore(s => s.connStatus);
+  const isCtrader = ctraderConnStatus === "streaming" && ctraderSpot !== null;
+
   const symData      = diag?.perSymbol[symbol];
   // Asset class: prefer server-classified value, fall back to client pattern
   const assetClass   = (symData?.assetClass as AssetClass | undefined) ?? getAssetClass(symbol);
   // Provider: prefer server routing (definitive), fall back to client priority rule
-  const liveProvider = symData?.provider ?? diag?.symbolRouting?.[symbol];
+  const liveProvider = isCtrader ? "ctrader" : (symData?.provider ?? diag?.symbolRouting?.[symbol]);
   const providerKey  = (liveProvider ?? "unknown") as DataProvider;
   const providerStat = diag?.providers.find(p => p.name === liveProvider);
-  const provOk       = providerStat?.status === "connected";
+  const provOk       = isCtrader ? true : (providerStat?.status === "connected");
   // Routing reason: prefer server-generated, fall back to client derivation
-  const reason       = symData?.routingReason ?? getRoutingReason(symbol);
+  const reason       = isCtrader
+    ? "cTrader ProtoOA real-time spot subscription"
+    : (symData?.routingReason ?? getRoutingReason(symbol));
 
   // Poll /api/feed/diagnostics every 3 s
   useEffect(() => {
@@ -151,7 +161,8 @@ export function FeedDiagnostics({ symbol }: Props) {
     return () => clearInterval(id);
   }, [calcTps]);
 
-  const lastTickAt  = symData?.lastTickAt ?? null;
+  // Last tick time: for cTrader use live receivedAt (no poll lag); others use server data
+  const lastTickAt  = isCtrader ? (ctraderSpot?.receivedAt ?? null) : (symData?.lastTickAt ?? null);
   const tickAgeMs   = lastTickAt ? Date.now() - lastTickAt : null;
   const tickAgeStr  = tickAgeMs !== null
     ? tickAgeMs < 60_000  ? `${Math.round(tickAgeMs / 1000)}s ago`
@@ -159,10 +170,10 @@ export function FeedDiagnostics({ symbol }: Props) {
     : `${Math.round(tickAgeMs / 3600_000)}h ago`
     : "—";
 
-  const subStatus   = symData?.subscribed ? "Subscribed ✓" : "Not subscribed";
-  const provStatus  = providerStat?.status ?? "unknown";
+  const subStatus   = isCtrader ? "Streaming ✓" : (symData?.subscribed ? "Subscribed ✓" : "Not subscribed");
+  const provStatus  = isCtrader ? "streaming" : (providerStat?.status ?? "unknown");
   const statusStr   = `${provStatus}  ·  ${subStatus}`;
-  const statusColor = symData?.subscribed && provOk ? "#00FFB4" : "#FF9F43";
+  const statusColor = (isCtrader || (symData?.subscribed && provOk)) ? "#00FFB4" : "#FF9F43";
 
   const classColor    = CLASS_COLOR[assetClass]             ?? CLASS_COLOR.unknown;
   const providerColor = PROVIDER_COLOR[providerKey]          ?? PROVIDER_COLOR.unknown;
@@ -264,7 +275,32 @@ export function FeedDiagnostics({ symbol }: Props) {
             <Row label="Last Price" value={String(symData.lastPrice)} dimValue />
           )}
 
-          {!symData?.subscribed && (
+          {/* cTrader live bid/ask/spread + cumulative tick counter */}
+          {isCtrader && ctraderSpot && (
+            <>
+              <Divider />
+              <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginBottom: 5, letterSpacing: "0.06em" }}>
+                CTRADER LIVE FEED
+              </div>
+              <Row label="Bid"    value={ctraderSpot.bid.toFixed(5)}    color="#4ADE80" />
+              <Row label="Ask"    value={ctraderSpot.ask.toFixed(5)}    color="#F87171" />
+              <Row label="Spread" value={ctraderSpot.spread.toFixed(5)} dimValue />
+              <Row
+                label="Tick Count"
+                value={ctraderTickCount > 0 ? ctraderTickCount.toLocaleString() : "0"}
+                color={ctraderTickCount > 0 ? "#00FFB4" : "rgba(255,255,255,0.35)"}
+              />
+              <Row
+                label="Last Tick At"
+                value={ctraderSpot.receivedAt
+                  ? new Date(ctraderSpot.receivedAt).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 })
+                  : "—"}
+                color={tickAgeMs !== null && tickAgeMs < 2_000 ? "#00FFB4" : "#FF9F43"}
+              />
+            </>
+          )}
+
+          {!isCtrader && !symData?.subscribed && (
             <div style={{ marginTop: 6, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
               Not subscribed — select this symbol in the watchlist to start receiving ticks.
             </div>

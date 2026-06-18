@@ -127,6 +127,35 @@ export function createCtraderSpotsRouter(): Router {
     }
   });
 
+  // POST /api/ctrader/spots/subscribe — dynamically subscribe to a symbol by name
+  router.post("/ctrader/spots/subscribe", async (req, res) => {
+    try {
+      const { symbol } = req.body as { symbol?: string };
+      if (!symbol) return res.status(400).json({ ok: false, error: "symbol required" });
+      const sym = symbol.toUpperCase().trim();
+
+      // Look up the symbol in ctrader_symbols table
+      const result = await pool.query(
+        "SELECT symbol_id, symbol_name FROM ctrader_symbols WHERE UPPER(symbol_name) = $1 LIMIT 1",
+        [sym],
+      );
+      if (!result.rows.length) {
+        return res.json({ ok: false, error: `Symbol ${sym} not found in cTrader symbol catalog` });
+      }
+      const row = result.rows[0] as { symbol_id: number; symbol_name: string };
+      const symbolMap = new Map<number, string>([[Number(row.symbol_id), row.symbol_name]]);
+      ctraderTickEngine.addSymbols([Number(row.symbol_id)], symbolMap);
+      const status = ctraderTickEngine.getStatus();
+      logger.info({ symbol: sym, symbolId: row.symbol_id, engineStatus: status.status },
+        "CtraderSpots: symbol subscription requested via API");
+      return res.json({ ok: true, symbol: sym, symbolId: row.symbol_id, engineStatus: status.status });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "CtraderSpots: subscribe error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   // POST /api/ctrader/spots/stop
   router.post("/ctrader/spots/stop", (_req, res) => {
     ctraderTickEngine.stop();

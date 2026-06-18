@@ -89,8 +89,19 @@ marketData.on("subscription_update", (update) => {
   wsManager.broadcast({ type: "subscription_update", ...update });
 });
 
-// ── cTrader tick engine → WebSocket broadcast ─────────────────────────────
+// ── cTrader tick engine → CandleAggregator + WebSocket broadcast ─────────────
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
+  // Feed into candle aggregator so server-side candle updates fire for cTrader symbols.
+  // This is required for CustomChart's candle_update path (in addition to the tick path).
+  wsManager.clearCandleCache();
+  candleAggregator.ingestTick({
+    symbol:    tick.symbol,
+    price:     tick.price,
+    volume:    1,
+    timestamp: tick.timestamp,
+    provider:  "ctrader",
+  } as ProviderTick);
+
   wsManager.broadcast({
     type:     "ctrader_tick",
     symbol:   tick.symbol,
