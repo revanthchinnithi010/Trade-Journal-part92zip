@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
-import { fetchSymbolsViaProtoOA } from "../lib/ctraderProtoOA.js";
+import { fetchSymbolsViaProtoOA, probeAppAuth } from "../lib/ctraderProtoOA.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
@@ -271,6 +271,74 @@ export function createCtraderOAuthRouter(): Router {
   // ── GET /api/ctrader/accounts (clean path used by frontend) ───────────────
   router.get("/ctrader/accounts", async (_req, res) => {
     return handleFetchAccounts(res);
+  });
+
+  // ── GET /api/ctrader/auth-test — try Mode A (numeric-only) then Mode B (full env var) ──
+  // Official Spotware clientId format: '{appId}_{longAlphanumeric}'
+  // Example from connect-nodejs-samples: '7_5az7pj935owsss8kgokcco84wc8osk0g0gksow0ow4s4ocwwgc'
+  // Mode A: numeric-only portion of CTRADER_CLIENT_ID  (e.g. "26547")
+  // Mode B: full CTRADER_CLIENT_ID env var as-is        (e.g. "26547_abc123...")
+  // Run both sequentially; log which gets APP_AUTH_RES vs Bye/ERROR_RES
+  router.get("/ctrader/auth-test", async (req, res) => {
+    const isLive = req.query.isLive === "true";
+
+    const rawClientId  = process.env.CTRADER_CLIENT_ID  ?? "";
+    const clientSecret = process.env.CTRADER_CLIENT_SECRET ?? "";
+
+    if (!rawClientId || !clientSecret) {
+      return res.status(500).json({
+        ok: false,
+        error: "CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not configured",
+      });
+    }
+
+    // Mode A: extract only the numeric leading digits
+    // e.g. "26547_abc" → "26547"  |  "26547" → "26547"
+    const modeAClientId = rawClientId.replace(/[^0-9].*$/, "").trim() || rawClientId.trim();
+    // Mode B: full value as stored in the Secret
+    const modeBClientId = rawClientId;
+
+    logger.info({
+      isLive,
+      modeA: { clientId: modeAClientId, length: modeAClientId.length },
+      modeB: { clientId: modeBClientId, length: modeBClientId.length },
+      secretLen: clientSecret.length,
+      note: [
+        "Official Spotware clientId format: '{appId}_{longAlphanumericString}'",
+        "Example from connect-nodejs-samples: '7_5az7pj935owsss8kgokcco84wc8osk0g0gksow0ow4s4ocwwgc'",
+        "If Mode A == Mode B == numeric only, CTRADER_CLIENT_ID needs the full string from the portal.",
+      ],
+    }, "ctrader/auth-test: starting dual-mode probe");
+
+    const [modeA, modeB] = await Promise.allSettled([
+      probeAppAuth({ clientId: modeAClientId, clientSecret, isLive, mode: "A", timeoutMs: 14_000 }),
+      // stagger B by 200ms so logs are distinguishable
+      new Promise<void>(r => setTimeout(r, 200)).then(() =>
+        probeAppAuth({ clientId: modeBClientId, clientSecret, isLive, mode: "B", timeoutMs: 14_000 })
+      ),
+    ]);
+
+    const resultA = modeA.status === "fulfilled" ? modeA.value : { mode: "A", success: false, error: String((modeA as PromiseRejectedResult).reason) };
+    const resultB = modeB.status === "fulfilled" ? modeB.value : { mode: "B", success: false, error: String((modeB as PromiseRejectedResult).reason) };
+
+    logger.info({
+      modeA: { success: resultA.success, closeReason: (resultA as any).closeReason, errorCode: (resultA as any).errorCode },
+      modeB: { success: resultB.success, closeReason: (resultB as any).closeReason, errorCode: (resultB as any).errorCode },
+    }, "ctrader/auth-test: SUMMARY");
+
+    return res.json({
+      ok:  resultA.success || resultB.success,
+      isLive,
+      note: {
+        officialFormat: "'{appId}_{longAlphanumeric}' e.g. '26547_abc123...'",
+        source:         "github.com/spotware/connect-nodejs-samples/index.js",
+        fix: !resultA.success && !resultB.success
+          ? "Both modes failed. Go to id.ctrader.com → your app → copy the full 'Client ID' string (format: 26547_xxxx...) and update CTRADER_CLIENT_ID in Replit Secrets."
+          : "One mode succeeded — see which one to know the correct clientId format.",
+      },
+      modeA: resultA,
+      modeB: resultB,
+    });
   });
 
   // ── ProtoOA WebSocket symbol fetch (replaces broken REST /symbol endpoint) ──

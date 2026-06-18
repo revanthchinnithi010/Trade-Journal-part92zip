@@ -241,6 +241,158 @@ function inspectString(label: string, s: string): object {
   };
 }
 
+// ── probeAppAuth — test a single clientId and return pass/fail ────────────────
+// Official Spotware clientId format (from connect-nodejs-samples):
+//   '7_5az7pj935owsss8kgokcco84wc8osk0g0gksow0ow4s4ocwwgc'
+//   → format: "{numericAppId}_{longAlphanumericString}"
+//   → NOT just the numeric app ID alone
+export interface AppAuthProbeResult {
+  clientId:         string;
+  clientIdHex:      string;
+  mode:             string;
+  success:          boolean;
+  closeCode?:       number;
+  closeReason?:     string;
+  errorCode?:       number | string;
+  errorDescription?: string;
+  receivedMessages: Array<{ payloadType: number; payloadTypeName: string; payloadHex: string }>;
+  allRawBytesHex:   string;   // every byte the server sent before close
+  durationMs:       number;
+}
+
+export async function probeAppAuth(opts: {
+  clientId:     string;
+  clientSecret: string;
+  isLive?:      boolean;
+  mode:         string;         // label for logs ("A" | "B" | etc.)
+  timeoutMs?:   number;
+}): Promise<AppAuthProbeResult> {
+  const { clientId, clientSecret, isLive = false, mode, timeoutMs = 12_000 } = opts;
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const url  = `wss://${host}:${PORT}`;
+  const t0   = Date.now();
+
+  logger.info({
+    mode,
+    url,
+    clientId: {
+      value:   clientId,
+      length:  clientId.length,
+      hexBytes: Buffer.from(clientId, "utf8").toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+    },
+    note: "Official format: '{appId}_{longAlphanumeric}' e.g. '26547_abc123xyz...'",
+  }, `ProtoOA probeAppAuth [Mode ${mode}]: attempting ApplicationAuthReq`);
+
+  return new Promise(resolve => {
+    const ws = new WebSocket(url, { rejectUnauthorized: false });
+    let recvBuf       = Buffer.alloc(0);
+    let allRawBytes   = Buffer.alloc(0);
+    const receivedMessages: AppAuthProbeResult["receivedMessages"] = [];
+    let settled       = false;
+
+    const finish = (partial: Omit<AppAuthProbeResult, "clientId"|"clientIdHex"|"mode"|"allRawBytesHex"|"receivedMessages"|"durationMs">) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { ws.terminate(); } catch { /* ignore */ }
+      const result: AppAuthProbeResult = {
+        clientId,
+        clientIdHex: Buffer.from(clientId, "utf8").toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+        mode,
+        allRawBytesHex: allRawBytes.toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+        receivedMessages,
+        durationMs: Date.now() - t0,
+        ...partial,
+      };
+      logger.info({
+        mode, success: result.success, closeCode: result.closeCode,
+        closeReason: result.closeReason, errorCode: result.errorCode,
+        errorDescription: result.errorDescription,
+        messagesReceived: receivedMessages.length,
+        rawBytesFromServer: allRawBytes.length,
+        durationMs: result.durationMs,
+      }, `ProtoOA probeAppAuth [Mode ${mode}]: DONE`);
+      resolve(result);
+    };
+
+    const timer = setTimeout(() => {
+      finish({ success: false, closeReason: "local timeout" });
+    }, timeoutMs);
+
+    ws.on("open", () => {
+      const frame = mkAppAuthReq(clientId, clientSecret);
+      logger.info({
+        mode,
+        selfDecode: selfDecodeFrame(frame),
+      }, `ProtoOA probeAppAuth [Mode ${mode}]: WS open — sending ApplicationAuthReq`);
+      ws.send(frame);
+    });
+
+    ws.on("message", (data: Buffer) => {
+      allRawBytes = Buffer.concat([allRawBytes, data]);
+      recvBuf     = Buffer.concat([recvBuf, data]);
+
+      logger.info({
+        mode,
+        rawHex:    hexSnippet(data, 128),
+        chunkBytes: data.length,
+      }, `ProtoOA probeAppAuth [Mode ${mode}]: ← RAW chunk`);
+
+      while (recvBuf.length >= 4) {
+        const msgLen = recvBuf.readUInt32BE(0);
+        if (msgLen > 1_000_000 || recvBuf.length < 4 + msgLen) break;
+        const raw = recvBuf.slice(4, 4 + msgLen);
+        recvBuf   = recvBuf.slice(4 + msgLen);
+
+        const msg = decodeFrame(raw);
+        if (!msg) {
+          logger.warn({ mode, rawHex: hexSnippet(raw) }, `ProtoOA probeAppAuth [Mode ${mode}]: ← undecoded frame`);
+          continue;
+        }
+
+        receivedMessages.push({
+          payloadType:     msg.payloadType,
+          payloadTypeName: ptName(msg.payloadType),
+          payloadHex:      hexSnippet(msg.payload, 64),
+        });
+
+        logger.info({
+          mode,
+          payloadType:     msg.payloadType,
+          payloadTypeName: ptName(msg.payloadType),
+          payloadLen:      msg.payload.length,
+          payloadHex:      hexSnippet(msg.payload, 64),
+        }, `ProtoOA probeAppAuth [Mode ${mode}]: ← ${ptName(msg.payloadType)}`);
+
+        if (msg.payloadType === PT.APP_AUTH_RES) {
+          finish({ success: true });
+          return;
+        }
+        if (msg.payloadType === PT.ERROR_RES) {
+          const { errorCode, description } = parseErrorRes(msg.payload);
+          finish({ success: false, errorCode, errorDescription: description });
+          return;
+        }
+      }
+    });
+
+    ws.on("error", err => {
+      logger.error({ mode, err: String(err) }, `ProtoOA probeAppAuth [Mode ${mode}]: WS error`);
+      finish({ success: false, closeReason: `ws_error: ${String(err)}` });
+    });
+
+    ws.on("close", (code, reason) => {
+      const reasonStr = reason?.toString() ?? "(none)";
+      logger.warn({
+        mode, code, reason: reasonStr,
+        allRawBytes: allRawBytes.length,
+        messagesBeforeClose: receivedMessages.length,
+      }, `ProtoOA probeAppAuth [Mode ${mode}]: WS CLOSE`);
+      finish({ success: false, closeCode: code, closeReason: reasonStr });
+    });
+  });
+}
+
 // ── Public interface ───────────────────────────────────────────────────────────
 export interface CtraderSymbol {
   symbolId:    number;
