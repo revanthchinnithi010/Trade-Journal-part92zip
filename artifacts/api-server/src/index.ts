@@ -14,7 +14,7 @@ import { runMigrations } from "./lib/migrate.js";
 import { logger } from "./lib/logger.js";
 import { AppConfigService } from "./services/AppConfigService.js";
 import { ctraderTickEngine } from "./services/CtraderTickEngine.js";
-import { autoStartCtraderEngine } from "./routes/ctrader_spots.js";
+import { autoStartCtraderEngine, subscribeWatchlistCtraderSymbols } from "./routes/ctrader_spots.js";
 import type { CtraderTick } from "./services/CtraderTickEngine.js";
 import type { EngineStatusPayload } from "./services/CtraderTickEngine.js";
 import type { ProviderTick } from "./services/providers/BaseProvider.js";
@@ -178,9 +178,12 @@ healthMonitor.start();
     logger.error({ err }, "AlertEngine: failed to start");
   });
 
-  // cTrader: auto-start if credentials + symbols are ready
-  autoStartCtraderEngine().catch((err) => {
+  // cTrader: auto-start (zero initial subscriptions), then subscribe watchlist symbols
+  await autoStartCtraderEngine().catch((err) => {
     logger.warn({ err }, "cTrader auto-start: unexpected error (non-fatal)");
+  });
+  subscribeWatchlistCtraderSymbols().catch((err) => {
+    logger.warn({ err }, "cTrader watchlist subscription: unexpected error (non-fatal)");
   });
 
   try {

@@ -3,9 +3,14 @@
  *
  * Persistent ProtoOA TLS session for cTrader spot price streaming.
  * Flow: APP_AUTH_REQ → APP_AUTH_RES → ACCT_AUTH_REQ → ACCT_AUTH_RES
- *       → SUBSCRIBE_SPOTS_REQ → SUBSCRIBE_SPOTS_RES → [SPOT_EVENT...]
+ *       → [SUBSCRIBE_SPOTS_REQ for watchlist symbols] → [SPOT_EVENT...]
  *
- * Reconnects automatically with exponential back-off on any disconnect.
+ * Subscription management:
+ *   - Starts with ZERO subscriptions after authentication.
+ *   - addSymbol(id, name)    — subscribe one symbol; idempotent (Set-backed).
+ *   - removeSymbol(id, name) — unsubscribe one symbol.
+ *   - On reconnect: re-subscribes all symbols in the Set automatically.
+ *
  * Emits:
  *   "tick"   (CtraderTick)         — one per SPOT_EVENT
  *   "status" (EngineStatusPayload) — on every state transition
@@ -181,6 +186,7 @@ export interface EngineStatusPayload {
   accountId:       number;
   isLive:          boolean;
   subscribedCount: number;
+  subscribedSymbols: string[];
   tickCounts:      Record<string, number>;
   connectedAt:     number | null;
   lastTickAt:      number | null;
@@ -194,7 +200,7 @@ export interface EngineOptions {
   ctidTraderAccountId: number;
   accessToken:         string;
   isLive:              boolean;
-  symbolIds:           number[];
+  /** Full symbol catalog for decoding SPOT_EVENT payloads (symbolId → name). */
   symbolMap:           Map<number, string>;
 }
 
@@ -205,6 +211,12 @@ export class CtraderTickEngine extends EventEmitter {
   private timer:   NodeJS.Timeout | null = null;
   private step:    "app_auth" | "acct_auth" | "subscribing" | "streaming" = "app_auth";
   private opts:    EngineOptions | null = null;
+
+  /**
+   * The canonical set of symbol IDs we want subscribed.
+   * Persists across reconnects. NOT reset by configure().
+   */
+  private subscribedIds  = new Set<number>();
 
   private tickCounts  = new Map<string, number>();
   private lastTickMap = new Map<number, CtraderTick>();
@@ -217,36 +229,53 @@ export class CtraderTickEngine extends EventEmitter {
   configure(opts: EngineOptions): void { this.opts = opts; }
 
   /**
-   * Dynamically add new symbol IDs to the subscription.
-   * - Updates the internal symbol map + ID list (idempotent — skips duplicates).
-   * - If already streaming, immediately sends SUBSCRIBE_SPOTS_REQ for the new IDs.
-   * - If not yet streaming, the symbols will be included in the next connect sequence.
+   * Subscribe to a single symbol by ProtoOA symbolId + name.
+   * - Idempotent: duplicate calls for the same id are ignored.
+   * - Updates the symbolMap so SPOT_EVENTs can be decoded.
+   * - If already streaming, immediately sends SUBSCRIBE_SPOTS_REQ for this id.
+   * - If in auth / reconnect phase, the id will be included in the next subscribe round.
    */
-  addSymbols(newSymbolIds: number[], newSymbolMap?: Map<number, string>): void {
+  addSymbol(symbolId: number, symbolName: string): void {
     if (!this.opts) {
-      logger.warn({ newSymbolIds }, "CtraderTickEngine.addSymbols: engine not configured");
+      logger.warn({ symbolId, symbolName }, "CtraderTickEngine.addSymbol: engine not configured");
       return;
     }
-    const added: number[] = [];
-    for (const id of newSymbolIds) {
-      if (!this.opts.symbolIds.includes(id)) {
-        this.opts.symbolIds.push(id);
-        added.push(id);
-      }
-    }
-    if (newSymbolMap) {
-      for (const [id, name] of newSymbolMap) {
-        this.opts.symbolMap.set(id, name);
-      }
-    }
-    if (added.length === 0) {
-      logger.info({ newSymbolIds }, "CtraderTickEngine.addSymbols: already subscribed, noop");
+    if (this.subscribedIds.has(symbolId)) {
+      logger.debug({ symbolId, symbolName }, "CtraderTickEngine.addSymbol: already subscribed (noop)");
       return;
     }
-    logger.info({ added, engineStatus: this._status }, "CtraderTickEngine.addSymbols: subscribing new symbols");
+    this.subscribedIds.add(symbolId);
+    this.opts.symbolMap.set(symbolId, symbolName);
+    logger.info({ symbolId, symbolName, engineStatus: this._status, total: this.subscribedIds.size },
+      "CtraderTickEngine.addSymbol: symbol added");
+
     if (this._status === "streaming" && this.conn) {
-      this.conn.write(this._buildSubscribeSpotsReq(added));
+      this.conn.write(this._buildSubscribeSpotsReq([symbolId]));
     }
+  }
+
+  /**
+   * Unsubscribe from a single symbol.
+   * - Idempotent: no-op if not subscribed.
+   * - If streaming, immediately sends UNSUBSCRIBE_SPOTS_REQ.
+   */
+  removeSymbol(symbolId: number, symbolName: string): void {
+    if (!this.subscribedIds.has(symbolId)) {
+      logger.debug({ symbolId, symbolName }, "CtraderTickEngine.removeSymbol: not subscribed (noop)");
+      return;
+    }
+    this.subscribedIds.delete(symbolId);
+    logger.info({ symbolId, symbolName, engineStatus: this._status, remaining: this.subscribedIds.size },
+      "CtraderTickEngine.removeSymbol: symbol removed");
+
+    if (this._status === "streaming" && this.conn) {
+      this.conn.write(this._buildUnsubscribeSpotsReq([symbolId]));
+    }
+  }
+
+  getSubscribedSymbols(): string[] {
+    if (!this.opts) return [];
+    return [...this.subscribedIds].map(id => this.opts!.symbolMap.get(id) ?? String(id));
   }
 
   start(): void {
@@ -266,14 +295,15 @@ export class CtraderTickEngine extends EventEmitter {
 
   getStatus(): EngineStatusPayload {
     return {
-      status:          this._status,
-      accountId:       this.opts?.ctidTraderAccountId ?? 0,
-      isLive:          this.opts?.isLive ?? false,
-      subscribedCount: this.opts?.symbolIds.length ?? 0,
-      tickCounts:      Object.fromEntries(this.tickCounts),
-      connectedAt:     this.connectedAt,
-      lastTickAt:      this.lastTickAt,
-      reconnectCount:  this.reconnectCount,
+      status:            this._status,
+      accountId:         this.opts?.ctidTraderAccountId ?? 0,
+      isLive:            this.opts?.isLive ?? false,
+      subscribedCount:   this.subscribedIds.size,
+      subscribedSymbols: this.getSubscribedSymbols(),
+      tickCounts:        Object.fromEntries(this.tickCounts),
+      connectedAt:       this.connectedAt,
+      lastTickAt:        this.lastTickAt,
+      reconnectCount:    this.reconnectCount,
     };
   }
 
@@ -362,15 +392,23 @@ export class CtraderTickEngine extends EventEmitter {
       }
       case "acct_auth": {
         if (pt !== PT.ACCT_AUTH_RES) { logger.warn({ got: name }, "CtraderTickEngine: unexpected frame in acct_auth"); return; }
-        logger.info("CtraderTickEngine: ✓ ACCT_AUTH_RES → SUBSCRIBE_SPOTS_REQ");
-        this.step = "subscribing";
-        this._setStatus("subscribing");
         this.connectedAt   = Date.now();
         this.reconnectDelay = 2_000;
         this.reconnectCount = 0;
-        const ids = this.opts!.symbolIds;
-        logger.info({ count: ids.length }, "CtraderTickEngine: SUBSCRIBE_SPOTS_REQ");
-        this.conn!.write(this._buildSubscribeSpotsReq(ids));
+
+        const ids = [...this.subscribedIds];
+        if (ids.length > 0) {
+          // Re-subscribe all watchlist symbols
+          logger.info({ count: ids.length }, "CtraderTickEngine: ✓ ACCT_AUTH_RES → SUBSCRIBE_SPOTS_REQ");
+          this.step = "subscribing";
+          this._setStatus("subscribing");
+          this.conn!.write(this._buildSubscribeSpotsReq(ids));
+        } else {
+          // No watchlist symbols yet — go straight to streaming; addSymbol() will subscribe later
+          logger.info("CtraderTickEngine: ✓ ACCT_AUTH_RES — no watchlist symbols yet, standing by");
+          this.step = "streaming";
+          this._setStatus("streaming");
+        }
         break;
       }
       case "subscribing": {
@@ -391,6 +429,10 @@ export class CtraderTickEngine extends EventEmitter {
       case "streaming": {
         if (pt === PT.SPOT_EVENT) {
           this._handleSpotEvent(payload);
+        } else if (pt === PT.SUBSCRIBE_SPOTS_RES) {
+          logger.debug("CtraderTickEngine: SUBSCRIBE_SPOTS_RES ack (dynamic add)");
+        } else if (pt === PT.UNSUBSCRIBE_SPOTS_RES) {
+          logger.debug("CtraderTickEngine: UNSUBSCRIBE_SPOTS_RES ack");
         } else {
           logger.debug({ got: name }, "CtraderTickEngine: unhandled frame in streaming");
         }
@@ -466,6 +508,15 @@ export class CtraderTickEngine extends EventEmitter {
       ...u32f(2, ctidTraderAccountId),
       ...symbolIds.flatMap(id => u32f(3, id)),
       ...boolField(4, true), // subscribeToSpotTimestamp = true
+    ]);
+  }
+
+  private _buildUnsubscribeSpotsReq(symbolIds: number[]): Buffer {
+    const { ctidTraderAccountId } = this.opts!;
+    return buildFrame(PT.UNSUBSCRIBE_SPOTS_REQ, [
+      ...u32f(1, PT.UNSUBSCRIBE_SPOTS_REQ),
+      ...u32f(2, ctidTraderAccountId),
+      ...symbolIds.flatMap(id => u32f(3, id)),
     ]);
   }
 

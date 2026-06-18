@@ -47,7 +47,7 @@ export function createFeedDiagnosticsRouter(marketData: MarketDataService): IRou
           status:        cStatus.status === "streaming" ? "connected" : cStatus.status,
           tickCount:     totalCtraderTicks,
           lastTickAt:    cStatus.lastTickAt,
-          subscriptions: cTicks.map(t => t.symbol),
+          subscriptions: cStatus.subscribedSymbols ?? cTicks.map(t => t.symbol),
         });
 
         for (const tick of cTicks) {

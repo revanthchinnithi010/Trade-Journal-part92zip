@@ -364,22 +364,6 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
   const handleSelect = useCallback((symbol: string) => {
     setActiveBroker(broker);
     setActiveSymbol(symbol);
-    if (broker === "ctrader") {
-      const base = import.meta.env.BASE_URL?.replace(/\/$/, "") ?? "";
-      console.log(`[BrokerWatchlist] cTrader symbol selected: ${symbol} — requesting spot subscription`);
-      fetch(`${base}/api/ctrader/spots/subscribe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbol }),
-      })
-        .then(r => r.json())
-        .then((data: unknown) => {
-          console.log(`[BrokerWatchlist] cTrader subscribe response for ${symbol}:`, data);
-        })
-        .catch(err => {
-          console.warn(`[BrokerWatchlist] cTrader subscribe failed for ${symbol}:`, err);
-        });
-    }
     onSelect(symbol);
   }, [broker, setActiveBroker, setActiveSymbol, onSelect]);
 
