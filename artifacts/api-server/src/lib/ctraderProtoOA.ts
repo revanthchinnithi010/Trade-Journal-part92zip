@@ -10,24 +10,29 @@ const DEMO_HOST = "demo.ctraderapi.com";
 const LIVE_HOST = "live.ctraderapi.com";
 const PORT      = 5035;
 
-// ── Payload type IDs (from OpenApiMessages.proto) ─────────────────────────────
+// ── Payload type IDs (from OpenApiModelMessages.proto — official Spotware enum) ─
+// Source: github.com/spotware/openapi-proto-messages / OpenApiModelMessages.proto
+// PROTO_OA_SYMBOLS_LIST_REQ  = 2114 (NOT 2115 — confirmed from enum)
+// PROTO_OA_SYMBOLS_LIST_RES  = 2115
+// PROTO_OA_SYMBOL_BY_ID_REQ  = 2116
+// PROTO_OA_SYMBOL_BY_ID_RES  = 2117
 const PT = {
   APP_AUTH_REQ:     2100,
   APP_AUTH_RES:     2101,
   ACCT_AUTH_REQ:    2102,
   ACCT_AUTH_RES:    2103,
-  SYMBOL_LIST_REQ:  2115,
-  SYMBOL_LIST_RES:  2116,
-  SYMBOL_BY_ID_REQ: 2117,
-  SYMBOL_BY_ID_RES: 2118,
+  SYMBOL_LIST_REQ:  2114,   // ← was 2115 (off-by-one; server rejected as UNSUPPORTED_MESSAGE)
+  SYMBOL_LIST_RES:  2115,   // ← was 2116
+  SYMBOL_BY_ID_REQ: 2116,   // ← was 2117
+  SYMBOL_BY_ID_RES: 2117,   // ← was 2118
   ERROR_RES:        2142,
 } as const;
 
 const PT_NAME: Record<number, string> = {
-  2100: "APP_AUTH_REQ",    2101: "APP_AUTH_RES",
-  2102: "ACCT_AUTH_REQ",   2103: "ACCT_AUTH_RES",
-  2115: "SYMBOL_LIST_REQ", 2116: "SYMBOL_LIST_RES",
-  2117: "SYMBOL_BY_ID_REQ", 2118: "SYMBOL_BY_ID_RES",
+  2100: "APP_AUTH_REQ",       2101: "APP_AUTH_RES",
+  2102: "ACCT_AUTH_REQ",      2103: "ACCT_AUTH_RES",
+  2114: "SYMBOLS_LIST_REQ",   2115: "SYMBOLS_LIST_RES",
+  2116: "SYMBOL_BY_ID_REQ",   2117: "SYMBOL_BY_ID_RES",
   2142: "ERROR_RES",
   51:   "HEARTBEAT_EVENT",
 };
