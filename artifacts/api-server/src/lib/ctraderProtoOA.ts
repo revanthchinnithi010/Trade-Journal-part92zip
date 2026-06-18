@@ -352,6 +352,31 @@ export async function probeAppAuth(opts: {
   });
 }
 
+// ── Verbose fetch types ────────────────────────────────────────────────────────
+
+export interface TraceEntry {
+  seq:          number;
+  direction:    "→" | "←";
+  msgName:      string;
+  payloadType:  number;
+  payloadBytes: number;
+  summary:      Record<string, unknown>;
+  tsMs:         number;
+}
+
+export interface VerboseFetchResult {
+  ok:             boolean;
+  trace:          TraceEntry[];
+  acctAuthOk:     boolean;
+  acctAuthFields: Record<string, unknown>;
+  errorCodes:     string[];
+  totalSymbols:   number;
+  first20:        CtraderSymbol[];
+  symbols:        CtraderSymbol[];
+  durationMs:     number;
+  error?:         string;
+}
+
 // ── Public interface ───────────────────────────────────────────────────────────
 export interface CtraderSymbol {
   symbolId:    number;
@@ -528,6 +553,201 @@ export async function fetchSymbolsViaProtoOA(opts: {
           }, "ProtoOA fetchSymbols: ✓ symbol merge complete");
 
           finish(result);
+          break;
+        }
+      }
+    };
+  });
+}
+
+// ── fetchSymbolsVerbose — full 6-step trace with per-message logging ──────────
+export async function fetchSymbolsVerbose(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  timeoutMs?:          number;
+}): Promise<VerboseFetchResult> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, timeoutMs = 30_000,
+  } = opts;
+
+  const host  = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0    = Date.now();
+  const trace: TraceEntry[] = [];
+  let   seq   = 0;
+  const errors: string[] = [];
+
+  function addSent(msgName: string, payloadType: number, payloadBytes: number, summary: Record<string, unknown> = {}) {
+    trace.push({ seq: ++seq, direction: "→", msgName, payloadType, payloadBytes, summary, tsMs: Date.now() });
+    logger.info({ seq, msgName, payloadType, payloadBytes, summary }, `ProtoOA verbose: → ${msgName}`);
+  }
+  function addRecv(msgName: string, payloadType: number, payloadBytes: number, summary: Record<string, unknown> = {}) {
+    trace.push({ seq: ++seq, direction: "←", msgName, payloadType, payloadBytes, summary, tsMs: Date.now() });
+    logger.info({ seq, msgName, payloadType, payloadBytes, summary }, `ProtoOA verbose: ← ${msgName}`);
+  }
+
+  logger.info({ host, port: PORT, ctidTraderAccountId, isLive }, "ProtoOA fetchSymbolsVerbose: starting");
+
+  return new Promise((resolveOuter) => {
+    type Step = "app_auth" | "acct_auth" | "symbol_list" | "symbol_detail" | "done";
+    let step: Step = "app_auth";
+    let lightSymbols: Array<{ symbolId: number; symbolName: string; enabled: boolean }> = [];
+    let acctAuthOk     = false;
+    let acctAuthFields: Record<string, unknown> = {};
+    let settled        = false;
+
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => {
+      finish({ ok: false, error: `ProtoOA timeout (${timeoutMs}ms) at step: ${step}` });
+    }, timeoutMs);
+
+    function finish(partial: Partial<VerboseFetchResult> & { ok: boolean }) {
+      if (settled) return;
+      settled = true;
+      step    = "done";
+      clearTimeout(timer);
+      conn.destroy();
+      const syms = partial.symbols ?? [];
+      resolveOuter({
+        ok:             partial.ok,
+        trace,
+        acctAuthOk,
+        acctAuthFields,
+        errorCodes:     errors,
+        totalSymbols:   syms.length,
+        first20:        syms.slice(0, 20),
+        symbols:        syms,
+        durationMs:     Date.now() - t0,
+        error:          partial.error,
+      });
+    }
+
+    conn.onConnect = () => {
+      const frame = mkAppAuthReq(clientId, clientSecret);
+      addSent("APP_AUTH_REQ", PT.APP_AUTH_REQ, frame.length, {
+        clientIdLen:     clientId.length,
+        clientSecretLen: clientSecret.length,
+      });
+      conn.write("ApplicationAuthReq", frame);
+    };
+
+    conn.onError = (e) => finish({ ok: false, error: e.message });
+
+    conn.onClose = (hadError) => {
+      if (step !== "done") {
+        finish({ ok: false, error: `Connection closed at step=${step} (hadError=${hadError})` });
+      }
+    };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        const errStr = `code=${errorCode}, desc=${description}`;
+        errors.push(errStr);
+        addRecv("ERROR_RES", PT.ERROR_RES, payload.length, { errorCode, description });
+        finish({ ok: false, error: `ProtoOA ERROR_RES: ${errStr}` });
+        return;
+      }
+      if (pt === 51) {
+        addRecv("HEARTBEAT_EVENT", 51, payload.length, {});
+        return;
+      }
+
+      switch (step) {
+        case "app_auth": {
+          if (pt !== PT.APP_AUTH_RES) return;
+          addRecv("APP_AUTH_RES", PT.APP_AUTH_RES, payload.length, { status: "app_authenticated" });
+          step = "acct_auth";
+          const frame = mkAcctAuthReq(ctidTraderAccountId, accessToken);
+          addSent("ACCT_AUTH_REQ", PT.ACCT_AUTH_REQ, frame.length, {
+            ctidTraderAccountId,
+            accessTokenLen: accessToken.length,
+          });
+          conn.write("AccountAuthReq", frame);
+          break;
+        }
+
+        case "acct_auth": {
+          if (pt !== PT.ACCT_AUTH_RES) return;
+          const fields = parseMsg(payload);
+          const ptF    = fields.find(f => f.fn === 1 && f.wt === 0);
+          acctAuthFields = {
+            payloadType: ptF?.v ?? null,
+            fieldCount:  fields.length,
+          };
+          acctAuthOk = true;
+          addRecv("ACCT_AUTH_RES", PT.ACCT_AUTH_RES, payload.length, {
+            status:              "account_authenticated",
+            ctidTraderAccountId,
+          });
+          step = "symbol_list";
+          const frame = mkSymbolListReq(ctidTraderAccountId);
+          addSent("SYMBOL_LIST_REQ", PT.SYMBOL_LIST_REQ, frame.length, { ctidTraderAccountId });
+          conn.write("SymbolsListReq", frame);
+          break;
+        }
+
+        case "symbol_list": {
+          if (pt !== PT.SYMBOL_LIST_RES) return;
+          const fields = parseMsg(payload);
+          lightSymbols = fields
+            .filter(f => f.fn === 3 && f.wt === 2)
+            .map(f => {
+              const sf     = parseMsg(f.v as Buffer);
+              const id     = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
+              const namBuf = sf.find(x => x.fn === 2 && x.wt === 2)?.v;
+              const en     = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 1;
+              return {
+                symbolId:   id,
+                symbolName: namBuf ? (namBuf as Buffer).toString("utf8") : `sym_${id}`,
+                enabled:    en !== 0,
+              };
+            });
+          const enabled = lightSymbols.filter(s => s.enabled);
+          addRecv("SYMBOL_LIST_RES", PT.SYMBOL_LIST_RES, payload.length, {
+            total:   lightSymbols.length,
+            enabled: enabled.length,
+            sample:  enabled.slice(0, 5).map(s => s.symbolName),
+          });
+          if (enabled.length === 0) { finish({ ok: true, symbols: [] }); return; }
+          const ids   = enabled.slice(0, 1000).map(s => s.symbolId);
+          step        = "symbol_detail";
+          const frame = mkSymbolByIdReq(ctidTraderAccountId, ids);
+          addSent("SYMBOL_BY_ID_REQ", PT.SYMBOL_BY_ID_REQ, frame.length, { requestedCount: ids.length });
+          conn.write(`SymbolByIdReq(${ids.length})`, frame);
+          break;
+        }
+
+        case "symbol_detail": {
+          if (pt !== PT.SYMBOL_BY_ID_RES) return;
+          const fields    = parseMsg(payload);
+          const detailMap = new Map<number, { digits: number; pipPosition: number }>();
+          fields.filter(f => f.fn === 3 && f.wt === 2).forEach(f => {
+            const sf  = parseMsg(f.v as Buffer);
+            const id  = sf.find(x => x.fn === 1 && x.wt === 0)?.v as number ?? 0;
+            const dig = sf.find(x => x.fn === 2 && x.wt === 0)?.v as number ?? 5;
+            const pip = sf.find(x => x.fn === 3 && x.wt === 0)?.v as number ?? 4;
+            detailMap.set(id, { digits: dig, pipPosition: pip });
+          });
+          addRecv("SYMBOL_BY_ID_RES", PT.SYMBOL_BY_ID_RES, payload.length, { detailCount: detailMap.size });
+          const result: CtraderSymbol[] = lightSymbols
+            .filter(s => s.enabled)
+            .slice(0, 1000)
+            .map(s => {
+              const d = detailMap.get(s.symbolId) ?? { digits: 5, pipPosition: 4 };
+              return {
+                symbolId:    s.symbolId,
+                symbolName:  s.symbolName,
+                description: s.symbolName,
+                pipPosition: d.pipPosition,
+                digits:      d.digits,
+              };
+            })
+            .sort((a, b) => a.symbolName.localeCompare(b.symbolName));
+          finish({ ok: true, symbols: result });
           break;
         }
       }

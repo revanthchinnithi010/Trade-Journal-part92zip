@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
-import { fetchSymbolsViaProtoOA, probeAppAuth } from "../lib/ctraderProtoOA.js";
+import { fetchSymbolsViaProtoOA, fetchSymbolsVerbose, probeAppAuth, type CtraderSymbol } from "../lib/ctraderProtoOA.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
@@ -385,6 +385,130 @@ export function createCtraderOAuthRouter(): Router {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err, ctidTraderAccountId, isLive }, "ctrader/symbols: ProtoOA error");
       return res.status(502).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Cache cTrader symbols to DB ──────────────────────────────────────────────
+  async function cacheCtraderSymbols(symbols: CtraderSymbol[]): Promise<void> {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ctrader_symbols (
+        symbol_id    INTEGER PRIMARY KEY,
+        symbol_name  TEXT NOT NULL,
+        description  TEXT NOT NULL,
+        pip_position INTEGER NOT NULL,
+        digits       INTEGER NOT NULL,
+        fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    for (const sym of symbols) {
+      await pool.query(
+        `INSERT INTO ctrader_symbols (symbol_id, symbol_name, description, pip_position, digits, fetched_at)
+         VALUES ($1, $2, $3, $4, $5, NOW())
+         ON CONFLICT (symbol_id) DO UPDATE SET
+           symbol_name  = EXCLUDED.symbol_name,
+           description  = EXCLUDED.description,
+           pip_position = EXCLUDED.pip_position,
+           digits       = EXCLUDED.digits,
+           fetched_at   = NOW()`,
+        [sym.symbolId, sym.symbolName, sym.description, sym.pipPosition, sym.digits],
+      );
+    }
+  }
+
+  // ── Verbose ProtoOA symbol fetch — full 6-step trace ─────────────────────────
+  router.get("/ctrader/symbols-verbose/:accountId", async (req, res) => {
+    const ctidTraderAccountId = parseInt(req.params.accountId, 10);
+    const isLive = req.query.isLive === "true";
+
+    if (isNaN(ctidTraderAccountId) || ctidTraderAccountId <= 0) {
+      return res.status(400).json({ ok: false, error: "Invalid ctidTraderAccountId" });
+    }
+
+    const stored = await getStoredToken().catch(() => null);
+    if (!stored) {
+      return res.status(401).json({ ok: false, error: "Not authenticated — complete OAuth first" });
+    }
+
+    const clientId     = process.env.CTRADER_CLIENT_ID;
+    const clientSecret = process.env.CTRADER_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.status(500).json({ ok: false, error: "CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not configured" });
+    }
+
+    logger.info({ ctidTraderAccountId, isLive }, "ctrader/symbols-verbose: starting");
+
+    try {
+      const result = await fetchSymbolsVerbose({
+        ctidTraderAccountId,
+        isLive,
+        accessToken:  stored.token,
+        clientId,
+        clientSecret,
+        timeoutMs:    35_000,
+      });
+
+      logger.info({
+        ok: result.ok, durationMs: result.durationMs,
+        totalSymbols: result.totalSymbols, traceLen: result.trace.length,
+        acctAuthOk: result.acctAuthOk,
+      }, "ctrader/symbols-verbose: complete");
+
+      return res.json({
+        ok:             result.ok,
+        trace:          result.trace,
+        acctAuthOk:     result.acctAuthOk,
+        acctAuthFields: result.acctAuthFields,
+        errorCodes:     result.errorCodes,
+        totalSymbols:   result.totalSymbols,
+        first20:        result.first20,
+        symbols:        result.symbols,
+        durationMs:     result.durationMs,
+        error:          result.error,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg, ctidTraderAccountId, isLive }, "ctrader/symbols-verbose: error");
+      return res.status(502).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Wire (cache) cTrader symbols into DB so the broker watchlist can load them
+  router.post("/ctrader/symbols-cache", async (req, res) => {
+    const { symbols } = req.body as { symbols?: CtraderSymbol[] };
+    if (!Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ ok: false, error: "No symbols provided" });
+    }
+    try {
+      await cacheCtraderSymbols(symbols);
+      logger.info({ count: symbols.length }, "ctrader/symbols-cache: saved to DB");
+      return res.json({ ok: true, cached: symbols.length });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/symbols-cache: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Read cached cTrader symbols from DB ───────────────────────────────────────
+  router.get("/ctrader/symbols-cached", async (_req, res) => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ctrader_symbols (
+          symbol_id    INTEGER PRIMARY KEY,
+          symbol_name  TEXT NOT NULL,
+          description  TEXT NOT NULL,
+          pip_position INTEGER NOT NULL,
+          digits       INTEGER NOT NULL,
+          fetched_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      const rows = await pool.query(
+        "SELECT symbol_id, symbol_name, description, pip_position, digits FROM ctrader_symbols ORDER BY symbol_name",
+      );
+      return res.json({ ok: true, count: rows.rowCount, symbols: rows.rows });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      return res.status(500).json({ ok: false, error: msg });
     }
   });
 

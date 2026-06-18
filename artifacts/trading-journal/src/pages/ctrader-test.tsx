@@ -56,15 +56,29 @@ interface CtraderSymbol {
   digits:      number;
 }
 
+interface TraceEntry {
+  seq:          number;
+  direction:    "→" | "←";
+  msgName:      string;
+  payloadType:  number;
+  payloadBytes: number;
+  summary:      Record<string, unknown>;
+  tsMs:         number;
+}
+
 interface SymbolsResult {
-  ok:       boolean;
-  via?:     string;
-  count?:   number;
-  symbols?: CtraderSymbol[];
-  error?:   string;
-  raw?:     string;
-  note?:    string;
-  http_status?: number;
+  ok:             boolean;
+  trace?:         TraceEntry[];
+  acctAuthOk?:    boolean;
+  acctAuthFields?: Record<string, unknown>;
+  errorCodes?:    string[];
+  totalSymbols?:  number;
+  first20?:       CtraderSymbol[];
+  durationMs?:    number;
+  error?:         string;
+  count?:         number;
+  via?:           string;
+  symbols?:       CtraderSymbol[];
 }
 
 type StepState = "idle" | "loading" | "success" | "error";
@@ -284,6 +298,8 @@ export default function CtraderTestPage() {
   const [disconnectLoading, setDisconnectLoading] = useState(false);
   const [accountsLoading, setAccountsLoading] = useState(false);
   const [symbolsLoading,  setSymbolsLoading]  = useState(false);
+  const [wireLoading,     setWireLoading]     = useState(false);
+  const [wiredCount,      setWiredCount]      = useState<number | null>(null);
 
   const log = useCallback((level: LogLevel, msg: string, data?: unknown) => {
     const entry: LogEntry = { ts: Date.now(), level, msg, data };
@@ -476,24 +492,26 @@ export default function CtraderTestPage() {
     const isLive = overrideIsLive ?? selectedIsLive;
     if (symbolsLoading || !id) return;
     setSymbolsLoading(true);
-    log("step", `ProtoOA WS — fetching symbols for ctidTraderAccountId: ${id} (${isLive ? "live" : "demo"})`);
+    setWiredCount(null);
+    log("step", `ProtoOA WS — verbose 6-step fetch for ctidTraderAccountId: ${id} (${isLive ? "live" : "demo"})`);
     setStepStates(p => ({ ...p, symbols: "loading" }));
     try {
-      const url  = `${BASE}/api/ctrader/symbols/${encodeURIComponent(id)}?isLive=${isLive}`;
+      const url  = `${BASE}/api/ctrader/symbols-verbose/${encodeURIComponent(id)}?isLive=${isLive}`;
       const res  = await fetch(url);
       const data = (await res.json()) as SymbolsResult;
       if (!mountedRef.current) return;
       setSymbols(data);
       if (data.ok) {
-        log("success", `Symbols received via ${data.via ?? "?"} — ${data.count} total`);
-        if (data.symbols?.length) {
-          const sample = data.symbols.slice(0, 8).map(s => s.symbolName).join(", ");
-          log("info", `Sample: ${sample}${(data.count ?? 0) > 8 ? " …" : ""}`);
+        log("success", `ProtoOA complete in ${data.durationMs ?? "?"}ms — ${data.totalSymbols} symbols, ${data.trace?.length ?? 0} messages traced`);
+        if (data.acctAuthOk) log("info", "✓ AccountAuthRes received — account authenticated");
+        if (data.first20?.length) {
+          const sample = data.first20.slice(0, 8).map(s => s.symbolName).join(", ");
+          log("info", `First symbols: ${sample}${(data.totalSymbols ?? 0) > 8 ? " …" : ""}`);
         }
         setStepStates(p => ({ ...p, symbols: "success" }));
       } else {
         log("warn", `Symbols error: ${data.error ?? "unknown"}`);
-        if (data.note) log("info", `Note: ${data.note}`);
+        if (data.errorCodes?.length) log("info", `ProtoOA error codes: ${data.errorCodes.join(", ")}`);
         setStepStates(p => ({ ...p, symbols: "error" }));
       }
     } catch (err) {
@@ -504,6 +522,34 @@ export default function CtraderTestPage() {
       if (mountedRef.current) setSymbolsLoading(false);
     }
   }, [symbolsLoading, accountIdInput, selectedIsLive, log]);
+
+  const wireSymbols = useCallback(async () => {
+    if (!symbols?.ok || !symbols.first20?.length) return;
+    const allSymbols = symbols.symbols ?? symbols.first20;
+    if (!allSymbols.length) return;
+    setWireLoading(true);
+    log("step", `Wiring ${allSymbols.length} symbols to cTrader Broker Watchlist…`);
+    try {
+      const res  = await fetch(`${BASE}/api/ctrader/symbols-cache`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ symbols: allSymbols }),
+      });
+      const data = await res.json() as { ok: boolean; cached?: number; error?: string };
+      if (!mountedRef.current) return;
+      if (data.ok) {
+        setWiredCount(data.cached ?? allSymbols.length);
+        log("success", `Wired ${data.cached ?? allSymbols.length} symbols → cTrader tab in Broker Watchlist`);
+      } else {
+        log("error", `Wire failed: ${data.error ?? "unknown"}`);
+      }
+    } catch (err) {
+      if (!mountedRef.current) return;
+      log("error", `Wire error: ${String(err)}`);
+    } finally {
+      if (mountedRef.current) setWireLoading(false);
+    }
+  }, [symbols, log]);
 
   const connected = oaStatus?.connected && !oaStatus.expired;
 
@@ -792,8 +838,8 @@ export default function CtraderTestPage() {
         ) : (
           <>
             <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.60)", lineHeight: 1.6 }}>
-              Connects via ProtoOA WebSocket (port 5036), authenticates, and fetches the symbol list.
-              Select an account in Step 3 to auto-populate — or enter an ID manually.
+              Full 6-step ProtoOA sequence: APP_AUTH_REQ → APP_AUTH_RES → ACCT_AUTH_REQ → ACCT_AUTH_RES → SYMBOL_LIST_REQ → SYMBOL_LIST_RES → SYMBOL_BY_ID_REQ → SYMBOL_BY_ID_RES.
+              Every message is captured in a trace below.
             </p>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input
@@ -822,24 +868,40 @@ export default function CtraderTestPage() {
               </button>
               <ActionBtn onClick={() => fetchSymbols()} loading={symbolsLoading} disabled={!accountIdInput.trim()}>
                 <BookOpen style={{ width: 12, height: 12 }} />
-                Fetch
+                Run Fetch
               </ActionBtn>
             </div>
+
             {symbols && (
               <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {/* ── Status badges ── */}
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   <Badge
-                    label={symbols.ok ? "Success" : "Failed"}
+                    label={symbols.ok ? "ProtoOA OK" : "Failed"}
                     color={symbols.ok ? "#34d399" : "#f87171"}
                     bg={symbols.ok ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"}
                   />
-                  {symbols.via && (
-                    <Badge label={symbols.via} color="#a78bfa" bg="rgba(139,92,246,0.10)" dot={false} />
+                  {symbols.acctAuthOk && (
+                    <Badge label="AcctAuth ✓" color="#a78bfa" bg="rgba(139,92,246,0.10)" dot={false} />
                   )}
-                  {symbols.ok && symbols.count !== undefined && (
-                    <Badge label={`${symbols.count} symbols`} color="#60a5fa" bg="rgba(59,130,246,0.10)" dot={false} />
+                  {symbols.ok && symbols.totalSymbols !== undefined && (
+                    <Badge label={`${symbols.totalSymbols} symbols`} color="#60a5fa" bg="rgba(59,130,246,0.10)" dot={false} />
+                  )}
+                  {symbols.durationMs !== undefined && (
+                    <Badge label={`${symbols.durationMs}ms`} color="#fbbf24" bg="rgba(245,158,11,0.10)" dot={false} />
+                  )}
+                  {symbols.ok && (symbols.totalSymbols ?? 0) > 0 && !wiredCount && (
+                    <ActionBtn onClick={wireSymbols} loading={wireLoading} variant="ghost">
+                      <Plug style={{ width: 11, height: 11 }} />
+                      Wire to cTrader Watchlist
+                    </ActionBtn>
+                  )}
+                  {wiredCount && (
+                    <Badge label={`Wired ${wiredCount} → Watchlist`} color="#34d399" bg="rgba(16,185,129,0.10)" dot={false} />
                   )}
                 </div>
+
+                {/* ── Error info ── */}
                 {symbols.error && (
                   <div style={{
                     padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6,
@@ -849,29 +911,113 @@ export default function CtraderTestPage() {
                     ❌ {symbols.error}
                   </div>
                 )}
-                {symbols.ok && symbols.symbols && symbols.symbols.length > 0 && (
+                {symbols.errorCodes && symbols.errorCodes.length > 0 && (
                   <div style={{
-                    borderRadius: 10, overflow: "hidden",
-                    border: "1px solid rgba(255,255,255,0.07)",
+                    padding: "8px 12px", borderRadius: 9, fontSize: 11,
+                    background: "rgba(239,68,68,0.05)", border: "1px solid rgba(239,68,68,0.15)",
+                    color: "#fbbf24", fontFamily: "monospace",
                   }}>
-                    <div style={{
-                      display: "grid",
-                      gridTemplateColumns: "1fr 80px 60px 60px",
-                      padding: "6px 12px",
-                      background: "rgba(0,0,0,0.30)",
-                      borderBottom: "1px solid rgba(255,255,255,0.07)",
+                    ProtoOA error codes: {symbols.errorCodes.join(" | ")}
+                  </div>
+                )}
+
+                {/* ── ProtoOA Message Trace ── */}
+                {symbols.trace && symbols.trace.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: "0.10em",
+                      textTransform: "uppercase", color: "rgba(148,163,184,0.45)",
                     }}>
-                      {["Symbol", "Pip Pos", "Digits", "ID"].map(h => (
-                        <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
-                          {h}
-                        </span>
-                      ))}
+                      ProtoOA Message Trace ({symbols.trace.length} messages)
+                    </span>
+                    <div style={{
+                      borderRadius: 10, overflow: "hidden",
+                      border: "1px solid rgba(255,255,255,0.07)",
+                      background: "rgba(0,0,0,0.20)",
+                    }}>
+                      {symbols.trace.map((entry) => {
+                        const isSent = entry.direction === "→";
+                        const color  = entry.msgName === "ERROR_RES"   ? "#f87171"
+                                     : entry.msgName === "APP_AUTH_RES"  ? "#34d399"
+                                     : entry.msgName === "ACCT_AUTH_RES" ? "#a78bfa"
+                                     : entry.msgName === "SYMBOL_LIST_RES" ? "#60a5fa"
+                                     : entry.msgName === "SYMBOL_BY_ID_RES" ? "#38bdf8"
+                                     : entry.msgName === "HEARTBEAT_EVENT" ? "rgba(148,163,184,0.30)"
+                                     : isSent ? "rgba(148,163,184,0.70)" : "#fbbf24";
+                        const summaryStr = Object.entries(entry.summary)
+                          .map(([k, v]) => `${k}=${Array.isArray(v) ? `[${(v as unknown[]).join(",")}]` : String(v)}`)
+                          .join("  ");
+                        return (
+                          <div key={entry.seq} style={{
+                            display: "flex", alignItems: "flex-start", gap: 10,
+                            padding: "5px 12px",
+                            borderBottom: "1px solid rgba(255,255,255,0.03)",
+                            background: entry.seq % 2 === 0 ? "rgba(0,0,0,0.12)" : "transparent",
+                          }}>
+                            <span style={{
+                              fontSize: 9.5, fontFamily: "monospace",
+                              color: "rgba(148,163,184,0.30)", flexShrink: 0, paddingTop: 1, minWidth: 16,
+                            }}>
+                              #{entry.seq}
+                            </span>
+                            <span style={{
+                              fontSize: 12, flexShrink: 0, fontWeight: 700, paddingTop: 1, minWidth: 18,
+                              color: isSent ? "rgba(148,163,184,0.50)" : color,
+                            }}>
+                              {entry.direction}
+                            </span>
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, fontFamily: "monospace",
+                              color, flexShrink: 0, minWidth: 160, paddingTop: 1,
+                            }}>
+                              {entry.msgName}
+                            </span>
+                            <span style={{
+                              fontSize: 10, fontFamily: "monospace",
+                              color: "rgba(148,163,184,0.50)", lineHeight: 1.5,
+                              flex: 1, wordBreak: "break-word",
+                            }}>
+                              {summaryStr || `pt=${entry.payloadType}  ${entry.payloadBytes}B`}
+                            </span>
+                            <span style={{
+                              fontSize: 9, fontFamily: "monospace",
+                              color: "rgba(148,163,184,0.25)", flexShrink: 0,
+                            }}>
+                              {entry.payloadBytes}B
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div style={{ maxHeight: 320, overflowY: "auto" }}>
-                      {symbols.symbols.slice(0, 200).map((s, i) => (
+                  </div>
+                )}
+
+                {/* ── First 20 symbols table ── */}
+                {symbols.ok && symbols.first20 && symbols.first20.length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, letterSpacing: "0.10em",
+                      textTransform: "uppercase", color: "rgba(148,163,184,0.45)",
+                    }}>
+                      First {symbols.first20.length} Symbols
+                      {(symbols.totalSymbols ?? 0) > symbols.first20.length
+                        ? ` (of ${symbols.totalSymbols} total)` : ""}
+                    </span>
+                    <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
+                      <div style={{
+                        display: "grid", gridTemplateColumns: "1fr 70px 60px 60px",
+                        padding: "6px 12px", background: "rgba(0,0,0,0.30)",
+                        borderBottom: "1px solid rgba(255,255,255,0.07)",
+                      }}>
+                        {["Symbol", "PipPos", "Digits", "ID"].map(h => (
+                          <span key={h} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
+                            {h}
+                          </span>
+                        ))}
+                      </div>
+                      {symbols.first20.map((s, i) => (
                         <div key={s.symbolId} style={{
-                          display: "grid",
-                          gridTemplateColumns: "1fr 80px 60px 60px",
+                          display: "grid", gridTemplateColumns: "1fr 70px 60px 60px",
                           padding: "5px 12px",
                           background: i % 2 === 0 ? "rgba(0,0,0,0.15)" : "transparent",
                           borderBottom: "1px solid rgba(255,255,255,0.03)",
@@ -890,11 +1036,6 @@ export default function CtraderTestPage() {
                           </span>
                         </div>
                       ))}
-                      {(symbols.count ?? 0) > 200 && (
-                        <div style={{ padding: "6px 12px", fontSize: 10, color: "rgba(148,163,184,0.40)", textAlign: "center" }}>
-                          … {(symbols.count ?? 0) - 200} more symbols
-                        </div>
-                      )}
                     </div>
                   </div>
                 )}

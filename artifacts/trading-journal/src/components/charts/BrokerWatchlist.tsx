@@ -31,6 +31,12 @@ const BROKER_CONFIG: Record<BrokerName, { label: string; shortLabel: string; col
     color:      "#3B82F6",
     badgeBg:    "rgba(59,130,246,0.12)",
   },
+  ctrader: {
+    label:      "cTrader",
+    shortLabel: "cTrader",
+    color:      "#F59E0B",
+    badgeBg:    "rgba(245,158,11,0.12)",
+  },
 };
 
 function getBadge(sym: SymbolInfo): string {
@@ -356,7 +362,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
 
       {/* ── Broker tabs ── */}
       <div style={{ display: "flex", gap: 3, padding: "8px 10px 0", flexShrink: 0 }}>
-        {(["delta", "finnhub"] as BrokerName[]).map(b => {
+        {(["delta", "finnhub", "ctrader"] as BrokerName[]).map(b => {
           const bc  = BROKER_CONFIG[b];
           const act = b === broker;
           return (

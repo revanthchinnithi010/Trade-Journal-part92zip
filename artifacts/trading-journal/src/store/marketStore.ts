@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type BrokerName = "delta" | "finnhub";
+export type BrokerName = "delta" | "finnhub" | "ctrader";
 export type WsStatus   = "connected" | "reconnecting" | "disconnected" | "error";
 
 export interface LiveTick {
