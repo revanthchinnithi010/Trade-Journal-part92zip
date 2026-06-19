@@ -53,7 +53,6 @@ const CLASS_COLOR: Record<AssetClass, string> = {
 const PROVIDER_COLOR: Record<string, string> = {
   delta:   "#8B5CF6",
   ctrader: "#F59E0B",
-  finnhub: "#3B82F6",
   unknown: "rgba(255,255,255,0.35)",
 };
 

@@ -1,6 +1,5 @@
 import { Router, type IRouter } from "express";
 import { pool } from "@workspace/db";
-import type { FinnhubService } from "../services/FinnhubService.js";
 import type { DeltaService } from "../services/DeltaService.js";
 import type { TelegramService } from "../services/TelegramService.js";
 import type { WSManager } from "../ws/WSManager.js";
@@ -26,7 +25,6 @@ async function probeDb(): Promise<{ connected: boolean; latencyMs: number | null
 }
 
 export function createHealthRouter(deps: {
-  finnhub: FinnhubService;
   delta: DeltaService;
   telegram: TelegramService;
   wsManager: WSManager;
@@ -43,7 +41,6 @@ export function createHealthRouter(deps: {
 
   router.get("/health", async (_req, res) => {
     const db = await probeDb();
-    const finnhubInfo = deps.finnhub.getStatus();
     const deltaInfo   = deps.delta.getStatus();
     const telegramOk  = deps.telegram.isEnabled();
 
@@ -52,7 +49,6 @@ export function createHealthRouter(deps: {
       timestamp: new Date().toISOString(),
       uptimeSeconds: process.uptime(),
       database: { connected: db.connected, latencyMs: db.latencyMs },
-      finnhub:  { status: finnhubInfo.status },
       delta:    { status: deltaInfo.status },
       telegram: { enabled: telegramOk },
     });

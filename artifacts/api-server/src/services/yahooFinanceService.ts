@@ -2,7 +2,7 @@
  * yahooFinanceService.ts
  *
  * Fetches OHLCV from Yahoo Finance for non-crypto symbols (indices, commodities, forex).
- * No API key required. Used as a fallback when Finnhub REST is not available.
+ * No API key required. Primary candle source for all non-crypto symbols.
  *
  * INTERVAL MAPPING NOTES
  * ──────────────────────

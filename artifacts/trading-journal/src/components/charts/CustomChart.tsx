@@ -3121,7 +3121,7 @@ const CustomChart = memo(function CustomChart({
       }
 
       // ── Ultra-fast tick path — instant live-bar update (zero CandleAggregator wait) ──
-      // Fires on EVERY raw price tick from the backend (Delta all_trades, Finnhub, cTrader, etc.)
+      // Fires on EVERY raw price tick from the backend (Delta all_trades, cTrader, etc.)
       // before candle_update is assembled.  We update the chart series directly so the
       // user sees price movement the moment the exchange reports it — MT5/TradingView style.
       // ctrader_tick has the same {symbol, price, timestamp} fields as tick — handled identically.
@@ -3136,7 +3136,7 @@ const CustomChart = memo(function CustomChart({
         const volume = t.volume ?? 1;
         const tsSec  = t.timestamp != null ? toSec(t.timestamp) : Math.floor(Date.now() / 1000);
 
-        // ── Input validation — guard against malformed Delta/Finnhub ticks ──
+        // ── Input validation — guard against malformed ticks ──
         if (!Number.isFinite(price) || price <= 0) return;
         if (!Number.isFinite(tsSec) || tsSec < 1_000_000_000 || tsSec > Date.now() / 1000 + 300) return;
 

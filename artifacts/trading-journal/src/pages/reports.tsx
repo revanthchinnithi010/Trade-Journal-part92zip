@@ -44,7 +44,7 @@ function ProviderBadge({ symbol }: { symbol: string }) {
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/20">
-      ⊕ Finnhub
+      ⊕ Yahoo Finance
     </span>
   );
 }
@@ -194,7 +194,6 @@ export default function Reports() {
     const map: Record<string, { pnl: number; trades: number; wins: number }> = {
       "Delta Exchange": { pnl: 0, trades: 0, wins: 0 },
       "FusionMarkets":  { pnl: 0, trades: 0, wins: 0 },
-      "Finnhub Feed":   { pnl: 0, trades: 0, wins: 0 },
     };
     symbolStats.forEach(s => {
       const provider = PROVIDER_MAP[s.symbol];

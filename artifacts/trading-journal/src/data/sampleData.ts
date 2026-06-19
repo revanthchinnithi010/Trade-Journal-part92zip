@@ -1,15 +1,15 @@
 // ── Market Data Provider routing ──────────────────────────────────────────────
 // Crypto assets  →  Delta Exchange WebSocket
-// Forex / Indices / Commodities  →  Finnhub API / WebSocket
+// Forex / Indices / Commodities  →  Yahoo Finance REST
 
 export const DELTA_ASSETS  = ["BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "PEPEUSD", "BNBUSD"];
-export const FINNHUB_ASSETS = ["NAS100", "US30", "US500", "EURUSD", "XAUUSD", "Crude Oil"];
+export const YAHOO_ASSETS  = ["NAS100", "US30", "US500", "EURUSD", "XAUUSD", "Crude Oil"];
 
-export const PROVIDER_MAP: Record<string, "Delta Exchange" | "Finnhub"> = {
+export const PROVIDER_MAP: Record<string, "Delta Exchange" | "Yahoo Finance"> = {
   BTCUSD: "Delta Exchange", ETHUSD: "Delta Exchange", SOLUSD: "Delta Exchange",
   DOGEUSD: "Delta Exchange", PEPEUSD: "Delta Exchange", BNBUSD: "Delta Exchange",
-  NAS100: "Finnhub", US30: "Finnhub", US500: "Finnhub",
-  EURUSD: "Finnhub", XAUUSD: "Finnhub", "Crude Oil": "Finnhub",
+  NAS100: "Yahoo Finance", US30: "Yahoo Finance", US500: "Yahoo Finance",
+  EURUSD: "Yahoo Finance", XAUUSD: "Yahoo Finance", "Crude Oil": "Yahoo Finance",
 };
 
 // Broker display info (name → visual identity)
@@ -24,7 +24,7 @@ export const BROKER_MAP: Record<string, string> = {
   // Delta Exchange — crypto-only
   BTCUSD: "Delta Exchange", ETHUSD: "Delta Exchange", SOLUSD: "Delta Exchange",
   DOGEUSD: "Delta Exchange", PEPEUSD: "Delta Exchange", BNBUSD: "Delta Exchange",
-  // FusionMarkets — forex, commodities, indices (market data via Finnhub)
+  // FusionMarkets — forex, commodities, indices (market data via Yahoo Finance)
   EURUSD: "FusionMarkets", "Crude Oil": "FusionMarkets",
   NAS100: "FusionMarkets", US30: "FusionMarkets", US500: "FusionMarkets",
   XAUUSD: "FusionMarkets",

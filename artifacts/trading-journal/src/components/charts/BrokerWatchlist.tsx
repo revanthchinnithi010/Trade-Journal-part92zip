@@ -53,12 +53,6 @@ const BROKER_CONFIG: Record<BrokerName, { label: string; shortLabel: string; col
     color:      "#00BFFF",
     badgeBg:    "rgba(0,191,255,0.12)",
   },
-  finnhub: {
-    label:      "Finnhub",
-    shortLabel: "Finnhub",
-    color:      "#3B82F6",
-    badgeBg:    "rgba(59,130,246,0.12)",
-  },
   ctrader: {
     label:      "cTrader",
     shortLabel: "cTrader",
@@ -319,7 +313,8 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
     setActiveSymbol,
   } = useMarketStore();
 
-  const broker: BrokerName = activeBroker ?? "delta";
+  const VALID_BROKERS: BrokerName[] = ["delta", "ctrader"];
+  const broker: BrokerName = (activeBroker && VALID_BROKERS.includes(activeBroker)) ? activeBroker : "delta";
   const cfg                = BROKER_CONFIG[broker];
 
   const [search, setSearch] = useState("");
@@ -439,7 +434,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
 
       {/* ── Broker tabs ── */}
       <div style={{ display: "flex", gap: 3, padding: "8px 10px 0", flexShrink: 0 }}>
-        {(["delta", "finnhub", "ctrader"] as BrokerName[]).map(b => {
+        {(["delta", "ctrader"] as BrokerName[]).map(b => {
           const bc  = BROKER_CONFIG[b];
           const act = b === broker;
           return (

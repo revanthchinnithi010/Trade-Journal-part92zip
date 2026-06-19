@@ -3,28 +3,21 @@
  *
  * Routing strategy:
  *
- *  1. Finnhub REST (preferred when API key is configured)
- *     → fetchFinnhubCandles() for all OANDA-mapped symbols (forex, indices, metals, commodities)
- *     → Returns true exchange OHLCV aligned to the requested interval.
+ *  1. Yahoo Finance (non-crypto: forex, indices, metals, commodities)
+ *     → fetchYahooCandles() — no API key required
  *
- *  2. Yahoo Finance fallback (no Finnhub key, or Finnhub returns empty)
- *     → fetchYahooCandles() for the same OANDA-mapped symbols
- *     → Intervals are now correctly mapped (1m→1m, 4H fetched as 1H then resampled, etc.)
- *
- *  3. Delta Exchange India (crypto — BTCUSD, ETHUSD, etc.)
+ *  2. Delta Exchange India (crypto — BTCUSD, ETHUSD, etc.)
  *     → fetchDeltaCandles() + CandleAggregator merge
  *
- * All three sources return OHLCBar[] with time in unix seconds (UTC),
+ * All sources return OHLCBar[] with time in unix seconds (UTC),
  * bars sorted ascending, capped at 500–501 entries.
  */
 
 import { Router, type IRouter } from "express";
 import type { CandleAggregator, OHLCBar, CandleInterval } from "../services/CandleAggregator.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
-import type { FinnhubService } from "../services/FinnhubService.js";
 import { fetchDeltaCandles } from "../services/deltaHistoryService.js";
 import { isYahooSymbol, fetchYahooCandles } from "../services/yahooFinanceService.js";
-import { isFinnhubCandleSymbol, fetchFinnhubCandles } from "../services/finnhubCandleService.js";
 import { logger } from "../lib/logger.js";
 
 const VALID_INTERVALS = new Set(["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"]);
@@ -49,7 +42,6 @@ function mergeBars(historical: OHLCBar[], aggregated: OHLCBar[]): OHLCBar[] {
 export function createCandlesRouter(
   aggregator:  CandleAggregator,
   _marketData: MarketDataService,
-  finnhub?:    FinnhubService,
 ): IRouter {
   const router: IRouter = Router();
 
@@ -66,46 +58,12 @@ export function createCandlesRouter(
     const beforeSec = typeof beforeRaw === "string" ? parseInt(beforeRaw, 10) : NaN;
     const beforeSecOpt = (!isNaN(beforeSec) && beforeSec > 0) ? beforeSec : undefined;
 
-    // ── Non-crypto (forex, indices, metals, commodities) ─────────────────────
-    //
-    // Priority: Finnhub REST > Yahoo Finance
-    // Finnhub provides pre-aggregated exchange OHLCV — no tick aggregation
-    // artifacts, correct candle boundaries, matches TradingView.
-    // Yahoo is the fallback when Finnhub key is absent or returns empty.
-    if (isFinnhubCandleSymbol(symbol) || isYahooSymbol(symbol)) {
-      const finnhubKey = finnhub?.getApiKey();
-
-      // ── Attempt Finnhub REST first (preferred) ────────────────────────────
-      if (finnhubKey && isFinnhubCandleSymbol(symbol)) {
-        logger.info({ symbol, interval }, "candles: routing to Finnhub REST (preferred, key configured)");
-        try {
-          const bars = await fetchFinnhubCandles(symbol, interval, finnhubKey, 500, beforeSecOpt);
-          if (bars.length > 0) {
-            logger.info({ symbol, interval, returned: bars.length }, "candles: Finnhub REST bars served ✓");
-            res.json(bars);
-            return;
-          }
-          logger.warn({ symbol, interval }, "candles: Finnhub REST returned 0 bars — falling back to Yahoo Finance");
-        } catch (err) {
-          logger.warn({ symbol, interval, err }, "candles: Finnhub REST error — falling back to Yahoo Finance");
-        }
-      }
-
-      // ── Yahoo Finance fallback ─────────────────────────────────────────────
-      if (isYahooSymbol(symbol)) {
-        logger.info(
-          { symbol, interval, reason: finnhubKey ? "finnhub-empty" : "no-finnhub-key" },
-          "candles: routing to Yahoo Finance",
-        );
-        const bars = await fetchYahooCandles(symbol, interval, beforeSecOpt);
-        logger.info({ symbol, interval, returned: bars.length }, "candles: Yahoo Finance bars served ✓");
-        res.json(bars);
-        return;
-      }
-
-      // Symbol is in Finnhub map but not Yahoo, and Finnhub returned empty — serve empty
-      logger.warn({ symbol, interval }, "candles: no data source available for this symbol");
-      res.json([]);
+    // ── Non-crypto (forex, indices, metals, commodities) via Yahoo Finance ────
+    if (isYahooSymbol(symbol)) {
+      logger.info({ symbol, interval }, "candles: routing to Yahoo Finance");
+      const bars = await fetchYahooCandles(symbol, interval, beforeSecOpt);
+      logger.info({ symbol, interval, returned: bars.length }, "candles: Yahoo Finance bars served ✓");
+      res.json(bars);
       return;
     }
 

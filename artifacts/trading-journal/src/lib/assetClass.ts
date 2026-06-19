@@ -1,5 +1,5 @@
 export type AssetClass = "crypto" | "forex" | "metal" | "index" | "commodity" | "unknown";
-export type DataProvider = "delta" | "ctrader" | "finnhub" | "unknown";
+export type DataProvider = "delta" | "ctrader" | "unknown";
 
 const METALS      = new Set(["XAUUSD", "XAGUSD", "XPTUSD", "XPDUSD"]);
 const INDICES     = new Set([
@@ -60,7 +60,6 @@ export function getDataProvider(symbol: string): DataProvider {
   const live = runtimeRouting[s];
   if (live === "delta")   return "delta";
   if (live === "ctrader") return "ctrader";
-  if (live === "finnhub") return "finnhub";
 
   return "unknown";
 }
@@ -100,7 +99,6 @@ export function getProviderLabel(provider: DataProvider): string {
   switch (provider) {
     case "delta":   return "Delta Exchange";
     case "ctrader": return "cTrader";
-    case "finnhub": return "Finnhub";
     default:        return "Unknown";
   }
 }
@@ -109,7 +107,6 @@ export function getProviderFullLabel(provider: DataProvider): string {
   switch (provider) {
     case "delta":   return "Delta Exchange India";
     case "ctrader": return "cTrader (ProtoOA)";
-    case "finnhub": return "Finnhub";
     default:        return "Unknown";
   }
 }

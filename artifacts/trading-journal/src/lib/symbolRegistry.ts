@@ -1,5 +1,5 @@
 /**
- * symbolRegistry.ts — single source of truth for non-crypto (Finnhub/OANDA) symbols.
+ * symbolRegistry.ts — single source of truth for non-crypto (Yahoo Finance) symbols.
  *
  * Both the Markets page and the Chart Symbol Selector (MobileChartLayout MarketWatchlistSheet)
  * import from here so the two surfaces always show identical symbol lists.

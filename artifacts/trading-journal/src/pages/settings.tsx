@@ -28,8 +28,7 @@ function SectionHeader({ icon: Icon, title, description }: {
   );
 }
 
-type FinnhubStatus = "connected" | "connecting" | "disconnected" | "invalid_key" | "error" | "testing";
-type DeltaStatus   = "connected" | "connecting" | "disconnected" | "reconnecting" | "error";
+type DeltaStatus = "connected" | "connecting" | "disconnected" | "reconnecting" | "error";
 
 const BADGE: Record<string, { bg: string; border: string; text: string; dot: string }> = {
   connected:    { bg: "rgba(96,165,250,0.10)",   border: "rgba(96,165,250,0.28)",   text: "#60a5fa", dot: "#60a5fa" },
@@ -86,145 +85,6 @@ function MsgBox({ type, children }: { type: "error" | "success"; children: React
         ? <WifiOff className="w-3.5 h-3.5 text-red-400 shrink-0 mt-0.5" />
         : <Check   className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />}
       <span style={{ color: isError ? "#f87171" : "rgba(148,163,184,0.9)" }}>{children}</span>
-    </div>
-  );
-}
-
-/* ─── Finnhub Panel ─────────────────────────────────────────────── */
-function FinnhubPanel() {
-  const [status, setStatus]       = useState<FinnhubStatus>("disconnected");
-  const [keyMasked, setKeyMasked] = useState<string | null>(null);
-  const [source, setSource]       = useState<"db" | "env" | "none">("none");
-  const [apiKey, setApiKey]       = useState("");
-  const [showKey, setShowKey]     = useState(false);
-  const [error, setError]         = useState<string | null>(null);
-  const [success, setSuccess]     = useState<string | null>(null);
-  const [loading, setLoading]     = useState<"connect" | "test" | "disconnect" | null>(null);
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const d = await fetch("/api/finnhub/status").then(r => r.json()) as {
-        configured: boolean; status: string; keyMasked: string | null; source: "db" | "env" | "none";
-      };
-      setStatus(d.status as FinnhubStatus);
-      setKeyMasked(d.keyMasked);
-      setSource(d.source);
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
-
-  const connect = async () => {
-    const k = apiKey.trim();
-    if (!k) { setError("Enter your Finnhub API key first"); return; }
-    setError(null); setSuccess(null); setLoading("connect"); setStatus("connecting");
-    const d = await fetch("/api/finnhub/config", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey: k }),
-    }).then(r => r.json()).catch(() => ({ success: false, error: "Network error" })) as { success: boolean; error?: string };
-    setLoading(null);
-    if (d.success) { setSuccess("Connected! Forex & indices streaming live."); setApiKey(""); await fetchStatus(); }
-    else { setStatus("invalid_key"); setError(d.error ?? "Connection failed"); }
-  };
-
-  const test = async () => {
-    setError(null); setSuccess(null); setLoading("test"); setStatus("testing");
-    const d = await fetch("/api/finnhub/test", { method: "POST" }).then(r => r.json()).catch(() => ({ success: false, error: "Network error" })) as { success: boolean; error?: string };
-    setLoading(null);
-    if (d.success) { setStatus("connected"); setSuccess("Test passed — feed is live."); }
-    else { setStatus("invalid_key"); setError(d.error ?? "Test failed"); }
-  };
-
-  const disconnect = async () => {
-    setError(null); setSuccess(null); setLoading("disconnect");
-    await fetch("/api/finnhub/config", { method: "DELETE" }).catch(() => {});
-    setLoading(null); setStatus("disconnected"); setKeyMasked(null); setSource("none");
-    setSuccess("Disconnected. Forex & indices feed stopped.");
-  };
-
-  const isLive = status === "connected";
-
-  return (
-    <div className="rounded-2xl p-4 space-y-4"
-      style={{ background: "rgba(16,37,28,0.65)", border: "1px solid rgba(57,91,67,0.24)" }}>
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ background: "rgba(59,130,246,0.14)", border: "1px solid rgba(59,130,246,0.28)" }}>
-            <Wifi className="w-5 h-5 text-blue-400" />
-          </div>
-          <div>
-            <p className="font-semibold text-white text-[14px] leading-tight">Finnhub / OANDA</p>
-            <p className="text-[11px] text-muted-foreground">EURUSD · GBPUSD · USDJPY · AUDUSD · USDCHF · XAUUSD · XAGUSD · USOIL · UKOIL · NATGAS · US30 · NAS100 · US500 · GER40 · UK100</p>
-          </div>
-        </div>
-        <StatusBadge status={status} />
-      </div>
-
-      {isLive && keyMasked && (
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl text-[12px]"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.10)" }}>
-          <Check className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-          <span className="text-foreground/70 font-medium">Active key:</span>
-          <span className="text-muted-foreground font-mono">{keyMasked}</span>
-          {source !== "none" && (
-            <span className="ml-auto text-muted-foreground/50 uppercase text-[10px] tracking-wider">
-              {source === "env" ? "env var" : "database"}
-            </span>
-          )}
-        </div>
-      )}
-
-      {!isLive && (
-        <div className="space-y-2">
-          <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">API Key</Label>
-          <div className="relative">
-            <Input type={showKey ? "text" : "password"} placeholder="Enter your Finnhub API key…"
-              value={apiKey} onChange={e => { setApiKey(e.target.value); setError(null); }}
-              onKeyDown={e => e.key === "Enter" && connect()}
-              className="rounded-xl h-10 pr-10 font-mono text-sm"
-              style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.28)" }} />
-            <button type="button" onClick={() => setShowKey(v => !v)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-          <p className="text-[11px] text-muted-foreground">
-            Get a free key at{" "}
-            <a href="https://finnhub.io" target="_blank" rel="noopener noreferrer"
-              className="text-blue-400 hover:text-blue-300 underline underline-offset-2">finnhub.io</a>.
-            Stored securely in the database.
-          </p>
-        </div>
-      )}
-
-      {error   && <MsgBox type="error">{error}</MsgBox>}
-      {success && <MsgBox type="success">{success}</MsgBox>}
-
-      <div className="flex items-center gap-2 flex-wrap">
-        {!isLive ? (
-          <Button size="sm" onClick={connect} disabled={loading !== null || !apiKey.trim()}
-            className="rounded-xl h-8 px-4 text-sm bg-blue-600 hover:bg-blue-500 text-white">
-            {loading === "connect" ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5 mr-1.5" />}
-            Connect
-          </Button>
-        ) : (
-          <>
-            <Button size="sm" variant="outline" onClick={test} disabled={loading !== null}
-              className="rounded-xl h-8 px-4 text-sm"
-              style={{ border: "1px solid rgba(57,91,67,0.32)", background: "rgba(57,91,67,0.12)", color: "#94a3b8" }}>
-              {loading === "test" ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1.5" />}
-              Test Feed
-            </Button>
-            <Button size="sm" variant="outline" onClick={disconnect} disabled={loading !== null}
-              className="rounded-xl h-8 px-4 text-sm"
-              style={{ border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.07)", color: "#f87171" }}>
-              {loading === "disconnect" ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <WifiOff className="w-3.5 h-3.5 mr-1.5" />}
-              Disconnect
-            </Button>
-          </>
-        )}
-      </div>
     </div>
   );
 }
@@ -587,7 +447,6 @@ function TelegramPanel() {
 type HealthStatus = {
   status: string;
   database: { connected: boolean; latencyMs: number | null };
-  finnhub:  { status: string };
   delta:    { status: string };
   telegram: { enabled: boolean };
 } | null;
@@ -611,8 +470,6 @@ function SystemHealthPanel() {
   const rows: Array<{ label: string; icon: React.ElementType; ok: boolean; detail?: string }> = health ? [
     { label: "Database",  icon: Database,   ok: health.database.connected,
       detail: health.database.connected ? `${health.database.latencyMs ?? "—"}ms` : "Unavailable" },
-    { label: "Finnhub",   icon: Wifi,       ok: health.finnhub.status === "connected",
-      detail: health.finnhub.status },
     { label: "Delta Exch", icon: Activity,  ok: health.delta.status === "connected" || health.delta.status === "reconnecting",
       detail: health.delta.status },
     { label: "Telegram",  icon: Send,       ok: health.telegram.enabled,
@@ -956,7 +813,6 @@ export default function Settings() {
             description="Manual connect — feeds only start when you click Connect" />
         </CardHeader>
         <CardContent className="space-y-3">
-          <FinnhubPanel />
           <DeltaPanel />
         </CardContent>
       </Card>

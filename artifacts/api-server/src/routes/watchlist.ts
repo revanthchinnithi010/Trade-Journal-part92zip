@@ -7,12 +7,12 @@ import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 import { getCtraderSymbolRow } from "./ctrader_spots.js";
 
 const PROVIDER_MAP: Record<string, string> = {
-  NAS100: "finnhub",  US30: "finnhub",   XAUUSD: "finnhub",   XAGUSD: "finnhub",
-  EURUSD: "finnhub",  GBPUSD: "finnhub", GBPJPY: "finnhub",   USDJPY: "finnhub",
-  AUDUSD: "finnhub",  USDCAD: "finnhub", USOIL: "finnhub",    UKOIL: "finnhub",
-  SPX500: "finnhub",  DE40: "finnhub",
-  BTCUSD: "finnhub",  ETHUSD: "finnhub", SOLUSD: "finnhub",
-  DOGEUSD: "finnhub", PEPEUSD: "finnhub",
+  NAS100: "yahoo",  US30: "yahoo",   XAUUSD: "yahoo",   XAGUSD: "yahoo",
+  EURUSD: "yahoo",  GBPUSD: "yahoo", GBPJPY: "yahoo",   USDJPY: "yahoo",
+  AUDUSD: "yahoo",  USDCAD: "yahoo", USOIL: "yahoo",    UKOIL: "yahoo",
+  SPX500: "yahoo",  DE40: "yahoo",
+  BTCUSD: "delta",  ETHUSD: "delta", SOLUSD: "delta",
+  DOGEUSD: "delta", PEPEUSD: "delta",
 };
 
 const AddSymbolBody = z.object({
@@ -46,7 +46,7 @@ export function createWatchlistRouter(marketData: MarketDataService): IRouter {
     if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
     const sym      = parsed.data.symbol;
-    const provider = PROVIDER_MAP[sym] ?? "finnhub";
+    const provider = PROVIDER_MAP[sym] ?? "delta";
     try {
       const existing = await db.select().from(watchlistTable).where(eq(watchlistTable.symbol, sym));
       if (existing.length > 0) { res.status(409).json({ error: "Symbol already in watchlist" }); return; }

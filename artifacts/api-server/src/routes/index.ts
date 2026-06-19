@@ -6,7 +6,6 @@ import { createAlertsRouter } from "./alerts.js";
 import { createZonesRouter } from "./zones.js";
 import { createTrendlinesRouter } from "./trendlines.js";
 import { createTelegramRouter } from "./telegram.js";
-import { createFinnhubRouter } from "./finnhub.js";
 import { createDeltaRouter } from "./delta.js";
 import { createMarketRouter } from "./market.js";
 import { createAnalyticsRouter } from "./analytics.js";
@@ -33,7 +32,6 @@ import type { AlertEngine } from "../services/AlertEngine.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
 import type { TelegramService } from "../services/TelegramService.js";
-import type { FinnhubService } from "../services/FinnhubService.js";
 import type { DeltaService } from "../services/DeltaService.js";
 import type { WSManager } from "../ws/WSManager.js";
 import type { CandleAggregator } from "../services/CandleAggregator.js";
@@ -43,7 +41,6 @@ export function createRouter(deps: {
   marketData: MarketDataService;
   healthMonitor: FeedHealthMonitor;
   telegram: TelegramService;
-  finnhub: FinnhubService;
   delta: DeltaService;
   wsManager: WSManager;
   candleAggregator: CandleAggregator;
@@ -51,7 +48,6 @@ export function createRouter(deps: {
   const router: IRouter = Router();
 
   router.use(createHealthRouter({
-    finnhub: deps.finnhub,
     delta: deps.delta,
     telegram: deps.telegram,
     wsManager: deps.wsManager,
@@ -65,10 +61,9 @@ export function createRouter(deps: {
   router.use(createZonesRouter(deps.alertEngine));
   router.use(createTrendlinesRouter(deps.alertEngine));
   router.use(createTelegramRouter(deps.telegram));
-  router.use(createFinnhubRouter(deps.finnhub));
   router.use(createDeltaRouter(deps.delta));
   router.use(createMarketRouter(deps.marketData, deps.healthMonitor));
-  router.use(createCandlesRouter(deps.candleAggregator, deps.marketData, deps.finnhub));
+  router.use(createCandlesRouter(deps.candleAggregator, deps.marketData));
   router.use(createAnalyticsRouter());
   router.use(configRouter);
   router.use(calendarEventsRouter);

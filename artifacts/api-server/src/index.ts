@@ -6,7 +6,6 @@ import { deltaSocketManager } from "./ws/deltaSocket.js";
 import { MarketDataService } from "./services/MarketDataService.js";
 import { CandleAggregator } from "./services/CandleAggregator.js";
 import { TelegramService } from "./services/TelegramService.js";
-import { FinnhubService } from "./services/FinnhubService.js";
 import { DeltaService } from "./services/DeltaService.js";
 import { AlertEngine } from "./services/AlertEngine.js";
 import { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
@@ -26,10 +25,9 @@ if (Number.isNaN(port) || port <= 0) throw new Error(`Invalid PORT value: "${raw
 
 const wsManager        = new WSManager();
 deltaSocketManager.setWsManager(wsManager);
-const marketData       = new MarketDataService(undefined);
+const marketData       = new MarketDataService();
 const candleAggregator = new CandleAggregator();
 const telegram         = new TelegramService();
-const finnhub          = new FinnhubService(marketData);
 const delta            = new DeltaService(marketData);
 const alertEngine      = new AlertEngine(marketData, telegram, wsManager);
 const healthMonitor    = new FeedHealthMonitor(marketData, wsManager, telegram);
@@ -91,8 +89,6 @@ marketData.on("subscription_update", (update) => {
 
 // ── cTrader tick engine → CandleAggregator + WebSocket broadcast ─────────────
 ctraderTickEngine.on("tick", (tick: CtraderTick) => {
-  // Feed into candle aggregator so server-side candle updates fire for cTrader symbols.
-  // This is required for CustomChart's candle_update path (in addition to the tick path).
   wsManager.clearCandleCache();
   candleAggregator.ingestTick({
     symbol:    tick.symbol,
@@ -124,7 +120,7 @@ marketData.start([]).catch(err =>
   logger.error({ err }, "MarketDataService: async start error"),
 );
 
-const app    = createApp({ alertEngine, marketData, healthMonitor, telegram, finnhub, delta, wsManager, candleAggregator });
+const app    = createApp({ alertEngine, marketData, healthMonitor, telegram, delta, wsManager, candleAggregator });
 const server = createServer(app);
 
 server.on("upgrade", (req, socket, head) => {
@@ -163,9 +159,6 @@ healthMonitor.start();
   await Promise.all([
     telegram.init().then(() => {
       logger.info({ telegramEnabled: telegram.isEnabled() }, "TelegramService: init complete");
-    }),
-    finnhub.init().then(() => {
-      logger.info("FinnhubService: init complete");
     }),
     delta.init().then(() => {
       logger.info("DeltaService: init complete");

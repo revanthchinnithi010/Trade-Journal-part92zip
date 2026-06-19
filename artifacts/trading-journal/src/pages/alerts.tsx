@@ -900,7 +900,6 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
 type ConnStatus = { label: string; ok: boolean; color: string; icon: React.ElementType };
 
 function ConnectionStatusWidget() {
-  const [finnhubOk, setFinnhubOk]   = useState<boolean | null>(null);
   const [deltaOk, setDeltaOk]       = useState<boolean | null>(null);
   const [telegramOk, setTelegramOk] = useState<boolean | null>(null);
   const [, setLocation] = useLocation();
@@ -908,12 +907,10 @@ function ConnectionStatusWidget() {
   useEffect(() => {
     const load = async () => {
       try {
-        const [fh, dl, tg] = await Promise.all([
-          fetch("/api/finnhub/status").then(r => r.json()) as Promise<{ configured: boolean; status: string }>,
+        const [dl, tg] = await Promise.all([
           fetch("/api/delta/status").then(r => r.json())   as Promise<{ connected: boolean }>,
           fetch("/api/telegram/status").then(r => r.json()).catch(() => fetch("/api/telegram/config").then(r => r.json())) as Promise<{ enabled?: boolean; configured?: boolean }>,
         ]);
-        setFinnhubOk(fh.status === "connected");
         setDeltaOk(dl.connected);
         setTelegramOk(!!(tg.enabled ?? tg.configured));
       } catch { /* ignore */ }
@@ -924,7 +921,6 @@ function ConnectionStatusWidget() {
   }, []);
 
   const conns: ConnStatus[] = [
-    { label: "Finnhub",  ok: finnhubOk  ?? false, color: "#3B82F6", icon: Wifi },
     { label: "Delta",    ok: deltaOk    ?? false, color: "#8B5CF6", icon: Activity },
     { label: "Telegram", ok: telegramOk ?? false, color: "#2CA5E0", icon: Send },
   ];
@@ -947,8 +943,7 @@ function ConnectionStatusWidget() {
 
       <div className="space-y-2">
         {conns.map(c => {
-          const loaded = c.label === "Finnhub" ? finnhubOk !== null
-            : c.label === "Delta" ? deltaOk !== null
+          const loaded = c.label === "Delta" ? deltaOk !== null
             : telegramOk !== null;
           return (
             <div key={c.label} className="flex items-center justify-between">

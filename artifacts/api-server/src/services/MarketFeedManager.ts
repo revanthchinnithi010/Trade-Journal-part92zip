@@ -1,6 +1,5 @@
 import { EventEmitter } from "events";
 import { BaseProvider, type ProviderTick, type ProviderStats } from "./providers/BaseProvider.js";
-import { FinnhubProvider } from "./providers/FinnhubProvider.js";
 import { DeltaExchangeProvider, type DeltaSymbolEntry } from "./providers/DeltaExchangeProvider.js";
 import { SymbolService } from "./SymbolService.js";
 import { logger } from "../lib/logger.js";
@@ -66,8 +65,7 @@ function routingReasonFor(assetClass: AssetClass, provider: PriorityProvider): s
 }
 
 export const PROVIDER_METADATA: Record<string, { displayName: string; badge: string; color: string }> = {
-  finnhub: { displayName: "Finnhub / OANDA · Binance", badge: "oanda", color: "#3B82F6" },
-  delta:   { displayName: "Delta Exchange India",       badge: "delta", color: "#8B5CF6" },
+  delta: { displayName: "Delta Exchange India", badge: "delta", color: "#8B5CF6" },
 };
 
 export class MarketFeedManager extends EventEmitter {
@@ -82,7 +80,7 @@ export class MarketFeedManager extends EventEmitter {
 
   readonly symbolService: SymbolService = new SymbolService();
 
-  constructor(private finnhubApiKey: string | undefined) {
+  constructor() {
     super();
   }
 
@@ -188,12 +186,6 @@ export class MarketFeedManager extends EventEmitter {
         this.symbolClasses.set(s, "crypto");
         this.routingReasons.set(s, "Crypto symbols always use Delta Exchange");
         logger.info({ symbol: s }, "MarketFeedManager: auto-routed new crypto symbol → delta");
-      } else if (this.providers.has("finnhub")) {
-        providerName = "finnhub";
-        this.symbolRouting.set(s, "finnhub");
-        this.symbolClasses.set(s, cls);
-        this.routingReasons.set(s, `Routed to Finnhub: ${cls}`);
-        logger.info({ symbol: s, cls }, "MarketFeedManager: auto-routed symbol → finnhub");
       } else {
         logger.debug({ symbol: s, cls }, "MarketFeedManager: no provider available for symbol");
         return false;
@@ -222,26 +214,6 @@ export class MarketFeedManager extends EventEmitter {
     this.subscribedSymbols.delete(s);
     this.emit("subscription_update", { symbol: s, action: "unsubscribed", subscriptions: this.getSubscriptions() });
     return true;
-  }
-
-  enableFinnhub(apiKey: string, symbols: string[]): void {
-    const existing = this.providers.get("finnhub");
-    if (existing) { existing.destroy(); this.providers.delete("finnhub"); }
-    const finnhub = new FinnhubProvider(apiKey);
-    this.wireProvider(finnhub);
-    this.providers.set("finnhub", finnhub);
-    for (const sym of symbols) { this.subscribedSymbols.add(sym); finnhub.subscribe(sym); }
-    finnhub.connect();
-    logger.info({ symbols }, "MarketFeedManager: Finnhub provider enabled");
-  }
-
-  disableFinnhub(): void {
-    const existing = this.providers.get("finnhub");
-    if (existing) {
-      existing.destroy();
-      this.providers.delete("finnhub");
-      this.emit("provider_status", { provider: "finnhub", status: "disconnected" });
-    }
   }
 
   enableDelta(symbols: string[]): void {
@@ -303,7 +275,7 @@ export class MarketFeedManager extends EventEmitter {
   }
 
   isAnyConnected(): boolean { return [...this.providers.values()].some(p => p.isConnected()); }
-  isFeedEnabled(): boolean  { return !!this.finnhubApiKey || this.providers.size > 0; }
+  isFeedEnabled(): boolean  { return this.providers.size > 0; }
 
   getDiagnostics() {
     const allTicks = this.getAllLatestTicks();
@@ -354,9 +326,6 @@ export class MarketFeedManager extends EventEmitter {
   }
 
   private buildStaticProviders(): void {
-    if (this.finnhubApiKey) {
-      this.providers.set("finnhub", new FinnhubProvider(this.finnhubApiKey));
-    }
     this.providers.set("delta", new DeltaExchangeProvider([]));
   }
 

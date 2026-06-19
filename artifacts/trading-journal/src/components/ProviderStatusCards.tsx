@@ -18,8 +18,7 @@ export interface ProviderStats {
 }
 
 const PROVIDER_DISPLAY: Record<string, { label: string; symbols: string }> = {
-  finnhub: { label: "Finnhub / OANDA", symbols: "NAS100 · US30 · XAUUSD · EURUSD · GBPJPY · USOIL · UKOIL" },
-  delta:   { label: "Delta Exchange",  symbols: "BTCUSD · ETHUSD · SOLUSD · DOGEUSD · PEPEUSD" },
+  delta: { label: "Delta Exchange", symbols: "BTCUSD · ETHUSD · SOLUSD · DOGEUSD · PEPEUSD" },
 };
 
 function fmtUptime(connectedAt: number | null): string {
@@ -134,12 +133,6 @@ const POLL_INTERVAL_MS = 10_000;
 const FETCH_TIMEOUT_MS = 5_000;
 const OFFLINE_FALLBACK: ProviderStats[] = [
   {
-    name: "finnhub", displayName: "Finnhub / OANDA", badge: "forex",
-    color: "#3B82F6", status: "disconnected",
-    tickCount: 0, reconnectCount: 0, lastTickAt: null,
-    latencyMs: null, subscriptions: [], connectedAt: null,
-  },
-  {
     name: "delta", displayName: "Delta Exchange", badge: "crypto",
     color: "#8B5CF6", status: "disconnected",
     tickCount: 0, reconnectCount: 0, lastTickAt: null,
@@ -214,9 +207,8 @@ export function ProviderStatusCards() {
 
 export const ProviderBadge = memo(function ProviderBadge({ provider, small }: { provider: string; small?: boolean }) {
   const cfg: Record<string, { label: string; color: string }> = {
-    finnhub: { label: "OANDA", color: "#3B82F6" },
-    oanda:   { label: "OANDA", color: "#3B82F6" },
     delta:   { label: "Δ Delta", color: "#8B5CF6" },
+    ctrader: { label: "cTrader", color: "#F59E0B" },
   };
   const c = cfg[provider.toLowerCase()] ?? { label: provider.toUpperCase(), color: "#64748b" };
 
@@ -259,5 +251,5 @@ export function LivePriceRow({ symbol, provider, price, change }: {
 
 export function getProviderFromSymbol(symbol: string): string {
   const cryptoSymbols = ["BTCUSD", "ETHUSD", "SOLUSD", "DOGEUSD", "PEPEUSD"];
-  return cryptoSymbols.includes(symbol.toUpperCase()) ? "delta" : "finnhub";
+  return cryptoSymbols.includes(symbol.toUpperCase()) ? "delta" : "unknown";
 }

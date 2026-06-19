@@ -10,7 +10,6 @@ import type { AlertEngine } from "./services/AlertEngine.js";
 import type { MarketDataService } from "./services/MarketDataService.js";
 import type { FeedHealthMonitor } from "./services/FeedHealthMonitor.js";
 import type { TelegramService } from "./services/TelegramService.js";
-import type { FinnhubService } from "./services/FinnhubService.js";
 import type { DeltaService } from "./services/DeltaService.js";
 import type { WSManager } from "./ws/WSManager.js";
 import type { CandleAggregator } from "./services/CandleAggregator.js";
@@ -39,7 +38,6 @@ export function createApp(deps: {
   marketData: MarketDataService;
   healthMonitor: FeedHealthMonitor;
   telegram: TelegramService;
-  finnhub: FinnhubService;
   delta: DeltaService;
   wsManager: WSManager;
   candleAggregator: CandleAggregator;

@@ -8,9 +8,9 @@ export type { UnifiedTick as LatestTick };
 export class MarketDataService extends EventEmitter {
   private feedManager: MarketFeedManager;
 
-  constructor(finnhubApiKey: string | undefined) {
+  constructor() {
     super();
-    this.feedManager = new MarketFeedManager(finnhubApiKey);
+    this.feedManager = new MarketFeedManager();
   }
 
   async start(defaultSymbols: string[] = []): Promise<void> {
@@ -44,9 +44,6 @@ export class MarketDataService extends EventEmitter {
   getProviderForSymbol(symbol: string): string | undefined { return this.feedManager.getProviderForSymbol(symbol); }
   isConnected(): boolean                                 { return this.feedManager.isAnyConnected(); }
   isFeedEnabled(): boolean                               { return this.feedManager.isFeedEnabled(); }
-
-  enableFinnhub(apiKey: string, symbols: string[]): void { this.feedManager.enableFinnhub(apiKey, symbols); }
-  disableFinnhub(): void                                 { this.feedManager.disableFinnhub(); }
 
   enableDelta(symbols: string[]): void                   { this.feedManager.enableDelta(symbols); }
   disableDelta(): void                                   { this.feedManager.disableDelta(); }

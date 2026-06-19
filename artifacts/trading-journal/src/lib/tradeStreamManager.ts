@@ -4,7 +4,7 @@
  * Routes real-time `tick` WebSocket messages to per-symbol handlers.
  *
  * The backend broadcasts a `tick` message for every incoming trade from all
- * providers (Delta Exchange all_trades, Finnhub, etc.). This manager:
+ * providers (Delta Exchange all_trades, cTrader, etc.). This manager:
  *   1. Registers ONE handler with `subscribeToMessages` — no WS per-symbol
  *   2. Dispatches ticks to per-symbol callbacks in O(1)
  *   3. Tracks latency (exchange timestamp → client receipt) + ticks/sec
