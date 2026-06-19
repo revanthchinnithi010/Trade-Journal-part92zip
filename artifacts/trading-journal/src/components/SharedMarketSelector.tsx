@@ -60,10 +60,13 @@ const UNIFIED_CATEGORY_ORDER: Category[] = [
 ];
 
 interface SymbolInfo {
-  symbol:   string;
-  name:     string;
-  category: Category;
-  broker:   Broker;
+  symbol:    string;
+  name:      string;
+  category:  Category;
+  broker:    Broker;
+  // Pre-computed uppercase strings — eliminates per-search allocations
+  symUpper:  string;
+  nameUpper: string;
 }
 
 const CATEGORY_META: Record<Category, { label: string; badge: string; color: string }> = {
@@ -445,8 +448,10 @@ const CategorySection = memo(function CategorySection({
 });
 
 // ── CtraderStatusBar ───────────────────────────────────────────────────────
+// memo() prevents re-renders when parent re-renders for unrelated reasons
+// (search input, tab change, etc.) — this only cares about connStatus.
 
-function CtraderStatusBar() {
+const CtraderStatusBar = memo(function CtraderStatusBar() {
   const connStatus  = useCtraderConnStatus();
   const isStreaming = connStatus === "streaming";
   const color = isStreaming ? "#10b981"
@@ -470,7 +475,7 @@ function CtraderStatusBar() {
       </span>
     </div>
   );
-}
+});
 
 // ── EmptyState ─────────────────────────────────────────────────────────────
 
@@ -606,6 +611,12 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   const scrollRef   = useRef<HTMLDivElement>(null);
   const onCloseRef  = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  // useLatest for onSelect — keeps handleSymbolTap stable regardless of parent re-renders.
+  // Without this, any parent re-render passing a new onSelect reference clears the entire
+  // per-symbol callback cache, triggering a full re-render of all SymbolRow components.
+  const onSelectRef = useRef(onSelect);
+  useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
 
   const isTouchRef = useRef(typeof window !== "undefined" && navigator.maxTouchPoints > 0);
 
@@ -914,10 +925,12 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json() as { symbols?: Array<{ symbol: string; name: string; category?: string }> };
       setDeltaSymbols((data.symbols ?? []).map(s => ({
-        symbol:   s.symbol,
-        name:     s.name,
-        category: (s.category === "future" ? "future" : "perpetual") as DeltaCategory,
-        broker:   "delta" as Broker,
+        symbol:    s.symbol,
+        name:      s.name,
+        category:  (s.category === "future" ? "future" : "perpetual") as DeltaCategory,
+        broker:    "delta" as Broker,
+        symUpper:  s.symbol.toUpperCase(),
+        nameUpper: s.name.toUpperCase(),
       })));
       setDeltaFetchAt(Date.now());
     } catch (e) {
@@ -951,10 +964,12 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
       const data = await res.json() as { symbols?: Array<{ symbol: string; name: string; category?: string }> };
       if (data.symbols && data.symbols.length > 0) {
         setCtraderSymbols(data.symbols.map(s => ({
-          symbol:   s.symbol,
-          name:     s.name,
-          category: (s.category ?? "other") as CtraderCategory,
-          broker:   "ctrader" as Broker,
+          symbol:    s.symbol,
+          name:      s.name,
+          category:  (s.category ?? "other") as CtraderCategory,
+          broker:    "ctrader" as Broker,
+          symUpper:  s.symbol.toUpperCase(),
+          nameUpper: s.name.toUpperCase(),
         })));
         setCtraderFetchAt(Date.now());
       }
@@ -975,34 +990,47 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
 
   const { items, addSymbol, toggleFavorite } = useWatchlist();
 
-  const watchMapRef = useRef(new Map<string, typeof items[0]>());
-  useEffect(() => {
-    const m = new Map<string, typeof items[0]>();
-    items.forEach(i => m.set(i.symbol, i));
-    watchMapRef.current = m;
-  }, [items]);
-
+  // ── Unified watchMap — single pass, no effect, ref sync during render ──
+  // Eliminates the previous redundant double-build (effect + useMemo).
+  // Render-time ref sync is safe: the ref is only read inside event callbacks
+  // which always fire after the current render has committed.
   const watchMap = useMemo(() => {
     const m = new Map<string, { isFavorite: boolean; id: number }>();
     items.forEach(i => m.set(i.symbol, { isFavorite: i.isFavorite, id: i.id }));
     return m;
   }, [items]);
+  const watchMapRef = useRef(watchMap);
+  watchMapRef.current = watchMap; // sync during render — no effect needed
+
+  // ── Stable addSymbol / toggleFavorite refs (Zustand actions are stable,
+  //    but guard defensively with useLatest so future refactors stay safe) ──
+  const addSymbolRef      = useRef(addSymbol);
+  const toggleFavoriteRef = useRef(toggleFavorite);
+  useEffect(() => {
+    addSymbolRef.current      = addSymbol;
+    toggleFavoriteRef.current = toggleFavorite;
+  }, [addSymbol, toggleFavorite]);
 
   // ── Callbacks ──────────────────────────────────────────────────────────
 
+  // Fully stable — no deps that change. Reads refs at call-time.
+  // This means starCbCache never needs to be cleared when watchlist updates.
   const handleStarPress = useCallback(async (symbol: string, tapAt: number) => {
     const item = watchMapRef.current.get(symbol);
     if (item) {
-      await toggleFavorite(item.id, item.isFavorite, tapAt);
+      await toggleFavoriteRef.current(item.id, item.isFavorite, tapAt);
     } else {
-      await addSymbol(symbol, true, tapAt);
+      await addSymbolRef.current(symbol, true, tapAt);
     }
-  }, [addSymbol, toggleFavorite]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Stable — uses onSelectRef so the cache never invalidates on parent re-renders.
+  // Before this fix: any parent re-render with a new onSelect reference cleared
+  // ALL per-symbol callback caches, triggering a full re-render of 500+ rows.
   const handleSymbolTap = useCallback((symbol: string) => {
-    onSelect(symbol);
-    if (mode === "sheet") doClose(); // animated close
-  }, [onSelect, doClose, mode]);
+    onSelectRef.current(symbol);
+    if (mode === "sheet") doClose();
+  }, [doClose, mode]); // onSelect deliberately excluded — read via ref
 
   const starCbCache = useRef(new Map<string, (tapAt: number) => void>());
   const tapCbCache  = useRef(new Map<string, () => void>());
@@ -1030,6 +1058,20 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     return tapCbCache.current.get(symbol)!;
   }, [handleSymbolTap]);
 
+  // ── Per-broker lookup Maps — O(1) symbol resolution ────────────────────
+  // Replaces O(n) .find() calls in watchlistRows (previously O(watchlist×symbols)).
+  const ctraderSymbolMap = useMemo(() => {
+    const m = new Map<string, SymbolInfo>();
+    ctraderSymbols.forEach(s => m.set(s.symbol, s));
+    return m;
+  }, [ctraderSymbols]);
+
+  const deltaSymbolMap = useMemo(() => {
+    const m = new Map<string, SymbolInfo>();
+    deltaSymbols.forEach(s => m.set(s.symbol, s));
+    return m;
+  }, [deltaSymbols]);
+
   // ── Merged symbol list ─────────────────────────────────────────────────
   //
   // Markets tab shows ONLY symbols returned by broker API endpoints:
@@ -1037,9 +1079,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   //   • deltaSymbols    — perpetuals / futures from Delta Exchange
   //
   // Watchlist items (items[]) are intentionally excluded here; they belong
-  // exclusively to the Watchlist tab (watchlistRows below). Merging them
-  // here was the source of Forex/Indices/Commodities appearing in the
-  // Markets tab when cTrader is not connected.
+  // exclusively to the Watchlist tab (watchlistRows below).
 
   const allMergedSymbols = useMemo<SymbolInfo[]>(() => {
     const seen   = new Set<string>();
@@ -1064,57 +1104,57 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     return map;
   }, [allMergedSymbols]);
 
-  // ── Console diagnostics ────────────────────────────────────────────────
+  // ── Console diagnostics (dev-only) ─────────────────────────────────────
 
   useEffect(() => {
-    const forexCount       = grouped.get("forex")?.length      ?? 0;
-    const indicesCount     = grouped.get("index")?.length      ?? 0;
-    const commoditiesCount = grouped.get("commodity")?.length  ?? 0;
+    if (!import.meta.env.DEV) return;
     console.log("[Markets] diagnostics", {
-      connectionStatus:   connStatus,
-      symbolsLoaded:      ctraderFetchAt > 0,
-      symbolSource:       ctraderSymbols.length > 0
+      connectionStatus: connStatus,
+      symbolsLoaded:    ctraderFetchAt > 0,
+      symbolSource:     ctraderSymbols.length > 0
         ? "ctrader"
         : deltaSymbols.length > 0 ? "delta" : "none",
-      forexCount,
-      indicesCount,
-      commoditiesCount,
-      deltaTotal:         deltaSymbols.length,
-      ctraderTotal:       ctraderSymbols.length,
+      forexCount:       grouped.get("forex")?.length      ?? 0,
+      indicesCount:     grouped.get("index")?.length      ?? 0,
+      commoditiesCount: grouped.get("commodity")?.length  ?? 0,
+      deltaTotal:       deltaSymbols.length,
+      ctraderTotal:     ctraderSymbols.length,
     });
   }, [grouped, connStatus, ctraderFetchAt, ctraderSymbols.length, deltaSymbols.length]);
 
-  // ── Search results ─────────────────────────────────────────────────────
+  // ── Search results — uses pre-uppercase fields (zero toUpperCase allocs) ──
 
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
     return allMergedSymbols.filter(s =>
-      s.symbol.toUpperCase().includes(searchUpper) ||
-      s.name.toUpperCase().includes(searchUpper)
+      s.symUpper.includes(searchUpper) || s.nameUpper.includes(searchUpper)
     );
   }, [allMergedSymbols, searchActive, searchUpper]);
 
+  // watchlistRows uses O(1) Map lookups instead of O(n) .find() per item
   const watchlistRows = useMemo(() => {
     return items
       .filter(i => i.isFavorite)
       .map(i => {
-        const cSym           = ctraderSymbols.find(c => c.symbol === i.symbol);
-        const dSym           = deltaSymbols.find(d => d.symbol === i.symbol);
+        const cSym           = ctraderSymbolMap.get(i.symbol);
+        const dSym           = deltaSymbolMap.get(i.symbol);
         const detectedBroker: Broker = cSym ? "ctrader" : "delta";
+        const name = i.label;
         return {
-          symbol:   i.symbol,
-          name:     i.label,
-          category: (cSym?.category ?? dSym?.category ?? (MARKET_TO_DELTA_CAT[i.market] ?? "other")) as Category,
-          broker:   detectedBroker,
-        };
+          symbol:    i.symbol,
+          name,
+          category:  (cSym?.category ?? dSym?.category ?? (MARKET_TO_DELTA_CAT[i.market] ?? "other")) as Category,
+          broker:    detectedBroker,
+          symUpper:  i.symbol.toUpperCase(),
+          nameUpper: name.toUpperCase(),
+        } satisfies SymbolInfo;
       });
-  }, [items, ctraderSymbols, deltaSymbols]);
+  }, [items, ctraderSymbolMap, deltaSymbolMap]);
 
   const filteredWatchlist = useMemo(() => {
     if (!searchActive) return watchlistRows;
     return watchlistRows.filter(r =>
-      r.symbol.toUpperCase().includes(searchUpper) ||
-      r.name.toUpperCase().includes(searchUpper)
+      r.symUpper.includes(searchUpper) || r.nameUpper.includes(searchUpper)
     );
   }, [watchlistRows, searchActive, searchUpper]);
 
