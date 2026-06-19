@@ -28,6 +28,7 @@ import {
   useDeferredValue, useTransition, startTransition,
 } from "react";
 import { createPortal } from "react-dom";
+import { sheetDragState } from "@/lib/sheetDragState";
 import {
   Star, TrendingUp, Search, X,
   ChevronDown, ChevronRight, RefreshCw,
@@ -39,6 +40,9 @@ import { useCtraderSpot, useCtraderConnStatus } from "@/store/ctraderSpotStore";
 import { tapStart, recordUi } from "@/lib/starDiag";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+// Spring easing for sheet snap transitions — matches BottomSheet in MobileChartLayout
+const SMS_SNAP_SPRING = "transform 0.22s cubic-bezier(0.22,1,0.36,1)";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -603,27 +607,314 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     return undefined;
   }, [visible, mode]); // eslint-disable-line
 
-  // Sheet open/close tracking for CSS transition
+  // ── Sheet mount gate — portal exists only while sheetMounted=true ──────────
   const [sheetMounted, setSheetMounted] = useState(false);
-  const [sheetVisible, setSheetVisible] = useState(false);
-  const unmountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (mode !== "sheet") return;
     if (visible) {
-      if (unmountTimerRef.current) clearTimeout(unmountTimerRef.current);
-      setSheetMounted(true);
-      // One frame delay so the transition plays (mount → translateY(0))
-      requestAnimationFrame(() => requestAnimationFrame(() => setSheetVisible(true)));
+      setSheetMounted(true);  // mount → opening animation fires in separate effect
     } else {
-      setSheetVisible(false);
-      // Unmount after transition completes
-      unmountTimerRef.current = setTimeout(() => setSheetMounted(false), 300);
+      // Parent force-closed without drag (e.g. navigated away): instant unmount
+      setSheetMounted(false);
     }
-    return () => {
-      if (unmountTimerRef.current) clearTimeout(unmountTimerRef.current);
-    };
   }, [visible, mode]);
+
+  // ── RAF drag refs ─────────────────────────────────────────────────────────
+  const sheetRef    = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const onCloseRef  = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  const isTouchRef = useRef(typeof window !== "undefined" && navigator.maxTouchPoints > 0);
+
+  // Snap Y offsets: FULL=5% from top (95% visible), HALF=50% visible
+  const snapYRef = useRef({
+    full: typeof window !== "undefined" ? Math.round(0.05 * window.innerHeight) : 40,
+    half: typeof window !== "undefined" ? Math.round(0.50 * window.innerHeight) : 400,
+  });
+  const computeSnaps = useCallback(() => {
+    snapYRef.current.full = Math.round(0.05 * window.innerHeight);
+    snapYRef.current.half = Math.round(0.50 * window.innerHeight);
+  }, []);
+  useEffect(() => {
+    computeSnaps();
+    window.addEventListener("resize", computeSnaps);
+    return () => window.removeEventListener("resize", computeSnaps);
+  }, [computeSnaps]);
+
+  const ds = useRef({
+    active:     false,
+    closing:    false,
+    snap:       "half" as "half" | "full",
+    baseY:      0,
+    startPY:    0,
+    latestPY:   0,
+    rafId:      0,
+    rafPending: false,
+  });
+
+  // Control scroll area overflow via DOM ref (no React re-render)
+  const applySnapDom = useCallback((snap: "half" | "full") => {
+    const sc = scrollRef.current;
+    if (!sc) return;
+    if (snap === "full") {
+      sc.style.overflowY = "auto";
+      (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "pan-y";
+    } else {
+      sc.style.overflowY = "hidden";
+      (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none";
+    }
+  }, []);
+
+  // Backdrop fades out as sheet drags below HALF
+  const syncBackdrop = useCallback((y: number) => {
+    const bd = backdropRef.current;
+    if (!bd) return;
+    const hY = snapYRef.current.half;
+    if (y <= hY) { bd.style.opacity = "1"; return; }
+    const ratio = Math.min(1, (y - hY) / Math.max(1, hY * 0.75));
+    bd.style.opacity = String(Math.max(0.05, 1 - ratio * 0.90));
+  }, []);
+
+  // RAF write — only mutates transform, nothing else
+  const applyDrag = useCallback(() => {
+    ds.current.rafPending = false;
+    const sheet = sheetRef.current;
+    if (!sheet || ds.current.closing) return;
+    const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
+    const y = Math.max(-14, raw);
+    sheet.style.transform = `translateY(${y}px)`;
+    syncBackdrop(y);
+  }, [syncBackdrop]);
+
+  const animateTo = useCallback((targetY: number, easing = SMS_SNAP_SPRING) => {
+    const sheet = sheetRef.current;
+    const bd    = backdropRef.current;
+    if (!sheet) return;
+    sheet.style.transition = easing;
+    sheet.style.transform  = `translateY(${targetY}px)`;
+    if (bd) { bd.style.transition = "opacity 0.22s ease"; syncBackdrop(targetY); }
+  }, [syncBackdrop]); // eslint-disable-line
+
+  // Animate off-screen then fire onClose
+  const doClose = useCallback(() => {
+    if (ds.current.closing) return;
+    ds.current.closing = true;
+    sheetDragState.active = false;
+    sheetDragState.flush?.();
+    document.body.classList.remove("tj-sheet-drag");
+    cancelAnimationFrame(ds.current.rafId);
+    ds.current.rafPending = false;
+    const sheet = sheetRef.current;
+    const bd    = backdropRef.current;
+    if (!sheet) { onCloseRef.current?.(); return; }
+    const offY = window.innerHeight + 20;
+    sheet.style.transition = "transform 0.16s cubic-bezier(0.40,0,0.80,0.60)";
+    sheet.style.transform  = `translateY(${offY}px)`;
+    if (bd) { bd.style.transition = "opacity 0.16s ease"; bd.style.opacity = "0"; }
+    setTimeout(() => onCloseRef.current?.(), 165);
+  }, []);
+
+  // Decide snap target on drag release
+  const commitSnap = useCallback((currentY: number) => {
+    sheetDragState.active = false;
+    sheetDragState.flush?.();
+    const { half, full } = snapYRef.current;
+    const delta = currentY - ds.current.baseY;
+
+    if (ds.current.snap === "half") {
+      if (delta < -60) {
+        // Drag up → expand to FULL
+        ds.current.snap = "full";
+        animateTo(full, SMS_SNAP_SPRING);
+        // Enable scroll after animation completes (avoids layout during animation)
+        setTimeout(() => applySnapDom("full"), 240);
+      } else if (delta > 110) {
+        // Drag down far enough → close
+        doClose();
+      } else {
+        // Spring back to HALF
+        animateTo(half, SMS_SNAP_SPRING);
+        if (!isTouchRef.current) document.body.classList.remove("tj-sheet-drag");
+      }
+    } else {
+      // From FULL: collapse to HALF on downward drag
+      if (delta > 90) {
+        ds.current.snap = "half";
+        // Lock scroll immediately so content stops during animation
+        const sc = scrollRef.current;
+        if (sc) {
+          sc.style.overflowY = "hidden";
+          (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none";
+        }
+        animateTo(half, SMS_SNAP_SPRING);
+        if (!isTouchRef.current) document.body.classList.remove("tj-sheet-drag");
+      } else {
+        // Spring back to FULL
+        animateTo(full, SMS_SNAP_SPRING);
+        if (!isTouchRef.current) document.body.classList.remove("tj-sheet-drag");
+      }
+    }
+  }, [animateTo, doClose, applySnapDom]);
+
+  // ── Touch drag on entire sheet ─────────────────────────────────────────────
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet || !sheetMounted) return;
+
+    let phase: "idle" | "pending" | "dragging" = "idle";
+    let startTouchY = 0;
+
+    const beginDrag = (touchY: number) => {
+      ds.current.active   = true;
+      ds.current.baseY    = snapYRef.current[ds.current.snap];
+      ds.current.startPY  = touchY;
+      ds.current.latestPY = touchY;
+      sheet.style.transition = "none";
+      sheetDragState.active = true;
+      document.body.classList.add("tj-sheet-drag");
+    };
+
+    const onTS = (e: TouchEvent) => {
+      if (ds.current.closing) return;
+      phase = "pending";
+      startTouchY = e.touches[0].clientY;
+    };
+
+    const onTM = (e: TouchEvent) => {
+      if (phase === "idle") return;
+      const dy = e.touches[0].clientY - startTouchY;
+
+      if (phase === "pending") {
+        if (Math.abs(dy) < 10) return;
+
+        if (ds.current.snap === "half") {
+          phase = "dragging";
+          beginDrag(startTouchY);
+        } else {
+          // FULL: only drag sheet when at scroll top AND pulling down
+          const scrollTop = scrollRef.current ? scrollRef.current.scrollTop : 0;
+          if (dy > 0 && scrollTop <= 1) {
+            phase = "dragging";
+            beginDrag(startTouchY);
+          } else {
+            phase = "idle"; // let list scroll normally
+            return;
+          }
+        }
+      }
+
+      if (phase === "dragging") {
+        e.preventDefault();
+        ds.current.latestPY = e.touches[0].clientY;
+        if (!ds.current.rafPending) {
+          ds.current.rafPending = true;
+          ds.current.rafId = requestAnimationFrame(applyDrag);
+        }
+      }
+    };
+
+    const onTE = () => {
+      if (phase !== "dragging") { phase = "idle"; return; }
+      phase = "idle";
+      if (!ds.current.active) return;
+      ds.current.active = false;
+      cancelAnimationFrame(ds.current.rafId);
+      ds.current.rafPending = false;
+      const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
+      commitSnap(Math.max(-14, raw));
+    };
+
+    sheet.addEventListener("touchstart",  onTS, { passive: true });
+    sheet.addEventListener("touchmove",   onTM, { passive: false });
+    sheet.addEventListener("touchend",    onTE, { passive: true });
+    sheet.addEventListener("touchcancel", onTE, { passive: true });
+    return () => {
+      sheet.removeEventListener("touchstart",  onTS);
+      sheet.removeEventListener("touchmove",   onTM);
+      sheet.removeEventListener("touchend",    onTE);
+      sheet.removeEventListener("touchcancel", onTE);
+      cancelAnimationFrame(ds.current.rafId);
+    };
+  }, [sheetMounted, applyDrag, commitSnap]);
+
+  // ── Pointer/mouse drag (desktop preview & stylus) ─────────────────────────
+  useEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet || !sheetMounted) return;
+
+    const onDown = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || ds.current.closing) return;
+      ds.current.active   = true;
+      ds.current.baseY    = snapYRef.current[ds.current.snap];
+      ds.current.startPY  = e.clientY;
+      ds.current.latestPY = e.clientY;
+      sheet.style.transition = "none";
+      sheetDragState.active = true;
+      document.body.classList.add("tj-sheet-drag");
+      try { sheet.setPointerCapture(e.pointerId); } catch {}
+    };
+
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || !ds.current.active) return;
+      ds.current.latestPY = e.clientY;
+      if (!ds.current.rafPending) {
+        ds.current.rafPending = true;
+        ds.current.rafId = requestAnimationFrame(applyDrag);
+      }
+    };
+
+    const onUp = (e: PointerEvent) => {
+      if (e.pointerType === "touch" || !ds.current.active) return;
+      ds.current.active = false;
+      cancelAnimationFrame(ds.current.rafId);
+      ds.current.rafPending = false;
+      const raw = ds.current.baseY + (ds.current.latestPY - ds.current.startPY);
+      commitSnap(Math.max(-14, raw));
+    };
+
+    sheet.addEventListener("pointerdown",   onDown);
+    sheet.addEventListener("pointermove",   onMove);
+    sheet.addEventListener("pointerup",     onUp);
+    sheet.addEventListener("pointercancel", onUp);
+    return () => {
+      sheet.removeEventListener("pointerdown",   onDown);
+      sheet.removeEventListener("pointermove",   onMove);
+      sheet.removeEventListener("pointerup",     onUp);
+      sheet.removeEventListener("pointercancel", onUp);
+      cancelAnimationFrame(ds.current.rafId);
+    };
+  }, [sheetMounted, applyDrag, commitSnap]);
+
+  // ── Opening animation: CLOSED → HALF ─────────────────────────────────────
+  useEffect(() => {
+    if (!sheetMounted) return;
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    ds.current.closing = false;
+    ds.current.snap    = "half";
+    const offY = window.innerHeight + 20;
+    sheet.style.transition = "none";
+    sheet.style.transform  = `translateY(${offY}px)`;
+    applySnapDom("half"); // start with scroll locked
+    let r1 = 0, r2 = 0;
+    r1 = requestAnimationFrame(() => {
+      r2 = requestAnimationFrame(() => {
+        computeSnaps();
+        animateTo(snapYRef.current.half, "transform 0.28s cubic-bezier(0.22,1,0.36,1)");
+      });
+    });
+    return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
+  }, [sheetMounted]); // eslint-disable-line
+
+  // Suppress backdrop-filter on touch devices while sheet is open (performance)
+  useEffect(() => {
+    if (!sheetMounted || !isTouchRef.current) return;
+    document.body.classList.add("tj-sheet-drag");
+    return () => { document.body.classList.remove("tj-sheet-drag"); };
+  }, [sheetMounted]);
 
   // ── Delta symbols ──────────────────────────────────────────────────────
 
@@ -730,8 +1021,8 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
 
   const handleSymbolTap = useCallback((symbol: string) => {
     onSelect(symbol);
-    if (mode === "sheet") onClose?.();
-  }, [onSelect, onClose, mode]);
+    if (mode === "sheet") doClose(); // animated close
+  }, [onSelect, doClose, mode]);
 
   const starCbCache = useRef(new Map<string, (tapAt: number) => void>());
   const tapCbCache  = useRef(new Map<string, () => void>());
@@ -995,7 +1286,15 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
       </div>
 
       {/* Scrollable content — only rendered once contentReady (lazy mount in sheet) */}
-      <div style={SCROLL_STYLE}>
+      <div
+        ref={scrollRef}
+        style={{
+          ...SCROLL_STYLE,
+          // Sheet mode: start locked (hidden); applySnapDom() unlocks on FULL snap.
+          // Page mode: always scrollable.
+          overflowY: mode === "page" ? "auto" : "hidden",
+        }}
+      >
         {!contentReady ? null : (
           <>
             {/* ── Watchlist tab ── */}
@@ -1122,38 +1421,49 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   // ── Page mode: render inline ───────────────────────────────────────────
   if (mode === "page") return body;
 
-  // ── Sheet mode: CSS-transition bottom sheet via portal ─────────────────
-  // CSS transform runs on the GPU compositor thread — no JS per frame.
-  // Backdrop and sheet are two separate DOM nodes so each can animate
-  // independently without causing layout in the other.
+  // ── Sheet mode: 3-snap RAF-driven bottom sheet ─────────────────────────
+  // Snap points: CLOSED (off-screen) → HALF (50% viewport) → FULL (95% viewport)
+  // Transform runs on the GPU compositor thread; all DOM writes skip React renders.
   if (!sheetMounted) return null;
 
   return createPortal(
     <>
-      {/* Backdrop */}
+      {/* Backdrop — opacity driven by syncBackdrop() via ref, not React state */}
       <div
-        onClick={onClose}
+        ref={backdropRef}
+        onClick={doClose}
         style={{
-          ...BACKDROP_STYLE,
-          opacity: sheetVisible ? 1 : 0,
-          transition: "opacity 200ms ease",
-          pointerEvents: sheetVisible ? "auto" : "none",
+          position: "fixed", inset: 0, zIndex: 220,
+          background: "rgba(0,0,0,0.72)",
+          willChange: "opacity",
+          animation: "sheet-fade-in 0.20s ease both",
         }}
       />
 
-      {/* Sheet */}
+      {/* Sheet — 100vh tall; translateY controls how much is visible:
+           translateY(5vh)  = 95% visible  = FULL snap
+           translateY(50vh) = 50% visible  = HALF snap
+           Opening useEffect sets initial off-screen position, then animates to HALF */}
       <div
+        ref={sheetRef}
+        onClick={e => e.stopPropagation()}
         style={{
           position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 221,
-          height: "88%",
+          height: "100vh",
           borderRadius: "18px 18px 0 0",
-          overflow: "hidden",
-          boxShadow: "0 -8px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
-          // GPU compositor animation — no JS per frame
-          transform: sheetVisible ? "translateY(0)" : "translateY(100%)",
-          transition: "transform 280ms cubic-bezier(0.32,0.72,0,1)",
+          background: "#090b0e",
+          borderTop: "1px solid rgba(255,255,255,0.10)",
+          boxShadow: "0 -8px 48px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.07)",
           willChange: "transform",
-        }}
+          contain: "layout style",
+          display: "flex", flexDirection: "column",
+          overflow: "hidden",
+          cursor: "grab",
+          userSelect: "none",
+          WebkitUserSelect: "none",
+          // Opening useEffect immediately overrides this initial position
+          transform: `translateY(${typeof window !== "undefined" ? window.innerHeight + 20 : 900}px)`,
+        } as React.CSSProperties}
       >
         {body}
       </div>
