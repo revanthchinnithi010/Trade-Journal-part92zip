@@ -3,47 +3,72 @@ import {
   useSyncExternalStore,
 } from "react";
 import {
-  Star, TrendingUp, RefreshCw, Search, X, ChevronDown, ChevronRight,
+  Star, TrendingUp, Search, X, ChevronDown, ChevronRight,
 } from "lucide-react";
-import { useWatchlist } from "@/contexts/WatchlistContext";
+import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
 import { useLocation } from "wouter";
 import { useChartStore } from "@/store/chartStore";
 import { tapStart, recordUi, getEvents, subscribe as diagSubscribe } from "@/lib/starDiag";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
-
 type Tab = "Watchlist" | "Markets";
 const TABS: Tab[] = ["Watchlist", "Markets"];
 
-const CATEGORY_ORDER = ["forex", "crypto", "metal", "index", "commodity", "other"] as const;
+// ── Category definitions ──────────────────────────────────────────────────
+const CATEGORY_ORDER = ["crypto", "forex", "index", "commodity", "other"] as const;
 type Category = typeof CATEGORY_ORDER[number];
 
 const CATEGORY_LABELS: Record<Category, string> = {
-  forex:     "Forex",
   crypto:    "Crypto",
-  metal:     "Metals",
+  forex:     "Forex",
   index:     "Indices",
   commodity: "Commodities",
   other:     "Stocks",
 };
 
 const CATEGORY_COLORS: Record<Category, string> = {
-  forex:     "#60a5fa",
   crypto:    "#f59e0b",
-  metal:     "#a78bfa",
+  forex:     "#60a5fa",
   index:     "#34d399",
   commodity: "#fb923c",
   other:     "#94a3b8",
 };
 
+// Map SYMBOL_CATALOG market values → internal category keys
+const MARKET_TO_CATEGORY: Record<string, Category> = {
+  Crypto:      "crypto",
+  Forex:       "forex",
+  Indices:     "index",
+  Commodities: "commodity",
+};
+
+// Badge label shown on each row
+const CONTRACT_LABELS: Record<Category, string> = {
+  crypto:    "Crypto",
+  forex:     "FX",
+  index:     "Index",
+  commodity: "Cmdty",
+  other:     "Stock",
+};
+
+// ── SymbolInfo — single shared type ──────────────────────────────────────
 interface SymbolInfo {
-  symbol:       string;
-  name:         string;
-  contractType: string;
-  broker:       string;
+  symbol:   string;
+  name:     string;
+  category: Category;
 }
 
+// ── Build symbol list from SYMBOL_CATALOG (same source as desktop) ────────
+// Deduped by symbol key; catalog order is preserved.
+function buildCatalogSymbols(): SymbolInfo[] {
+  return Object.entries(SYMBOL_CATALOG).map(([sym, entry]) => ({
+    symbol:   sym,
+    name:     entry.label,
+    category: MARKET_TO_CATEGORY[entry.market] ?? "other",
+  }));
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
 function formatPrice(price: number | undefined): string {
   if (!price) return "—";
   if (price >= 10000) return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -52,32 +77,24 @@ function formatPrice(price: number | undefined): string {
   return price.toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
 }
 
-const CONTRACT_LABELS: Record<string, string> = {
-  forex:     "FX",
-  metal:     "Metal",
-  crypto:    "Crypto",
-  index:     "Index",
-  commodity: "Cmdty",
-  other:     "Stock",
-};
-
+// ── SymbolRow ─────────────────────────────────────────────────────────────
 let totalRowRenders = 0;
 
 const SymbolRow = memo(function SymbolRow({
-  symbol, name, contractType, isFavorite, inWatchlist, onStarPress, onTap,
+  symbol, name, category, isFavorite, inWatchlist, onStarPress, onTap,
 }: {
-  symbol: string; name: string; contractType: string;
+  symbol: string; name: string; category: Category;
   isFavorite: boolean; inWatchlist: boolean;
   onStarPress: (tapAt: number) => void;
   onTap?: () => void;
 }) {
   totalRowRenders++;
 
-  const tick         = useSymbolTick(symbol);
-  const price        = tick?.price;
-  const changePct    = tick?.changePct ?? 0;
-  const isUp         = changePct >= 0;
-  const tag          = CONTRACT_LABELS[contractType] ?? contractType;
+  const tick      = useSymbolTick(symbol);
+  const price     = tick?.price;
+  const changePct = tick?.changePct ?? 0;
+  const isUp      = changePct >= 0;
+  const tag       = CONTRACT_LABELS[category];
 
   const [visualFav, setVisualFav] = useState(isFavorite);
   useEffect(() => { setVisualFav(isFavorite); }, [isFavorite]);
@@ -171,6 +188,7 @@ const SymbolRow = memo(function SymbolRow({
   );
 });
 
+// ── DiagnosticsPanel ──────────────────────────────────────────────────────
 function DiagnosticsPanel({ onClose }: { onClose: () => void }) {
   const events = useSyncExternalStore(diagSubscribe, getEvents);
   return (
@@ -222,6 +240,7 @@ function DiagnosticsPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
+// ── CategorySection ───────────────────────────────────────────────────────
 function CategorySection({
   category, symbols, watchMap, getStarCb, getTapCb, defaultOpen, searchActive,
 }: {
@@ -280,7 +299,7 @@ function CategorySection({
             key={s.symbol}
             symbol={s.symbol}
             name={s.name}
-            contractType={s.contractType}
+            category={s.category}
             inWatchlist={!!wItem}
             isFavorite={wItem?.isFavorite ?? false}
             onStarPress={getStarCb(s.symbol)}
@@ -292,6 +311,7 @@ function CategorySection({
   );
 }
 
+// ── Main page ─────────────────────────────────────────────────────────────
 export default function Markets() {
   const [, navigate]              = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
@@ -299,18 +319,35 @@ export default function Markets() {
   const [showDiag,  setShowDiag]  = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
-  const [loading,        setLoading]        = useState(false);
-  const [loadError,      setLoadError]      = useState<string | null>(null);
-
   const { items, addSymbol, toggleFavorite } = useWatchlist();
 
-  const handleSymbolTap = useCallback((symbol: string) => {
-    localStorage.setItem("tv_symbol", symbol);
-    useChartStore.getState().setSymbol(symbol);
-    navigate("/charts");
-  }, [navigate]);
+  // ── Build the complete symbol list ──────────────────────────────────────
+  // 1. SYMBOL_CATALOG is the primary source (same as desktop watchlist).
+  // 2. Any watchlist items NOT in SYMBOL_CATALOG are appended under their
+  //    auto-derived category (covers symbols the user manually added).
+  const catalogSymbols = useMemo(() => buildCatalogSymbols(), []);
 
+  const catalogKeys = useMemo(
+    () => new Set(catalogSymbols.map(s => s.symbol)),
+    [catalogSymbols],
+  );
+
+  const extraSymbols = useMemo<SymbolInfo[]>(() =>
+    items
+      .filter(i => !catalogKeys.has(i.symbol))
+      .map(i => ({
+        symbol:   i.symbol,
+        name:     i.label,
+        category: (MARKET_TO_CATEGORY[i.market] ?? "other") as Category,
+      }))
+  , [items, catalogKeys]);
+
+  const allSymbols = useMemo(
+    () => [...catalogSymbols, ...extraSymbols],
+    [catalogSymbols, extraSymbols],
+  );
+
+  // ── Watchlist map (for star/favorite state) ──────────────────────────────
   const watchMapRef = useRef(new Map<string, typeof items[0]>());
   useEffect(() => {
     const m = new Map<string, typeof items[0]>();
@@ -324,19 +361,14 @@ export default function Markets() {
     return m;
   }, [items]);
 
-  useEffect(() => {
-    setLoading(true);
-    setLoadError(null);
-    fetch(`${BASE}/api/symbols?broker=ctrader`)
-      .then(r => r.json())
-      .then(d => {
-        const syms = (d as { symbols?: SymbolInfo[] }).symbols ?? [];
-        setCtraderSymbols(syms);
-      })
-      .catch(err => setLoadError(String(err)))
-      .finally(() => setLoading(false));
-  }, []);
+  // ── Navigation ──────────────────────────────────────────────────────────
+  const handleSymbolTap = useCallback((symbol: string) => {
+    localStorage.setItem("tv_symbol", symbol);
+    useChartStore.getState().setSymbol(symbol);
+    navigate("/charts");
+  }, [navigate]);
 
+  // ── Star/add to watchlist ────────────────────────────────────────────────
   const handleStarPress = useCallback(async (symbol: string, tapAt: number) => {
     const item = watchMapRef.current.get(symbol);
     if (item) {
@@ -346,6 +378,7 @@ export default function Markets() {
     }
   }, [addSymbol, toggleFavorite]);
 
+  // Stable per-symbol callbacks (avoids re-creating stable memo'd rows)
   const starCbCache = useRef(new Map<string, (tapAt: number) => void>());
   const tapCbCache  = useRef(new Map<string, () => void>());
 
@@ -372,20 +405,19 @@ export default function Markets() {
     return tapCbCache.current.get(symbol)!;
   }, [handleSymbolTap]);
 
+  // ── Search ───────────────────────────────────────────────────────────────
   const searchActive = search.trim().length > 0;
   const searchUpper  = search.trim().toUpperCase();
 
+  // ── Group by category ─────────────────────────────────────────────────
   const grouped = useMemo(() => {
     const map = new Map<Category, SymbolInfo[]>();
     CATEGORY_ORDER.forEach(c => map.set(c, []));
-    for (const sym of ctraderSymbols) {
-      const cat = (CATEGORY_ORDER as readonly string[]).includes(sym.contractType)
-        ? sym.contractType as Category
-        : "other";
-      map.get(cat)!.push(sym);
+    for (const sym of allSymbols) {
+      map.get(sym.category)!.push(sym);
     }
     return map;
-  }, [ctraderSymbols]);
+  }, [allSymbols]);
 
   const filteredGrouped = useMemo(() => {
     if (!searchActive) return grouped;
@@ -399,14 +431,14 @@ export default function Markets() {
     return filtered;
   }, [grouped, searchActive, searchUpper]);
 
+  // ── Watchlist tab rows (favorites) ──────────────────────────────────────
   const watchlistRows = useMemo(() =>
     items.filter(i => i.isFavorite).map(i => ({
-      symbol:       i.symbol,
-      name:         i.label,
-      contractType: ctraderSymbols.find(s => s.symbol === i.symbol)?.contractType
-        ?? "other",
+      symbol:   i.symbol,
+      name:     i.label,
+      category: (MARKET_TO_CATEGORY[i.market] ?? "other") as Category,
     }))
-  , [items, ctraderSymbols]);
+  , [items]);
 
   const filteredWatchlist = useMemo(() => {
     if (!searchActive) return watchlistRows;
@@ -416,7 +448,7 @@ export default function Markets() {
     );
   }, [watchlistRows, searchActive, searchUpper]);
 
-  const totalMarkets = ctraderSymbols.length;
+  const totalMarkets = allSymbols.length;
 
   return (
     <div style={{
@@ -468,6 +500,7 @@ export default function Markets() {
             );
           })}
 
+          {/* Star diagnostics toggle */}
           <button
             onPointerDown={() => setShowDiag(v => !v)}
             title="Star tap diagnostics"
@@ -530,25 +563,6 @@ export default function Markets() {
       {/* ── Content ── */}
       <div style={{ flex: 1, overflowY: "auto" }}>
 
-        {/* Loading */}
-        {loading && activeTab === "Markets" && (
-          <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "50px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
-            <RefreshCw size={15} style={{ animation: "spin 1s linear infinite" }} />
-            <span style={{ fontSize: 13 }}>Loading cTrader symbols…</span>
-            <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
-          </div>
-        )}
-
-        {/* Error */}
-        {!loading && loadError && activeTab === "Markets" && (
-          <div style={{ padding: "40px 24px", textAlign: "center", color: "rgba(239,68,68,0.65)", fontSize: 13 }}>
-            <p style={{ margin: "0 0 8px" }}>Failed to load cTrader symbols.</p>
-            <p style={{ margin: 0, fontSize: 11, color: "rgba(148,163,184,0.4)" }}>
-              Ensure cTrader is connected and symbols are cached via the cTrader test page.
-            </p>
-          </div>
-        )}
-
         {/* ── WATCHLIST TAB ── */}
         {activeTab === "Watchlist" && (
           <>
@@ -572,7 +586,7 @@ export default function Markets() {
                   key={row.symbol}
                   symbol={row.symbol}
                   name={row.name}
-                  contractType={row.contractType}
+                  category={row.category}
                   inWatchlist={!!wItem}
                   isFavorite={wItem?.isFavorite ?? false}
                   onStarPress={getStarCb(row.symbol)}
@@ -584,18 +598,9 @@ export default function Markets() {
         )}
 
         {/* ── MARKETS TAB ── */}
-        {activeTab === "Markets" && !loading && !loadError && (
+        {activeTab === "Markets" && (
           <>
-            {ctraderSymbols.length === 0 && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
-                <TrendingUp size={34} strokeWidth={1} />
-                <p style={{ fontSize: 14, margin: 0 }}>No cTrader symbols cached</p>
-                <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
-                  Go to cTrader Test page → fetch symbols → wire them to enable this view
-                </p>
-              </div>
-            )}
-
+            {/* Search: flat list across all categories */}
             {searchActive && (
               <>
                 {Array.from(filteredGrouped.values()).every(a => a.length === 0) && (
@@ -605,7 +610,6 @@ export default function Markets() {
                 )}
                 {CATEGORY_ORDER.map(cat => {
                   const syms = filteredGrouped.get(cat) ?? [];
-                  if (syms.length === 0) return null;
                   return syms.map(s => {
                     const wItem = watchMap.get(s.symbol);
                     return (
@@ -613,7 +617,7 @@ export default function Markets() {
                         key={s.symbol}
                         symbol={s.symbol}
                         name={s.name}
-                        contractType={s.contractType}
+                        category={s.category}
                         inWatchlist={!!wItem}
                         isFavorite={wItem?.isFavorite ?? false}
                         onStarPress={getStarCb(s.symbol)}
@@ -625,6 +629,7 @@ export default function Markets() {
               </>
             )}
 
+            {/* Normal: collapsible category sections */}
             {!searchActive && CATEGORY_ORDER.map((cat, idx) => (
               <CategorySection
                 key={cat}
@@ -644,6 +649,7 @@ export default function Markets() {
       </div>
 
       {showDiag && <DiagnosticsPanel onClose={() => setShowDiag(false)} />}
+      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
     </div>
   );
 }
