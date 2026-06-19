@@ -59,8 +59,7 @@ const loadIndicators = (): IndicatorState => {
 };
 
 // Resolve initial values and ensure localStorage is always written on first load.
-// This guarantees chartStore.symbol === localStorage.tv_symbol from moment zero,
-// so the SyncDiagnostics overlay never shows a false-positive mismatch.
+// This guarantees chartStore.symbol === localStorage.tv_symbol from moment zero.
 const _initSymbol   = (typeof localStorage !== "undefined" ? localStorage.getItem("tv_symbol")   : null) ?? "BTCUSD";
 const _initInterval = (typeof localStorage !== "undefined" ? localStorage.getItem("tv_interval") : null) ?? "60";
 if (typeof localStorage !== "undefined") {
