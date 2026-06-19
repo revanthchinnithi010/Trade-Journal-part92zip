@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { createPortal } from "react-dom";
 import {
   useListTrades,
   useCreateTrade,
@@ -12,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Search, Plus, Trash2, Eye, ExternalLink, ImageIcon, TrendingUp,
-  X, ChevronDown, Tag, AlertTriangle, FileText, Link as LinkIcon
+  X, ChevronDown, Tag, AlertTriangle, FileText, Link as LinkIcon,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -117,6 +119,249 @@ function FilterPill({
   );
 }
 
+// ── FilterBottomSheet — mobile-only filter panel ──────────────────────────
+// Opens from below with a spring slide. All filters live here on mobile.
+// Uses draft state: changes are staged until "Apply" is tapped.
+
+const BROKER_OPTS = [
+  { value: "all",            label: "All",           color: undefined },
+  { value: "Delta Exchange", label: "Delta",         color: "#f97316" },
+  { value: "FusionMarkets",  label: "Fusion Markets",color: "#3b82f6" },
+  { value: "cTrader",        label: "cTrader",       color: "#a78bfa" },
+] as const;
+
+function FilterBottomSheet({
+  open,
+  onClose,
+  outcomeFilter,
+  sideFilter,
+  brokerFilter,
+  onApply,
+}: {
+  open: boolean;
+  onClose: () => void;
+  outcomeFilter: string;
+  sideFilter: string;
+  brokerFilter: string;
+  onApply: (outcome: string, side: string, broker: string) => void;
+}) {
+  const [draftOutcome, setDraftOutcome] = useState(outcomeFilter);
+  const [draftSide,    setDraftSide]    = useState(sideFilter);
+  const [draftBroker,  setDraftBroker]  = useState(brokerFilter);
+
+  // Sync draft when sheet opens (so it reflects current applied state)
+  const prevOpenRef = useState(false);
+  if (prevOpenRef[0] !== open) {
+    prevOpenRef[1](open);
+    if (open) {
+      setDraftOutcome(outcomeFilter);
+      setDraftSide(sideFilter);
+      setDraftBroker(brokerFilter);
+    }
+  }
+
+  const handleReset = () => {
+    setDraftOutcome("all");
+    setDraftSide("all");
+    setDraftBroker("all");
+  };
+
+  const handleApply = () => {
+    onApply(draftOutcome, draftSide, draftBroker);
+    onClose();
+  };
+
+  // ── Chip helper ──────────────────────────────────────────────────────────
+  const Chip = ({
+    label, active, accent, onClick,
+  }: { label: string; active: boolean; accent?: string; onClick: () => void }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      style={active && accent ? {
+        background: `${accent}18`,
+        border: `1.5px solid ${accent}55`,
+        color: accent,
+      } : active ? {
+        background: "rgba(255,255,255,0.12)",
+        border: "1.5px solid rgba(255,255,255,0.40)",
+        color: "#ffffff",
+      } : undefined}
+      className={`px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold border transition-all duration-150 ${
+        active
+          ? ""
+          : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:text-white hover:bg-white/[0.08]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  // ── Section header ────────────────────────────────────────────────────────
+  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+    <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(148,163,184,0.5)", marginBottom: 8, textTransform: "uppercase" }}>
+      {children}
+    </p>
+  );
+
+  if (!open) return null;
+
+  return createPortal(
+    <AnimatePresence>
+      {open && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            key="fs-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            onClick={onClose}
+            style={{
+              position: "fixed", inset: 0, zIndex: 400,
+              background: "rgba(0,0,0,0.72)",
+            }}
+          />
+
+          {/* Sheet */}
+          <motion.div
+            key="fs-sheet"
+            initial={{ y: "100%" }}
+            animate={{ y: 0 }}
+            exit={{ y: "100%" }}
+            transition={{ type: "spring", damping: 32, stiffness: 340, mass: 0.9 }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 401,
+              background: "#0d0f13",
+              borderTop: "1px solid rgba(255,255,255,0.09)",
+              borderRadius: "20px 20px 0 0",
+              boxShadow: "0 -16px 64px rgba(0,0,0,0.85)",
+              paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
+              display: "flex", flexDirection: "column",
+            }}
+          >
+            {/* Handle pill */}
+            <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 4 }}>
+              <div style={{ width: 36, height: 4, borderRadius: 9999, background: "rgba(255,255,255,0.18)" }} />
+            </div>
+
+            {/* Title row */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "6px 18px 14px",
+              borderBottom: "1px solid rgba(255,255,255,0.06)",
+            }}>
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", letterSpacing: "-0.01em" }}>
+                Filters
+              </span>
+              <button
+                onClick={onClose}
+                style={{
+                  background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)",
+                  borderRadius: 8, padding: "6px 8px", cursor: "pointer", lineHeight: 0,
+                  color: "rgba(148,163,184,0.55)",
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            {/* Filter groups */}
+            <div style={{ padding: "18px 18px 8px", display: "flex", flexDirection: "column", gap: 20 }}>
+              {/* Trade Result */}
+              <div>
+                <SectionLabel>Trade Result</SectionLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {[
+                    { v: "all",       label: "All" },
+                    { v: "win",       label: "Win",       accent: "#10b981" },
+                    { v: "loss",      label: "Loss",      accent: "#ef4444" },
+                    { v: "breakeven", label: "Breakeven", accent: "#f59e0b" },
+                  ].map(({ v, label, accent }) => (
+                    <Chip
+                      key={v} label={label} accent={accent}
+                      active={draftOutcome === v}
+                      onClick={() => setDraftOutcome(v)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Trade Side */}
+              <div>
+                <SectionLabel>Trade Side</SectionLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {[
+                    { v: "all",   label: "All Sides" },
+                    { v: "long",  label: "Long",  accent: "#60a5fa" },
+                    { v: "short", label: "Short", accent: "#f97316" },
+                  ].map(({ v, label, accent }) => (
+                    <Chip
+                      key={v} label={label} accent={accent}
+                      active={draftSide === v}
+                      onClick={() => setDraftSide(v)}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {/* Broker */}
+              <div>
+                <SectionLabel>Broker</SectionLabel>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {BROKER_OPTS.map(({ value, label, color }) => (
+                    <Chip
+                      key={value} label={label} accent={color as string | undefined}
+                      active={draftBroker === value}
+                      onClick={() => setDraftBroker(value)}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer actions */}
+            <div style={{
+              display: "flex", gap: 10, padding: "14px 18px 4px",
+              borderTop: "1px solid rgba(255,255,255,0.06)",
+              marginTop: 4,
+            }}>
+              <button
+                onClick={handleReset}
+                style={{
+                  flex: 1, height: 44, borderRadius: 12,
+                  background: "rgba(255,255,255,0.04)",
+                  border: "1px solid rgba(255,255,255,0.10)",
+                  color: "rgba(148,163,184,0.8)", fontSize: 13.5, fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                Reset Filters
+              </button>
+              <button
+                onClick={handleApply}
+                style={{
+                  flex: 2, height: 44, borderRadius: 12,
+                  background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+                  border: "1.5px solid rgba(255,255,255,0.85)",
+                  color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
+                  boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
+                  cursor: "pointer",
+                }}
+              >
+                Apply
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>,
+    document.body,
+  );
+}
+
 const modalOverlayVariants = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { duration: 0.2 } },
@@ -142,11 +387,18 @@ export default function Trades() {
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
   const [sideFilter, setSideFilter] = useState<string>("all");
   const [brokerFilter, setBrokerFilter] = useState<string>("all");
+  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<ModalTab>("details");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
   const isMobile = useIsMobile();
   const fc       = useCurrencyFormatter();
+
+  // Count non-default active filters for the badge
+  const activeFilterCount =
+    (outcomeFilter !== "all" ? 1 : 0) +
+    (sideFilter    !== "all" ? 1 : 0) +
+    (brokerFilter  !== "all" ? 1 : 0);
 
   const queryClient = useQueryClient();
 
@@ -228,80 +480,127 @@ export default function Trades() {
     <div className="space-y-5 pb-12">
 
       {/* ── Filter Bar ── */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-        <div className="flex flex-wrap items-center gap-2 flex-1">
-          {/* Symbol search */}
-          <div className="relative">
+      {isMobile ? (
+        /* ── Mobile: search + filter icon + log trade ── */
+        <div className="flex items-center gap-2">
+          {/* Search stretches full width */}
+          <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
             <Input
-              placeholder="Symbol search..."
-              className="pl-8.5 w-44 bg-white/[0.04] border-white/[0.08] rounded-xl h-9 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
+              placeholder="Search symbol…"
+              className="pl-8.5 w-full bg-white/[0.04] border-white/[0.08] rounded-xl h-10 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
               value={symbolFilter}
               onChange={(e) => { setSymbolFilter(e.target.value); setPage(1); }}
             />
           </div>
 
-          {/* Outcome pills */}
-          <div className="flex items-center gap-1.5">
-            {["all", "win", "loss", "breakeven"].map(v => (
-              <FilterPill
-                key={v}
-                label={v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
-                active={outcomeFilter === v}
-                onClick={() => { setOutcomeFilter(v); setPage(1); }}
-              />
-            ))}
-          </div>
-
-          {/* Side pills */}
-          <div className="flex items-center gap-1.5 ml-1">
-            {["all", "long", "short"].map(v => (
-              <FilterPill
-                key={v}
-                label={v === "all" ? "All Sides" : v.charAt(0).toUpperCase() + v.slice(1)}
-                active={sideFilter === v}
-                onClick={() => setSideFilter(v)}
-              />
-            ))}
-          </div>
-
-          {/* Broker pills */}
-          <div className="flex items-center gap-1.5 ml-1">
-            <span className="text-[10px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Broker:</span>
-            {[
-              { value: "all", label: "All" },
-              { value: "Delta Exchange", label: "Delta" },
-              { value: "FusionMarkets", label: "Fusion" },
-            ].map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setBrokerFilter(value)}
-                style={brokerFilter === value && isMobile ? glossyWhiteStyle : undefined}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
-                  brokerFilter === value
-                    ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
-                    : value === "FusionMarkets" ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                    : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
-                    : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
-                }`}
+          {/* Filter icon with active-count badge */}
+          <button
+            onClick={() => setFilterSheetOpen(true)}
+            className="relative flex items-center justify-center w-10 h-10 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all shrink-0"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            {activeFilterCount > 0 && (
+              <span
+                className="absolute -top-1.5 -right-1.5 flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold text-black"
+                style={{ background: "rgba(255,255,255,0.92)" }}
               >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
 
-        <button
-          onClick={openModal}
-          className="flex items-center gap-2 px-4 h-9 rounded-xl border-2 border-white bg-white text-black sm:border-0 sm:bg-primary sm:text-white text-[13px] font-semibold hover:bg-white/90 sm:hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-black/10 sm:shadow-primary/25 shrink-0"
-        >
-          <span className="flex items-center justify-center w-5 h-5 rounded-full bg-black sm:hidden">
-            <Plus className="w-3 h-3 text-white" />
-          </span>
-          <Plus className="hidden sm:block w-4 h-4" />
-          Log Trade
-        </button>
-      </div>
+          {/* Log Trade */}
+          <button
+            onClick={openModal}
+            className="flex items-center gap-1.5 px-3.5 h-10 rounded-xl border-2 border-white bg-white text-black text-[13px] font-semibold hover:bg-white/90 active:scale-[0.97] transition-all shadow-md shadow-black/10 shrink-0"
+          >
+            <span className="flex items-center justify-center w-4 h-4 rounded-full bg-black">
+              <Plus className="w-2.5 h-2.5 text-white" />
+            </span>
+            Log
+          </button>
+        </div>
+      ) : (
+        /* ── Desktop: original full filter bar ── */
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2 flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
+              <Input
+                placeholder="Symbol search..."
+                className="pl-8.5 w-44 bg-white/[0.04] border-white/[0.08] rounded-xl h-9 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
+                value={symbolFilter}
+                onChange={(e) => { setSymbolFilter(e.target.value); setPage(1); }}
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              {["all", "win", "loss", "breakeven"].map(v => (
+                <FilterPill
+                  key={v}
+                  label={v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+                  active={outcomeFilter === v}
+                  onClick={() => { setOutcomeFilter(v); setPage(1); }}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 ml-1">
+              {["all", "long", "short"].map(v => (
+                <FilterPill
+                  key={v}
+                  label={v === "all" ? "All Sides" : v.charAt(0).toUpperCase() + v.slice(1)}
+                  active={sideFilter === v}
+                  onClick={() => setSideFilter(v)}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-1.5 ml-1">
+              <span className="text-[10px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Broker:</span>
+              {[
+                { value: "all",            label: "All" },
+                { value: "Delta Exchange", label: "Delta" },
+                { value: "FusionMarkets",  label: "Fusion" },
+              ].map(({ value, label }) => (
+                <button
+                  key={value}
+                  onClick={() => setBrokerFilter(value)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+                    brokerFilter === value
+                      ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                      : value === "FusionMarkets"  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                      : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
+                      : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={openModal}
+            className="flex items-center gap-2 px-4 h-9 rounded-xl border-0 bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-primary/25 shrink-0"
+          >
+            <Plus className="w-4 h-4" />
+            Log Trade
+          </button>
+        </div>
+      )}
+
+      {/* ── Mobile filter bottom sheet ── */}
+      <FilterBottomSheet
+        open={filterSheetOpen}
+        onClose={() => setFilterSheetOpen(false)}
+        outcomeFilter={outcomeFilter}
+        sideFilter={sideFilter}
+        brokerFilter={brokerFilter}
+        onApply={(outcome, side, broker) => {
+          setOutcomeFilter(outcome);
+          setSideFilter(side);
+          setBrokerFilter(broker);
+          setPage(1);
+        }}
+      />
 
       {/* ── Table ── */}
       <div className="glass-card overflow-hidden">
