@@ -58,9 +58,19 @@ const loadIndicators = (): IndicatorState => {
   return { ema9: false, ema21: false, ema50: false, ema200: false, vwap: false };
 };
 
+// Resolve initial values and ensure localStorage is always written on first load.
+// This guarantees chartStore.symbol === localStorage.tv_symbol from moment zero,
+// so the SyncDiagnostics overlay never shows a false-positive mismatch.
+const _initSymbol   = (typeof localStorage !== "undefined" ? localStorage.getItem("tv_symbol")   : null) ?? "BTCUSD";
+const _initInterval = (typeof localStorage !== "undefined" ? localStorage.getItem("tv_interval") : null) ?? "60";
+if (typeof localStorage !== "undefined") {
+  localStorage.setItem("tv_symbol",   _initSymbol);
+  localStorage.setItem("tv_interval", _initInterval);
+}
+
 export const useChartStore = create<ChartStoreState>((set, get) => ({
-  symbol:     (typeof localStorage !== "undefined" ? localStorage.getItem("tv_symbol")    : null) ?? "BTCUSD",
-  interval:   (typeof localStorage !== "undefined" ? localStorage.getItem("tv_interval")  : null) ?? "60",
+  symbol:     _initSymbol,
+  interval:   _initInterval,
   chartType:  (typeof localStorage !== "undefined" ? localStorage.getItem("tv_chartType") as ChartType : null) ?? "candles",
   indicators: loadIndicators(),
   livePrice:  null,
@@ -69,8 +79,8 @@ export const useChartStore = create<ChartStoreState>((set, get) => ({
   barsLoaded: false,
   mobileChartFullscreen: false,
 
-  setSymbol:    (symbol)    => set({ symbol, barsLoaded: false }),
-  setInterval:  (interval)  => set({ interval, barsLoaded: false }),
+  setSymbol:    (symbol)    => { localStorage.setItem("tv_symbol",   symbol);   set({ symbol,   barsLoaded: false }); },
+  setInterval:  (interval)  => { localStorage.setItem("tv_interval", interval); set({ interval, barsLoaded: false }); },
   setChartType: (chartType) => { localStorage.setItem("tv_chartType", chartType); set({ chartType }); },
   setIndicator: (key, val)  => {
     const next = { ...get().indicators, [key]: val };

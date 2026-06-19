@@ -263,6 +263,71 @@ function AnimatedMeshBackground() {
   );
 }
 
+// ── Sync Diagnostics — confirms chartStore is the single source of truth ──────
+// Collapsed by default: a small pill. Tap to expand.
+function SyncDiagnostics() {
+  const [open, setOpen] = useState(false);
+  const storeSymbol   = useChartStore(s => s.symbol);
+  const storeInterval = useChartStore(s => s.interval);
+  const lsSymbol   = localStorage.getItem("tv_symbol")   ?? "(none)";
+  const lsInterval = localStorage.getItem("tv_interval") ?? "(none)";
+  const symbolOk   = storeSymbol   === lsSymbol;
+  const intervalOk = storeInterval === lsInterval;
+  const allOk = symbolOk && intervalOk;
+  const dot = allOk ? "#B7FF5A" : "#ef4444";
+  return (
+    <div style={{ position: "absolute", bottom: 56, right: 6, zIndex: 99 }}>
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "2px 7px", borderRadius: 20,
+            background: "rgba(0,0,0,0.72)",
+            border: `1px solid ${dot}44`,
+            cursor: "pointer", fontSize: 8, fontFamily: "monospace",
+            color: dot, fontWeight: 800,
+          }}
+        >
+          <span style={{ width: 5, height: 5, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+          {allOk ? "SYNC ✓" : "MISMATCH ✗"}
+        </button>
+      )}
+      {open && (
+        <div style={{
+          background: "rgba(0,0,0,0.88)",
+          backdropFilter: "blur(8px)",
+          border: `1px solid ${allOk ? "rgba(183,255,90,0.35)" : "rgba(239,68,68,0.45)"}`,
+          borderRadius: 8, padding: "5px 8px",
+          fontSize: 9, fontFamily: "monospace", color: "#ddd",
+          display: "flex", flexDirection: "column", gap: 2, minWidth: 170,
+          cursor: "pointer",
+        }} onClick={() => setOpen(false)}>
+          <div style={{ fontWeight: 800, color: dot, marginBottom: 1, fontSize: 8 }}>
+            {allOk ? "✓ STORE IN SYNC" : "✗ STORE MISMATCH"} (tap to close)
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>store symbol</span>
+            <span style={{ color: symbolOk ? "#B7FF5A" : "#ef4444" }}>{storeSymbol}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS symbol</span>
+            <span style={{ color: symbolOk ? "rgba(255,255,255,0.55)" : "#ef4444" }}>{lsSymbol}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>store interval</span>
+            <span style={{ color: intervalOk ? "#B7FF5A" : "#ef4444" }}>{storeInterval}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS interval</span>
+            <span style={{ color: intervalOk ? "rgba(255,255,255,0.55)" : "#ef4444" }}>{lsInterval}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Floating left drawing pill ──────────────────────────────────────────────
 function FloatingDrawingPill({
   activeTool,
@@ -3207,6 +3272,9 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
               <CustomIndicatorRenderer />
             </CustomChart>
           )}
+
+          {/* Sync diagnostics — confirms chartStore is single source of truth */}
+          {layoutCount === 1 && <SyncDiagnostics />}
 
           {/* Multi-chart grid */}
           {layoutCount > 1 && (

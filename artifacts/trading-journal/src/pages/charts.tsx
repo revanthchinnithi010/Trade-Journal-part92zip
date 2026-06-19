@@ -705,19 +705,23 @@ function useChartLayout() {
     fetch(`${BASE}/api/chart-layouts/${LAYOUT_SLOT}`)
       .then(r => r.ok ? r.json() : null)
       .then((data: ChartLayout | null) => {
-        if (data) setLayout({
+        if (data) {
           // localStorage wins over DB for symbol/interval/market: navigation flows
           // (Markets, Watchlist, Search) write to localStorage *before* routing here,
           // so the localStorage value is always the user's intended selection.
-          // The DB value may be stale if the user navigated away before the 600ms
-          // saveToDb debounce flushed. bottomOpen/bottomHeight are UI-only prefs
-          // not written to localStorage by navigation flows, so DB wins for those.
-          symbol:       localStorage.getItem("tv_symbol")   ?? data.symbol,
-          interval:     localStorage.getItem("tv_interval") ?? data.interval,
-          market:       localStorage.getItem("tv_market")   ?? data.market,
-          bottomOpen:   data.bottomOpen,
-          bottomHeight: data.bottomHeight,
-        });
+          const sym = localStorage.getItem("tv_symbol")   ?? data.symbol;
+          const itv = localStorage.getItem("tv_interval") ?? data.interval;
+          const mkt = localStorage.getItem("tv_market")   ?? data.market;
+          // chartStore is THE source of truth — sync DB/localStorage into it
+          const store = useChartStore.getState();
+          if (store.symbol   !== sym) store.setSymbol(sym);
+          if (store.interval !== itv) store.setInterval(itv);
+          setLayout({
+            symbol: sym, interval: itv, market: mkt,
+            bottomOpen:   data.bottomOpen,
+            bottomHeight: data.bottomHeight,
+          });
+        }
       })
       .catch(() => {});
   }, []);
@@ -812,6 +816,82 @@ function OHLCVBar({ symbol }: { symbol: string }) {
         <span className="text-[9.5px]" style={{ color: "rgba(167,184,169,0.6)" }}>L <span ref={lRef} style={{ color: "#ef4444" }}>{initFmt(initHas ? initCh.low : null)}</span></span>
         <span className="text-[9.5px]" style={{ color: "rgba(167,184,169,0.6)" }}>C <span ref={cRef} style={{ color: "#F3FFF3" }}>{initFmt(initC)}</span></span>
       </div>
+    </div>
+  );
+}
+
+// ── Sync Diagnostics overlay — confirms chartStore is the single source of truth ──
+// Collapsed by default: shows a small ⚡ pill. Click to expand.
+// Always visible so mismatches surface immediately during QA.
+function SyncDiagnostics() {
+  const [open, setOpen] = useState(false);
+  const storeSymbol   = useChartStore(s => s.symbol);
+  const storeInterval = useChartStore(s => s.interval);
+  const lsSymbol   = localStorage.getItem("tv_symbol")   ?? "(none)";
+  const lsInterval = localStorage.getItem("tv_interval") ?? "(none)";
+  const symbolOk   = storeSymbol   === lsSymbol;
+  const intervalOk = storeInterval === lsInterval;
+  const allOk = symbolOk && intervalOk;
+  const dot = allOk ? "#B7FF5A" : "#ef4444";
+
+  return (
+    <div style={{ position: "absolute", bottom: 48, right: 8, zIndex: 99 }}>
+      {/* Collapsed pill */}
+      {!open && (
+        <button
+          onClick={() => setOpen(true)}
+          title="Sync diagnostics"
+          style={{
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "2px 7px", borderRadius: 20,
+            background: "rgba(0,0,0,0.72)",
+            border: `1px solid ${dot}44`,
+            cursor: "pointer", fontSize: 9, fontFamily: "monospace",
+            color: dot, fontWeight: 800,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: dot, flexShrink: 0 }} />
+          {allOk ? "SYNC ✓" : "MISMATCH ✗"}
+        </button>
+      )}
+
+      {/* Expanded panel */}
+      {open && (
+        <div style={{
+          background: "rgba(0,0,0,0.88)",
+          backdropFilter: "blur(8px)",
+          border: `1px solid ${allOk ? "rgba(183,255,90,0.35)" : "rgba(239,68,68,0.45)"}`,
+          borderRadius: 8,
+          padding: "6px 10px",
+          fontSize: 10,
+          fontFamily: "monospace",
+          color: "#ddd",
+          display: "flex", flexDirection: "column", gap: 2,
+          minWidth: 190,
+          cursor: "pointer",
+        }} onClick={() => setOpen(false)}>
+          <div style={{ fontWeight: 800, color: dot, marginBottom: 2, fontSize: 9, display: "flex", justifyContent: "space-between" }}>
+            <span>{allOk ? "✓ STORE IN SYNC" : "✗ STORE MISMATCH"}</span>
+            <span style={{ color: "rgba(255,255,255,0.35)", fontWeight: 400 }}>(click to collapse)</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>store symbol</span>
+            <span style={{ color: symbolOk ? "#B7FF5A" : "#ef4444" }}>{storeSymbol}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS symbol</span>
+            <span style={{ color: symbolOk ? "rgba(255,255,255,0.6)" : "#ef4444" }}>{lsSymbol}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>store interval</span>
+            <span style={{ color: intervalOk ? "#B7FF5A" : "#ef4444" }}>{storeInterval}</span>
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS interval</span>
+            <span style={{ color: intervalOk ? "rgba(255,255,255,0.6)" : "#ef4444" }}>{lsInterval}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -980,12 +1060,14 @@ export default function Charts() {
   const activeAlertsCount = useAlertStore(s => s.alerts.filter(a => a.status === "active").length);
 
   const { layout, setLayout, saveToDb } = useChartLayout();
-  const activeTick = useSymbolTick(layout.symbol);
-
-  const activeKey  = layout.symbol;
-  const interval   = layout.interval;
+  // ── Single source of truth: chartStore drives symbol + interval ──────────
+  // Do NOT read from layout.symbol / layout.interval here — they're kept only
+  // for DB persistence and market inference, not for driving the UI.
+  const activeKey  = useChartStore(s => s.symbol);
+  const interval   = useChartStore(s => s.interval);
+  const activeTick = useSymbolTick(activeKey);
   const bottomOpen = layout.bottomOpen;
-  const bottomH       = layout.bottomHeight;
+  const bottomH    = layout.bottomHeight;
 
   const [bottomTab,       setBottomTab]       = useState<BottomTab>("Positions");
   const [isFullscreen,    setIsFullscreen]    = useState(false);
@@ -1179,11 +1261,8 @@ export default function Charts() {
   const currentPrice  = activeTick?.price ?? null;
   const prevAlertCount = useRef(0);
 
-  useEffect(() => {
-    const s = useChartStore.getState();
-    if (s.symbol !== activeKey) s.setSymbol(activeKey);
-    if (s.interval !== interval) s.setInterval(interval);
-  }, [activeKey, interval]); // eslint-disable-line
+  // NOTE: the old layout→chartStore sync effect has been removed.
+  // chartStore IS the single source of truth; no bridging effect needed.
 
   // ── Resize drag state ─────────────────────────────────────────────────────
   const dragging      = useRef(false);
@@ -1229,46 +1308,24 @@ export default function Charts() {
   const liveChangePct = activeTick?.changePct ?? 0;
   const isUp = liveChangePct >= 0;
 
-  // Guard so our own setSymbol calls don't re-trigger the external-change subscription
-  const _selfSettingRef = useRef(false);
-
+  // selectSymbol: chartStore.setSymbol is the single write path (persists to localStorage).
+  // layout is updated only to keep market in sync for DB persistence.
+  // No self-guard ref or subscription needed — charts.tsx reads activeKey directly
+  // from chartStore via useChartStore(s => s.symbol), so external changes (Markets page,
+  // named layouts, watchlist) are picked up automatically by the Zustand selector.
   const selectSymbol = useCallback((key: string) => {
-    _selfSettingRef.current = true;
     const e = watchlistItems.find(i => i.symbol === key);
     const market = e?.market ?? layout.market;
+    useChartStore.getState().setSymbol(key); // single source of truth + localStorage
+    if (e) localStorage.setItem("tv_market", market);
     setLayout(prev => ({ ...prev, symbol: key, market }));
     saveToDb({ symbol: key, market });
-    localStorage.setItem("tv_symbol", key);
-    if (e) localStorage.setItem("tv_market", market);
-    useChartStore.getState().setSymbol(key);
-    // Reset after Zustand subscriber fires synchronously
-    Promise.resolve().then(() => { _selfSettingRef.current = false; });
   }, [watchlistItems, layout.market, setLayout, saveToDb]);
 
-  // Keep stable refs so the subscription below never needs to re-subscribe
-  const _activeKeyRef    = useRef(activeKey);
-  _activeKeyRef.current  = activeKey;
-  const _selectSymRef    = useRef(selectSymbol);
-  _selectSymRef.current  = selectSymbol;
-
-  // React to external symbol changes (e.g. Markets page tapping a coin → navigate("/charts"))
-  useEffect(() => {
-    return useChartStore.subscribe(
-      (s) => s.symbol,
-      (newSym) => {
-        if (_selfSettingRef.current) return;
-        if (newSym && newSym !== _activeKeyRef.current) {
-          _selectSymRef.current(newSym);
-        }
-      },
-    );
-  }, []); // eslint-disable-line
-
   const selectInterval = useCallback((v: string) => {
+    useChartStore.getState().setInterval(v); // single source of truth + localStorage
     setLayout(prev => ({ ...prev, interval: v }));
     saveToDb({ interval: v });
-    localStorage.setItem("tv_interval", v);
-    useChartStore.getState().setInterval(v);
   }, [setLayout, saveToDb]);
 
   // ── Slot-aware interval/symbol handlers ───────────────────────────────────
@@ -1832,6 +1889,9 @@ export default function Charts() {
 
             {/* ── Feed diagnostics overlay (bottom-left corner) ── */}
             {layoutCount === 1 && <FeedDiagnostics symbol={activeKey} />}
+
+            {/* ── Sync diagnostics (bottom-right) — shows chartStore values to confirm single-source sync ── */}
+            {layoutCount === 1 && <SyncDiagnostics />}
 
             {/* ── Floating symbol info overlay — glassmorphism panel above candles ── */}
             {layoutCount === 1 && (
