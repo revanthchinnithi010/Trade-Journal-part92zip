@@ -11,12 +11,9 @@ import {
   Star, Search, TrendingUp, RefreshCw,
   LayoutTemplate, Link2, Unlink2,
 } from "lucide-react";
-import {
-  REGISTRY_FOREX, REGISTRY_METALS, REGISTRY_COMMODITIES, REGISTRY_INDICES,
-} from "@/lib/symbolRegistry";
 import { useBrokerWatchlistStore } from "@/store/brokerWatchlistStore";
+import { SharedMarketSelector } from "@/components/SharedMarketSelector";
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
-import { SymbolPickerSheet } from "./SymbolPickerSheet";
 import CustomChart from "./CustomChart";
 import MiniChart from "./MiniChart";
 import DrawingOverlay from "./DrawingOverlay";
@@ -2669,346 +2666,6 @@ const MiniWatchlistRow = memo(function MiniWatchlistRow({
   );
 });
 
-// ── Market Watchlist Sheet ─────────────────────────────────────────────────
-type MktTab = "Watchlist" | "Crypto" | "Forex" | "Metals" | "Commodities" | "Indices";
-const MKT_TABS: MktTab[] = ["Watchlist", "Crypto", "Forex", "Metals", "Commodities", "Indices"];
-
-const MKT_CONTRACT_LABELS: Record<string, string> = {
-  perpetual_futures: "Perp",
-  forex:             "FX",
-  index:             "Index",
-  commodity:         "Cmdty",
-  metal:             "Metal",
-  crypto:            "Perp",
-  indices:           "Index",
-  commodities:       "Cmdty",
-};
-
-function fmtMktPrice(price: number | undefined): string {
-  if (!price) return "—";
-  if (price >= 10000) return price.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-  if (price >= 100)   return price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1)     return price.toLocaleString("en-US", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
-  return price.toLocaleString("en-US", { minimumFractionDigits: 5, maximumFractionDigits: 5 });
-}
-
-interface MktSymbolInfo {
-  symbol: string;
-  name: string;
-  contractType: string;
-}
-
-const MktRow = memo(function MktRow({
-  symbol, name, contractType, isFavorite, onStar, onTap,
-}: {
-  symbol: string;
-  name: string;
-  contractType: string;
-  isFavorite: boolean;
-  onStar: () => void;
-  onTap: () => void;
-}) {
-  const tick      = useSymbolTick(symbol);
-  const price     = tick?.price;
-  const changePct = tick?.changePct ?? 0;
-  const isUp      = changePct >= 0;
-  const tag       = MKT_CONTRACT_LABELS[contractType] ?? contractType;
-
-  // Optimistic star visual — fills at pointer-down, zero latency
-  const [visualFav, setVisualFav] = useState(isFavorite);
-  useEffect(() => { setVisualFav(isFavorite); }, [isFavorite]);
-
-  const handleStarDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setVisualFav(v => !v);
-    onStar();
-  }, [onStar]);
-
-  return (
-    <div
-      onClick={e => { if ((e.target as HTMLElement).closest("button")) return; onTap(); }}
-      style={{
-        display: "flex", alignItems: "center",
-        padding: "10px 14px",
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
-        gap: 9, minHeight: 58, cursor: "pointer",
-      }}
-    >
-      {/* Star — fires on pointer-down for instant response */}
-      <button
-        onPointerDown={handleStarDown}
-        style={{
-          background: "none", border: "none", cursor: "pointer",
-          padding: "6px 4px", flexShrink: 0, lineHeight: 0,
-          touchAction: "manipulation",
-        }}
-      >
-        <Star
-          size={15}
-          fill={visualFav ? "#f59e0b" : "rgba(148,163,184,0.15)"}
-          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.35)"}
-          strokeWidth={1.8}
-          style={{ transition: "fill 0.08s, color 0.08s" }}
-        />
-      </button>
-
-      {/* Symbol + name */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ color: "#fff", fontWeight: 700, fontSize: 13, letterSpacing: "0.01em" }}>{symbol}</span>
-          <span style={{
-            fontSize: 9, fontWeight: 600, color: "#94a3b8",
-            background: "rgba(148,163,184,0.10)", border: "1px solid rgba(148,163,184,0.16)",
-            borderRadius: 4, padding: "1px 4px", letterSpacing: "0.03em", flexShrink: 0,
-          }}>
-            {tag}
-          </span>
-        </div>
-        <div style={{ color: "rgba(148,163,184,0.45)", fontSize: 10.5, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {name}
-        </div>
-      </div>
-
-      {/* Price */}
-      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 72 }}>
-        <div style={{ color: price ? "#fff" : "rgba(148,163,184,0.3)", fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums" }}>
-          {price ? `$${fmtMktPrice(price)}` : "—"}
-        </div>
-      </div>
-
-      {/* Change badge */}
-      <div style={{
-        minWidth: 56, padding: "4px 6px", borderRadius: 6,
-        textAlign: "center", fontSize: 11.5, fontWeight: 700,
-        fontVariantNumeric: "tabular-nums", flexShrink: 0,
-        background: tick ? (isUp ? "rgba(16,185,129,0.14)" : "rgba(239,68,68,0.14)") : "rgba(148,163,184,0.07)",
-        color: tick ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.3)",
-        border: tick
-          ? (isUp ? "1px solid rgba(16,185,129,0.22)" : "1px solid rgba(239,68,68,0.22)")
-          : "1px solid rgba(148,163,184,0.1)",
-      }}>
-        {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
-      </div>
-    </div>
-  );
-});
-
-function MarketWatchlistSheet({
-  onSelect, onClose, activeSymbol,
-}: {
-  onSelect: (symbol: string) => void;
-  onClose: () => void;
-  activeSymbol: string;
-}) {
-  const [activeTab, setActiveTab]           = useState<MktTab>("Watchlist");
-  const [search, setSearch]                 = useState("");
-  const [deltaSymbols, setDeltaSymbols]     = useState<MktSymbolInfo[]>([]);
-  const [loadingBroker, setLoadingBroker]   = useState(false);
-
-  const { items: wlItems, addSymbol, toggleFavorite } = useBrokerWatchlistStore();
-
-  const watchMap = useRef(new Map<string, typeof wlItems[0]>());
-  useEffect(() => {
-    const m = new Map<string, typeof wlItems[0]>();
-    wlItems.forEach(i => m.set(i.symbol, i));
-    watchMap.current = m;
-  }, [wlItems]);
-
-  useEffect(() => {
-    setLoadingBroker(true);
-    fetch(`${BASE}/api/symbols?broker=delta`).then(r => r.json())
-      .then(d => {
-        setDeltaSymbols((d as { symbols: MktSymbolInfo[] }).symbols ?? []);
-      })
-      .catch(() => {})
-      .finally(() => setLoadingBroker(false));
-  }, []);
-
-  const handleStar = useCallback((symbol: string) => {
-    const item = watchMap.current.get(symbol);
-    if (item) toggleFavorite(item.id, item.isFavorite);
-    else addSymbol(symbol, true);
-  }, [addSymbol, toggleFavorite]);
-
-  // Stable per-symbol callback cache so MktRow.memo works correctly
-  const starCbCache = useRef(new Map<string, () => void>());
-  const tapCbCache  = useRef(new Map<string, () => void>());
-
-  const prevHandleStar = useRef(handleStar);
-  const prevOnSelect   = useRef(onSelect);
-  if (prevHandleStar.current !== handleStar || prevOnSelect.current !== onSelect) {
-    prevHandleStar.current = handleStar;
-    prevOnSelect.current   = onSelect;
-    starCbCache.current.clear();
-    tapCbCache.current.clear();
-  }
-
-  const getStarCb = useCallback((symbol: string) => {
-    if (!starCbCache.current.has(symbol)) {
-      starCbCache.current.set(symbol, () => handleStar(symbol));
-    }
-    return starCbCache.current.get(symbol)!;
-  }, [handleStar]);
-
-  const getTapCb = useCallback((symbol: string) => {
-    if (!tapCbCache.current.has(symbol)) {
-      tapCbCache.current.set(symbol, () => { onSelect(symbol); onClose(); });
-    }
-    return tapCbCache.current.get(symbol)!;
-  }, [onSelect, onClose]);
-
-  const rows = useMemo((): MktSymbolInfo[] => {
-    let r: MktSymbolInfo[];
-    if (activeTab === "Watchlist") {
-      r = wlItems
-        .filter(i => i.isFavorite)
-        .map(i => ({ symbol: i.symbol, name: i.label, contractType: SYMBOL_CATALOG[i.symbol]?.market?.toLowerCase() ?? "other" }));
-    } else if (activeTab === "Crypto") {
-      r = deltaSymbols;
-    } else if (activeTab === "Forex") {
-      r = REGISTRY_FOREX;
-    } else if (activeTab === "Metals") {
-      r = REGISTRY_METALS;
-    } else if (activeTab === "Commodities") {
-      r = REGISTRY_COMMODITIES;
-    } else {
-      r = REGISTRY_INDICES;
-    }
-    if (search.trim()) {
-      const q = search.trim().toUpperCase();
-      r = r.filter(row => row.symbol.toUpperCase().includes(q) || row.name.toUpperCase().includes(q));
-    }
-    return r;
-  }, [activeTab, search, wlItems, deltaSymbols]);
-
-  // ── Reuse the exact BottomSheet used by Drawing Tools ──────────────────────
-  // Tabs + search + column headers are sticky inside the BottomSheet's scroll
-  // area so they pin at the top while the symbol list scrolls in FULL state.
-  return (
-    <BottomSheet title="Market" onClose={onClose}>
-      {/* ── Sticky header block: pinned to top of scroll area in FULL state ── */}
-      <div style={{
-        position: "sticky", top: 0, zIndex: 2,
-        background: SHEET_BG,
-      }}>
-        {/* Search bar — always visible */}
-        <div style={{ padding: "4px 12px 2px" }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.10)",
-            borderRadius: 10, padding: "7px 12px",
-          }}>
-            <Search size={13} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder={`Search ${activeTab === "Watchlist" ? "symbols" : activeTab}…`}
-              style={{
-                flex: 1, background: "none", border: "none", outline: "none",
-                color: "#fff", fontSize: 13, caretColor: "#f59e0b", minWidth: 0,
-              }}
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)", flexShrink: 0 }}
-              >
-                <X size={13} />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {/* Tab bar */}
-        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "0 6px" } as React.CSSProperties}>
-          {MKT_TABS.map(tab => {
-            const active = tab === activeTab;
-            return (
-              <button
-                key={tab}
-                onClick={() => { setActiveTab(tab); setSearch(""); }}
-                style={{
-                  flexShrink: 0, padding: "9px 13px 10px", border: "none",
-                  background: "transparent", cursor: "pointer",
-                  fontSize: 13, fontWeight: active ? 700 : 400,
-                  color: active ? "#f59e0b" : "rgba(148,163,184,0.50)",
-                  position: "relative", transition: "color 0.15s", whiteSpace: "nowrap",
-                }}
-              >
-                {tab}
-                {active && (
-                  <div style={{
-                    position: "absolute", bottom: 0,
-                    left: "16%", right: "16%",
-                    height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b",
-                  }} />
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Column headers */}
-        <div style={{
-          display: "flex", alignItems: "center",
-          padding: "4px 14px 5px",
-          background: "rgba(255,255,255,0.02)",
-          borderTop: "1px solid rgba(255,255,255,0.06)",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}>
-          <div style={{ width: 24, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Contract</div>
-          <div style={{ minWidth: 76, textAlign: "right", fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>Price</div>
-          <div style={{ minWidth: 64, textAlign: "center", marginLeft: 8, fontSize: 10.5, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>24h Chg.</div>
-        </div>
-      </div>
-
-      {/* ── Symbol list — lives directly in BottomSheet's managed scroll area ── */}
-      {loadingBroker && (
-        <div style={{ display: "flex", justifyContent: "center", alignItems: "center", padding: "36px 0", gap: 8, color: "rgba(148,163,184,0.45)" }}>
-          <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
-          <span style={{ fontSize: 13 }}>Loading…</span>
-          <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}`}</style>
-        </div>
-      )}
-
-      {!loadingBroker && rows.length === 0 && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "52px 24px", color: "rgba(148,163,184,0.35)", gap: 10 }}>
-          <TrendingUp size={30} strokeWidth={1} />
-          <p style={{ fontSize: 13.5, margin: 0 }}>
-            {activeTab === "Watchlist" ? "No favourites yet" : `No ${activeTab} symbols found`}
-          </p>
-          {activeTab === "Watchlist" && (
-            <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.25)", textAlign: "center" }}>
-              Tap ★ on any symbol to add it here
-            </p>
-          )}
-        </div>
-      )}
-
-      {!loadingBroker && rows.map(row => {
-        const wItem      = watchMap.current.get(row.symbol);
-        const isFavorite = wItem?.isFavorite ?? false;
-        return (
-          <MktRow
-            key={row.symbol}
-            symbol={row.symbol}
-            name={row.name}
-            contractType={row.contractType}
-            isFavorite={isFavorite}
-            onStar={getStarCb(row.symbol)}
-            onTap={getTapCb(row.symbol)}
-          />
-        );
-      })}
-
-      <div style={{ height: 20 }} />
-    </BottomSheet>
-  );
-}
-
 // ── MiniWatchlistPopup ─────────────────────────────────────────────────────
 function MiniWatchlistPopup({
   items, activeSymbol, anchorRect, onSelect, onClose,
@@ -3286,14 +2943,14 @@ const MiniControlBar = memo(function MiniControlBar({
         </div>{/* /tj-ctrl-bar-inner */}
       </div>{/* /tj-ctrl-bar-glow */}
 
-      {/* Market watchlist sheet */}
-      {showMarketSheet && (
-        <MarketWatchlistSheet
-          activeSymbol={activeKey}
-          onSelect={handleSheetSelect}
-          onClose={() => setShowMarketSheet(false)}
-        />
-      )}
+      {/* Market / symbol picker sheet */}
+      <SharedMarketSelector
+        mode="sheet"
+        visible={showMarketSheet}
+        activeSymbol={activeKey}
+        onSelect={handleSheetSelect}
+        onClose={() => setShowMarketSheet(false)}
+      />
     </div>
   );
 });
@@ -3382,7 +3039,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showMoreSheet,     setShowMoreSheet]     = useState(false);
   const [showObjectTree,    setShowObjectTree]    = useState(false);
   const [showWatchlist,     setShowWatchlist]     = useState(false);
-  const [showSymbolPicker,  setShowSymbolPicker]  = useState(false);
   const [isFullscreen,      setIsFullscreen]      = useState(false);
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
@@ -3713,12 +3369,6 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {showSettings    && <ChartSettingsSheet settings={chartSettings} onChange={handleSettings} onSaveAsDefault={handleSaveAsDefault} onClose={handleCloseSettings} />}
       {showAlertCenter && <AlertSheet onClose={() => setShowAlertCenter(false)} />}
 
-      <SymbolPickerSheet
-        visible={showSymbolPicker}
-        activeSymbol={activeSlotSymbol}
-        onClose={() => setShowSymbolPicker(false)}
-        onSelect={handleSelectSymbol}
-      />
 
       {(showQuickAlert || alertDrawing !== null) && (
         <DrawingAlertModal
