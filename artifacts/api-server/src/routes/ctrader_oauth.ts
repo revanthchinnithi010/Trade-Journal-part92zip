@@ -598,10 +598,10 @@ export function createCtraderOAuthRouter(): Router {
 
       logger.info(
         {
-          http_status:   httpStatus,
-          body_length:   body.length,
+          http_status:      httpStatus,
+          body_length:      body.length,
           response_headers: responseHeaders,
-          body_preview:  body.slice(0, 600),
+          body_preview:     body.slice(0, 800),
         },
         "ctrader/accounts: Spotware REST response received",
       );
@@ -610,14 +610,110 @@ export function createCtraderOAuthRouter(): Router {
       try { parsed = JSON.parse(body); } catch { /* keep null */ }
 
       const ok = accountRes?.ok ?? false;
+
+      // ── Normalise Spotware envelope ──────────────────────────────────────
+      // Spotware returns { "data": [ { accountId, live, accountNumber, ... } ] }
+      // NOT a flat array. Unwrap and remap to our internal CtraderAccount shape.
+      type SpotwareAccount = {
+        accountId?: number;
+        accountNumber?: number;
+        live?: boolean;
+        brokerName?: string;
+        brokerTitle?: string;
+        depositCurrency?: string;
+        balance?: number;
+        leverage?: number;
+        leverageInCents?: number;
+        traderAccountType?: string;
+        accountStatus?: string;
+        deleted?: boolean;
+        moneyDigits?: number;
+        swapFree?: boolean;
+        traderRegistrationTimestamp?: number;
+      };
+
+      let rawList: SpotwareAccount[] = [];
+      if (ok && parsed !== null && typeof parsed === "object") {
+        const p = parsed as Record<string, unknown>;
+        // Shape A: { data: [...] }
+        if (Array.isArray(p["data"])) {
+          rawList = p["data"] as SpotwareAccount[];
+        // Shape B: flat array
+        } else if (Array.isArray(parsed)) {
+          rawList = parsed as SpotwareAccount[];
+        // Shape C: { accounts: [...] }
+        } else if (Array.isArray(p["accounts"])) {
+          rawList = p["accounts"] as SpotwareAccount[];
+        }
+      }
+
+      // Filter deleted accounts, then map to internal shape
+      const accounts = rawList
+        .filter(a => !a.deleted)
+        .map(a => ({
+          ctidTraderAccountId: a.accountId ?? 0,
+          traderLogin:         a.accountNumber ?? null,
+          isLive:              a.live ?? false,
+          brokerName:          a.brokerName ?? null,
+          brokerTitle:         a.brokerTitle ?? null,
+          depositCurrency:     a.depositCurrency ?? null,
+          balance:             a.balance ?? 0,
+          leverage:            a.leverage ?? (a.leverageInCents ? a.leverageInCents / 100 : null),
+          accountType:         a.traderAccountType ?? null,
+          accountStatus:       a.accountStatus ?? null,
+          swapFree:            a.swapFree ?? false,
+          moneyDigits:         a.moneyDigits ?? 2,
+        }));
+
+      const liveCount = accounts.filter(a => a.isLive).length;
+      const demoCount = accounts.filter(a => !a.isLive).length;
+
+      logger.info(
+        {
+          total_raw:     rawList.length,
+          after_filter:  accounts.length,
+          live_count:    liveCount,
+          demo_count:    demoCount,
+          account_ids:   accounts.map(a => a.ctidTraderAccountId),
+          account_logins: accounts.map(a => a.traderLogin),
+          parsed_shape:  ok ? (
+            Array.isArray(parsed)           ? "flat_array" :
+            parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string,unknown>)["data"])
+              ? "data_envelope" : "unknown"
+          ) : "n/a",
+        },
+        accounts.length === 0
+          ? "ctrader/accounts: ⚠️  0 accounts returned — no trading accounts linked to this OAuth token"
+          : `ctrader/accounts: ✓ ${accounts.length} account(s) normalised`,
+      );
+
+      if (ok && accounts.length === 0) {
+        logger.warn(
+          {
+            raw_body_full: body,
+            http_status:   httpStatus,
+            token_preview: tokenPreview,
+            hint:          "Possible causes: (1) OAuth scope missing trading_accounts, (2) no broker account linked to cTrader ID, (3) all accounts are deleted",
+          },
+          "ctrader/accounts: 0 accounts — returning warning to client",
+        );
+      }
+
       res.json({
         ok,
         http_status:      httpStatus,
         response_headers: responseHeaders,
-        accounts:         ok ? parsed : null,
+        accounts:         ok ? accounts : null,
+        account_count:    ok ? accounts.length : null,
+        live_count:       ok ? liveCount : null,
+        demo_count:       ok ? demoCount : null,
         raw:              body,
+        raw_list_length:  rawList.length,
         url_called:       maskedUrl,
-        note:             ok ? null : "HTTP 401/403 = token expired (re-run OAuth). HTTP 400 = wrong param. HTTP 0 = DNS/network.",
+        warning:          (ok && accounts.length === 0)
+          ? "No cTrader trading accounts found. Create or connect a broker trading account at your cTrader-enabled broker."
+          : null,
+        note: ok ? null : "HTTP 401/403 = token expired (re-run OAuth). HTTP 400 = wrong param. HTTP 0 = DNS/network.",
       });
     } catch (err: unknown) {
       const e = err as Error;
