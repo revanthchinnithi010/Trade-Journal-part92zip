@@ -119,7 +119,7 @@ const BACKDROP_STYLE: React.CSSProperties = {
 
 const STAR_BTN_STYLE: React.CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
-  padding: "8px 10px 8px 12px", flexShrink: 0, lineHeight: 0,
+  padding: "8px 8px 8px 10px", flexShrink: 0, lineHeight: 0,
   touchAction: "manipulation",
 };
 
@@ -136,7 +136,8 @@ const ROW_SYMBOL_STYLE: React.CSSProperties = {
 
 const PRICE_COL_STYLE: React.CSSProperties = {
   flexShrink: 0, display: "flex", flexDirection: "column",
-  alignItems: "flex-end", gap: 5,
+  alignItems: "flex-end", gap: 3,
+  paddingRight: 12,
 };
 
 // ── Price helpers ──────────────────────────────────────────────────────────
@@ -183,73 +184,50 @@ const PriceCell = memo(function PriceCell({
   const changeColor = isLive ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.22)";
 
   return (
-    <>
-      {hasBidAsk && (
-        <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
-          <span style={{
-            fontSize: 9, color: "rgba(52,211,153,0.70)",
-            fontVariantNumeric: "tabular-nums", fontWeight: 600,
-            background: "rgba(52,211,153,0.07)", borderRadius: 3, padding: "1px 4px",
-          }}>
-            B {formatPrice(bid!)}
-          </span>
-          <span style={{
-            fontSize: 9, color: "rgba(239,68,68,0.70)",
-            fontVariantNumeric: "tabular-nums", fontWeight: 600,
-            background: "rgba(239,68,68,0.07)", borderRadius: 3, padding: "1px 4px",
-          }}>
-            A {formatPrice(ask!)}
-          </span>
-          {!!spread && spread > 0 && !!price && (
-            <span style={{ fontSize: 9, color: "rgba(148,163,184,0.28)", fontVariantNumeric: "tabular-nums" }}>
-              {formatSpread(spread, price)}
-            </span>
-          )}
-        </div>
-      )}
-
-      <div style={PRICE_COL_STYLE}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          {isLive && (
-            <div style={{
-              width: 5, height: 5, borderRadius: "50%",
-              background: "#10b981", boxShadow: "0 0 5px #10b981", flexShrink: 0,
-              animation: "mktPulse 2.4s ease-in-out infinite",
-            }} />
-          )}
-          <span style={{
-            color: price ? "#ddeedd" : "rgba(148,163,184,0.2)",
-            fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums",
-            letterSpacing: "-0.01em", minWidth: 64, textAlign: "right",
-          }}>
-            {price ? formatPrice(price) : "—"}
-          </span>
-        </div>
-        <div style={{
-          display: "flex", alignItems: "center", gap: 2,
-          padding: "3px 6px", borderRadius: 6,
-          background: isLive
-            ? (isUp ? "rgba(16,185,129,0.11)" : "rgba(239,68,68,0.11)")
-            : "rgba(148,163,184,0.05)",
-          border: `1px solid ${isLive
-            ? (isUp ? "rgba(16,185,129,0.20)" : "rgba(239,68,68,0.20)")
-            : "rgba(148,163,184,0.08)"}`,
-          minWidth: 58, justifyContent: "center",
+    <div style={PRICE_COL_STYLE}>
+      {/* Price row with live dot */}
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        {isLive && (
+          <div style={{
+            width: 4, height: 4, borderRadius: "50%",
+            background: "#10b981", boxShadow: "0 0 4px #10b981", flexShrink: 0,
+            animation: "mktPulse 2.4s ease-in-out infinite",
+          }} />
+        )}
+        <span style={{
+          color: price ? "#ddeedd" : "rgba(148,163,184,0.2)",
+          fontWeight: 600, fontSize: 13, fontVariantNumeric: "tabular-nums",
+          letterSpacing: "-0.01em", minWidth: 60, textAlign: "right",
         }}>
-          {isLive && (
-            isUp
-              ? <ArrowUp size={9} color="#10b981" strokeWidth={2.5} />
-              : <ArrowDown size={9} color="#ef4444" strokeWidth={2.5} />
-          )}
-          <span style={{
-            fontSize: 11.5, fontWeight: 700, fontVariantNumeric: "tabular-nums",
-            color: changeColor, letterSpacing: "0.01em",
-          }}>
-            {isLive ? `${Math.abs(changePct).toFixed(2)}%` : "—"}
-          </span>
-        </div>
+          {price ? formatPrice(price) : "—"}
+        </span>
       </div>
-    </>
+
+      {/* % change pill */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 2,
+        padding: "2px 5px", borderRadius: 5,
+        background: isLive
+          ? (isUp ? "rgba(16,185,129,0.11)" : "rgba(239,68,68,0.11)")
+          : "rgba(148,163,184,0.05)",
+        border: `1px solid ${isLive
+          ? (isUp ? "rgba(16,185,129,0.20)" : "rgba(239,68,68,0.20)")
+          : "rgba(148,163,184,0.08)"}`,
+        minWidth: 52, justifyContent: "center",
+      }}>
+        {isLive && (
+          isUp
+            ? <ArrowUp size={8} color="#10b981" strokeWidth={2.5} />
+            : <ArrowDown size={8} color="#ef4444" strokeWidth={2.5} />
+        )}
+        <span style={{
+          fontSize: 11, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+          color: changeColor, letterSpacing: "0.01em",
+        }}>
+          {isLive ? `${Math.abs(changePct).toFixed(2)}%` : "—"}
+        </span>
+      </div>
+    </div>
   );
 });
 
@@ -302,9 +280,9 @@ export const SymbolRow = memo(function SymbolRow({
     <div
       style={{
         display: "flex", alignItems: "center",
-        padding: "11px 12px 11px 0",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
-        gap: 0, minHeight: 58,
+        padding: "8px 0 8px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.035)",
+        minHeight: 52,
         cursor: onTap ? "pointer" : "default",
         borderLeft: isActive ? "2.5px solid #f59e0b" : "2.5px solid transparent",
         background: isActive
@@ -313,13 +291,14 @@ export const SymbolRow = memo(function SymbolRow({
         position: "relative",
         // Browser skips layout + paint for rows scrolled off-screen
         contentVisibility: "auto",
-        containIntrinsicSize: "0 58px",
+        containIntrinsicSize: "0 52px",
       }}
       onClick={onTap ? handleClick : undefined}
     >
+      {/* Star button — kept wide enough for 44px touch target */}
       <button onPointerDown={handleStarDown} style={STAR_BTN_STYLE}>
         <Star
-          size={15}
+          size={14}
           fill={visualFav ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.15)" : "none"}
           color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.28)"}
           strokeWidth={1.8}
@@ -327,23 +306,24 @@ export const SymbolRow = memo(function SymbolRow({
         />
       </button>
 
+      {/* Left: symbol name + subtitle — takes remaining width */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
           <span style={ROW_SYMBOL_STYLE}>{symbol}</span>
           <span style={{
-            fontSize: 8.5, fontWeight: 700, color: meta.color,
+            fontSize: 8, fontWeight: 700, color: meta.color,
             background: `${meta.color}16`, border: `1px solid ${meta.color}28`,
-            borderRadius: 4, padding: "1.5px 4px",
+            borderRadius: 3, padding: "1px 3px",
             letterSpacing: "0.06em", flexShrink: 0, lineHeight: 1.4,
           }}>
             {meta.badge}
           </span>
         </div>
         <div style={ROW_NAME_STYLE}>{name}</div>
-
-        {/* PriceCell — tick-isolated subtree */}
-        <PriceCell symbol={symbol} broker={broker} />
       </div>
+
+      {/* Right: price + % change — tick-isolated subtree */}
+      <PriceCell symbol={symbol} broker={broker} />
     </div>
   );
 });
@@ -392,12 +372,12 @@ const CategorySection = memo(function CategorySection({
         onClick={handleToggle}
         style={{
           width: "100%", display: "flex", alignItems: "center",
-          padding: "8px 12px 8px 14px", gap: 8,
+          padding: "6px 12px 6px 12px", gap: 8,
           background: "rgba(255,255,255,0.015)",
           borderLeft: `2.5px solid ${meta.color}`,
           border: "none",
-          borderBottom: "1px solid rgba(255,255,255,0.05)",
-          borderTop: "1px solid rgba(255,255,255,0.05)",
+          borderBottom: "1px solid rgba(255,255,255,0.04)",
+          borderTop: "1px solid rgba(255,255,255,0.04)",
           cursor: "pointer", touchAction: "manipulation",
         }}
       >
