@@ -820,82 +820,6 @@ function OHLCVBar({ symbol }: { symbol: string }) {
   );
 }
 
-// ── Sync Diagnostics overlay — confirms chartStore is the single source of truth ──
-// Collapsed by default: shows a small ⚡ pill. Click to expand.
-// Always visible so mismatches surface immediately during QA.
-function SyncDiagnostics() {
-  const [open, setOpen] = useState(false);
-  const storeSymbol   = useChartStore(s => s.symbol);
-  const storeInterval = useChartStore(s => s.interval);
-  const lsSymbol   = localStorage.getItem("tv_symbol")   ?? "(none)";
-  const lsInterval = localStorage.getItem("tv_interval") ?? "(none)";
-  const symbolOk   = storeSymbol   === lsSymbol;
-  const intervalOk = storeInterval === lsInterval;
-  const allOk = symbolOk && intervalOk;
-  const dot = allOk ? "#B7FF5A" : "#ef4444";
-
-  return (
-    <div style={{ position: "absolute", bottom: 48, right: 8, zIndex: 99 }}>
-      {/* Collapsed pill */}
-      {!open && (
-        <button
-          onClick={() => setOpen(true)}
-          title="Sync diagnostics"
-          style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "2px 7px", borderRadius: 20,
-            background: "rgba(0,0,0,0.72)",
-            border: `1px solid ${dot}44`,
-            cursor: "pointer", fontSize: 9, fontFamily: "monospace",
-            color: dot, fontWeight: 800,
-          }}
-        >
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: dot, flexShrink: 0 }} />
-          {allOk ? "SYNC ✓" : "MISMATCH ✗"}
-        </button>
-      )}
-
-      {/* Expanded panel */}
-      {open && (
-        <div style={{
-          background: "rgba(0,0,0,0.88)",
-          backdropFilter: "blur(8px)",
-          border: `1px solid ${allOk ? "rgba(183,255,90,0.35)" : "rgba(239,68,68,0.45)"}`,
-          borderRadius: 8,
-          padding: "6px 10px",
-          fontSize: 10,
-          fontFamily: "monospace",
-          color: "#ddd",
-          display: "flex", flexDirection: "column", gap: 2,
-          minWidth: 190,
-          cursor: "pointer",
-        }} onClick={() => setOpen(false)}>
-          <div style={{ fontWeight: 800, color: dot, marginBottom: 2, fontSize: 9, display: "flex", justifyContent: "space-between" }}>
-            <span>{allOk ? "✓ STORE IN SYNC" : "✗ STORE MISMATCH"}</span>
-            <span style={{ color: "rgba(255,255,255,0.35)", fontWeight: 400 }}>(click to collapse)</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ color: "rgba(255,255,255,0.45)" }}>store symbol</span>
-            <span style={{ color: symbolOk ? "#B7FF5A" : "#ef4444" }}>{storeSymbol}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS symbol</span>
-            <span style={{ color: symbolOk ? "rgba(255,255,255,0.6)" : "#ef4444" }}>{lsSymbol}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ color: "rgba(255,255,255,0.45)" }}>store interval</span>
-            <span style={{ color: intervalOk ? "#B7FF5A" : "#ef4444" }}>{storeInterval}</span>
-          </div>
-          <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-            <span style={{ color: "rgba(255,255,255,0.45)" }}>LS interval</span>
-            <span style={{ color: intervalOk ? "rgba(255,255,255,0.6)" : "#ef4444" }}>{lsInterval}</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Snapshot Preview Popup ────────────────────────────────────────────────────
 function SnapshotPreviewPopup({ url, filename, onClose }: {
   url: string; filename: string; onClose: () => void;
@@ -1890,8 +1814,6 @@ export default function Charts() {
             {/* ── Feed diagnostics overlay (bottom-left corner) ── */}
             {layoutCount === 1 && <FeedDiagnostics symbol={activeKey} />}
 
-            {/* ── Sync diagnostics (bottom-right) — shows chartStore values to confirm single-source sync ── */}
-            {layoutCount === 1 && <SyncDiagnostics />}
 
             {/* ── Floating symbol info overlay — glassmorphism panel above candles ── */}
             {layoutCount === 1 && (
