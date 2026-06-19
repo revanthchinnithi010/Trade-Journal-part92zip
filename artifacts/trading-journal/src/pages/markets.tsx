@@ -4,7 +4,7 @@ import {
 } from "react";
 import {
   Star, TrendingUp, Search, X, ChevronDown, ChevronRight,
-  RefreshCw, Wifi, AlertCircle,
+  RefreshCw, Wifi, AlertCircle, ArrowUp, ArrowDown,
 } from "lucide-react";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
@@ -128,12 +128,11 @@ const SymbolRow = memo(function SymbolRow({
   const tick      = useSymbolTick(symbol);
   const cSpot     = useCtraderSpot(symbol);
 
-  // Unified price display: tickStore has price for both Delta+cTrader (after our handleTick fix)
   const price     = tick?.price;
   const changePct = tick?.changePct ?? 0;
   const isUp      = changePct >= 0;
+  const isLive    = !!tick;
 
-  // Bid/ask: tickStore has them from both Delta v2/ticker and ctrader_tick
   const bid    = tick?.bid    ?? (broker === "ctrader" ? cSpot?.bid    : undefined);
   const ask    = tick?.ask    ?? (broker === "ctrader" ? cSpot?.ask    : undefined);
   const spread = tick?.spread ?? (broker === "ctrader" ? cSpot?.spread : undefined);
@@ -153,60 +152,90 @@ const SymbolRow = memo(function SymbolRow({
     onStarPress(tapAt);
   }, [symbol, onStarPress]);
 
+  const changeColor = isLive ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.22)";
+
   return (
     <div
       style={{
         display: "flex", alignItems: "center",
-        padding: "9px 14px 9px 10px",
-        borderBottom: "1px solid rgba(255,255,255,0.035)",
-        gap: 8, minHeight: hasBidAsk ? 64 : 56,
+        padding: hasBidAsk ? "10px 12px 10px 0" : "11px 12px 11px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        gap: 0, minHeight: hasBidAsk ? 68 : 58,
         cursor: onTap ? "pointer" : "default",
         borderLeft: isActive ? "2.5px solid #f59e0b" : "2.5px solid transparent",
-        background: isActive ? "rgba(245,158,11,0.04)" : undefined,
-        transition: "border-left-color 0.15s, background 0.15s",
+        background: isActive
+          ? "linear-gradient(90deg, rgba(245,158,11,0.06) 0%, transparent 60%)"
+          : undefined,
+        position: "relative",
       }}
       onClick={onTap ? (e) => { if ((e.target as HTMLElement).closest("button")) return; onTap(); } : undefined}
     >
+      {/* Star button */}
       <button
         onPointerDown={handleStarDown}
-        style={{ background: "none", border: "none", cursor: "pointer", padding: "6px 4px", flexShrink: 0, lineHeight: 0, touchAction: "manipulation" }}
+        style={{
+          background: "none", border: "none", cursor: "pointer",
+          padding: "8px 10px 8px 12px", flexShrink: 0, lineHeight: 0,
+          touchAction: "manipulation",
+        }}
       >
         <Star
-          size={16}
-          fill={visualFav ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.2)" : "none"}
-          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.38)"}
+          size={15}
+          fill={visualFav ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.15)" : "none"}
+          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.28)"}
           strokeWidth={1.8}
-          style={{ transition: "fill 0.08s" }}
+          style={{ transition: "fill 0.08s, color 0.08s" }}
         />
       </button>
 
+      {/* Symbol + name */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ color: "#fff", fontWeight: 700, fontSize: 13, letterSpacing: "0.01em" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+          <span style={{
+            color: "#e8f0ed", fontWeight: 700, fontSize: 13.5,
+            letterSpacing: "0.025em", lineHeight: 1,
+          }}>
             {symbol}
           </span>
           <span style={{
-            fontSize: 9, fontWeight: 600, color: meta.color,
-            background: `${meta.color}18`,
-            border: `1px solid ${meta.color}30`,
-            borderRadius: 3, padding: "1px 4px", letterSpacing: "0.04em", flexShrink: 0,
+            fontSize: 8.5, fontWeight: 700,
+            color: meta.color,
+            background: `${meta.color}16`,
+            border: `1px solid ${meta.color}28`,
+            borderRadius: 4, padding: "1.5px 4px",
+            letterSpacing: "0.06em", flexShrink: 0,
+            lineHeight: 1.4,
           }}>
             {meta.badge}
           </span>
         </div>
-        <div style={{ color: "rgba(148,163,184,0.4)", fontSize: 10.5, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        <div style={{
+          color: "rgba(148,163,184,0.38)", fontSize: 10.5, lineHeight: 1,
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          maxWidth: "calc(100% - 8px)",
+        }}>
           {name}
         </div>
         {hasBidAsk && (
-          <div style={{ display: "flex", gap: 6, marginTop: 2.5 }}>
-            <span style={{ fontSize: 9.5, color: "rgba(52,211,153,0.75)", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+          <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
+            <span style={{
+              fontSize: 9, color: "rgba(52,211,153,0.70)",
+              fontVariantNumeric: "tabular-nums", fontWeight: 600,
+              background: "rgba(52,211,153,0.07)", borderRadius: 3,
+              padding: "1px 4px",
+            }}>
               B {formatPrice(bid!)}
             </span>
-            <span style={{ fontSize: 9.5, color: "rgba(239,68,68,0.75)", fontVariantNumeric: "tabular-nums", fontWeight: 600 }}>
+            <span style={{
+              fontSize: 9, color: "rgba(239,68,68,0.70)",
+              fontVariantNumeric: "tabular-nums", fontWeight: 600,
+              background: "rgba(239,68,68,0.07)", borderRadius: 3,
+              padding: "1px 4px",
+            }}>
               A {formatPrice(ask!)}
             </span>
             {!!spread && spread > 0 && !!price && (
-              <span style={{ fontSize: 9.5, color: "rgba(148,163,184,0.35)", fontVariantNumeric: "tabular-nums" }}>
+              <span style={{ fontSize: 9, color: "rgba(148,163,184,0.28)", fontVariantNumeric: "tabular-nums" }}>
                 {formatSpread(spread, price)}
               </span>
             )}
@@ -214,20 +243,54 @@ const SymbolRow = memo(function SymbolRow({
         )}
       </div>
 
-      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 70 }}>
-        <div style={{ color: price ? "#fff" : "rgba(148,163,184,0.25)", fontWeight: 600, fontSize: 12.5, fontVariantNumeric: "tabular-nums" }}>
-          {price ? formatPrice(price) : "—"}
+      {/* Price + change */}
+      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+        {/* Price with live dot */}
+        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+          {isLive && (
+            <div style={{
+              width: 5, height: 5, borderRadius: "50%",
+              background: "#10b981",
+              boxShadow: "0 0 5px #10b981",
+              flexShrink: 0,
+              animation: "mktPulse 2.4s ease-in-out infinite",
+            }} />
+          )}
+          <span style={{
+            color: price ? "#ddeedd" : "rgba(148,163,184,0.2)",
+            fontWeight: 600, fontSize: 13,
+            fontVariantNumeric: "tabular-nums",
+            letterSpacing: "-0.01em",
+            minWidth: 64, textAlign: "right",
+          }}>
+            {price ? formatPrice(price) : "—"}
+          </span>
         </div>
-      </div>
 
-      <div style={{
-        minWidth: 60, padding: "3px 5px", borderRadius: 6, textAlign: "center", flexShrink: 0,
-        background: tick ? (isUp ? "rgba(16,185,129,0.12)" : "rgba(239,68,68,0.12)") : "rgba(148,163,184,0.05)",
-        color: tick ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.25)",
-        border: tick ? (isUp ? "1px solid rgba(16,185,129,0.18)" : "1px solid rgba(239,68,68,0.18)") : "1px solid rgba(148,163,184,0.08)",
-      }}>
-        <div style={{ fontSize: 11.5, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>
-          {tick ? `${isUp ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+        {/* Change badge */}
+        <div style={{
+          display: "flex", alignItems: "center", gap: 2,
+          padding: "3px 6px", borderRadius: 6,
+          background: isLive
+            ? (isUp ? "rgba(16,185,129,0.11)" : "rgba(239,68,68,0.11)")
+            : "rgba(148,163,184,0.05)",
+          border: `1px solid ${isLive ? (isUp ? "rgba(16,185,129,0.20)" : "rgba(239,68,68,0.20)") : "rgba(148,163,184,0.08)"}`,
+          minWidth: 58,
+          justifyContent: "center",
+        }}>
+          {isLive && (
+            isUp
+              ? <ArrowUp size={9} color="#10b981" strokeWidth={2.5} />
+              : <ArrowDown size={9} color="#ef4444" strokeWidth={2.5} />
+          )}
+          <span style={{
+            fontSize: 11.5, fontWeight: 700,
+            fontVariantNumeric: "tabular-nums",
+            color: changeColor,
+            letterSpacing: "0.01em",
+          }}>
+            {isLive ? `${Math.abs(changePct).toFixed(2)}%` : "—"}
+          </span>
         </div>
       </div>
     </div>
@@ -261,17 +324,43 @@ function CategorySection({
       <button
         onClick={() => setOpen(v => !v)}
         style={{
-          width: "100%", display: "flex", alignItems: "center", padding: "9px 14px", gap: 10,
-          background: "rgba(255,255,255,0.018)", border: "none",
-          borderBottom: "1px solid rgba(255,255,255,0.055)", cursor: "pointer", touchAction: "manipulation",
+          width: "100%", display: "flex", alignItems: "center",
+          padding: "8px 12px 8px 14px", gap: 8,
+          background: "rgba(255,255,255,0.015)",
+          borderLeft: `2.5px solid ${meta.color}`,
+          border: "none",
+          borderBottom: "1px solid rgba(255,255,255,0.05)",
+          borderTop: "1px solid rgba(255,255,255,0.05)",
+          cursor: "pointer", touchAction: "manipulation",
         }}
       >
-        <div style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: meta.color, boxShadow: `0 0 5px ${meta.color}66` }} />
-        <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.72)", textAlign: "left" }}>{meta.label}</span>
-        <span style={{ fontSize: 10.5, fontWeight: 600, color: "rgba(148,163,184,0.4)", background: "rgba(148,163,184,0.07)", borderRadius: 4, padding: "1px 6px", marginRight: 3 }}>
+        <div style={{
+          width: 7, height: 7, borderRadius: "50%", flexShrink: 0,
+          background: meta.color,
+          boxShadow: `0 0 6px ${meta.color}88`,
+        }} />
+        <span style={{
+          flex: 1, fontSize: 11, fontWeight: 700,
+          color: "rgba(255,255,255,0.68)",
+          textAlign: "left",
+          letterSpacing: "0.06em",
+          textTransform: "uppercase",
+        }}>
+          {meta.label}
+        </span>
+        <span style={{
+          fontSize: 10, fontWeight: 600,
+          color: meta.color,
+          background: `${meta.color}18`,
+          borderRadius: 99, padding: "1.5px 7px",
+          letterSpacing: "0.02em",
+        }}>
           {symbols.length}
         </span>
-        {open ? <ChevronDown size={13} color="rgba(148,163,184,0.4)" /> : <ChevronRight size={13} color="rgba(148,163,184,0.4)" />}
+        {open
+          ? <ChevronDown size={12} color="rgba(148,163,184,0.35)" strokeWidth={2.5} />
+          : <ChevronRight size={12} color="rgba(148,163,184,0.35)" strokeWidth={2.5} />
+        }
       </button>
 
       {open && (
@@ -299,7 +388,8 @@ function CategorySection({
               style={{
                 width: "100%", padding: "10px 16px", border: "none",
                 borderBottom: "1px solid rgba(255,255,255,0.04)",
-                background: "rgba(255,255,255,0.025)", cursor: "pointer", touchAction: "manipulation",
+                background: "rgba(255,255,255,0.02)", cursor: "pointer",
+                touchAction: "manipulation",
                 color: meta.color, fontSize: 12, fontWeight: 600,
               }}
             >
@@ -350,7 +440,6 @@ function CtraderConnectCard({
           return;
         }
 
-        // OAuth succeeded — run auto-setup
         setPhase("setup");
         setProgressMsg("Fetching account & symbols…");
         try {
@@ -378,29 +467,30 @@ function CtraderConnectCard({
 
   return (
     <div style={{
-      margin: "28px 16px", padding: "22px 18px", borderRadius: 14,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
+      margin: "24px 14px", padding: "22px 18px", borderRadius: 16,
+      background: "rgba(255,255,255,0.025)",
+      border: "1px solid rgba(255,255,255,0.07)",
       textAlign: "center",
     }}>
-      <div style={{ marginBottom: 10, opacity: 0.4 }}>
-        <Wifi size={32} color="#60a5fa" />
+      <div style={{ marginBottom: 12, opacity: 0.35 }}>
+        <Wifi size={28} color="#60a5fa" />
       </div>
-      <div style={{ fontSize: 14.5, fontWeight: 700, color: "#fff", marginBottom: 6 }}>
+      <div style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", marginBottom: 6 }}>
         Connect cTrader
       </div>
-      <div style={{ fontSize: 12, color: "rgba(148,163,184,0.5)", marginBottom: 18, lineHeight: 1.5 }}>
-        Connect your cTrader account to stream live Forex, Indices, Commodities, Stocks, and Crypto. Symbols subscribe automatically when added to watchlist.
+      <div style={{ fontSize: 12, color: "rgba(148,163,184,0.48)", marginBottom: 18, lineHeight: 1.55 }}>
+        Stream live Forex, Indices, Commodities, Stocks, and Crypto. Symbols subscribe automatically when added to watchlist.
       </div>
 
       {phase === "idle" && (
         <button
           onClick={startOAuth}
           style={{
-            padding: "10px 22px", borderRadius: 9, border: "none",
+            padding: "10px 24px", borderRadius: 10, border: "none",
             background: "linear-gradient(135deg, #3b82f6, #6366f1)",
             color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer",
             touchAction: "manipulation",
+            boxShadow: "0 4px 16px rgba(99,102,241,0.30)",
           }}
         >
           Connect cTrader
@@ -450,18 +540,58 @@ function CtraderConnectCard({
 function CtraderStatusBar() {
   const connStatus = useCtraderConnStatus();
   const isStreaming = connStatus === "streaming";
-  const color = isStreaming ? "#10b981" : connStatus === "connecting" || connStatus === "app_auth" || connStatus === "acct_auth" ? "#f59e0b" : "rgba(148,163,184,0.3)";
+  const color = isStreaming ? "#10b981"
+    : connStatus === "connecting" || connStatus === "app_auth" || connStatus === "acct_auth"
+      ? "#f59e0b"
+      : "rgba(148,163,184,0.28)";
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 14px 6px" }}>
-      <div style={{ width: 6, height: 6, borderRadius: "50%", background: color, flexShrink: 0, boxShadow: isStreaming ? `0 0 4px ${color}` : "none" }} />
-      <span style={{ fontSize: 10, color: "rgba(148,163,184,0.4)", fontWeight: 500 }}>
-        cTrader: {connStatus === "streaming" ? "live" : connStatus === "connecting" ? "connecting…" : connStatus === "app_auth" || connStatus === "acct_auth" ? "authenticating…" : connStatus === "reconnecting" ? "reconnecting…" : connStatus}
+    <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 14px 5px" }}>
+      <div style={{
+        width: 5, height: 5, borderRadius: "50%", background: color, flexShrink: 0,
+        boxShadow: isStreaming ? `0 0 5px ${color}` : "none",
+        animation: isStreaming ? "mktPulse 2.4s ease-in-out infinite" : "none",
+      }} />
+      <span style={{ fontSize: 10, color: "rgba(148,163,184,0.38)", fontWeight: 500 }}>
+        cTrader:&nbsp;
+        {connStatus === "streaming" ? "live"
+          : connStatus === "connecting" ? "connecting…"
+          : connStatus === "app_auth" || connStatus === "acct_auth" ? "authenticating…"
+          : connStatus === "reconnecting" ? "reconnecting…"
+          : connStatus}
       </span>
     </div>
   );
 }
 
+// ── Empty state ────────────────────────────────────────────────────────────
+
+function EmptyState({ icon: Icon, title, subtitle }: { icon: React.ElementType; title: string; subtitle?: string }) {
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "64px 32px", gap: 12,
+    }}>
+      <div style={{
+        width: 52, height: 52, borderRadius: 16,
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 4,
+      }}>
+        <Icon size={22} color="rgba(148,163,184,0.30)" strokeWidth={1.5} />
+      </div>
+      <p style={{ fontSize: 14, fontWeight: 600, color: "rgba(255,255,255,0.40)", margin: 0, textAlign: "center" }}>
+        {title}
+      </p>
+      {subtitle && (
+        <p style={{ fontSize: 12, color: "rgba(148,163,184,0.25)", margin: 0, textAlign: "center", lineHeight: 1.5, maxWidth: 220 }}>
+          {subtitle}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 
@@ -474,7 +604,6 @@ export default function Markets() {
   const [showDiag,  setShowDiag]  = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // ── Active chart symbol — used to highlight the currently charting row ──
   const chartSymbol = useChartStore(s => s.symbol);
 
   // ── Delta catalog ──────────────────────────────────────────────────────
@@ -589,26 +718,22 @@ export default function Markets() {
     return tapCbCache.current.get(symbol)!;
   }, [handleSymbolTap]);
 
-  // ── Merged symbol list: cTrader first, then Delta perps/futures, then SYMBOL_CATALOG fallback ──
+  // ── Merged symbol list ─────────────────────────────────────────────────
   const allMergedSymbols = useMemo<SymbolInfo[]>(() => {
     const seen = new Set<string>();
     const result: SymbolInfo[] = [];
-    // 1. cTrader — forex, index, commodity, stock, crypto
     for (const s of ctraderSymbols) {
       if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
     }
-    // 2. Delta from API — perpetuals & futures (native to Delta)
     for (const s of deltaSymbols) {
       if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
     }
-    // 3. SYMBOL_CATALOG — forex/index/commodity fallback when cTrader not connected
     for (const [sym, entry] of Object.entries(SYMBOL_CATALOG)) {
       if (entry.market === "Crypto") continue;
       if (seen.has(sym)) continue;
       seen.add(sym);
       result.push({ symbol: sym, name: entry.label, category: MARKET_TO_DELTA_CAT[entry.market] ?? "other", broker: "delta" });
     }
-    // 4. Watchlist items not yet represented
     for (const item of items) {
       if (!seen.has(item.symbol)) {
         seen.add(item.symbol);
@@ -630,7 +755,7 @@ export default function Markets() {
     return map;
   }, [allMergedSymbols]);
 
-  // ── Search across all providers ────────────────────────────────────────
+  // ── Search ─────────────────────────────────────────────────────────────
   const searchActive = search.trim().length > 0;
   const searchUpper  = search.trim().toUpperCase();
 
@@ -666,66 +791,99 @@ export default function Markets() {
     );
   }, [watchlistRows, searchActive, searchUpper]);
 
-  // ── Total counts ───────────────────────────────────────────────────────
+  // ── Totals ─────────────────────────────────────────────────────────────
   const totalMarkets = allMergedSymbols.length;
   const isLoading    = deltaLoading || ctraderLoading;
 
   return (
     <div style={{
       display: "flex", flexDirection: "column", height: "100%",
-      background: "rgb(10,12,16)", color: "#fff", overflow: "hidden",
+      background: "#090b0e", color: "#e2e8f0", overflow: "hidden",
     }}>
       {/* ── Sticky header ── */}
       <div style={{
         flexShrink: 0,
-        background: "rgba(10,12,16,0.98)",
+        background: "rgba(9,11,14,0.98)",
         backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
         position: "sticky", top: 0, zIndex: 10,
       }}>
-        {/* Tab bar */}
-        <div style={{ display: "flex", overflowX: "auto", scrollbarWidth: "none", padding: "4px 6px 0", alignItems: "flex-end" }}>
-          {TABS.map(tab => {
-            const active = tab === activeTab;
-            return (
-              <button
-                key={tab}
-                onClick={() => { setActiveTab(tab); setSearch(""); }}
-                style={{
-                  flexShrink: 0, padding: "9px 14px 10px", border: "none",
-                  background: "transparent", cursor: "pointer",
-                  fontSize: 13.5, fontWeight: active ? 700 : 400,
-                  color: active ? "#f59e0b" : "rgba(148,163,184,0.5)",
-                  position: "relative", transition: "color 0.15s", whiteSpace: "nowrap",
-                }}
-              >
-                {tab}
-                {tab === "Markets" && !active && totalMarkets > 0 && (
-                  <span style={{ marginLeft: 5, fontSize: 10, fontWeight: 600, color: "rgba(148,163,184,0.35)", background: "rgba(148,163,184,0.08)", borderRadius: 99, padding: "1px 5px" }}>
-                    {totalMarkets}
-                  </span>
-                )}
-                {active && (
-                  <div style={{ position: "absolute", bottom: 0, left: "16%", right: "16%", height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b" }} />
-                )}
-              </button>
-            );
-          })}
+        {/* Tab row + actions */}
+        <div style={{
+          display: "flex", alignItems: "center",
+          padding: "10px 12px 0",
+          gap: 8,
+        }}>
+          {/* Segment pill control */}
+          <div style={{
+            display: "flex", flex: 1,
+            background: "rgba(255,255,255,0.055)",
+            borderRadius: 10,
+            padding: 3,
+            border: "1px solid rgba(255,255,255,0.07)",
+          }}>
+            {TABS.map(tab => {
+              const active = tab === activeTab;
+              return (
+                <button
+                  key={tab}
+                  onClick={() => { setActiveTab(tab); setSearch(""); }}
+                  style={{
+                    flex: 1, padding: "7px 10px",
+                    border: "none", borderRadius: 7,
+                    cursor: "pointer", touchAction: "manipulation",
+                    fontSize: 12.5, fontWeight: active ? 700 : 500,
+                    color: active ? "#fff" : "rgba(148,163,184,0.45)",
+                    background: active ? "rgba(245,158,11,0.18)" : "transparent",
+                    boxShadow: active ? "0 0 0 1px rgba(245,158,11,0.28)" : "none",
+                    transition: "all 0.15s",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {tab}
+                  {tab === "Markets" && totalMarkets > 0 && (
+                    <span style={{
+                      fontSize: 9.5, fontWeight: 600,
+                      color: active ? "rgba(245,158,11,0.8)" : "rgba(148,163,184,0.30)",
+                      background: active ? "rgba(245,158,11,0.12)" : "rgba(148,163,184,0.06)",
+                      borderRadius: 99, padding: "1px 5px",
+                    }}>
+                      {totalMarkets}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
 
-          {/* Refresh + diag */}
-          <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 2, paddingRight: 4 }}>
+          {/* Action buttons */}
+          <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
             {activeTab === "Markets" && (
               <button
                 onPointerDown={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }}
                 disabled={isLoading}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: "9px 8px 10px", color: isLoading ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.35)", touchAction: "manipulation" }}
+                style={{
+                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+                  borderRadius: 8, cursor: "pointer",
+                  padding: "7px 9px",
+                  color: isLoading ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.5)",
+                  touchAction: "manipulation", lineHeight: 0,
+                }}
               >
                 <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
               </button>
             )}
             <button
               onPointerDown={() => setShowDiag(v => !v)}
-              style={{ padding: "9px 8px 10px", border: "none", background: "transparent", cursor: "pointer", color: showDiag ? "#f59e0b" : "rgba(148,163,184,0.28)", touchAction: "manipulation" }}
+              style={{
+                padding: "7px 9px", border: "1px solid rgba(255,255,255,0.08)",
+                borderRadius: 8,
+                background: showDiag ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.05)",
+                cursor: "pointer",
+                color: showDiag ? "#f59e0b" : "rgba(148,163,184,0.40)",
+                touchAction: "manipulation", lineHeight: 0,
+              }}
             >
               <ChevronDown size={13} style={{ transform: showDiag ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
             </button>
@@ -733,31 +891,44 @@ export default function Markets() {
         </div>
 
         {/* Search bar */}
-        <div style={{ padding: "6px 12px 6px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, padding: "8px 12px" }}>
-            <Search size={14} color="rgba(148,163,184,0.45)" style={{ flexShrink: 0 }} />
+        <div style={{ padding: "8px 12px 6px" }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8,
+            background: "rgba(255,255,255,0.05)",
+            border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 10, padding: "9px 12px",
+          }}>
+            <Search size={13} color="rgba(148,163,184,0.38)" style={{ flexShrink: 0 }} />
             <input
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder={activeTab === "Watchlist" ? "Search watchlist…" : "Search all markets…"}
-              style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#fff", fontSize: 13.5, caretColor: "#f59e0b", minWidth: 0 }}
+              style={{
+                flex: 1, background: "none", border: "none", outline: "none",
+                color: "#e2e8f0", fontSize: 13.5,
+                caretColor: "#f59e0b", minWidth: 0,
+              }}
             />
             {search && (
-              <button onClick={() => { setSearch(""); searchRef.current?.focus(); }} style={{ background: "none", border: "none", cursor: "pointer", padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)" }}>
-                <X size={14} />
+              <button
+                onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+                style={{
+                  background: "rgba(255,255,255,0.08)", border: "none", cursor: "pointer",
+                  padding: 0, lineHeight: 0,
+                  color: "rgba(148,163,184,0.5)",
+                  width: 18, height: 18, borderRadius: 50,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                }}
+              >
+                <X size={11} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Column headers */}
-        <div style={{ display: "flex", alignItems: "center", padding: "3px 14px 5px", borderTop: "1px solid rgba(255,255,255,0.045)" }}>
-          <div style={{ width: 28, flexShrink: 0 }} />
-          <div style={{ flex: 1, fontSize: 10, color: "rgba(148,163,184,0.32)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Symbol</div>
-          <div style={{ minWidth: 72, textAlign: "right", fontSize: 10, color: "rgba(148,163,184,0.32)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Price</div>
-          <div style={{ minWidth: 62, textAlign: "center", marginLeft: 8, fontSize: 10, color: "rgba(148,163,184,0.32)", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>24h%</div>
-        </div>
+        {/* cTrader status bar (only when streaming) */}
+        <CtraderStatusBar />
       </div>
 
       {/* ── Scrollable content ── */}
@@ -767,13 +938,11 @@ export default function Markets() {
         {activeTab === "Watchlist" && (
           <>
             {filteredWatchlist.length === 0 && (
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "60px 24px", color: "rgba(148,163,184,0.32)", gap: 10 }}>
-                <TrendingUp size={32} strokeWidth={1} />
-                <p style={{ fontSize: 14, margin: 0 }}>{searchActive ? "No results" : "No favourites yet"}</p>
-                {!searchActive && (
-                  <p style={{ fontSize: 12, margin: 0, color: "rgba(148,163,184,0.22)", textAlign: "center" }}>Tap ★ on any symbol in Markets to add it here</p>
-                )}
-              </div>
+              <EmptyState
+                icon={TrendingUp}
+                title={searchActive ? "No results" : "Watchlist is empty"}
+                subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
+              />
             )}
             {filteredWatchlist.map(row => {
               const wItem = watchMap.get(row.symbol);
@@ -798,32 +967,45 @@ export default function Markets() {
         {/* ── MARKETS TAB ── */}
         {activeTab === "Markets" && (
           <>
-            {/* Initial loading — no symbols yet */}
             {isLoading && allMergedSymbols.length === 0 && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: 8, color: "rgba(148,163,184,0.4)" }}>
+              <div style={{
+                display: "flex", alignItems: "center", justifyContent: "center",
+                padding: "56px 0", gap: 8, color: "rgba(148,163,184,0.35)",
+              }}>
                 <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 13 }}>Loading markets…</span>
+                <span style={{ fontSize: 12.5 }}>Loading markets…</span>
               </div>
             )}
 
-            {/* Delta error (only show if we have nothing at all) */}
             {!isLoading && deltaError && allMergedSymbols.length === 0 && (
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.6)", fontSize: 13 }}>Failed to load market catalog</p>
-                <p style={{ margin: "0 0 14px", fontSize: 11, color: "rgba(148,163,184,0.35)" }}>{deltaError}</p>
-                <button onClick={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "rgba(245,158,11,0.15)", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.55)", fontSize: 13 }}>
+                  Failed to load market catalog
+                </p>
+                <p style={{ margin: "0 0 16px", fontSize: 11, color: "rgba(148,163,184,0.30)" }}>
+                  {deltaError}
+                </p>
+                <button
+                  onClick={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }}
+                  style={{
+                    padding: "9px 18px", borderRadius: 9, border: "none",
+                    background: "rgba(245,158,11,0.14)", color: "#f59e0b",
+                    fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    border: "1px solid rgba(245,158,11,0.22)" as never,
+                  }}
+                >
                   Retry
                 </button>
               </div>
             )}
 
-            {/* Search results — flat list across all providers */}
             {searchActive && (
               <>
                 {searchResults.length === 0 && (
-                  <div style={{ display: "flex", justifyContent: "center", padding: "40px 0", color: "rgba(148,163,184,0.35)", fontSize: 13 }}>
-                    No symbols match "{search}"
-                  </div>
+                  <EmptyState
+                    icon={Search}
+                    title={`No symbols match "${search}"`}
+                  />
                 )}
                 {searchResults.map(s => {
                   const wItem = watchMap.get(s.symbol);
@@ -845,7 +1027,6 @@ export default function Markets() {
               </>
             )}
 
-            {/* Category sections — merged across all providers */}
             {!searchActive && allMergedSymbols.length > 0 && UNIFIED_CATEGORY_ORDER.map((cat, idx) => (
               <CategorySection
                 key={cat}
@@ -860,10 +1041,9 @@ export default function Markets() {
               />
             ))}
 
-            {/* Footer */}
             {(deltaFetchAt > 0 || ctraderFetchAt > 0) && !isLoading && (
-              <div style={{ padding: "12px 14px 4px", textAlign: "center" }}>
-                <span style={{ fontSize: 10, color: "rgba(148,163,184,0.22)", fontWeight: 500 }}>
+              <div style={{ padding: "14px 14px 8px", textAlign: "center" }}>
+                <span style={{ fontSize: 10, color: "rgba(148,163,184,0.18)", fontWeight: 500 }}>
                   {allMergedSymbols.length} symbols
                   {deltaSymbols.length > 0 && ` · Delta ${deltaSymbols.length}`}
                   {ctraderSymbols.length > 0 && ` · cTrader ${ctraderSymbols.length}`}
@@ -877,7 +1057,14 @@ export default function Markets() {
       </div>
 
       {showDiag && <DiagnosticsPanel onClose={() => setShowDiag(false)} />}
-      <style>{`@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}`}</style>
+
+      <style>{`
+        @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
+        @keyframes mktPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.45; transform: scale(0.75); }
+        }
+      `}</style>
     </div>
   );
 }
