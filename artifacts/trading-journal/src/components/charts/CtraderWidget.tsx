@@ -19,8 +19,19 @@ interface LogEntry { ts: number; level: LogLevel; msg: string; }
 interface OAuthConfig  { configured: boolean; redirectUri: string; authUrl: string | null; }
 interface TokenStatus  { ok: boolean; masked_token: string | null; expires_at: number; expired: boolean; error?: string; }
 interface OAuthStatus  { connected: boolean; expires_at?: number; expired?: boolean; updated_at?: string; error?: string; }
+interface CtraderAccount {
+  ctidTraderAccountId: number;
+  traderLogin?: number;
+  isLive: boolean;
+  brokerName?: string;
+  depositCurrency?: string;
+  balance?: number;
+  leverage?: number;
+  accountType?: string;
+  accountName?: string;
+}
 interface AccountsResult {
-  ok: boolean; http_status: number; accounts: unknown; raw?: string;
+  ok: boolean; http_status: number; accounts: CtraderAccount[] | null; raw?: string;
   note?: string; error?: string; endpoint_url?: string;
 }
 interface CtraderSymbol { symbolId: number; symbolName: string; description: string; pipPosition: number; digits: number; }
@@ -314,8 +325,21 @@ export function CtraderWidget() {
       const data = (await res.json()) as AccountsResult;
       if (!mountedRef.current) return;
       setAccounts(data);
-      if (data.ok) { log("success", `Accounts received — HTTP ${data.http_status}`); setStepStates(p => ({ ...p, accounts: "success" })); }
-      else { log("warn", `Accounts HTTP ${data.http_status}: ${data.error ?? (data.raw ?? "").slice(0, 200)}`); setStepStates(p => ({ ...p, accounts: "error" })); }
+      if (data.ok) {
+        const list = Array.isArray(data.accounts) ? data.accounts : [];
+        log("success", `Accounts received — ${list.length} account${list.length !== 1 ? "s" : ""}`);
+        setStepStates(p => ({ ...p, accounts: "success" }));
+        if (list.length === 1) {
+          const only = list[0]!;
+          const id = String(only.ctidTraderAccountId);
+          log("info", `Auto-selecting single account: ${id}`);
+          setAccountIdInput(id);
+          setSelectedIsLive(only.isLive);
+        }
+      } else {
+        log("warn", `Accounts HTTP ${data.http_status}: ${data.error ?? (data.raw ?? "").slice(0, 200)}`);
+        setStepStates(p => ({ ...p, accounts: "error" }));
+      }
     } catch (err) {
       if (!mountedRef.current) return;
       log("error", `Account fetch error: ${String(err)}`);
@@ -587,59 +611,142 @@ export function CtraderWidget() {
               <Users style={{ width: 12, height: 12 }} />
               Fetch Accounts
             </ActionBtn>
-            {accounts && (
-              <>
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <CWBadge label={`HTTP ${accounts.http_status}`} color={accounts.ok ? "#34d399" : "#fbbf24"} bg={accounts.ok ? "rgba(16,185,129,0.10)" : "rgba(245,158,11,0.10)"} dot={false} />
-                  <CWBadge label={accounts.ok ? "Success" : "Failed"} color={accounts.ok ? "#34d399" : "#f87171"} bg={accounts.ok ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"} />
-                </div>
-                {accounts.error && (
-                  <div style={{ padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", color: "#f87171" }}>
-                    ❌ {accounts.error}
-                  </div>
-                )}
-                {accounts.ok && Array.isArray(accounts.accounts) && (accounts.accounts as unknown[]).length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
-                      Select Account → Auto-fetch Symbols
+
+            {accounts?.error && (
+              <div style={{ padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", color: "#f87171" }}>
+                ❌ {accounts.error}
+              </div>
+            )}
+
+            {accounts?.ok && Array.isArray(accounts.accounts) && accounts.accounts.length > 0 && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.10em", textTransform: "uppercase", color: "rgba(148,163,184,0.45)" }}>
+                    {accounts.accounts.length} Account{accounts.accounts.length !== 1 ? "s" : ""} Found
+                  </span>
+                  {accounts.accounts.length === 1 && (
+                    <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 7px", borderRadius: 99, background: "rgba(16,185,129,0.10)", border: "1px solid rgba(16,185,129,0.22)", color: "#34d399" }}>
+                      Auto-selected
                     </span>
-                    {(accounts.accounts as Array<{
-                      ctidTraderAccountId: number; traderLogin: number; isLive: boolean; brokerName?: string; depositCurrency?: string;
-                    }>).map(acct => (
-                      <div key={acct.ctidTraderAccountId} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 9, background: accountIdInput === String(acct.ctidTraderAccountId) ? "rgba(96,165,250,0.10)" : "rgba(0,0,0,0.20)", border: `1px solid ${accountIdInput === String(acct.ctidTraderAccountId) ? "rgba(96,165,250,0.30)" : "rgba(255,255,255,0.07)"}`, transition: "all 0.12s" }}>
+                  )}
+                </div>
+
+                {accounts.accounts.map(acct => {
+                  const id = String(acct.ctidTraderAccountId);
+                  const isSelected = accountIdInput === id;
+                  const displayBalance = acct.balance != null
+                    ? `${(acct.balance / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${acct.depositCurrency ?? ""}`
+                    : null;
+
+                  return (
+                    <div
+                      key={acct.ctidTraderAccountId}
+                      style={{
+                        borderRadius: 12,
+                        border: `1px solid ${isSelected ? "rgba(96,165,250,0.40)" : "rgba(255,255,255,0.08)"}`,
+                        background: isSelected ? "rgba(96,165,250,0.07)" : "rgba(255,255,255,0.02)",
+                        overflow: "hidden",
+                        transition: "border-color 0.15s, background 0.15s",
+                      }}
+                    >
+                      {/* Card header */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "11px 14px 9px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                            <span style={{ fontFamily: "monospace", fontSize: 12, color: "rgba(255,255,255,0.85)", fontWeight: 600 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                            <span style={{ fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.92)", fontFamily: "monospace", letterSpacing: "-0.01em" }}>
                               {acct.traderLogin ?? acct.ctidTraderAccountId}
                             </span>
-                            <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 99, background: acct.isLive ? "rgba(239,68,68,0.12)" : "rgba(59,130,246,0.12)", color: acct.isLive ? "#f87171" : "#60a5fa", border: `1px solid ${acct.isLive ? "rgba(239,68,68,0.25)" : "rgba(59,130,246,0.25)"}` }}>
+                            <span style={{
+                              fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99,
+                              background: acct.isLive ? "rgba(239,68,68,0.14)" : "rgba(59,130,246,0.14)",
+                              color: acct.isLive ? "#f87171" : "#60a5fa",
+                              border: `1px solid ${acct.isLive ? "rgba(239,68,68,0.28)" : "rgba(59,130,246,0.28)"}`,
+                              letterSpacing: "0.06em",
+                            }}>
                               {acct.isLive ? "LIVE" : "DEMO"}
                             </span>
-                            {acct.brokerName && <span style={{ fontSize: 10, color: "rgba(148,163,184,0.55)" }}>{acct.brokerName}</span>}
-                            {acct.depositCurrency && <span style={{ fontSize: 10, color: "rgba(148,163,184,0.40)" }}>{acct.depositCurrency}</span>}
-                          </div>
-                          <div style={{ fontSize: 10, color: "rgba(148,163,184,0.40)", marginTop: 2, fontFamily: "monospace" }}>
-                            ID: {acct.ctidTraderAccountId}
+                            {isSelected && (
+                              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: "rgba(16,185,129,0.12)", border: "1px solid rgba(16,185,129,0.28)", color: "#34d399" }}>
+                                <CheckCircle2 style={{ width: 9, height: 9 }} />
+                                Selected
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <ActionBtn
-                          variant={accountIdInput === String(acct.ctidTraderAccountId) ? "ghost" : "primary"}
+                      </div>
+
+                      {/* Card body — field grid */}
+                      <div style={{ padding: "10px 14px", display: "grid", gridTemplateColumns: "1fr 1fr", gap: "7px 16px" }}>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Account ID</div>
+                          <div style={{ fontSize: 12, fontFamily: "monospace", color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>{acct.ctidTraderAccountId}</div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Type</div>
+                          <div style={{ fontSize: 12, color: acct.isLive ? "#f87171" : "#60a5fa", fontWeight: 600 }}>{acct.isLive ? "Live" : "Demo"}</div>
+                        </div>
+                        {acct.brokerName && (
+                          <div style={{ gridColumn: "1 / -1" }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Broker</div>
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>{acct.brokerName}</div>
+                          </div>
+                        )}
+                        {acct.depositCurrency && (
+                          <div>
+                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Currency</div>
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>{acct.depositCurrency}</div>
+                          </div>
+                        )}
+                        {acct.leverage != null && (
+                          <div>
+                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Leverage</div>
+                            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: 600 }}>1:{acct.leverage}</div>
+                          </div>
+                        )}
+                        {displayBalance && (
+                          <div style={{ gridColumn: acct.leverage == null ? "1 / -1" : undefined }}>
+                            <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.09em", textTransform: "uppercase", color: "rgba(148,163,184,0.38)", marginBottom: 2 }}>Balance</div>
+                            <div style={{ fontSize: 12, color: "#34d399", fontWeight: 700, fontFamily: "monospace" }}>{displayBalance}</div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Select button */}
+                      <div style={{ padding: "0 14px 12px" }}>
+                        <button
                           onClick={() => {
-                            const id = String(acct.ctidTraderAccountId);
                             setAccountIdInput(id);
                             setSelectedIsLive(acct.isLive);
-                            fetchSymbols(id, acct.isLive);
                           }}
-                          loading={symbolsLoading && accountIdInput === String(acct.ctidTraderAccountId)}
+                          disabled={isSelected}
+                          style={{
+                            width: "100%", padding: "9px 0", borderRadius: 9,
+                            fontSize: 13, fontWeight: 700,
+                            background: isSelected ? "rgba(16,185,129,0.10)" : "rgba(96,165,250,0.14)",
+                            border: `1px solid ${isSelected ? "rgba(16,185,129,0.28)" : "rgba(96,165,250,0.30)"}`,
+                            color: isSelected ? "#34d399" : "#60a5fa",
+                            cursor: isSelected ? "default" : "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+                            touchAction: "manipulation",
+                            transition: "all 0.15s",
+                          }}
                         >
-                          <BookOpen style={{ width: 11, height: 11 }} />
-                          {accountIdInput === String(acct.ctidTraderAccountId) ? "Selected" : "Select"}
-                        </ActionBtn>
+                          {isSelected
+                            ? <><CheckCircle2 style={{ width: 13, height: 13 }} /> Selected</>
+                            : <><UserCheck style={{ width: 13, height: 13 }} /> Select Account</>
+                          }
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {accounts?.ok && Array.isArray(accounts.accounts) && accounts.accounts.length === 0 && (
+              <div style={{ padding: "12px", textAlign: "center", fontSize: 12, color: "rgba(148,163,184,0.45)" }}>
+                No trading accounts found for this OAuth token.
+              </div>
             )}
           </>
         )}
