@@ -2,13 +2,15 @@ import { EventEmitter } from "events";
 import { logger } from "../../lib/logger.js";
 
 export interface ProviderTick {
-  symbol: string;
+  symbol:         string;
   providerSymbol: string;
-  provider: string;
-  price: number;
-  volume: number;
-  timestamp: number;
-  receivedAt: number;
+  provider:       string;
+  price:          number;
+  bid?:           number;
+  ask?:           number;
+  volume:         number;
+  timestamp:      number;
+  receivedAt:     number;
 }
 
 export type ProviderStatus = "connected" | "reconnecting" | "disconnected" | "error";

@@ -8,7 +8,7 @@ import { logger } from "../../lib/logger.js";
  * WS endpoint: wss://socket.india.delta.exchange
  * Channels:
  *   - all_trades  → fires on EVERY executed trade (sub-second during active markets)
- *   - v2/ticker   → full ticker snapshot every ~5s (volume, spread, mark price)
+ *   - v2/ticker   → full ticker snapshot every ~5s (volume, spread, mark price, bid/ask)
  *
  * `all_trades` is the primary real-time tick source — it gives MT5/TradingView-level
  * update frequency when the market is active. `v2/ticker` is the reliable baseline
@@ -179,6 +179,7 @@ export class DeltaExchangeProvider extends BaseProvider {
         // ── v2/ticker: full snapshot every ~5s — reliable baseline ─────────────
         // Continues to provide price updates even when all_trades is sparse
         // (thin markets, low volatility, off-hours trading).
+        // Also the primary source for bid/ask/spread data.
         if ((msg.type === "v2/ticker" || msg.type === "ticker") && msg.symbol) {
           const internalSym = this.deltaToInternal.get(msg.symbol);
           if (!internalSym) {
@@ -202,13 +203,17 @@ export class DeltaExchangeProvider extends BaseProvider {
             : parsePrice(msg.volume) || parsePrice(msg.turnover_usd) || 0;
           const volume = isNaN(rawVol as number) ? 0 : rawVol as number;
 
+          // Extract bid/ask from ticker snapshot
+          const bid = parsePrice(msg.best_bid);
+          const ask = parsePrice(msg.best_ask);
+
           const tsMs = normToMs(msg.timestamp);
 
           logger.info(
             { provider: this.name, symbol: internalSym, price, deltaSym: msg.symbol },
             "DeltaExchangeProvider: tick",
           );
-          this._emitTick(internalSym, msg.symbol, price, volume, tsMs);
+          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, bid, ask);
         }
       } catch (err) {
         logger.warn({ err, provider: this.name, raw: str.slice(0, 200) }, "DeltaExchangeProvider: parse error");
@@ -277,7 +282,15 @@ export class DeltaExchangeProvider extends BaseProvider {
     logger.info({ provider: this.name }, "DeltaExchangeProvider: destroyed");
   }
 
-  private _emitTick(internalSym: string, deltaSym: string, price: number, volume: number, tsMs: number): void {
+  private _emitTick(
+    internalSym: string,
+    deltaSym: string,
+    price: number,
+    volume: number,
+    tsMs: number,
+    bid?: number,
+    ask?: number,
+  ): void {
     const tick: ProviderTick = {
       symbol:          internalSym,
       providerSymbol:  deltaSym,
@@ -286,6 +299,8 @@ export class DeltaExchangeProvider extends BaseProvider {
       volume,
       timestamp:       tsMs,   // milliseconds — CandleAggregator expects ms
       receivedAt:      Date.now(),
+      ...(bid && !isNaN(bid) ? { bid } : {}),
+      ...(ask && !isNaN(ask) ? { ask } : {}),
     };
     this.onTick(tick);
   }
@@ -295,7 +310,7 @@ export class DeltaExchangeProvider extends BaseProvider {
     this.subscribedDelta.add(deltaSym);
     // Subscribe to both channels in one payload:
     //   all_trades → per-trade ticks (sub-second during active markets)
-    //   v2/ticker  → reliable 5-second snapshot as baseline fallback
+    //   v2/ticker  → reliable 5-second snapshot as baseline fallback + bid/ask
     this.ws!.send(JSON.stringify({
       type:    "subscribe",
       payload: { channels: [

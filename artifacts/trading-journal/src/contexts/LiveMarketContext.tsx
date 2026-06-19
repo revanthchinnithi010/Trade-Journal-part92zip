@@ -148,7 +148,12 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const handleTick = useCallback((symbol: string, price: number) => {
+  const handleTick = useCallback((
+    symbol: string,
+    price: number,
+    bid?: number,
+    ask?: number,
+  ) => {
     if (lastSeenPrices.current[symbol] === price) return;
     lastSeenPrices.current[symbol] = price;
 
@@ -171,9 +176,17 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
     const flashKey  = (prev?.flashKey  ?? 0) + (flashDir ? 1 : 0);
     const tickCount = (prev?.tickCount ?? 0) + 1;
 
+    // Preserve existing bid/ask if not supplied (all_trades doesn't carry them)
+    const resolvedBid    = bid    ?? prev?.bid;
+    const resolvedAsk    = ask    ?? prev?.ask;
+    const resolvedSpread = (resolvedBid && resolvedAsk && resolvedAsk > resolvedBid)
+      ? resolvedAsk - resolvedBid
+      : prev?.spread;
+
     pendingTicksRef.current[symbol] = {
       price, prevPrice, openPrice, change, changePct,
       history, lastTick: Date.now(), flashDir, flashKey, tickCount,
+      bid: resolvedBid, ask: resolvedAsk, spread: resolvedSpread,
     };
 
     // Schedule one RAF flush for this frame (idempotent — noop if already scheduled)
@@ -229,7 +242,12 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
         const msg = JSON.parse(event.data as string);
         for (const handler of msgSubscribersRef.current) { handler(msg); }
         if (msg.type === "tick" && typeof msg.symbol === "string" && typeof msg.price === "number") {
-          handleTick(msg.symbol, msg.price);
+          handleTick(
+            msg.symbol,
+            msg.price,
+            typeof msg.bid === "number" ? msg.bid : undefined,
+            typeof msg.ask === "number" ? msg.ask : undefined,
+          );
           if (connectTimeRef.current > 0) {
             setLatencyMs(Date.now() - connectTimeRef.current);
             connectTimeRef.current = 0;

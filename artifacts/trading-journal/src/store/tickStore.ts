@@ -23,6 +23,9 @@ export interface TickState {
   flashDir:  FlashDir;
   flashKey:  number;
   tickCount: number;
+  bid?:      number;
+  ask?:      number;
+  spread?:   number;
 }
 
 interface TickStoreState {
