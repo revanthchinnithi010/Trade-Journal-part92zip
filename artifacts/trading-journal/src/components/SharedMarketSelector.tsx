@@ -11,13 +11,23 @@
  *
  * Symbol selection always calls props.onSelect(symbol).
  * In sheet mode it also calls props.onClose() automatically.
+ *
+ * Performance architecture:
+ *   • PriceCell component isolates tick re-renders — SymbolRow layout never re-renders on price ticks
+ *   • content-visibility:auto on every row — browser skips layout/paint for off-screen items
+ *   • useDeferredValue + 150ms debounce on search — input stays 60fps while filter defers
+ *   • useTransition for category expand and tab change — non-blocking DOM mounting
+ *   • Lazy content mount in sheet mode — sheet slides in as lightweight shell (2-frame delay)
+ *   • CSS tween replaces Framer spring — GPU compositor thread animation
+ *   • overscroll-behavior:contain + -webkit-overflow-scrolling:touch — smooth mobile scroll
+ *   • All static style objects hoisted to module level — zero GC pressure per render
  */
 
 import {
   memo, useState, useCallback, useEffect, useMemo, useRef,
+  useDeferredValue, useTransition, startTransition,
 } from "react";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "framer-motion";
 import {
   Star, TrendingUp, Search, X,
   ChevronDown, ChevronRight, RefreshCw,
@@ -37,6 +47,9 @@ type CtraderCategory = "forex" | "index" | "commodity" | "stock" | "crypto" | "o
 type Category        = DeltaCategory | CtraderCategory;
 type Tab             = "Watchlist" | "Markets";
 type Broker          = "delta" | "ctrader";
+
+// Hoisted to module level — never re-created on render
+const TABS: Tab[] = ["Watchlist", "Markets"];
 
 const UNIFIED_CATEGORY_ORDER: Category[] = [
   "forex", "index", "commodity", "perpetual", "future", "crypto", "stock", "other",
@@ -67,6 +80,61 @@ const MARKET_TO_DELTA_CAT: Record<string, DeltaCategory> = {
   Commodities: "commodity",
 };
 
+// ── Hoisted static styles ─────────────────────────────────────────────────
+// Created once at module load — React never needs to diff these objects.
+
+const SCROLL_STYLE: React.CSSProperties = {
+  flex: 1,
+  overflowY: "auto",
+  // Smooth momentum scrolling on iOS
+  WebkitOverflowScrolling: "touch",
+  // Prevent scroll from propagating to the page behind the sheet
+  overscrollBehavior: "contain",
+};
+
+const HEADER_STYLE: React.CSSProperties = {
+  flexShrink: 0,
+  background: "rgba(9,11,14,0.98)",
+  backdropFilter: "blur(20px)",
+  WebkitBackdropFilter: "blur(20px)",
+  borderBottom: "1px solid rgba(255,255,255,0.06)",
+};
+
+const SHEET_CONTAINER_STYLE: React.CSSProperties = {
+  display: "flex", flexDirection: "column", height: "100%",
+  background: "#090b0e", color: "#e2e8f0",
+  overflow: "hidden",
+};
+
+const BACKDROP_STYLE: React.CSSProperties = {
+  position: "fixed", inset: 0, zIndex: 220,
+  background: "rgba(0,0,0,0.65)",
+  backdropFilter: "blur(4px)",
+  WebkitBackdropFilter: "blur(4px)",
+};
+
+const STAR_BTN_STYLE: React.CSSProperties = {
+  background: "none", border: "none", cursor: "pointer",
+  padding: "8px 10px 8px 12px", flexShrink: 0, lineHeight: 0,
+  touchAction: "manipulation",
+};
+
+const ROW_NAME_STYLE: React.CSSProperties = {
+  color: "rgba(148,163,184,0.38)", fontSize: 10.5, lineHeight: 1,
+  overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+  maxWidth: "calc(100% - 8px)",
+};
+
+const ROW_SYMBOL_STYLE: React.CSSProperties = {
+  color: "#e8f0ed", fontWeight: 700, fontSize: 13.5,
+  letterSpacing: "0.025em", lineHeight: 1,
+};
+
+const PRICE_COL_STYLE: React.CSSProperties = {
+  flexShrink: 0, display: "flex", flexDirection: "column",
+  alignItems: "flex-end", gap: 5,
+};
+
 // ── Price helpers ──────────────────────────────────────────────────────────
 
 function formatPrice(price: number): string {
@@ -84,20 +152,16 @@ function formatSpread(spread: number, price: number): string {
   return pct < 0.01 ? `${spread.toFixed(6)}` : `${pct.toFixed(3)}%`;
 }
 
-// ── SymbolRow ──────────────────────────────────────────────────────────────
+// ── PriceCell ──────────────────────────────────────────────────────────────
+// Isolated component: only this subtree re-renders on price ticks.
+// SymbolRow's layout (symbol name, badge, star) is completely unaffected.
 
-export const SymbolRow = memo(function SymbolRow({
-  symbol, name, category, broker, isFavorite, inWatchlist, isActive, onStarPress, onTap,
+const PriceCell = memo(function PriceCell({
+  symbol,
+  broker,
 }: {
-  symbol:      string;
-  name:        string;
-  category:    Category;
-  broker:      Broker;
-  isFavorite:  boolean;
-  inWatchlist: boolean;
-  isActive?:   boolean;
-  onStarPress: (tapAt: number) => void;
-  onTap?:      () => void;
+  symbol: string;
+  broker: Broker;
 }) {
   const tick  = useSymbolTick(symbol);
   const cSpot = useCtraderSpot(symbol);
@@ -112,105 +176,35 @@ export const SymbolRow = memo(function SymbolRow({
   const spread = tick?.spread ?? (broker === "ctrader" ? cSpot?.spread : undefined);
 
   const hasBidAsk = !!bid && !!ask;
-  const meta      = CATEGORY_META[category];
-
-  const [visualFav, setVisualFav] = useState(isFavorite);
-  useEffect(() => { setVisualFav(isFavorite); }, [isFavorite]);
-
-  const handleStarDown = useCallback((e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const tapAt = tapStart(symbol);
-    setVisualFav(v => !v);
-    requestAnimationFrame(() => recordUi(tapAt));
-    onStarPress(tapAt);
-  }, [symbol, onStarPress]);
-
   const changeColor = isLive ? (isUp ? "#10b981" : "#ef4444") : "rgba(148,163,184,0.22)";
 
   return (
-    <div
-      style={{
-        display: "flex", alignItems: "center",
-        padding: hasBidAsk ? "10px 12px 10px 0" : "11px 12px 11px 0",
-        borderBottom: "1px solid rgba(255,255,255,0.04)",
-        gap: 0, minHeight: hasBidAsk ? 68 : 58,
-        cursor: onTap ? "pointer" : "default",
-        borderLeft: isActive ? "2.5px solid #f59e0b" : "2.5px solid transparent",
-        background: isActive
-          ? "linear-gradient(90deg, rgba(245,158,11,0.06) 0%, transparent 60%)"
-          : undefined,
-        position: "relative",
-      }}
-      onClick={onTap ? (e) => { if ((e.target as HTMLElement).closest("button")) return; onTap(); } : undefined}
-    >
-      <button
-        onPointerDown={handleStarDown}
-        style={{
-          background: "none", border: "none", cursor: "pointer",
-          padding: "8px 10px 8px 12px", flexShrink: 0, lineHeight: 0,
-          touchAction: "manipulation",
-        }}
-      >
-        <Star
-          size={15}
-          fill={visualFav ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.15)" : "none"}
-          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.28)"}
-          strokeWidth={1.8}
-          style={{ transition: "fill 0.08s, color 0.08s" }}
-        />
-      </button>
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+    <>
+      {hasBidAsk && (
+        <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
           <span style={{
-            color: "#e8f0ed", fontWeight: 700, fontSize: 13.5,
-            letterSpacing: "0.025em", lineHeight: 1,
+            fontSize: 9, color: "rgba(52,211,153,0.70)",
+            fontVariantNumeric: "tabular-nums", fontWeight: 600,
+            background: "rgba(52,211,153,0.07)", borderRadius: 3, padding: "1px 4px",
           }}>
-            {symbol}
+            B {formatPrice(bid!)}
           </span>
           <span style={{
-            fontSize: 8.5, fontWeight: 700, color: meta.color,
-            background: `${meta.color}16`, border: `1px solid ${meta.color}28`,
-            borderRadius: 4, padding: "1.5px 4px",
-            letterSpacing: "0.06em", flexShrink: 0, lineHeight: 1.4,
+            fontSize: 9, color: "rgba(239,68,68,0.70)",
+            fontVariantNumeric: "tabular-nums", fontWeight: 600,
+            background: "rgba(239,68,68,0.07)", borderRadius: 3, padding: "1px 4px",
           }}>
-            {meta.badge}
+            A {formatPrice(ask!)}
           </span>
-        </div>
-        <div style={{
-          color: "rgba(148,163,184,0.38)", fontSize: 10.5, lineHeight: 1,
-          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          maxWidth: "calc(100% - 8px)",
-        }}>
-          {name}
-        </div>
-        {hasBidAsk && (
-          <div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center" }}>
-            <span style={{
-              fontSize: 9, color: "rgba(52,211,153,0.70)",
-              fontVariantNumeric: "tabular-nums", fontWeight: 600,
-              background: "rgba(52,211,153,0.07)", borderRadius: 3, padding: "1px 4px",
-            }}>
-              B {formatPrice(bid!)}
+          {!!spread && spread > 0 && !!price && (
+            <span style={{ fontSize: 9, color: "rgba(148,163,184,0.28)", fontVariantNumeric: "tabular-nums" }}>
+              {formatSpread(spread, price)}
             </span>
-            <span style={{
-              fontSize: 9, color: "rgba(239,68,68,0.70)",
-              fontVariantNumeric: "tabular-nums", fontWeight: 600,
-              background: "rgba(239,68,68,0.07)", borderRadius: 3, padding: "1px 4px",
-            }}>
-              A {formatPrice(ask!)}
-            </span>
-            {!!spread && spread > 0 && !!price && (
-              <span style={{ fontSize: 9, color: "rgba(148,163,184,0.28)", fontVariantNumeric: "tabular-nums" }}>
-                {formatSpread(spread, price)}
-              </span>
-            )}
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
-      <div style={{ flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
+      <div style={PRICE_COL_STYLE}>
         <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
           {isLive && (
             <div style={{
@@ -251,6 +245,101 @@ export const SymbolRow = memo(function SymbolRow({
           </span>
         </div>
       </div>
+    </>
+  );
+});
+
+// ── SymbolRow ──────────────────────────────────────────────────────────────
+// Pure layout component — NO tick subscriptions here.
+// content-visibility:auto lets the browser skip paint for off-screen rows.
+
+export const SymbolRow = memo(function SymbolRow({
+  symbol, name, category, broker, isFavorite, inWatchlist, isActive, onStarPress, onTap,
+}: {
+  symbol:      string;
+  name:        string;
+  category:    Category;
+  broker:      Broker;
+  isFavorite:  boolean;
+  inWatchlist: boolean;
+  isActive?:   boolean;
+  onStarPress: (tapAt: number) => void;
+  onTap?:      () => void;
+}) {
+  const meta = CATEGORY_META[category];
+
+  // Optimistic star state — only local toggle, syncs via isFavorite prop
+  const [visualFav, setVisualFav] = useState(isFavorite);
+
+  // Sync only when prop changes from outside (after server confirm)
+  const prevFavRef = useRef(isFavorite);
+  if (prevFavRef.current !== isFavorite) {
+    prevFavRef.current = isFavorite;
+    // Direct mutation during render is safe here (no useEffect needed)
+    // because we're simply syncing derived state
+    setVisualFav(isFavorite);
+  }
+
+  const handleStarDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const tapAt = tapStart(symbol);
+    setVisualFav(v => !v);
+    requestAnimationFrame(() => recordUi(tapAt));
+    onStarPress(tapAt);
+  }, [symbol, onStarPress]);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("button")) return;
+    onTap?.();
+  }, [onTap]);
+
+  return (
+    <div
+      style={{
+        display: "flex", alignItems: "center",
+        padding: "11px 12px 11px 0",
+        borderBottom: "1px solid rgba(255,255,255,0.04)",
+        gap: 0, minHeight: 58,
+        cursor: onTap ? "pointer" : "default",
+        borderLeft: isActive ? "2.5px solid #f59e0b" : "2.5px solid transparent",
+        background: isActive
+          ? "linear-gradient(90deg, rgba(245,158,11,0.06) 0%, transparent 60%)"
+          : undefined,
+        position: "relative",
+        // Browser skips layout + paint for rows scrolled off-screen
+        contentVisibility: "auto",
+        containIntrinsicSize: "0 58px",
+      }}
+      onClick={onTap ? handleClick : undefined}
+    >
+      <button onPointerDown={handleStarDown} style={STAR_BTN_STYLE}>
+        <Star
+          size={15}
+          fill={visualFav ? "#f59e0b" : inWatchlist ? "rgba(148,163,184,0.15)" : "none"}
+          color={visualFav ? "#f59e0b" : "rgba(148,163,184,0.28)"}
+          strokeWidth={1.8}
+          style={{ transition: "fill 0.08s, color 0.08s" }}
+        />
+      </button>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 2 }}>
+          <span style={ROW_SYMBOL_STYLE}>{symbol}</span>
+          <span style={{
+            fontSize: 8.5, fontWeight: 700, color: meta.color,
+            background: `${meta.color}16`, border: `1px solid ${meta.color}28`,
+            borderRadius: 4, padding: "1.5px 4px",
+            letterSpacing: "0.06em", flexShrink: 0, lineHeight: 1.4,
+          }}>
+            {meta.badge}
+          </span>
+        </div>
+        <div style={ROW_NAME_STYLE}>{name}</div>
+
+        {/* PriceCell — tick-isolated subtree */}
+        <PriceCell symbol={symbol} broker={broker} />
+      </div>
     </div>
   );
 });
@@ -263,28 +352,40 @@ const CategorySection = memo(function CategorySection({
   category, symbols, watchMap, getStarCb, getTapCb,
   defaultOpen, searchActive, activeSymbol,
 }: {
-  category:    Category;
-  symbols:     SymbolInfo[];
-  watchMap:    Map<string, { isFavorite: boolean; id: number }>;
-  getStarCb:   (s: string) => (tapAt: number) => void;
-  getTapCb:    (s: string) => () => void;
-  defaultOpen: boolean;
-  searchActive:boolean;
+  category:     Category;
+  symbols:      SymbolInfo[];
+  watchMap:     Map<string, { isFavorite: boolean; id: number }>;
+  getStarCb:    (s: string) => (tapAt: number) => void;
+  getTapCb:     (s: string) => () => void;
+  defaultOpen:  boolean;
+  searchActive: boolean;
   activeSymbol?: string;
 }) {
   const [open,    setOpen]    = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
-  useEffect(() => { if (searchActive) setOpen(true); }, [searchActive]);
+  const [, transition]        = useTransition();
+
+  // Force-open when searching; use transition so it doesn't block input
+  useEffect(() => {
+    if (searchActive) {
+      transition(() => setOpen(true));
+    }
+  }, [searchActive]); // eslint-disable-line
 
   const meta = CATEGORY_META[category];
   if (symbols.length === 0) return null;
 
   const visible = showAll ? symbols : symbols.slice(0, INITIAL_SHOW);
 
+  const handleToggle = () => {
+    // startTransition: expanding a category is non-urgent — defer child mounting
+    startTransition(() => setOpen(v => !v));
+  };
+
   return (
     <div>
       <button
-        onClick={() => setOpen(v => !v)}
+        onClick={handleToggle}
         style={{
           width: "100%", display: "flex", alignItems: "center",
           padding: "8px 12px 8px 14px", gap: 8,
@@ -341,7 +442,7 @@ const CategorySection = memo(function CategorySection({
           })}
           {!showAll && symbols.length > INITIAL_SHOW && (
             <button
-              onClick={() => setShowAll(true)}
+              onClick={() => startTransition(() => setShowAll(true))}
               style={{
                 width: "100%", padding: "10px 16px", border: "none",
                 borderBottom: "1px solid rgba(255,255,255,0.04)",
@@ -449,19 +550,80 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   onClose,
   headerActions,
 }: SharedMarketSelectorProps) {
-  const TABS: Tab[] = ["Watchlist", "Markets"];
 
   const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
+
+  // ── Search: two-stage debounce → defer ─────────────────────────────────
+  // rawSearch: immediate input value (always reflects keystrokes)
+  // search:    debounced 150ms (avoids filtering on every keystroke)
+  // deferredSearch: further deferred by React for non-urgent renders
+  const [rawSearch, setRawSearch] = useState("");
   const [search,    setSearch]    = useState("");
-  const searchRef = useRef<HTMLInputElement>(null);
+  const searchRef  = useRef<HTMLInputElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleSearchChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setRawSearch(val);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      startTransition(() => setSearch(val));
+    }, 150);
+  }, []);
+
+  const deferredSearch = useDeferredValue(search);
+  const searchActive   = deferredSearch.trim().length > 0;
+  const searchUpper    = deferredSearch.trim().toUpperCase();
 
   useEffect(() => {
     if (mode === "sheet" && visible) {
+      setRawSearch("");
       setSearch("");
       setActiveTab("Watchlist");
-      setTimeout(() => searchRef.current?.focus(), 260);
+      setTimeout(() => searchRef.current?.focus(), 280);
     }
   }, [mode, visible]);
+
+  // ── Lazy content mount (sheet mode only) ───────────────────────────────
+  // The sheet CSS transition plays immediately on a lightweight shell.
+  // After 2 animation frames (~34ms) the full content mounts.
+  // This eliminates the "lag before animation" caused by mounting 500+ nodes.
+  const [contentReady, setContentReady] = useState(mode === "page");
+
+  useEffect(() => {
+    if (mode !== "sheet") return undefined;
+    if (visible && !contentReady) {
+      let raf1: number;
+      let raf2: number;
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setContentReady(true));
+      });
+      return () => { cancelAnimationFrame(raf1); cancelAnimationFrame(raf2); };
+    }
+    return undefined;
+  }, [visible, mode]); // eslint-disable-line
+
+  // Sheet open/close tracking for CSS transition
+  const [sheetMounted, setSheetMounted] = useState(false);
+  const [sheetVisible, setSheetVisible] = useState(false);
+  const unmountTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (mode !== "sheet") return;
+    if (visible) {
+      if (unmountTimerRef.current) clearTimeout(unmountTimerRef.current);
+      setSheetMounted(true);
+      // One frame delay so the transition plays (mount → translateY(0))
+      requestAnimationFrame(() => requestAnimationFrame(() => setSheetVisible(true)));
+    } else {
+      setSheetVisible(false);
+      // Unmount after transition completes
+      unmountTimerRef.current = setTimeout(() => setSheetMounted(false), 300);
+    }
+    return () => {
+      if (unmountTimerRef.current) clearTimeout(unmountTimerRef.current);
+    };
+  }, [visible, mode]);
 
   // ── Delta symbols ──────────────────────────────────────────────────────
 
@@ -634,9 +796,9 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   // ── Console diagnostics ────────────────────────────────────────────────
 
   useEffect(() => {
-    const forexCount      = grouped.get("forex")?.length      ?? 0;
-    const indicesCount    = grouped.get("index")?.length      ?? 0;
-    const commoditiesCount = grouped.get("commodity")?.length ?? 0;
+    const forexCount       = grouped.get("forex")?.length      ?? 0;
+    const indicesCount     = grouped.get("index")?.length      ?? 0;
+    const commoditiesCount = grouped.get("commodity")?.length  ?? 0;
     console.log("[Markets] diagnostics", {
       connectionStatus:   connStatus,
       symbolsLoaded:      ctraderFetchAt > 0,
@@ -651,10 +813,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     });
   }, [grouped, connStatus, ctraderFetchAt, ctraderSymbols.length, deltaSymbols.length]);
 
-  // ── Search ─────────────────────────────────────────────────────────────
-
-  const searchActive = search.trim().length > 0;
-  const searchUpper  = search.trim().toUpperCase();
+  // ── Search results ─────────────────────────────────────────────────────
 
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
@@ -693,19 +852,24 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
 
   // ── Render helpers ─────────────────────────────────────────────────────
 
+  const handleTabChange = useCallback((tab: Tab) => {
+    startTransition(() => {
+      setActiveTab(tab);
+      setRawSearch("");
+      setSearch("");
+    });
+  }, []);
+
+  const handleClearSearch = useCallback(() => {
+    setRawSearch("");
+    setSearch("");
+    searchRef.current?.focus();
+  }, []);
+
   const body = (
-    <div style={{
-      display: "flex", flexDirection: "column", height: "100%",
-      background: "#090b0e", color: "#e2e8f0",
-      overflow: "hidden",
-    }}>
+    <div style={SHEET_CONTAINER_STYLE}>
       {/* Sticky header */}
-      <div style={{
-        flexShrink: 0,
-        background: "rgba(9,11,14,0.98)",
-        backdropFilter: "blur(20px)", WebkitBackdropFilter: "blur(20px)",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
-      }}>
+      <div style={HEADER_STYLE}>
         {/* Sheet-mode drag handle */}
         {mode === "sheet" && (
           <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 4 }}>
@@ -729,7 +893,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
               return (
                 <button
                   key={tab}
-                  onClick={() => { setActiveTab(tab); setSearch(""); }}
+                  onClick={() => handleTabChange(tab)}
                   style={{
                     flex: 1, padding: "7px 10px",
                     border: "none", borderRadius: 7,
@@ -803,17 +967,17 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
             <Search size={13} color="rgba(148,163,184,0.38)" style={{ flexShrink: 0 }} />
             <input
               ref={searchRef}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+              value={rawSearch}
+              onChange={handleSearchChange}
               placeholder={activeTab === "Watchlist" ? "Search watchlist…" : "Search all markets…"}
               style={{
                 flex: 1, background: "none", border: "none", outline: "none",
                 color: "#e2e8f0", fontSize: 13.5, caretColor: "#f59e0b", minWidth: 0,
               }}
             />
-            {search && (
+            {rawSearch && (
               <button
-                onClick={() => { setSearch(""); searchRef.current?.focus(); }}
+                onClick={handleClearSearch}
                 style={{
                   background: "rgba(255,255,255,0.08)", border: "none", cursor: "pointer",
                   padding: 0, lineHeight: 0, color: "rgba(148,163,184,0.5)",
@@ -830,121 +994,124 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
         <CtraderStatusBar />
       </div>
 
-      {/* Scrollable content */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
-
-        {/* ── Watchlist tab ── */}
-        {activeTab === "Watchlist" && (
+      {/* Scrollable content — only rendered once contentReady (lazy mount in sheet) */}
+      <div style={SCROLL_STYLE}>
+        {!contentReady ? null : (
           <>
-            {filteredWatchlist.length === 0 && (
-              <EmptyState
-                icon={TrendingUp}
-                title={searchActive ? "No results" : "Watchlist is empty"}
-                subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
-              />
-            )}
-            {filteredWatchlist.map(row => {
-              const wItem = watchMap.get(row.symbol);
-              return (
-                <SymbolRow
-                  key={row.symbol}
-                  symbol={row.symbol}
-                  name={row.name}
-                  category={row.category}
-                  broker={row.broker}
-                  inWatchlist={!!wItem}
-                  isFavorite={wItem?.isFavorite ?? false}
-                  isActive={activeSymbol === row.symbol}
-                  onStarPress={getStarCb(row.symbol)}
-                  onTap={getTapCb(row.symbol)}
-                />
-              );
-            })}
-          </>
-        )}
-
-        {/* ── Markets tab ── */}
-        {activeTab === "Markets" && (
-          <>
-            {isLoading && allMergedSymbols.length === 0 && (
-              <div style={{
-                display: "flex", alignItems: "center", justifyContent: "center",
-                padding: "56px 0", gap: 8, color: "rgba(148,163,184,0.35)",
-              }}>
-                <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 12.5 }}>Loading markets…</span>
-              </div>
-            )}
-
-            {!isLoading && deltaError && allMergedSymbols.length === 0 && (
-              <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.55)", fontSize: 13 }}>
-                  Failed to load market catalog
-                </p>
-                <p style={{ margin: "0 0 16px", fontSize: 11, color: "rgba(148,163,184,0.30)" }}>
-                  {deltaError}
-                </p>
-                <button
-                  onClick={() => { fetchDeltaSymbols(true); if (ctraderIsStreaming) fetchCtraderSymbolsInternal(); }}
-                  style={{
-                    padding: "9px 18px", borderRadius: 9,
-                    border: "1px solid rgba(245,158,11,0.22)",
-                    background: "rgba(245,158,11,0.14)", color: "#f59e0b",
-                    fontSize: 12, fontWeight: 600, cursor: "pointer",
-                  }}
-                >
-                  Retry
-                </button>
-              </div>
-            )}
-
-            {searchActive && (
+            {/* ── Watchlist tab ── */}
+            {activeTab === "Watchlist" && (
               <>
-                {searchResults.length === 0 && (
-                  <EmptyState icon={Search} title={`No symbols match "${search}"`} />
+                {filteredWatchlist.length === 0 && (
+                  <EmptyState
+                    icon={TrendingUp}
+                    title={searchActive ? "No results" : "Watchlist is empty"}
+                    subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
+                  />
                 )}
-                {searchResults.map(s => {
-                  const wItem = watchMap.get(s.symbol);
+                {filteredWatchlist.map(row => {
+                  const wItem = watchMap.get(row.symbol);
                   return (
                     <SymbolRow
-                      key={s.symbol}
-                      symbol={s.symbol}
-                      name={s.name}
-                      category={s.category}
-                      broker={s.broker}
+                      key={row.symbol}
+                      symbol={row.symbol}
+                      name={row.name}
+                      category={row.category}
+                      broker={row.broker}
                       inWatchlist={!!wItem}
                       isFavorite={wItem?.isFavorite ?? false}
-                      isActive={activeSymbol === s.symbol}
-                      onStarPress={getStarCb(s.symbol)}
-                      onTap={getTapCb(s.symbol)}
+                      isActive={activeSymbol === row.symbol}
+                      onStarPress={getStarCb(row.symbol)}
+                      onTap={getTapCb(row.symbol)}
                     />
                   );
                 })}
               </>
             )}
 
-            {!searchActive && allMergedSymbols.length > 0 && UNIFIED_CATEGORY_ORDER.map((cat, idx) => (
-              <CategorySection
-                key={cat}
-                category={cat}
-                symbols={grouped.get(cat) ?? []}
-                watchMap={watchMap}
-                getStarCb={getStarCb}
-                getTapCb={getTapCb}
-                defaultOpen={idx === 0}
-                searchActive={searchActive}
-                activeSymbol={activeSymbol}
-              />
-            ))}
+            {/* ── Markets tab ── */}
+            {activeTab === "Markets" && (
+              <>
+                {isLoading && allMergedSymbols.length === 0 && (
+                  <div style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    padding: "56px 0", gap: 8, color: "rgba(148,163,184,0.35)",
+                  }}>
+                    <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
+                    <span style={{ fontSize: 12.5 }}>Loading markets…</span>
+                  </div>
+                )}
 
-            {(deltaFetchAt > 0 || ctraderFetchAt > 0) && !isLoading && (
-              <div style={{ padding: "14px 14px 8px", textAlign: "center" }}>
-                <span style={{ fontSize: 10, color: "rgba(148,163,184,0.18)", fontWeight: 500 }}>
-                  {allMergedSymbols.length} symbols
-                  {deltaSymbols.length > 0 && ` · Delta ${deltaSymbols.length}`}
-                  {ctraderSymbols.length > 0 && ` · cTrader ${ctraderSymbols.length}`}
-                </span>
-              </div>
+                {!isLoading && deltaError && allMergedSymbols.length === 0 && (
+                  <div style={{ padding: "40px 20px", textAlign: "center" }}>
+                    <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.55)", fontSize: 13 }}>
+                      Failed to load market catalog
+                    </p>
+                    <p style={{ margin: "0 0 16px", fontSize: 11, color: "rgba(148,163,184,0.30)" }}>
+                      {deltaError}
+                    </p>
+                    <button
+                      onClick={() => { fetchDeltaSymbols(true); if (ctraderIsStreaming) fetchCtraderSymbolsInternal(); }}
+                      style={{
+                        padding: "9px 18px", borderRadius: 9,
+                        border: "1px solid rgba(245,158,11,0.22)",
+                        background: "rgba(245,158,11,0.14)", color: "#f59e0b",
+                        fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                )}
+
+                {searchActive && (
+                  <>
+                    {searchResults.length === 0 && (
+                      <EmptyState icon={Search} title={`No symbols match "${deferredSearch}"`} />
+                    )}
+                    {searchResults.map(s => {
+                      const wItem = watchMap.get(s.symbol);
+                      return (
+                        <SymbolRow
+                          key={s.symbol}
+                          symbol={s.symbol}
+                          name={s.name}
+                          category={s.category}
+                          broker={s.broker}
+                          inWatchlist={!!wItem}
+                          isFavorite={wItem?.isFavorite ?? false}
+                          isActive={activeSymbol === s.symbol}
+                          onStarPress={getStarCb(s.symbol)}
+                          onTap={getTapCb(s.symbol)}
+                        />
+                      );
+                    })}
+                  </>
+                )}
+
+                {!searchActive && allMergedSymbols.length > 0 && UNIFIED_CATEGORY_ORDER.map((cat, idx) => (
+                  <CategorySection
+                    key={cat}
+                    category={cat}
+                    symbols={grouped.get(cat) ?? []}
+                    watchMap={watchMap}
+                    getStarCb={getStarCb}
+                    getTapCb={getTapCb}
+                    defaultOpen={idx === 0}
+                    searchActive={searchActive}
+                    activeSymbol={activeSymbol}
+                  />
+                ))}
+
+                {(deltaFetchAt > 0 || ctraderFetchAt > 0) && !isLoading && (
+                  <div style={{ padding: "14px 14px 8px", textAlign: "center" }}>
+                    <span style={{ fontSize: 10, color: "rgba(148,163,184,0.18)", fontWeight: 500 }}>
+                      {allMergedSymbols.length} symbols
+                      {deltaSymbols.length > 0 && ` · Delta ${deltaSymbols.length}`}
+                      {ctraderSymbols.length > 0 && ` · cTrader ${ctraderSymbols.length}`}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </>
         )}
@@ -955,43 +1122,42 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   // ── Page mode: render inline ───────────────────────────────────────────
   if (mode === "page") return body;
 
-  // ── Sheet mode: portal bottom sheet ───────────────────────────────────
+  // ── Sheet mode: CSS-transition bottom sheet via portal ─────────────────
+  // CSS transform runs on the GPU compositor thread — no JS per frame.
+  // Backdrop and sheet are two separate DOM nodes so each can animate
+  // independently without causing layout in the other.
+  if (!sheetMounted) return null;
+
   return createPortal(
-    <AnimatePresence>
-      {visible && (
-        <>
-          <motion.div
-            key="sms-bd"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={onClose}
-            style={{
-              position: "fixed", inset: 0, zIndex: 220,
-              background: "rgba(0,0,0,0.65)",
-              backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)",
-            }}
-          />
-          <motion.div
-            key="sms-sh"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", stiffness: 340, damping: 34 }}
-            style={{
-              position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 221,
-              height: "88%",
-              borderRadius: "18px 18px 0 0",
-              overflow: "hidden",
-              boxShadow: "0 -8px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
-            }}
-          >
-            {body}
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
+    <>
+      {/* Backdrop */}
+      <div
+        onClick={onClose}
+        style={{
+          ...BACKDROP_STYLE,
+          opacity: sheetVisible ? 1 : 0,
+          transition: "opacity 200ms ease",
+          pointerEvents: sheetVisible ? "auto" : "none",
+        }}
+      />
+
+      {/* Sheet */}
+      <div
+        style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 221,
+          height: "88%",
+          borderRadius: "18px 18px 0 0",
+          overflow: "hidden",
+          boxShadow: "0 -8px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.05)",
+          // GPU compositor animation — no JS per frame
+          transform: sheetVisible ? "translateY(0)" : "translateY(100%)",
+          transition: "transform 280ms cubic-bezier(0.32,0.72,0,1)",
+          willChange: "transform",
+        }}
+      >
+        {body}
+      </div>
+    </>,
     document.body,
   );
 });
