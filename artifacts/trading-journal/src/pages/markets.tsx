@@ -116,10 +116,10 @@ function DiagnosticsPanel({ onClose }: { onClose: () => void }) {
 // ── SymbolRow ─────────────────────────────────────────────────────────────
 
 const SymbolRow = memo(function SymbolRow({
-  symbol, name, category, broker, isFavorite, inWatchlist, onStarPress, onTap,
+  symbol, name, category, broker, isFavorite, inWatchlist, isActive, onStarPress, onTap,
 }: {
   symbol: string; name: string; category: Category; broker: Broker;
-  isFavorite: boolean; inWatchlist: boolean;
+  isFavorite: boolean; inWatchlist: boolean; isActive?: boolean;
   onStarPress: (tapAt: number) => void;
   onTap?: () => void;
 }) {
@@ -159,6 +159,9 @@ const SymbolRow = memo(function SymbolRow({
         borderBottom: "1px solid rgba(255,255,255,0.035)",
         gap: 8, minHeight: hasBidAsk ? 64 : 56,
         cursor: onTap ? "pointer" : "default",
+        borderLeft: isActive ? "2.5px solid #f59e0b" : "2.5px solid transparent",
+        background: isActive ? "rgba(245,158,11,0.04)" : undefined,
+        transition: "border-left-color 0.15s, background 0.15s",
       }}
       onClick={onTap ? (e) => { if ((e.target as HTMLElement).closest("button")) return; onTap(); } : undefined}
     >
@@ -234,13 +237,13 @@ const SymbolRow = memo(function SymbolRow({
 const INITIAL_SHOW = 50;
 
 function CategorySection({
-  category, symbols, broker, watchMap, getStarCb, getTapCb, defaultOpen, searchActive,
+  category, symbols, broker, watchMap, getStarCb, getTapCb, defaultOpen, searchActive, activeSymbol,
 }: {
   category: Category; symbols: SymbolInfo[]; broker: Broker;
   watchMap: Map<string, { isFavorite: boolean; id: number }>;
   getStarCb: (s: string) => (tapAt: number) => void;
   getTapCb:  (s: string) => () => void;
-  defaultOpen: boolean; searchActive: boolean;
+  defaultOpen: boolean; searchActive: boolean; activeSymbol?: string;
 }) {
   const [open,    setOpen]    = useState(defaultOpen);
   const [showAll, setShowAll] = useState(false);
@@ -282,6 +285,7 @@ function CategorySection({
                 broker={broker}
                 inWatchlist={!!wItem}
                 isFavorite={wItem?.isFavorite ?? false}
+                isActive={activeSymbol === s.symbol}
                 onStarPress={getStarCb(s.symbol)}
                 onTap={getTapCb(s.symbol)}
               />
@@ -510,6 +514,9 @@ export default function Markets() {
   const [search,    setSearch]    = useState("");
   const [showDiag,  setShowDiag]  = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // ── Active chart symbol — used to highlight the currently charting row ──
+  const chartSymbol = useChartStore(s => s.symbol);
 
   // ── Delta catalog ──────────────────────────────────────────────────────
   const [deltaSymbols, setDeltaSymbols] = useState<SymbolInfo[]>([]);
@@ -840,6 +847,7 @@ export default function Markets() {
                   broker={row.broker}
                   inWatchlist={!!wItem}
                   isFavorite={wItem?.isFavorite ?? false}
+                  isActive={chartSymbol === row.symbol}
                   onStarPress={getStarCb(row.symbol)}
                   onTap={getTapCb(row.symbol)}
                 />
@@ -895,6 +903,7 @@ export default function Markets() {
                       broker={s.broker}
                       inWatchlist={!!wItem}
                       isFavorite={wItem?.isFavorite ?? false}
+                      isActive={chartSymbol === s.symbol}
                       onStarPress={getStarCb(s.symbol)}
                       onTap={getTapCb(s.symbol)}
                     />
@@ -915,6 +924,7 @@ export default function Markets() {
                 getTapCb={getTapCb}
                 defaultOpen={idx === 0}
                 searchActive={searchActive}
+                activeSymbol={chartSymbol}
               />
             ))}
 

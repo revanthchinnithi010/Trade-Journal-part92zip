@@ -14,6 +14,7 @@ import {
 import {
   REGISTRY_FOREX, REGISTRY_METALS, REGISTRY_COMMODITIES, REGISTRY_INDICES,
 } from "@/lib/symbolRegistry";
+import { useBrokerWatchlistStore } from "@/store/brokerWatchlistStore";
 import { MobileWatchlistOverlay } from "./MobileWatchlistOverlay";
 import { SymbolPickerSheet } from "./SymbolPickerSheet";
 import CustomChart from "./CustomChart";
@@ -2805,7 +2806,7 @@ function MarketWatchlistSheet({
   const [deltaSymbols, setDeltaSymbols]     = useState<MktSymbolInfo[]>([]);
   const [loadingBroker, setLoadingBroker]   = useState(false);
 
-  const { items: wlItems, addSymbol, toggleFavorite } = useWatchlist();
+  const { items: wlItems, addSymbol, toggleFavorite } = useBrokerWatchlistStore();
 
   const watchMap = useRef(new Map<string, typeof wlItems[0]>());
   useEffect(() => {
