@@ -476,7 +476,7 @@ export function CtraderWidget() {
   const connected = oaStatus?.connected && !oaStatus.expired;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
 
       {/* ── Status banner ── */}
       <div style={{

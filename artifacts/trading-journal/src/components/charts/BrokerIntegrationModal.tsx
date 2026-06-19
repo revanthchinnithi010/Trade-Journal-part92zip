@@ -1,8 +1,7 @@
 /**
- * BrokerIntegrationModal — full-screen popup for broker integrations.
- * Tab architecture: cTrader | Delta | Fusion Markets (future-ready).
- * Opened from the Plug button in MiniControlBar.
- * Closing the modal does NOT disconnect — connections survive.
+ * BrokerIntegrationModal — centered sheet popup for broker integrations.
+ * Mobile-first: centered dialog, safe area support, no horizontal overflow.
+ * Responsive from 320px to 430px (and beyond).
  */
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
@@ -14,16 +13,16 @@ import { useBrokerStore } from "@/store/brokerStore";
 type BrokerTab = "ctrader" | "delta" | "fusion";
 
 const TABS: { id: BrokerTab; label: string; icon: React.ElementType; badge?: string }[] = [
-  { id: "ctrader", label: "cTrader",       icon: Wifi    },
-  { id: "delta",   label: "Delta",          icon: Zap,   badge: "Δ" },
-  { id: "fusion",  label: "Fusion Markets", icon: Globe              },
+  { id: "ctrader", label: "cTrader", icon: Wifi    },
+  { id: "delta",   label: "Delta",   icon: Zap,    badge: "Δ" },
+  { id: "fusion",  label: "Fusion",  icon: Globe             },
 ];
 
 function DeltaTabContent({ onClose }: { onClose: () => void }) {
   const { loadAccounts } = useBrokerStore();
   useEffect(() => { loadAccounts(); }, [loadAccounts]);
   return (
-    <div style={{ padding: "0 0 16px" }}>
+    <div style={{ padding: "0 0 8px" }}>
       <BrokerListContent onClose={onClose} />
     </div>
   );
@@ -32,27 +31,28 @@ function DeltaTabContent({ onClose }: { onClose: () => void }) {
 function FusionTabContent() {
   return (
     <div style={{
-      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-      padding: "60px 24px", gap: 14, textAlign: "center",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "48px 20px", gap: 14, textAlign: "center",
     }}>
       <div style={{
-        width: 52, height: 52, borderRadius: 16, flexShrink: 0,
+        width: 48, height: 48, borderRadius: 14, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
         background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.16)",
       }}>
-        <Globe style={{ width: 22, height: 22, color: "#60a5fa" }} />
+        <Globe style={{ width: 20, height: 20, color: "#60a5fa" }} />
       </div>
       <div>
-        <p style={{ margin: "0 0 6px", fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.80)" }}>
+        <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 700, color: "rgba(255,255,255,0.80)" }}>
           Fusion Markets
         </p>
         <p style={{ margin: 0, fontSize: 12, color: "rgba(148,163,184,0.50)", lineHeight: 1.6 }}>
-          Integration coming soon.<br />
+          Integration coming soon.
+          <br />
           Fusion Markets support will appear here when available.
         </p>
       </div>
       <div style={{
-        padding: "6px 14px", borderRadius: 99,
+        padding: "5px 14px", borderRadius: 99,
         background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.15)",
       }}>
         <span style={{ fontSize: 11, fontWeight: 600, color: "#60a5fa" }}>Coming Soon</span>
@@ -69,122 +69,220 @@ interface BrokerIntegrationModalProps {
 export function BrokerIntegrationModal({ onClose, initialTab = "ctrader" }: BrokerIntegrationModalProps) {
   const [activeTab, setActiveTab] = useState<BrokerTab>(initialTab);
 
-  // Close on Escape key
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Prevent body scroll while modal is open
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
   const modal = (
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 9200,
-        background: "rgba(8,9,15,0.96)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        display: "flex", flexDirection: "column",
-        overflowY: "hidden",
-      }}
-    >
-      {/* ── Header ── */}
-      <div style={{
-        flexShrink: 0,
-        display: "flex", alignItems: "center",
-        padding: "14px 16px 0",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        {/* Title */}
-        <div style={{ flex: 1 }}>
-          <span style={{ fontSize: 15, fontWeight: 700, color: "rgba(255,255,255,0.90)" }}>
-            Broker Integrations
-          </span>
-        </div>
+    <>
+      {/* ── Backdrop ── */}
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, zIndex: 9200,
+          background: "rgba(5,6,10,0.85)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+          animation: "bimBackdropIn 0.18s ease both",
+        }}
+      />
 
-        {/* Close button */}
-        <button
-          onClick={onClose}
+      {/* ── Centering wrapper ── */}
+      <div
+        style={{
+          position: "fixed", inset: 0, zIndex: 9201,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          // Safe area padding so dialog stays away from notch/home bar
+          paddingTop: "max(12px, env(safe-area-inset-top))",
+          paddingRight: "max(12px, env(safe-area-inset-right))",
+          paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+          paddingLeft: "max(12px, env(safe-area-inset-left))",
+          boxSizing: "border-box",
+          pointerEvents: "none",
+        }}
+      >
+        {/* ── Dialog card ── */}
+        <div
+          onClick={e => e.stopPropagation()}
           style={{
-            width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)",
-            cursor: "pointer", touchAction: "manipulation",
+            // Width: fills viewport on small phones, capped at 520px on larger ones
+            width: "min(calc(100vw - 24px), 520px)",
+            // Height: up to 88% of dynamic viewport height
+            maxHeight: "min(88dvh, 680px)",
+            background: "rgba(10,12,16,0.99)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            borderRadius: 20,
+            boxShadow: [
+              "0 0 0 1px rgba(255,255,255,0.04) inset",
+              "0 24px 80px rgba(0,0,0,0.75)",
+              "0 4px 24px rgba(0,0,0,0.50)",
+            ].join(","),
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            pointerEvents: "auto",
+            animation: "bimDialogIn 0.22s cubic-bezier(0.32,1.0,0.60,1) both",
+            // Hard cap on width to prevent overflow on very narrow screens
+            maxWidth: "calc(100vw - 24px)",
+            boxSizing: "border-box",
           }}
-          title="Close (connection stays active)"
         >
-          <X style={{ width: 16, height: 16, color: "rgba(255,255,255,0.60)" }} />
-        </button>
-      </div>
-
-      {/* ── Tab bar ── */}
-      <div style={{
-        flexShrink: 0,
-        display: "flex", alignItems: "flex-end",
-        padding: "0 4px",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
-      }}>
-        {TABS.map(tab => {
-          const active = tab.id === activeTab;
-          const Icon = tab.icon;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 6,
-                padding: "11px 14px 12px", border: "none", background: "transparent",
-                cursor: "pointer", position: "relative", flexShrink: 0,
-                touchAction: "manipulation",
-              }}
-            >
-              <Icon style={{ width: 13, height: 13, color: active ? "#f59e0b" : "rgba(148,163,184,0.40)", flexShrink: 0 }} />
-              <span style={{
-                fontSize: 13, fontWeight: active ? 700 : 500,
-                color: active ? "#f59e0b" : "rgba(148,163,184,0.50)",
-                transition: "color 0.15s",
+          {/* ── Header ── */}
+          <div style={{
+            flexShrink: 0,
+            display: "flex", alignItems: "center",
+            padding: "14px 14px 12px",
+            borderBottom: "1px solid rgba(255,255,255,0.07)",
+            gap: 10,
+          }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: 15, fontWeight: 700,
+                color: "rgba(255,255,255,0.90)",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
               }}>
-                {tab.label}
-              </span>
-              {tab.badge && (
-                <span style={{
-                  fontSize: 9, fontWeight: 700,
-                  color: active ? "#f59e0b" : "rgba(148,163,184,0.30)",
-                  background: active ? "rgba(245,158,11,0.12)" : "rgba(148,163,184,0.07)",
-                  border: `1px solid ${active ? "rgba(245,158,11,0.22)" : "rgba(148,163,184,0.10)"}`,
-                  borderRadius: 4, padding: "1px 4px",
-                }}>
-                  {tab.badge}
-                </span>
-              )}
-              {active && (
-                <div style={{
-                  position: "absolute", bottom: 0, left: "12%", right: "12%",
-                  height: 2, borderRadius: "2px 2px 0 0", background: "#f59e0b",
-                }} />
-              )}
+                Broker Integrations
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(148,163,184,0.35)", marginTop: 1 }}>
+                Closing keeps your connection active
+              </div>
+            </div>
+            {/* Close — always visible */}
+            <button
+              onClick={onClose}
+              style={{
+                width: 34, height: 34, borderRadius: 10, flexShrink: 0,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: "rgba(255,255,255,0.07)",
+                border: "1px solid rgba(255,255,255,0.10)",
+                cursor: "pointer", touchAction: "manipulation",
+              }}
+              title="Close"
+            >
+              <X style={{ width: 15, height: 15, color: "rgba(255,255,255,0.55)" }} />
             </button>
-          );
-        })}
+          </div>
 
-        {/* Connection-survives hint */}
-        <div style={{
-          marginLeft: "auto", padding: "0 12px 10px",
-          display: "flex", alignItems: "flex-end",
-          flexShrink: 0,
-        }}>
-          <span style={{ fontSize: 10, color: "rgba(148,163,184,0.28)", fontStyle: "italic" }}>
-            Closing keeps connection active
-          </span>
+          {/* ── Tab segment control ── */}
+          <div style={{
+            flexShrink: 0,
+            padding: "10px 12px 0",
+            borderBottom: "1px solid rgba(255,255,255,0.06)",
+          }}>
+            <div style={{
+              display: "flex",
+              background: "rgba(255,255,255,0.05)",
+              borderRadius: 10,
+              padding: 3,
+              border: "1px solid rgba(255,255,255,0.07)",
+              marginBottom: 10,
+              gap: 2,
+            }}>
+              {TABS.map(tab => {
+                const active = tab.id === activeTab;
+                const Icon = tab.icon;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    style={{
+                      flex: 1, display: "flex", alignItems: "center",
+                      justifyContent: "center", gap: 5,
+                      padding: "7px 6px",
+                      border: "none", borderRadius: 7,
+                      cursor: "pointer", touchAction: "manipulation",
+                      fontSize: 12, fontWeight: active ? 700 : 500,
+                      color: active ? "#fff" : "rgba(148,163,184,0.45)",
+                      background: active ? "rgba(245,158,11,0.18)" : "transparent",
+                      boxShadow: active ? "0 0 0 1px rgba(245,158,11,0.28)" : "none",
+                      transition: "all 0.15s",
+                      minWidth: 0, overflow: "hidden",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    <Icon style={{
+                      width: 12, height: 12, flexShrink: 0,
+                      color: active ? "#f59e0b" : "rgba(148,163,184,0.38)",
+                    }} />
+                    <span style={{
+                      overflow: "hidden", textOverflow: "ellipsis",
+                      color: active ? "#f0c060" : undefined,
+                    }}>
+                      {tab.label}
+                    </span>
+                    {tab.badge && (
+                      <span style={{
+                        fontSize: 8.5, fontWeight: 700,
+                        color: active ? "#f59e0b" : "rgba(148,163,184,0.28)",
+                        background: active ? "rgba(245,158,11,0.12)" : "rgba(148,163,184,0.06)",
+                        border: `1px solid ${active ? "rgba(245,158,11,0.22)" : "rgba(148,163,184,0.08)"}`,
+                        borderRadius: 4, padding: "1px 3px", flexShrink: 0,
+                      }}>
+                        {tab.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Scrollable content ── */}
+          <div style={{
+            flex: 1,
+            overflowY: "auto",
+            overflowX: "hidden",
+            overscrollBehavior: "contain",
+            WebkitOverflowScrolling: "touch",
+            // Prevent children from blowing out the width
+            maxWidth: "100%",
+            boxSizing: "border-box",
+          } as React.CSSProperties}>
+            <div style={{
+              padding: "14px 12px",
+              boxSizing: "border-box",
+              width: "100%",
+              maxWidth: "100%",
+              overflow: "hidden",
+            }}>
+              {activeTab === "ctrader" && <CtraderWidget />}
+              {activeTab === "delta"   && <DeltaTabContent onClose={onClose} />}
+              {activeTab === "fusion"  && <FusionTabContent />}
+            </div>
+
+            {/* Safe area bottom spacer */}
+            <div style={{ height: "max(16px, env(safe-area-inset-bottom))" }} />
+          </div>
         </div>
       </div>
 
-      {/* ── Content ── */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px 16px 32px" }}>
-        {activeTab === "ctrader" && <CtraderWidget />}
-        {activeTab === "delta"   && <DeltaTabContent onClose={onClose} />}
-        {activeTab === "fusion"  && <FusionTabContent />}
-      </div>
-    </div>
+      {/* ── Keyframes ── */}
+      <style>{`
+        @keyframes bimBackdropIn {
+          from { opacity: 0 }
+          to   { opacity: 1 }
+        }
+        @keyframes bimDialogIn {
+          from { opacity: 0; transform: translateY(32px) scale(0.97) }
+          to   { opacity: 1; transform: translateY(0)    scale(1)    }
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg) }
+          to   { transform: rotate(360deg) }
+        }
+      `}</style>
+    </>
   );
 
   return createPortal(modal, document.body);

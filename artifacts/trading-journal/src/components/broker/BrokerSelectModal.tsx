@@ -37,19 +37,22 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
   } = useBrokerStore();
 
   return (
-    <div style={{ padding: "16px 20px 32px", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div style={{
+      padding: "12px 12px 24px",
+      display: "flex", flexDirection: "column", gap: 10,
+      boxSizing: "border-box", width: "100%", maxWidth: "100%",
+    }}>
       {BROKERS.map(broker => {
         const connectedAccount = connectedAccounts[broker.id];
         const status: ConnectionStatus = brokerStatuses[broker.id] ?? "disconnected";
         const isConnected = !!connectedAccount;
         const isConnecting = status === "connecting";
 
-        // Saved accounts for this broker (all, not just connected)
         const savedAccounts = accounts.filter(a => a.broker_id === broker.id);
 
         return (
           <div key={broker.id} style={{
-            borderRadius: 18,
+            borderRadius: 16,
             border: isConnected
               ? "1px solid rgba(34,197,94,0.25)"
               : "1px solid rgba(57,91,67,0.2)",
@@ -58,17 +61,19 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
               : "rgba(255,255,255,0.02)",
             overflow: "hidden",
             transition: "border-color 0.2s, background 0.2s",
+            boxSizing: "border-box", width: "100%",
           }}>
             {/* Broker header row */}
             <div style={{
-              display: "flex", alignItems: "center", gap: 14,
-              padding: "16px 18px",
+              display: "flex", alignItems: "center", gap: 12,
+              padding: "14px 14px",
+              minWidth: 0,
             }}>
               {/* Logo */}
               <div style={{
-                width: 44, height: 44, borderRadius: 13, flexShrink: 0,
+                width: 40, height: 40, borderRadius: 12, flexShrink: 0,
                 background: broker.image ? "transparent" : broker.color + "22",
-                color: broker.color, fontSize: 18, fontWeight: 900,
+                color: broker.color, fontSize: 16, fontWeight: 900,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 overflow: "hidden",
                 boxShadow: isConnected ? `0 0 14px ${broker.color}30` : "none",
@@ -81,70 +86,88 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
 
               {/* Name + description + status */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" as const, marginBottom: 3 }}>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: "#fff" }}>{broker.name}</span>
+                <div style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  flexWrap: "wrap" as const, marginBottom: 3,
+                }}>
+                  <span style={{
+                    fontSize: 13, fontWeight: 700, color: "#fff",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                  }}>{broker.name}</span>
                   <StatusBadge status={status} />
                 </div>
-                <p style={{ fontSize: 11, color: "rgba(167,184,169,0.55)", margin: 0, lineHeight: 1.4 }}>{broker.description}</p>
+                <p style={{
+                  fontSize: 11, color: "rgba(167,184,169,0.55)", margin: 0,
+                  lineHeight: 1.4, overflow: "hidden",
+                  display: "-webkit-box", WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical" as never,
+                }}>{broker.description}</p>
               </div>
             </div>
 
             {/* Connected account info + actions */}
             {isConnected && connectedAccount && (
               <div style={{
-                display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "10px 18px 14px",
+                display: "flex", alignItems: "center", gap: 8,
+                flexWrap: "wrap" as const,
+                padding: "10px 14px 12px",
                 borderTop: "1px solid rgba(34,197,94,0.12)",
               }}>
-                <div>
-                  <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", margin: 0 }}>
-                    Active: <span style={{ color: "#fff", fontWeight: 600 }}>{connectedAccount.label || "Account"}</span>
-                  </p>
-                </div>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button
-                    onClick={() => disconnectBroker(broker.id)}
-                    style={{
-                      height: 30, padding: "0 14px", borderRadius: 8, fontSize: 11, fontWeight: 600,
-                      background: "rgba(239,68,68,0.1)", color: "#EF4444",
-                      border: "1px solid rgba(239,68,68,0.2)", cursor: "pointer",
-                      display: "flex", alignItems: "center", gap: 5,
-                    }}
-                  >
-                    <WifiOff size={11} /> Disconnect
-                  </button>
-                </div>
+                <p style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", margin: 0, flex: 1, minWidth: 0 }}>
+                  Active: <span style={{ color: "#fff", fontWeight: 600 }}>{connectedAccount.label || "Account"}</span>
+                </p>
+                <button
+                  onClick={() => disconnectBroker(broker.id)}
+                  style={{
+                    height: 30, padding: "0 12px", borderRadius: 8, fontSize: 11, fontWeight: 600,
+                    background: "rgba(239,68,68,0.1)", color: "#EF4444",
+                    border: "1px solid rgba(239,68,68,0.2)", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 5, flexShrink: 0,
+                    touchAction: "manipulation",
+                  }}
+                >
+                  <WifiOff size={11} /> Disconnect
+                </button>
               </div>
             )}
 
             {/* Error state */}
             {!isConnected && status === "error" && (
-              <div style={{ padding: "10px 18px 14px", borderTop: "1px solid rgba(239,68,68,0.15)" }}>
-                <div style={{ display: "flex", items: "center", gap: 8, padding: "8px 12px", borderRadius: 10, background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)" }}>
-                  <AlertCircle size={13} style={{ color: "#EF4444", flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: "#EF4444" }}>Connection error — check credentials</span>
+              <div style={{ padding: "10px 14px 12px", borderTop: "1px solid rgba(239,68,68,0.15)" }}>
+                <div style={{
+                  display: "flex", alignItems: "flex-start", gap: 8,
+                  padding: "8px 10px", borderRadius: 10,
+                  background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.15)",
+                }}>
+                  <AlertCircle size={13} style={{ color: "#EF4444", flexShrink: 0, marginTop: 1 }} />
+                  <span style={{ fontSize: 11, color: "#EF4444", lineHeight: 1.4 }}>Connection error — check credentials</span>
                 </div>
               </div>
             )}
 
             {/* Saved accounts list + add button (when not connected) */}
             {!isConnected && !isConnecting && (
-              <div style={{ padding: "0 18px 14px", borderTop: "1px solid rgba(57,91,67,0.1)" }}>
-                {/* Saved accounts for quick connect */}
+              <div style={{ padding: "0 14px 12px", borderTop: "1px solid rgba(57,91,67,0.1)" }}>
                 {savedAccounts.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10, marginBottom: 10 }}>
                     {savedAccounts.map(acc => (
                       <div key={acc.id} style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "8px 12px", borderRadius: 10,
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "8px 10px", borderRadius: 10,
                         background: "rgba(255,255,255,0.04)", border: "1px solid rgba(57,91,67,0.15)",
+                        minWidth: 0,
                       }}>
-                        <span style={{ flex: 1, fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: 500 }}>{acc.label || "Account"}</span>
+                        <span style={{
+                          flex: 1, fontSize: 12, color: "rgba(255,255,255,0.75)", fontWeight: 500,
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                          minWidth: 0,
+                        }}>{acc.label || "Account"}</span>
                         <button
                           onClick={() => { connect(acc); onClose(); }}
                           style={{
-                            height: 26, padding: "0 12px", borderRadius: 7, fontSize: 11, fontWeight: 600,
+                            height: 26, padding: "0 10px", borderRadius: 7, fontSize: 11, fontWeight: 600,
                             background: "#B7FF5A", color: "#07110D", border: "none", cursor: "pointer",
+                            flexShrink: 0, touchAction: "manipulation",
                           }}
                         >
                           Connect
@@ -154,7 +177,7 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
                           style={{
                             width: 26, height: 26, borderRadius: 7, border: "none", cursor: "pointer",
                             background: "transparent", display: "flex", alignItems: "center", justifyContent: "center",
-                            color: "rgba(239,68,68,0.55)",
+                            color: "rgba(239,68,68,0.55)", flexShrink: 0, touchAction: "manipulation",
                           }}
                         >
                           <Trash2 size={12} />
@@ -164,20 +187,20 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
                   </div>
                 )}
 
-                {/* Add new account button */}
                 <button
                   onClick={() => openAuthModal(broker.id as import("@/types/broker").BrokerId)}
                   style={{
                     width: "100%", marginTop: savedAccounts.length > 0 ? 0 : 10,
-                    padding: "9px 0", borderRadius: 10, fontSize: 12, fontWeight: 600,
+                    padding: "9px 8px", borderRadius: 10, fontSize: 12, fontWeight: 600,
                     background: "rgba(183,255,90,0.08)", color: "#B7FF5A",
                     border: "1px solid rgba(183,255,90,0.2)", cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                    boxSizing: "border-box", touchAction: "manipulation",
                   }}
                   onTouchStart={e => (e.currentTarget.style.background = "rgba(183,255,90,0.15)")}
                   onTouchEnd={e => (e.currentTarget.style.background = "rgba(183,255,90,0.08)")}
                 >
-                  <span style={{ fontSize: 14, lineHeight: 1 }}>+</span>
+                  <span style={{ fontSize: 14, lineHeight: 1, flexShrink: 0 }}>+</span>
                   {savedAccounts.length > 0 ? "Add Another Account" : `Connect ${broker.name}`}
                 </button>
               </div>
@@ -200,23 +223,23 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
       {/* Connected broker count summary */}
       {Object.keys(connectedAccounts).length > 0 && (
         <div style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "10px 14px",
+          display: "flex", alignItems: "center", gap: 8, padding: "9px 12px",
           borderRadius: 12, background: "rgba(34,197,94,0.06)", border: "1px solid rgba(34,197,94,0.15)",
-          marginTop: 4,
+          marginTop: 4, flexWrap: "wrap" as const,
         }}>
-          <Wifi size={14} style={{ color: "#22C55E", flexShrink: 0 }} />
-          <span style={{ fontSize: 12, color: "rgba(255,255,255,0.7)" }}>
+          <Wifi size={13} style={{ color: "#22C55E", flexShrink: 0 }} />
+          <span style={{ fontSize: 11, color: "rgba(255,255,255,0.7)", flex: 1, minWidth: 0 }}>
             <span style={{ color: "#22C55E", fontWeight: 700 }}>
               {Object.keys(connectedAccounts).length}
             </span>
-            {" "}broker{Object.keys(connectedAccounts).length !== 1 ? "s" : ""} connected simultaneously
+            {" "}broker{Object.keys(connectedAccounts).length !== 1 ? "s" : ""} connected
           </span>
           <button
             onClick={() => useBrokerStore.getState().disconnectAll()}
             style={{
-              marginLeft: "auto", fontSize: 10, fontWeight: 600, padding: "3px 10px",
+              flexShrink: 0, fontSize: 10, fontWeight: 600, padding: "3px 10px",
               borderRadius: 6, background: "rgba(239,68,68,0.1)", color: "rgba(239,68,68,0.7)",
-              border: "1px solid rgba(239,68,68,0.15)", cursor: "pointer",
+              border: "1px solid rgba(239,68,68,0.15)", cursor: "pointer", touchAction: "manipulation",
             }}
           >
             Disconnect All
