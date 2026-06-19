@@ -30,7 +30,18 @@ function StatusBadge({ status }: { status: ConnectionStatus }) {
 }
 
 // ── Main broker list content ─────────────────────────────────────────────────
-export function BrokerListContent({ onClose }: { onClose: () => void }) {
+interface BrokerListContentProps {
+  onClose: () => void;
+  /**
+   * Optional override for the "Connect X" / "Add Another Account" button.
+   * When provided, this is called instead of openAuthModal so that callers
+   * (e.g. BrokerIntegrationModal) can handle navigation internally without
+   * opening a full-screen page.
+   */
+  onConnectBroker?: (brokerId: string) => void;
+}
+
+export function BrokerListContent({ onClose, onConnectBroker }: BrokerListContentProps) {
   const {
     accounts, connect, deleteAccount, openAuthModal,
     connectedAccounts, brokerStatuses, disconnectBroker,
@@ -188,7 +199,10 @@ export function BrokerListContent({ onClose }: { onClose: () => void }) {
                 )}
 
                 <button
-                  onClick={() => openAuthModal(broker.id as import("@/types/broker").BrokerId)}
+                  onClick={() => {
+                    if (onConnectBroker) onConnectBroker(broker.id);
+                    else openAuthModal(broker.id as import("@/types/broker").BrokerId);
+                  }}
                   style={{
                     width: "100%", marginTop: savedAccounts.length > 0 ? 0 : 10,
                     padding: "9px 8px", borderRadius: 10, fontSize: 12, fontWeight: 600,

@@ -3073,11 +3073,8 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const wlEntry  = watchlistItems.find(i => i.symbol === activeKey);
   const badge    = wlEntry?.badge ?? catEntry?.badge ?? activeKey.slice(0,4).toUpperCase();
 
-  // ── Fix: BrokerAuthModal renders at zIndex 201, BrokerIntegrationModal at zIndex 9200.
-  // Close the integration modal when the Delta auth modal opens so it's clearly visible.
-  useEffect(() => {
-    if (showAuthModal) setShowBrokerIntegration(false);
-  }, [showAuthModal]);
+  // (Broker auth is now handled inline inside BrokerIntegrationModal — no need to
+  //  close the integration sheet when showAuthModal fires.)
 
   // ── Stable sheet close handlers — MUST be useCallback so memo'd sheets
   // don't re-render from a new inline-arrow onClose prop on every parent render ──
