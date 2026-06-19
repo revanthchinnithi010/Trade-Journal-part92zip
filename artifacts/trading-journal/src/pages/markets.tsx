@@ -4,7 +4,7 @@ import {
 } from "react";
 import {
   Star, TrendingUp, Search, X, ChevronDown, ChevronRight,
-  RefreshCw, Wifi, WifiOff, AlertCircle, Zap,
+  RefreshCw, Wifi, AlertCircle,
 } from "lucide-react";
 import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
@@ -22,6 +22,8 @@ type CtraderCategory = "forex" | "index" | "commodity" | "stock" | "crypto" | "o
 type Category        = DeltaCategory | CtraderCategory;
 type Tab             = "Watchlist" | "Markets";
 type Broker          = "delta" | "ctrader";
+
+const UNIFIED_CATEGORY_ORDER: Category[] = ["forex", "index", "commodity", "perpetual", "future", "crypto", "stock", "other"];
 
 interface SymbolInfo {
   symbol:   string;
@@ -237,9 +239,9 @@ const SymbolRow = memo(function SymbolRow({
 const INITIAL_SHOW = 50;
 
 function CategorySection({
-  category, symbols, broker, watchMap, getStarCb, getTapCb, defaultOpen, searchActive, activeSymbol,
+  category, symbols, watchMap, getStarCb, getTapCb, defaultOpen, searchActive, activeSymbol,
 }: {
-  category: Category; symbols: SymbolInfo[]; broker: Broker;
+  category: Category; symbols: SymbolInfo[];
   watchMap: Map<string, { isFavorite: boolean; id: number }>;
   getStarCb: (s: string) => (tapAt: number) => void;
   getTapCb:  (s: string) => () => void;
@@ -282,7 +284,7 @@ function CategorySection({
                 symbol={s.symbol}
                 name={s.name}
                 category={s.category}
-                broker={broker}
+                broker={s.broker}
                 inWatchlist={!!wItem}
                 isFavorite={wItem?.isFavorite ?? false}
                 isActive={activeSymbol === s.symbol}
@@ -460,48 +462,6 @@ function CtraderStatusBar() {
   );
 }
 
-// ── Broker Pill Filter ────────────────────────────────────────────────────
-
-function BrokerFilter({ value, onChange, deltaCount, ctraderCount }: {
-  value: Broker; onChange: (b: Broker) => void;
-  deltaCount: number; ctraderCount: number;
-}) {
-  const items: [Broker, string, number][] = [
-    ["delta",   "Delta Exchange", deltaCount],
-    ["ctrader", "cTrader",        ctraderCount],
-  ];
-
-  return (
-    <div style={{ display: "flex", gap: 6, padding: "6px 12px 2px", overflowX: "auto", scrollbarWidth: "none" }}>
-      {items.map(([broker, label, count]) => {
-        const active = value === broker;
-        return (
-          <button
-            key={broker}
-            onClick={() => onChange(broker)}
-            style={{
-              flexShrink: 0, padding: "5px 12px", borderRadius: 20,
-              border: active ? "1px solid rgba(245,158,11,0.4)" : "1px solid rgba(255,255,255,0.08)",
-              background: active ? "rgba(245,158,11,0.1)" : "rgba(255,255,255,0.04)",
-              color: active ? "#f59e0b" : "rgba(148,163,184,0.5)",
-              fontSize: 11.5, fontWeight: active ? 700 : 400,
-              cursor: "pointer", touchAction: "manipulation",
-              display: "flex", alignItems: "center", gap: 5,
-            }}
-          >
-            {broker === "delta" ? <Zap size={10} /> : <Wifi size={10} />}
-            {label}
-            {count > 0 && (
-              <span style={{ fontSize: 9.5, fontWeight: 600, color: active ? "rgba(245,158,11,0.7)" : "rgba(148,163,184,0.35)" }}>
-                {count}
-              </span>
-            )}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── Main Page ─────────────────────────────────────────────────────────────
 
@@ -510,7 +470,6 @@ const TABS: Tab[] = ["Watchlist", "Markets"];
 export default function Markets() {
   const [, navigate]              = useLocation();
   const [activeTab, setActiveTab] = useState<Tab>("Watchlist");
-  const [broker,    setBroker]    = useState<Broker>("delta");
   const [search,    setSearch]    = useState("");
   const [showDiag,  setShowDiag]  = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -571,12 +530,6 @@ export default function Markets() {
 
   useEffect(() => { fetchCtraderSymbols(); }, []); // eslint-disable-line
 
-  // Fetch cTrader symbols when switching to ctrader broker
-  useEffect(() => {
-    if (broker === "ctrader" && ctraderSymbols.length === 0 && !ctraderLoading) {
-      fetchCtraderSymbols();
-    }
-  }, [broker]); // eslint-disable-line
 
   // ── Watchlist ──────────────────────────────────────────────────────────
   const { items, addSymbol, toggleFavorite } = useWatchlist();
@@ -636,19 +589,26 @@ export default function Markets() {
     return tapCbCache.current.get(symbol)!;
   }, [handleSymbolTap]);
 
-  // ── Delta symbol list (perpetuals + futures + catalog non-crypto) ──────
-  const allDeltaSymbols = useMemo<SymbolInfo[]>(() => {
+  // ── Merged symbol list: cTrader first, then Delta perps/futures, then SYMBOL_CATALOG fallback ──
+  const allMergedSymbols = useMemo<SymbolInfo[]>(() => {
     const seen = new Set<string>();
     const result: SymbolInfo[] = [];
+    // 1. cTrader — forex, index, commodity, stock, crypto
+    for (const s of ctraderSymbols) {
+      if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
+    }
+    // 2. Delta from API — perpetuals & futures (native to Delta)
     for (const s of deltaSymbols) {
       if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
     }
+    // 3. SYMBOL_CATALOG — forex/index/commodity fallback when cTrader not connected
     for (const [sym, entry] of Object.entries(SYMBOL_CATALOG)) {
       if (entry.market === "Crypto") continue;
       if (seen.has(sym)) continue;
       seen.add(sym);
       result.push({ symbol: sym, name: entry.label, category: MARKET_TO_DELTA_CAT[entry.market] ?? "other", broker: "delta" });
     }
+    // 4. Watchlist items not yet represented
     for (const item of items) {
       if (!seen.has(item.symbol)) {
         seen.add(item.symbol);
@@ -656,36 +616,31 @@ export default function Markets() {
       }
     }
     return result;
-  }, [deltaSymbols, items]);
+  }, [ctraderSymbols, deltaSymbols, items]);
 
-  // ── Current broker symbol list ─────────────────────────────────────────
-  const activeSymbols = broker === "delta" ? allDeltaSymbols : ctraderSymbols;
-
-  // ── Group by category ──────────────────────────────────────────────────
-  const categoryOrder = broker === "delta" ? DELTA_CATEGORY_ORDER : CTRADER_CATEGORY_ORDER;
-
+  // ── Group by unified category ──────────────────────────────────────────
   const grouped = useMemo(() => {
     const map = new Map<Category, SymbolInfo[]>();
-    categoryOrder.forEach(c => map.set(c, []));
-    for (const s of activeSymbols) {
+    UNIFIED_CATEGORY_ORDER.forEach(c => map.set(c, []));
+    for (const s of allMergedSymbols) {
       const arr = map.get(s.category as Category);
       if (arr) arr.push(s);
       else map.set(s.category as Category, [s]);
     }
     return map;
-  }, [activeSymbols, categoryOrder]);
+  }, [allMergedSymbols]);
 
-  // ── Search ─────────────────────────────────────────────────────────────
+  // ── Search across all providers ────────────────────────────────────────
   const searchActive = search.trim().length > 0;
   const searchUpper  = search.trim().toUpperCase();
 
   const searchResults = useMemo(() => {
     if (!searchActive) return [];
-    return activeSymbols.filter(s =>
+    return allMergedSymbols.filter(s =>
       s.symbol.toUpperCase().includes(searchUpper) ||
       s.name.toUpperCase().includes(searchUpper)
     );
-  }, [activeSymbols, searchActive, searchUpper]);
+  }, [allMergedSymbols, searchActive, searchUpper]);
 
   // ── Watchlist tab items ────────────────────────────────────────────────
   const watchlistRows = useMemo(() => {
@@ -712,11 +667,8 @@ export default function Markets() {
   }, [watchlistRows, searchActive, searchUpper]);
 
   // ── Total counts ───────────────────────────────────────────────────────
-  const totalMarkets = activeSymbols.length;
-
-  const handleCtraderSetupComplete = useCallback(() => {
-    fetchCtraderSymbols();
-  }, [fetchCtraderSymbols]);
+  const totalMarkets = allMergedSymbols.length;
+  const isLoading    = deltaLoading || ctraderLoading;
 
   return (
     <div style={{
@@ -764,11 +716,11 @@ export default function Markets() {
           <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 2, paddingRight: 4 }}>
             {activeTab === "Markets" && (
               <button
-                onPointerDown={() => broker === "delta" ? fetchDeltaSymbols(true) : fetchCtraderSymbols()}
-                disabled={broker === "delta" ? deltaLoading : ctraderLoading}
-                style={{ background: "none", border: "none", cursor: "pointer", padding: "9px 8px 10px", color: (deltaLoading || ctraderLoading) ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.35)", touchAction: "manipulation" }}
+                onPointerDown={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }}
+                disabled={isLoading}
+                style={{ background: "none", border: "none", cursor: "pointer", padding: "9px 8px 10px", color: isLoading ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.35)", touchAction: "manipulation" }}
               >
-                <RefreshCw size={13} style={{ animation: (deltaLoading || ctraderLoading) ? "spin 1s linear infinite" : "none" }} />
+                <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
               </button>
             )}
             <button
@@ -780,19 +732,6 @@ export default function Markets() {
           </div>
         </div>
 
-        {/* Broker filter — only on Markets tab */}
-        {activeTab === "Markets" && (
-          <BrokerFilter
-            value={broker}
-            onChange={b => { setBroker(b); setSearch(""); }}
-            deltaCount={allDeltaSymbols.length}
-            ctraderCount={ctraderSymbols.length}
-          />
-        )}
-
-        {/* cTrader status bar */}
-        {activeTab === "Markets" && broker === "ctrader" && <CtraderStatusBar />}
-
         {/* Search bar */}
         <div style={{ padding: "6px 12px 6px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)", borderRadius: 10, padding: "8px 12px" }}>
@@ -801,7 +740,7 @@ export default function Markets() {
               ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder={activeTab === "Watchlist" ? "Search watchlist…" : `Search ${broker === "ctrader" ? "cTrader" : "Delta"} markets…`}
+              placeholder={activeTab === "Watchlist" ? "Search watchlist…" : "Search all markets…"}
               style={{ flex: 1, background: "none", border: "none", outline: "none", color: "#fff", fontSize: 13.5, caretColor: "#f59e0b", minWidth: 0 }}
             />
             {search && (
@@ -859,32 +798,26 @@ export default function Markets() {
         {/* ── MARKETS TAB ── */}
         {activeTab === "Markets" && (
           <>
-            {/* cTrader: no symbols yet → show connect card */}
-            {broker === "ctrader" && ctraderSymbols.length === 0 && !ctraderLoading && (
-              <CtraderConnectCard onSetupComplete={handleCtraderSetupComplete} />
-            )}
-
-            {/* Loading */}
-            {((broker === "delta" && deltaLoading && deltaSymbols.length === 0) ||
-              (broker === "ctrader" && ctraderLoading && ctraderSymbols.length === 0)) && (
+            {/* Initial loading — no symbols yet */}
+            {isLoading && allMergedSymbols.length === 0 && (
               <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "50px 0", gap: 8, color: "rgba(148,163,184,0.4)" }}>
                 <RefreshCw size={14} style={{ animation: "spin 1s linear infinite" }} />
-                <span style={{ fontSize: 13 }}>Loading {broker === "ctrader" ? "cTrader" : "Delta"} catalog…</span>
+                <span style={{ fontSize: 13 }}>Loading markets…</span>
               </div>
             )}
 
-            {/* Delta error */}
-            {broker === "delta" && !deltaLoading && deltaError && deltaSymbols.length === 0 && (
+            {/* Delta error (only show if we have nothing at all) */}
+            {!isLoading && deltaError && allMergedSymbols.length === 0 && (
               <div style={{ padding: "40px 20px", textAlign: "center" }}>
-                <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.6)", fontSize: 13 }}>Failed to load Delta catalog</p>
+                <p style={{ margin: "0 0 6px", color: "rgba(239,68,68,0.6)", fontSize: 13 }}>Failed to load market catalog</p>
                 <p style={{ margin: "0 0 14px", fontSize: 11, color: "rgba(148,163,184,0.35)" }}>{deltaError}</p>
-                <button onClick={() => fetchDeltaSymbols(true)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "rgba(245,158,11,0.15)", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                <button onClick={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", background: "rgba(245,158,11,0.15)", color: "#f59e0b", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
                   Retry
                 </button>
               </div>
             )}
 
-            {/* Search results — flat list */}
+            {/* Search results — flat list across all providers */}
             {searchActive && (
               <>
                 {searchResults.length === 0 && (
@@ -912,13 +845,12 @@ export default function Markets() {
               </>
             )}
 
-            {/* Category sections */}
-            {!searchActive && activeSymbols.length > 0 && (categoryOrder as Category[]).map((cat, idx) => (
+            {/* Category sections — merged across all providers */}
+            {!searchActive && allMergedSymbols.length > 0 && UNIFIED_CATEGORY_ORDER.map((cat, idx) => (
               <CategorySection
-                key={`${broker}-${cat}`}
+                key={cat}
                 category={cat}
                 symbols={grouped.get(cat) ?? []}
-                broker={broker}
                 watchMap={watchMap}
                 getStarCb={getStarCb}
                 getTapCb={getTapCb}
@@ -928,18 +860,13 @@ export default function Markets() {
               />
             ))}
 
-            {/* Footer timestamp */}
-            {broker === "delta" && deltaFetchAt > 0 && !deltaLoading && (
+            {/* Footer */}
+            {(deltaFetchAt > 0 || ctraderFetchAt > 0) && !isLoading && (
               <div style={{ padding: "12px 14px 4px", textAlign: "center" }}>
                 <span style={{ fontSize: 10, color: "rgba(148,163,184,0.22)", fontWeight: 500 }}>
-                  Delta: {allDeltaSymbols.length} symbols · {Math.round((Date.now() - deltaFetchAt) / 1000)}s ago
-                </span>
-              </div>
-            )}
-            {broker === "ctrader" && ctraderFetchAt > 0 && !ctraderLoading && (
-              <div style={{ padding: "12px 14px 4px", textAlign: "center" }}>
-                <span style={{ fontSize: 10, color: "rgba(148,163,184,0.22)", fontWeight: 500 }}>
-                  cTrader: {ctraderSymbols.length} symbols · {Math.round((Date.now() - ctraderFetchAt) / 1000)}s ago
+                  {allMergedSymbols.length} symbols
+                  {deltaSymbols.length > 0 && ` · Delta ${deltaSymbols.length}`}
+                  {ctraderSymbols.length > 0 && ` · cTrader ${ctraderSymbols.length}`}
                 </span>
               </div>
             )}
