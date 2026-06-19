@@ -598,6 +598,15 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   }, [handleSymbolTap]);
 
   // ── Merged symbol list ─────────────────────────────────────────────────
+  //
+  // Markets tab shows ONLY symbols returned by broker API endpoints:
+  //   • ctraderSymbols  — populated only when connStatus === "streaming"
+  //   • deltaSymbols    — perpetuals / futures from Delta Exchange
+  //
+  // Watchlist items (items[]) are intentionally excluded here; they belong
+  // exclusively to the Watchlist tab (watchlistRows below). Merging them
+  // here was the source of Forex/Indices/Commodities appearing in the
+  // Markets tab when cTrader is not connected.
 
   const allMergedSymbols = useMemo<SymbolInfo[]>(() => {
     const seen   = new Set<string>();
@@ -608,19 +617,8 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     for (const s of deltaSymbols) {
       if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
     }
-    for (const item of items) {
-      if (!seen.has(item.symbol)) {
-        seen.add(item.symbol);
-        result.push({
-          symbol:   item.symbol,
-          name:     item.label,
-          category: MARKET_TO_DELTA_CAT[item.market] ?? "other",
-          broker:   "delta",
-        });
-      }
-    }
     return result;
-  }, [ctraderSymbols, deltaSymbols, items]);
+  }, [ctraderSymbols, deltaSymbols]);
 
   const grouped = useMemo(() => {
     const map = new Map<Category, SymbolInfo[]>();
@@ -632,6 +630,26 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     }
     return map;
   }, [allMergedSymbols]);
+
+  // ── Console diagnostics ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const forexCount      = grouped.get("forex")?.length      ?? 0;
+    const indicesCount    = grouped.get("index")?.length      ?? 0;
+    const commoditiesCount = grouped.get("commodity")?.length ?? 0;
+    console.log("[Markets] diagnostics", {
+      connectionStatus:   connStatus,
+      symbolsLoaded:      ctraderFetchAt > 0,
+      symbolSource:       ctraderSymbols.length > 0
+        ? "ctrader"
+        : deltaSymbols.length > 0 ? "delta" : "none",
+      forexCount,
+      indicesCount,
+      commoditiesCount,
+      deltaTotal:         deltaSymbols.length,
+      ctraderTotal:       ctraderSymbols.length,
+    });
+  }, [grouped, connStatus, ctraderFetchAt, ctraderSymbols.length, deltaSymbols.length]);
 
   // ── Search ─────────────────────────────────────────────────────────────
 
