@@ -253,7 +253,12 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
             connectTimeRef.current = 0;
           }
         } else if (msg.type === "ctrader_tick" && typeof msg.symbol === "string" && typeof msg.price === "number") {
-          handleTick(msg.symbol as string, msg.price as number);
+          handleTick(
+            msg.symbol as string,
+            msg.price as number,
+            typeof msg.bid === "number" ? msg.bid as number : undefined,
+            typeof msg.ask === "number" ? msg.ask as number : undefined,
+          );
           useCtraderSpotStore.getState().setSpotTick({
             symbol:     msg.symbol    as string,
             symbolId:   (msg.symbolId as number) ?? 0,

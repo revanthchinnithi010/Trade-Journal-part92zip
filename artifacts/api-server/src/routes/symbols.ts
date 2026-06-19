@@ -10,13 +10,24 @@ import { pool } from "@workspace/db";
  * Returns the full tradable symbol catalog for Delta Exchange.
  * Delta India symbols are fetched live from the REST API and cached 10 min.
  */
-function inferCtraderType(symbolName: string): string {
+type CtraderCategory = "forex" | "index" | "commodity" | "crypto" | "stock" | "other";
+
+function inferCtraderType(symbolName: string): CtraderCategory {
   const s = symbolName.toUpperCase();
-  if (/^[A-Z]{3}USD$/.test(s) || /^[A-Z]{6}$/.test(s)) return "forex";
-  if (/^(XAU|XAG|XPT|XPD)/.test(s)) return "metal";
-  if (/USDT$|BTC$|ETH$/.test(s)) return "crypto";
-  if (/^(US30|NAS|SPX|GER|UK1|JP2|DAX|CAC|FTSE|AUS)/.test(s)) return "index";
-  if (/^(OIL|GAS|WTI|BRENT|NGAS|USOIL|UKOIL|COPP|WHEAT|CORN|COFF)/.test(s)) return "commodity";
+  // Precious metals / commodities (before forex check to avoid XAU → forex)
+  if (/^(XAU|XAG|XPT|XPD)/.test(s)) return "commodity";
+  if (/^(OIL|GAS|WTI|BRENT|NGAS|USOIL|UKOIL|COPP|WHEAT|CORN|COFF|SOYB|SUGAR|CACAO|NATGAS|NGAS)/.test(s)) return "commodity";
+  // Crypto
+  if (/USDT$/.test(s) || /^(BTC|ETH|SOL|DOG|PEPE|XRP|ADA|MATIC|LINK|DOT|AVAX|LTC|BCH|SHIB|UNI|ATOM|NEAR|FTM|ALGO|SAND|MANA|AXS|AAVE|COMP|MKR|SNX|SUSHI|1INCH|CRV|BAL|DYDX|IMX|APE|GMX|ARB|OP|SUI|SEI|TIA|BLUR|DOGE|BNB)/.test(s)) return "crypto";
+  // Indices
+  if (/^(US30|NAS|SPX|GER|UK1|JP2|DAX|CAC|FTSE|AUS|HSI|NIKKEI|DOW|SP5|ES3|FR4|IT4|ES35|IBEX|N225|HK5|CN50|CHINA|INDIA|VIX)/.test(s)) return "index";
+  // Standard 6-char forex pairs
+  if (/^[A-Z]{6}$/.test(s)) return "forex";
+  // 3-char ISO currency + USD
+  if (/^[A-Z]{3}USD$/.test(s) && !["XAUUSD","XAGUSD","XPTUSD","XPDUSD"].includes(s)) return "forex";
+  // Stocks: 2-5 uppercase letters, no numbers, not matched above
+  if (/^[A-Z]{2,5}$/.test(s)) return "stock";
+  if (/^[A-Z]{2,6}\.[A-Z]{1,3}$/.test(s)) return "stock"; // e.g. AAPL.US
   return "other";
 }
 
@@ -51,15 +62,19 @@ export function createSymbolsRouter(marketData: MarketDataService): IRouter {
         const symbols = (rows.rows as Array<{
           symbol_id: number; symbol_name: string; description: string;
           pip_position: number; digits: number;
-        }>).map(r => ({
-          symbol:       r.symbol_name,
-          name:         r.description || r.symbol_name,
-          contractType: inferCtraderType(r.symbol_name),
-          broker:       "ctrader",
-          underlying:   r.symbol_name.length >= 6 ? r.symbol_name.slice(0, 3) : r.symbol_name,
-          quoteAsset:   r.symbol_name.length >= 6 ? r.symbol_name.slice(-3) : "",
-          active:       true,
-        }));
+        }>).map(r => {
+          const cat = inferCtraderType(r.symbol_name);
+          return {
+            symbol:       r.symbol_name,
+            name:         r.description || r.symbol_name,
+            contractType: cat,
+            category:     cat,
+            broker:       "ctrader",
+            underlying:   r.symbol_name.length >= 6 ? r.symbol_name.slice(0, 3) : r.symbol_name,
+            quoteAsset:   r.symbol_name.length >= 6 ? r.symbol_name.slice(-3) : "",
+            active:       true,
+          };
+        });
         res.json({ broker: "ctrader", count: symbols.length, symbols });
         return;
       }

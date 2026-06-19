@@ -828,6 +828,133 @@ export function createCtraderOAuthRouter(): Router {
     }
   });
 
+  // ── POST /api/ctrader/auto-setup ─────────────────────────────────────────
+  // Called from the frontend after OAuth succeeds.
+  // Fetches accounts → picks first → fetches symbols via ProtoOA → caches →
+  // saves spot config → starts the spot engine. All in one request.
+  router.post("/ctrader/auto-setup", async (_req, res) => {
+    try {
+      const stored = await getStoredToken();
+      if (!stored) {
+        return res.status(401).json({ ok: false, error: "Not authenticated — complete OAuth first" });
+      }
+
+      const clientId     = process.env.CTRADER_CLIENT_ID;
+      const clientSecret = process.env.CTRADER_CLIENT_SECRET;
+      if (!clientId || !clientSecret) {
+        return res.status(500).json({ ok: false, error: "CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not configured" });
+      }
+
+      // Step 1: Fetch trading accounts
+      logger.info("ctrader/auto-setup: fetching accounts");
+      const acctUrl = `${CTRADER_API_BASE}/connect/tradingaccounts?${CTRADER_TOKEN_PARAM}=${encodeURIComponent(stored.token)}`;
+      let accounts: Array<{ ctidTraderAccountId: number; isLive?: boolean; accountName?: string }> = [];
+      try {
+        const acctRes = await fetch(acctUrl, {
+          headers: { "Accept": "application/json", "Authorization": `Bearer ${stored.token}` },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (acctRes.ok) {
+          const parsed = await acctRes.json() as unknown;
+          if (Array.isArray(parsed)) accounts = parsed;
+          else if (parsed && typeof parsed === "object" && Array.isArray((parsed as Record<string, unknown>).accounts)) {
+            accounts = (parsed as { accounts: typeof accounts }).accounts;
+          }
+        }
+      } catch (e) {
+        logger.warn({ err: e }, "ctrader/auto-setup: accounts REST failed, will try ProtoOA directly");
+      }
+
+      let ctidTraderAccountId: number | null = null;
+      let isLive = false;
+
+      if (accounts.length > 0) {
+        const first = accounts[0]!;
+        ctidTraderAccountId = Number(first.ctidTraderAccountId);
+        isLive = Boolean(first.isLive);
+        logger.info({ ctidTraderAccountId, isLive, total: accounts.length }, "ctrader/auto-setup: account selected");
+      } else {
+        // Try to get from existing spot config
+        try {
+          await pool.query(`CREATE TABLE IF NOT EXISTS ctrader_spot_config (
+            id INTEGER PRIMARY KEY DEFAULT 1, account_id BIGINT NOT NULL,
+            is_live BOOLEAN NOT NULL DEFAULT false, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          )`);
+          const cfg = await pool.query("SELECT account_id, is_live FROM ctrader_spot_config WHERE id=1");
+          if (cfg.rows.length > 0) {
+            const r = cfg.rows[0] as { account_id: number; is_live: boolean };
+            ctidTraderAccountId = Number(r.account_id);
+            isLive = Boolean(r.is_live);
+            logger.info({ ctidTraderAccountId }, "ctrader/auto-setup: using cached account from spot config");
+          }
+        } catch { /* ignore */ }
+      }
+
+      if (!ctidTraderAccountId) {
+        return res.status(502).json({
+          ok: false,
+          error: "Could not determine cTrader account ID. Try again or check REST API connectivity.",
+          accountsFound: accounts.length,
+        });
+      }
+
+      // Step 2: Fetch symbols via ProtoOA TLS
+      logger.info({ ctidTraderAccountId, isLive }, "ctrader/auto-setup: fetching symbols via ProtoOA");
+      const symbols = await fetchSymbolsViaProtoOA({
+        ctidTraderAccountId,
+        isLive,
+        accessToken:  stored.token,
+        clientId,
+        clientSecret,
+        timeoutMs: 30_000,
+      });
+
+      if (!symbols.length) {
+        return res.status(502).json({ ok: false, error: "ProtoOA returned 0 symbols" });
+      }
+
+      logger.info({ count: symbols.length }, "ctrader/auto-setup: symbols fetched");
+
+      // Step 3: Cache to DB
+      await cacheCtraderSymbols(symbols);
+
+      // Step 4: Save spot config
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ctrader_spot_config (
+          id INTEGER PRIMARY KEY DEFAULT 1, account_id BIGINT NOT NULL,
+          is_live BOOLEAN NOT NULL DEFAULT false, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )`);
+      await pool.query(`
+        INSERT INTO ctrader_spot_config (id, account_id, is_live, updated_at)
+        VALUES (1, $1, $2, NOW())
+        ON CONFLICT (id) DO UPDATE SET account_id=$1, is_live=$2, updated_at=NOW()
+      `, [ctidTraderAccountId, isLive]);
+
+      // Step 5: Start the spot engine (import here to avoid circular deps)
+      try {
+        const { autoStartCtraderEngine, subscribeWatchlistCtraderSymbols } = await import("./ctrader_spots.js");
+        await autoStartCtraderEngine();
+        await subscribeWatchlistCtraderSymbols();
+        logger.info("ctrader/auto-setup: spot engine started");
+      } catch (e) {
+        logger.warn({ err: e }, "ctrader/auto-setup: engine start warning (non-fatal)");
+      }
+
+      logger.info({ ctidTraderAccountId, symbolCount: symbols.length }, "ctrader/auto-setup: complete");
+      return res.json({
+        ok:           true,
+        accountId:    ctidTraderAccountId,
+        isLive,
+        symbolCount:  symbols.length,
+        accountCount: accounts.length,
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/auto-setup: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   return router;
 }
 
