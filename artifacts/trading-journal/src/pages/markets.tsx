@@ -6,7 +6,7 @@ import {
   Star, TrendingUp, Search, X, ChevronDown, ChevronRight,
   RefreshCw, Wifi, AlertCircle, ArrowUp, ArrowDown,
 } from "lucide-react";
-import { useWatchlist, SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
+import { useWatchlist } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
 import { useCtraderSpot, useCtraderConnStatus } from "@/store/ctraderSpotStore";
 import { useLocation } from "wouter";
@@ -74,8 +74,16 @@ function formatSpread(spread: number, price: number): string {
 
 // ── Diagnostics panel ─────────────────────────────────────────────────────
 
-function DiagnosticsPanel({ onClose }: { onClose: () => void }) {
+interface CtraderDiag {
+  connected: boolean;
+  connStatus: string;
+  symbolCount: number;
+  source: "Live" | "None";
+}
+
+function DiagnosticsPanel({ onClose, ctraderDiag }: { onClose: () => void; ctraderDiag: CtraderDiag }) {
   const events = useSyncExternalStore(diagSubscribe, getEvents);
+  const { connected, connStatus, symbolCount, source } = ctraderDiag;
   return (
     <div style={{
       position: "fixed", bottom: 60, left: 8, right: 8, zIndex: 9999,
@@ -87,14 +95,40 @@ function DiagnosticsPanel({ onClose }: { onClose: () => void }) {
     }}>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 8, gap: 6 }}>
         <span style={{ fontSize: 10, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.08em", textTransform: "uppercase", flex: 1 }}>
-          ⏱ Star Diagnostics
+          Diagnostics
         </span>
         <button onPointerDown={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 2, color: "rgba(148,163,184,0.5)", lineHeight: 0, touchAction: "manipulation" }}>
           <X size={13} />
         </button>
       </div>
+
+      {/* cTrader diagnostics */}
+      <div style={{ marginBottom: 10, paddingBottom: 8, borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+        <span style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(148,163,184,0.4)", letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+          cTrader
+        </span>
+        <div style={{ display: "grid", gridTemplateColumns: "110px 1fr", gap: "3px 8px" }}>
+          <span style={{ fontSize: 10.5, color: "rgba(148,163,184,0.45)" }}>Connected</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: connected ? "#10b981" : "#ef4444" }}>
+            {connected ? `Yes (${connStatus})` : `No (${connStatus})`}
+          </span>
+          <span style={{ fontSize: 10.5, color: "rgba(148,163,184,0.45)" }}>Symbols Loaded</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: symbolCount > 0 ? "#e2e8f0" : "rgba(148,163,184,0.4)" }}>
+            {symbolCount}
+          </span>
+          <span style={{ fontSize: 10.5, color: "rgba(148,163,184,0.45)" }}>Source</span>
+          <span style={{ fontSize: 10.5, fontWeight: 700, color: source === "Live" ? "#10b981" : "rgba(148,163,184,0.4)" }}>
+            {source}
+          </span>
+        </div>
+      </div>
+
+      {/* Star timing diagnostics */}
+      <span style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(148,163,184,0.4)", letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 6 }}>
+        ⏱ Star Timings
+      </span>
       {events.length === 0
-        ? <p style={{ fontSize: 11, color: "rgba(148,163,184,0.4)", margin: "6px 0 0" }}>Tap ★ on any symbol to measure.</p>
+        ? <p style={{ fontSize: 11, color: "rgba(148,163,184,0.4)", margin: "4px 0 0" }}>Tap ★ on any symbol to measure.</p>
         : events.map(ev => (
             <div key={ev.id} style={{ display: "grid", gridTemplateColumns: "90px 54px 54px 54px 32px", gap: 4, marginBottom: 3, alignItems: "center" }}>
               <span style={{ fontSize: 10.5, fontWeight: 700, color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ev.symbol}</span>
@@ -632,13 +666,20 @@ export default function Markets() {
 
   useEffect(() => { fetchDeltaSymbols(); }, []); // eslint-disable-line
 
-  // ── cTrader catalog ────────────────────────────────────────────────────
+  // ── cTrader catalog (gated on live connection) ─────────────────────────
+  const connStatus = useCtraderConnStatus();
+  const ctraderIsStreaming = connStatus === "streaming";
+  const ctraderIsConnected = !["idle", "stopped", "error", "unknown"].includes(connStatus);
+
   const [ctraderSymbols, setCtraderSymbols] = useState<SymbolInfo[]>([]);
   const [ctraderLoading, setCtraderLoading] = useState(false);
   const [ctraderFetchAt, setCtraderFetchAt] = useState(0);
+  const [ctraderSource,  setCtraderSource]  = useState<"Live" | "None">("None");
+  const ctraderFetchingRef = useRef(false);
 
-  const fetchCtraderSymbols = useCallback(async () => {
-    if (ctraderLoading) return;
+  const fetchCtraderSymbolsInternal = useCallback(async () => {
+    if (ctraderFetchingRef.current) return;
+    ctraderFetchingRef.current = true;
     setCtraderLoading(true);
     try {
       const res  = await fetch(`${BASE}/api/symbols?broker=ctrader`);
@@ -651,13 +692,22 @@ export default function Markets() {
           category: (s.category ?? "other") as CtraderCategory,
           broker:   "ctrader" as Broker,
         })));
+        setCtraderSource("Live");
         setCtraderFetchAt(Date.now());
       }
     } catch { /* non-fatal */ }
-    finally { setCtraderLoading(false); }
-  }, [ctraderLoading]);
+    finally { setCtraderLoading(false); ctraderFetchingRef.current = false; }
+  }, []);
 
-  useEffect(() => { fetchCtraderSymbols(); }, []); // eslint-disable-line
+  useEffect(() => {
+    if (ctraderIsStreaming) {
+      fetchCtraderSymbolsInternal();
+    } else if (!ctraderIsConnected) {
+      setCtraderSymbols([]);
+      setCtraderSource("None");
+      setCtraderFetchAt(0);
+    }
+  }, [ctraderIsStreaming, ctraderIsConnected, fetchCtraderSymbolsInternal]);
 
 
   // ── Watchlist ──────────────────────────────────────────────────────────
@@ -719,6 +769,8 @@ export default function Markets() {
   }, [handleSymbolTap]);
 
   // ── Merged symbol list ─────────────────────────────────────────────────
+  // cTrader symbols only appear when connStatus === "streaming" (gated above).
+  // No hardcoded fallback symbols; all entries come from actual broker APIs.
   const allMergedSymbols = useMemo<SymbolInfo[]>(() => {
     const seen = new Set<string>();
     const result: SymbolInfo[] = [];
@@ -727,12 +779,6 @@ export default function Markets() {
     }
     for (const s of deltaSymbols) {
       if (!seen.has(s.symbol)) { seen.add(s.symbol); result.push(s); }
-    }
-    for (const [sym, entry] of Object.entries(SYMBOL_CATALOG)) {
-      if (entry.market === "Crypto") continue;
-      if (seen.has(sym)) continue;
-      seen.add(sym);
-      result.push({ symbol: sym, name: entry.label, category: MARKET_TO_DELTA_CAT[entry.market] ?? "other", broker: "delta" });
     }
     for (const item of items) {
       if (!seen.has(item.symbol)) {
@@ -861,7 +907,7 @@ export default function Markets() {
           <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
             {activeTab === "Markets" && (
               <button
-                onPointerDown={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }}
+                onPointerDown={() => { fetchDeltaSymbols(true); if (ctraderIsStreaming) fetchCtraderSymbolsInternal(); }}
                 disabled={isLoading}
                 style={{
                   background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
@@ -986,7 +1032,7 @@ export default function Markets() {
                   {deltaError}
                 </p>
                 <button
-                  onClick={() => { fetchDeltaSymbols(true); fetchCtraderSymbols(); }}
+                  onClick={() => { fetchDeltaSymbols(true); if (ctraderIsStreaming) fetchCtraderSymbolsInternal(); }}
                   style={{
                     padding: "9px 18px", borderRadius: 9, border: "none",
                     background: "rgba(245,158,11,0.14)", color: "#f59e0b",
@@ -1056,7 +1102,17 @@ export default function Markets() {
         <div style={{ height: 28 }} />
       </div>
 
-      {showDiag && <DiagnosticsPanel onClose={() => setShowDiag(false)} />}
+      {showDiag && (
+        <DiagnosticsPanel
+          onClose={() => setShowDiag(false)}
+          ctraderDiag={{
+            connected:   ctraderIsStreaming,
+            connStatus,
+            symbolCount: ctraderSymbols.length,
+            source:      ctraderSource,
+          }}
+        />
+      )}
 
       <style>{`
         @keyframes spin { from { transform: rotate(0deg) } to { transform: rotate(360deg) } }
