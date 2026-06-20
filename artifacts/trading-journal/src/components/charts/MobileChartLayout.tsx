@@ -2752,6 +2752,198 @@ function MiniWatchlistPopup({
   );
 }
 
+// ── TradeSheet — full-screen, drag to collapse / close ────────────────────
+function TradeSheet({ onClose }: { onClose: () => void }) {
+  const sheetRef    = useRef<HTMLDivElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const scrollRef   = useRef<HTMLDivElement>(null);
+  const onCloseRef  = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  const snapYRef = useRef({
+    full: 0,
+    half: typeof window !== "undefined" ? Math.round(0.5 * window.innerHeight) : 400,
+  });
+  useEffect(() => {
+    const compute = () => {
+      snapYRef.current.full = 0;
+      snapYRef.current.half = Math.round(0.5 * window.innerHeight);
+    };
+    compute();
+    window.addEventListener("resize", compute);
+    return () => window.removeEventListener("resize", compute);
+  }, []);
+
+  const ds = useRef({
+    active: false, closing: false,
+    snap: "full" as "full" | "half",
+    baseY: 0, startPY: 0, latestPY: 0,
+    rafId: 0, rafPending: false,
+  });
+
+  const applyY = (y: number, dur?: string) => {
+    const el = sheetRef.current;
+    if (!el) return;
+    el.style.transition = dur ? `transform ${dur} cubic-bezier(0.32,0.72,0,1)` : "none";
+    el.style.transform  = `translateY(${y}px)`;
+  };
+
+  const syncBD = (y: number) => {
+    const bd = backdropRef.current;
+    if (!bd) return;
+    const hY = snapYRef.current.half;
+    if (y <= hY) { bd.style.opacity = "1"; return; }
+    bd.style.opacity = String(Math.max(0, 1 - (y - hY) / (hY * 0.75)));
+  };
+
+  // Open animation — slide in from bottom
+  useEffect(() => {
+    const offscreen = window.innerHeight + 20;
+    applyY(offscreen);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      applyY(0, "0.42s");
+      document.body.classList.add("tj-sheet-drag");
+      sheetRef.current?.addEventListener("transitionend",
+        () => document.body.classList.remove("tj-sheet-drag"), { once: true });
+    }));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const doClose = useCallback(() => {
+    if (ds.current.closing) return;
+    ds.current.closing = true;
+    const offscreen = window.innerHeight + 20;
+    applyY(offscreen, "0.30s");
+    const bd = backdropRef.current;
+    if (bd) { bd.style.transition = "opacity 0.30s"; bd.style.opacity = "0"; }
+    const fire = () => onCloseRef.current();
+    sheetRef.current?.addEventListener("transitionend", fire, { once: true });
+    setTimeout(fire, 360);
+  }, []);
+
+  const onPD = useCallback((e: React.PointerEvent) => {
+    const sc = scrollRef.current;
+    // While fully open: only capture drag when at scroll top
+    if (ds.current.snap === "full" && sc && sc.scrollTop > 1) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    ds.current.active  = true;
+    ds.current.startPY = e.clientY;
+    ds.current.latestPY = e.clientY;
+    ds.current.baseY   = ds.current.snap === "full" ? 0 : snapYRef.current.half;
+    document.body.classList.add("tj-sheet-drag");
+  }, []);
+
+  const onPM = useCallback((e: React.PointerEvent) => {
+    if (!ds.current.active) return;
+    ds.current.latestPY = e.clientY;
+    if (ds.current.rafPending) return;
+    ds.current.rafPending = true;
+    ds.current.rafId = requestAnimationFrame(() => {
+      ds.current.rafPending = false;
+      const dy = ds.current.latestPY - ds.current.startPY;
+      const y  = Math.max(0, ds.current.baseY + dy);
+      const el = sheetRef.current;
+      if (el) { el.style.transition = "none"; el.style.transform = `translateY(${y}px)`; }
+      syncBD(y);
+    });
+  }, []);
+
+  const onPU = useCallback(() => {
+    if (!ds.current.active) return;
+    ds.current.active = false;
+    cancelAnimationFrame(ds.current.rafId);
+    ds.current.rafPending = false;
+    document.body.classList.remove("tj-sheet-drag");
+
+    const dy  = ds.current.latestPY - ds.current.startPY;
+    const curY = Math.max(0, ds.current.baseY + dy);
+    const { full, half } = snapYRef.current;
+    const closeThr = half + half * 0.35;
+
+    if (curY >= closeThr) {
+      doClose();
+    } else if (curY >= half * 0.45) {
+      ds.current.snap = "half";
+      applyY(half, "0.34s"); syncBD(half);
+      const sc = scrollRef.current;
+      if (sc) { sc.style.overflowY = "hidden"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "none"; }
+    } else {
+      ds.current.snap = "full";
+      applyY(full, "0.34s"); syncBD(full);
+      const sc = scrollRef.current;
+      if (sc) { sc.style.overflowY = "auto"; (sc.style as CSSStyleDeclaration & { touchAction: string }).touchAction = "pan-y"; }
+    }
+  }, [doClose]);
+
+  return createPortal(
+    <>
+      <div
+        ref={backdropRef}
+        onClick={doClose}
+        style={{
+          position:"fixed", inset:0, zIndex:9200,
+          background:"rgba(0,0,0,0.65)",
+          backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)",
+          transition:"opacity 0.22s",
+        }}
+      />
+      <div
+        ref={sheetRef}
+        style={{
+          position:"fixed", bottom:0, left:0, right:0,
+          height:"100dvh",
+          zIndex:9201,
+          background:"rgba(9,11,20,0.99)",
+          borderRadius:"20px 20px 0 0",
+          display:"flex", flexDirection:"column",
+          overflow:"hidden",
+          boxShadow:"0 -8px 64px rgba(0,0,0,0.85), 0 -1px 0 rgba(255,255,255,0.08)",
+          willChange:"transform",
+        }}
+        onPointerDown={onPD}
+        onPointerMove={onPM}
+        onPointerUp={onPU}
+        onPointerCancel={onPU}
+      >
+        {/* Header */}
+        <div style={{
+          flexShrink:0, padding:"12px 16px 10px",
+          display:"flex", flexDirection:"column", alignItems:"center", gap:10,
+          borderBottom:`1px solid ${DIVIDER}`,
+          touchAction:"none",
+          cursor:"grab",
+        }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"rgba(255,255,255,0.22)" }} />
+          <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ width:36 }} />
+            <span style={{ fontSize:16, fontWeight:700, color:TEXT_HI, letterSpacing:"0.01em" }}>Trade</span>
+            <button
+              onClick={e => { e.stopPropagation(); doClose(); }}
+              style={{
+                width:36, height:36, borderRadius:10,
+                display:"flex", alignItems:"center", justifyContent:"center",
+                background:BTN_BG, border:`1px solid ${BTN_BORDER}`, cursor:"pointer",
+              }}
+            >
+              <X style={{ width:16, height:16, color:TEXT_DIM }} />
+            </button>
+          </div>
+        </div>
+
+        {/* Empty scrollable content — ready for trading controls */}
+        <div
+          ref={scrollRef}
+          style={{
+            flex:1,
+            overflowY:"auto",
+            overscrollBehavior:"contain",
+          } as React.CSSProperties}
+        />
+      </div>
+    </>,
+    document.body
+  );
+}
+
 // ── MiniControlBar ─────────────────────────────────────────────────────────
 // memo() is critical: this component sits outside the sheet tree but inside
 // MobileChartLayout. Without memo, every parent state change (showSettings,
@@ -2759,12 +2951,12 @@ function MiniWatchlistPopup({
 // own props change — i.e. symbol/interval/watchlist/fullscreen/broker status.
 const MiniControlBar = memo(function MiniControlBar({
   activeKey, badge, interval, watchlistItems,
-  onSelectSymbol, onTF, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
+  onSelectSymbol, onTF, onTrade, onDraw, onBroker, onMore, onPrev, onNext, onFullscreen, isFullscreen,
   brokerConnected,
 }: {
   activeKey: string; badge: string; interval: string;
   watchlistItems: { symbol: string; badge?: string }[];
-  onSelectSymbol: (key: string) => void; onTF: () => void; onDraw: () => void;
+  onSelectSymbol: (key: string) => void; onTF: () => void; onTrade: () => void; onDraw: () => void;
   onBroker: () => void; onMore: () => void;
   onPrev: () => void; onNext: () => void;
   onFullscreen: () => void; isFullscreen: boolean;
@@ -2892,6 +3084,40 @@ const MiniControlBar = memo(function MiniControlBar({
         >
           <span style={{ fontSize:12.5, fontWeight:700, color: TEXT_HI }}>{tfLabel(interval)}</span>
           <ChevronDown style={{ width:11, height:11, color: GL_TEAL, opacity:0.85 }} />
+        </button>
+
+        {/* Trade button — amber pill */}
+        <button
+          onClick={onTrade}
+          onPointerDown={e => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.transition = "transform 0.09s ease, background 0.09s";
+            el.style.transform  = "scale(0.91)";
+            el.style.background = "#D18A22";
+          }}
+          onPointerUp={e => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1), background 0.18s";
+            el.style.transform  = "scale(1)";
+            el.style.background = "#B8741A";
+          }}
+          onPointerCancel={e => {
+            const el = e.currentTarget as HTMLElement;
+            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1), background 0.18s";
+            el.style.transform  = "scale(1)";
+            el.style.background = "#B8741A";
+          }}
+          style={{
+            height:36, padding:"0 16px",
+            borderRadius:9999, flexShrink:0,
+            display:"flex", alignItems:"center", justifyContent:"center",
+            background:"#B8741A",
+            border:"1px solid rgba(255,178,60,0.28)",
+            cursor:"pointer",
+            boxShadow:"0 0 14px rgba(184,116,26,0.45), 0 2px 6px rgba(0,0,0,0.40)",
+          }}
+        >
+          <span style={{ fontSize:12.5, fontWeight:600, color:"#FFFFFF", whiteSpace:"nowrap" }}>Trade</span>
         </button>
 
         {divider}
@@ -3041,6 +3267,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [showWatchlist,     setShowWatchlist]     = useState(false);
   const [isFullscreen,      setIsFullscreen]      = useState(false);
   const [showLayoutSheet,   setShowLayoutSheet]   = useState(false);
+  const [showTradeSheet,    setShowTradeSheet]    = useState(false);
   const [activeChartSlot,   setActiveChartSlot]   = useState(0);
   const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
   const [slotIntervals,     setSlotIntervals]     = useState<string[]>(() => [interval, interval, interval]);
@@ -3140,6 +3367,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const handleOpenDrawingSheet = useCallback(() => setShowDrawingSheet(true),  []);
   const handleOpenBrokerSheet  = useCallback(() => setShowBrokerIntegration(true), []);
   const handleOpenMoreSheet    = useCallback(() => setShowMoreSheet(true),     []);
+  const handleOpenTradeSheet   = useCallback(() => setShowTradeSheet(true),    []);
 
   // Derive the symbol/badge/interval shown in the shared mini control bar for the active slot
   const activeSlotSymbol = (activeChartSlot === 0 || layoutCount <= 1)
@@ -3301,6 +3529,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
           watchlistItems={watchlistItems}
           onSelectSymbol={handleSelectSymbol}
           onTF={handleOpenTFSheet}
+          onTrade={handleOpenTradeSheet}
           onDraw={handleOpenDrawingSheet}
           onBroker={handleOpenBrokerSheet}
           onMore={handleOpenMoreSheet}
@@ -3315,6 +3544,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
       {/* ── Main bar rendered by layout.tsx to avoid remount flash ── */}
 
       {/* ── Sheets & modals ── */}
+      {showTradeSheet   && <TradeSheet onClose={() => setShowTradeSheet(false)} />}
       {showDrawingSheet && <DrawingToolsSheet onClose={handleCloseDrawingSheet} />}
       {showBrokerIntegration && <BrokerIntegrationModal onClose={() => setShowBrokerIntegration(false)} />}
       {showTFSheet      && <TFSheet interval={activeSlotInterval} onSelect={handleSelectInterval} onClose={() => setShowTFSheet(false)} />}
