@@ -574,8 +574,13 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       </main>
 
       {/* ── Mobile bottom navigation bar ── */}
-      {isMobile && !mobileChartFullscreen && (
-        <div style={{ position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60 }}>
+      {/* Always mounted so visualIdx / animation state survive fullscreen toggles.
+          Fullscreen only hides it via display:none — never unmounts it. */}
+      {isMobile && (
+        <div style={{
+          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60,
+          display: mobileChartFullscreen ? "none" : "block",
+        }}>
           <MobileBottomNav />
         </div>
       )}
