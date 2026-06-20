@@ -3,8 +3,9 @@
  *
  * Routing strategy:
  *
- *  1. Yahoo Finance (non-crypto: forex, indices, metals, commodities)
- *     → fetchYahooCandles() — no API key required
+ *  1. cTrader (non-crypto: forex, indices, metals, commodities)
+ *     → returns aggregated bars built from live ProtoOA ticks
+ *     → no REST history source; bars accumulate as ticks arrive
  *
  *  2. Delta Exchange India (crypto — BTCUSD, ETHUSD, etc.)
  *     → fetchDeltaCandles() + CandleAggregator merge
@@ -17,10 +18,20 @@ import { Router, type IRouter } from "express";
 import type { CandleAggregator, OHLCBar, CandleInterval } from "../services/CandleAggregator.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import { fetchDeltaCandles } from "../services/deltaHistoryService.js";
-import { isYahooSymbol, fetchYahooCandles } from "../services/yahooFinanceService.js";
 import { logger } from "../lib/logger.js";
 
 const VALID_INTERVALS = new Set(["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"]);
+
+/**
+ * Symbols served by cTrader (all non-crypto).
+ * Add/remove symbols here as cTrader subscriptions change.
+ */
+const CTRADER_SYMBOLS = new Set([
+  "NAS100", "US30", "US500", "SPX500", "GER40", "DE40", "UK100", "JP225",
+  "XAUUSD", "XAGUSD", "USOIL", "UKOIL", "NATGAS",
+  "EURUSD", "GBPUSD", "GBPJPY", "USDJPY", "AUDUSD", "USDCAD", "USDCHF",
+  "EURGBP", "EURJPY", "EURAUD", "GBPAUD", "NZDUSD",
+]);
 
 /**
  * Merge historical (older) bars with live aggregator bars (newer).
@@ -58,12 +69,15 @@ export function createCandlesRouter(
     const beforeSec = typeof beforeRaw === "string" ? parseInt(beforeRaw, 10) : NaN;
     const beforeSecOpt = (!isNaN(beforeSec) && beforeSec > 0) ? beforeSec : undefined;
 
-    // ── Non-crypto (forex, indices, metals, commodities) via Yahoo Finance ────
-    if (isYahooSymbol(symbol)) {
-      logger.info({ symbol, interval }, "candles: routing to Yahoo Finance");
-      const bars = await fetchYahooCandles(symbol, interval, beforeSecOpt);
-      logger.info({ symbol, interval, returned: bars.length }, "candles: Yahoo Finance bars served ✓");
-      res.json(bars);
+    const iv = interval as CandleInterval;
+
+    // ── cTrader symbols (forex, indices, metals, commodities) ─────────────────
+    // Historical REST not available; return tick-aggregated bars only.
+    if (CTRADER_SYMBOLS.has(symbol)) {
+      logger.info({ symbol, interval }, "candles: routing to cTrader (live-tick aggregated bars)");
+      const aggBars = aggregator.getBars(symbol, iv);
+      logger.info({ symbol, interval, bars: aggBars.length }, "candles: cTrader aggregated bars served ✓");
+      res.json(aggBars.slice(-501));
       return;
     }
 
@@ -85,8 +99,6 @@ export function createCandlesRouter(
     }
 
     // ── Initial load: latest 500 bars merged with live aggregator ─────────────
-    const iv = interval as CandleInterval;
-
     logger.info({ symbol, interval }, "candles: fetching real Delta Exchange India bars");
 
     const historicalBars = await fetchDeltaCandles(symbol, interval, 500);

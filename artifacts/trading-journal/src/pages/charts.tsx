@@ -296,7 +296,7 @@ function getEntry(key: string, watchlist: WatchlistEntry[]): WatchlistEntry {
   if (wl) return wl;
   const cat = SYMBOL_CATALOG[key];
   return {
-    id: -1, symbol: key, provider: "yahoo", position: 0,
+    id: -1, symbol: key, provider: "ctrader", position: 0,
     isFavorite: false, createdAt: "",
     tv: cat?.tv ?? key, label: cat?.label ?? key,
     badge: cat?.badge ?? key.slice(0, 4), market: cat?.market ?? "Other",

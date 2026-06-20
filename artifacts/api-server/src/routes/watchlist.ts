@@ -7,12 +7,12 @@ import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 import { getCtraderSymbolRow } from "./ctrader_spots.js";
 
 const PROVIDER_MAP: Record<string, string> = {
-  NAS100: "yahoo",  US30: "yahoo",   XAUUSD: "yahoo",   XAGUSD: "yahoo",
-  EURUSD: "yahoo",  GBPUSD: "yahoo", GBPJPY: "yahoo",   USDJPY: "yahoo",
-  AUDUSD: "yahoo",  USDCAD: "yahoo", USOIL: "yahoo",    UKOIL: "yahoo",
-  SPX500: "yahoo",  DE40: "yahoo",
-  BTCUSD: "delta",  ETHUSD: "delta", SOLUSD: "delta",
-  DOGEUSD: "delta", PEPEUSD: "delta",
+  NAS100: "ctrader", US30: "ctrader",   XAUUSD: "ctrader",  XAGUSD: "ctrader",
+  EURUSD: "ctrader", GBPUSD: "ctrader", GBPJPY: "ctrader",  USDJPY: "ctrader",
+  AUDUSD: "ctrader", USDCAD: "ctrader", USOIL: "ctrader",   UKOIL: "ctrader",
+  SPX500: "ctrader", DE40: "ctrader",
+  BTCUSD: "delta",   ETHUSD: "delta",   SOLUSD: "delta",
+  DOGEUSD: "delta",  PEPEUSD: "delta",
 };
 
 const AddSymbolBody = z.object({

@@ -563,13 +563,12 @@ function TickRateOverlay({
       }
 
       // ── Market open ────────────────────────────────────────────────────
-      // lastTs === 0 means no tick has EVER arrived for this symbol/chart,
-      // which means there is no live WS feed (e.g. Yahoo Finance symbols).
+      // lastTs === 0 means no tick has ever arrived for this chart — provider offline.
       const hasLiveFeed = lastTs > 0;
 
       if (!hasLiveFeed) {
-        // No live feed — Yahoo Finance / REST-only symbols
-        txt.textContent      = "No Live Feed";
+        // Provider offline (cTrader not connected, or Delta WS down)
+        txt.textContent      = "Feed Offline";
         dot.style.background = "#6b7280";
         dot.style.boxShadow  = "none";
         wrap.style.opacity   = "0.55";
@@ -807,8 +806,7 @@ function LivePriceBox({
   // ── Countdown — 500 ms is plenty of precision for a seconds counter ───────
   // Frozen to "—" when:
   //   • market is closed (no new candles will form), OR
-  //   • no live tick has ever arrived for this chart (Yahoo Finance / REST-only
-  //     symbols — lastTickTimeRef stays 0, no WS feed to drive candle formation)
+  //   • no live tick has ever arrived (provider offline — cTrader or Delta down)
   // rc.current fields are synced on every render so the setInterval closure
   // always reads current state without stale capture.
   useEffect(() => {

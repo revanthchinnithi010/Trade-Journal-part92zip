@@ -44,7 +44,7 @@ function ProviderBadge({ symbol }: { symbol: string }) {
     </span>
   ) : (
     <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-blue-500/15 text-blue-400 border border-blue-500/20">
-      ⊕ Yahoo Finance
+      ⊕ cTrader
     </span>
   );
 }

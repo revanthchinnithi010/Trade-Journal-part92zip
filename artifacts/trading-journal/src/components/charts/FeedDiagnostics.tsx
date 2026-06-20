@@ -116,14 +116,13 @@ export function FeedDiagnostics({ symbol }: Props) {
     ? "cTrader ProtoOA real-time spot subscription"
     : (symData?.routingReason ?? getRoutingReason(symbol));
 
-  // Yahoo Finance REST: non-crypto AND cTrader is NOT connected.
-  // Never classify a cTrader-connected symbol as Yahoo Finance.
-  const isYahooSymbol = assetClass !== "crypto" && !ctraderConnected;
+  // Feed offline states — shown when the required provider is unavailable
+  const isCtraderOffline = assetClass !== "crypto" && !ctraderConnected;
+  const isDeltaOffline   = assetClass === "crypto"  && !provOk;
 
   const feedStatus = isCtrader
     ? sessionOpen ? "streaming" : "market_closed"
-    : isYahooSymbol
-    ? "REST only"
+    : isCtraderOffline ? "offline"
     : (symData?.subscribed && provOk)
     ? "streaming"
     : "disconnected";
@@ -197,17 +196,20 @@ export function FeedDiagnostics({ symbol }: Props) {
   // Pill button appearance
   const pillLive    = isCtrader ? sessionOpen : (provOk && sessionOpen);
   const pillClosed  = !sessionOpen;
-  const pillColor   = pillClosed  ? "#ef4444"
-                    : pillLive    ? "#00FFB4"
-                    : isYahooSymbol ? "#F59E0B"
+  const pillColor   = pillClosed        ? "#ef4444"
+                    : pillLive          ? "#00FFB4"
+                    : isCtraderOffline  ? "#ef4444"
+                    : isDeltaOffline    ? "#ef4444"
                     : "#ff6b6b";
-  const pillBorder  = pillClosed  ? "rgba(239,68,68,0.3)"
-                    : pillLive    ? "rgba(0,255,140,0.25)"
-                    : isYahooSymbol ? "rgba(245,158,11,0.3)"
+  const pillBorder  = pillClosed        ? "rgba(239,68,68,0.3)"
+                    : pillLive          ? "rgba(0,255,140,0.25)"
+                    : isCtraderOffline  ? "rgba(239,68,68,0.3)"
+                    : isDeltaOffline    ? "rgba(239,68,68,0.3)"
                     : "rgba(255,100,100,0.25)";
-  const pillLabel   = pillClosed    ? "Closed"
-                    : isCtrader     ? "cTrader"
-                    : isYahooSymbol ? "REST"
+  const pillLabel   = pillClosed       ? "Closed"
+                    : isCtrader        ? "cTrader"
+                    : isCtraderOffline ? "cTrader ↓"
+                    : isDeltaOffline   ? "Delta ↓"
                     : "Feed";
 
   return (
@@ -230,7 +232,7 @@ export function FeedDiagnostics({ symbol }: Props) {
         }}
         title="Feed Diagnostics"
       >
-        {pillLive && !pillClosed ? <Wifi size={9} /> : isYahooSymbol ? <Activity size={9} /> : <WifiOff size={9} />}
+        {pillLive && !pillClosed ? <Wifi size={9} /> : <WifiOff size={9} />}
         <span style={{ color: "rgba(255,255,255,0.5)" }}>{pillLabel}</span>
         {open ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
       </button>
@@ -282,22 +284,34 @@ export function FeedDiagnostics({ symbol }: Props) {
           {/* Provider + feed status */}
           <Row
             label="Provider"
-            value={liveProvider ? getProviderLabel(providerKey) : "Yahoo Finance"}
-            color={isCtrader ? "#F59E0B" : isYahooSymbol ? "#6b7280" : providerColor}
+            value={
+              isCtrader          ? "cTrader"
+              : isCtraderOffline ? "cTrader (offline)"
+              : isDeltaOffline   ? "Delta Exchange (offline)"
+              : liveProvider ? getProviderLabel(providerKey) : "—"
+            }
+            color={
+              isCtrader          ? "#F59E0B"
+              : isCtraderOffline ? "#ef4444"
+              : isDeltaOffline   ? "#ef4444"
+              : providerColor
+            }
           />
           <Row
             label="Live Feed"
             value={
-              isCtrader && sessionOpen  ? "Active ✓"
+              isCtrader && sessionOpen    ? "Active ✓"
               : isCtrader && !sessionOpen ? "Waiting · Market Closed"
-              : isYahooSymbol           ? "REST only · no WS"
+              : isCtraderOffline          ? "cTrader Feed Offline"
+              : isDeltaOffline            ? "Delta Feed Offline"
               : feedStatus === "streaming" ? "Streaming ✓"
               : feedStatus
             }
             color={
               isCtrader && sessionOpen    ? "#00FFB4"
               : isCtrader && !sessionOpen ? "#F59E0B"
-              : isYahooSymbol             ? "#6b7280"
+              : isCtraderOffline          ? "#ef4444"
+              : isDeltaOffline            ? "#ef4444"
               : feedStatus === "streaming" ? "#00FFB4"
               : "#FF9F43"
             }
@@ -380,21 +394,32 @@ export function FeedDiagnostics({ symbol }: Props) {
             </>
           )}
 
-          {/* Yahoo Finance banner — only when cTrader is NOT connected */}
-          {isYahooSymbol && (
+          {/* cTrader offline banner */}
+          {isCtraderOffline && (
             <div style={{
               marginTop: 6, padding: "5px 8px", borderRadius: 4,
-              background: "rgba(107,114,128,0.08)", border: "1px solid rgba(107,114,128,0.2)",
-              fontSize: 10, color: "rgba(180,180,180,0.8)", lineHeight: 1.5,
+              background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)",
+              fontSize: 10, color: "rgba(239,68,68,0.9)", lineHeight: 1.5,
             }}>
-              <strong>No live feed</strong> — {getAssetClassLabel(assetClass)} data uses
-              Yahoo Finance REST (no WebSocket). Candle countdown is frozen.
-              {!sessionOpen && " Market is currently closed."}
+              <strong>cTrader Feed Offline</strong> — {getAssetClassLabel(assetClass)} data
+              requires a cTrader connection. Connect via Brokers to restore live feed and candle data.
+            </div>
+          )}
+
+          {/* Delta offline banner */}
+          {isDeltaOffline && (
+            <div style={{
+              marginTop: 6, padding: "5px 8px", borderRadius: 4,
+              background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.25)",
+              fontSize: 10, color: "rgba(239,68,68,0.9)", lineHeight: 1.5,
+            }}>
+              <strong>Delta Feed Offline</strong> — Crypto data requires Delta Exchange.
+              Check your connection or reconnect via Brokers.
             </div>
           )}
 
           {/* Not subscribed warning — only for Delta crypto symbols */}
-          {!isCtrader && !isYahooSymbol && !symData?.subscribed && (
+          {!isCtrader && !isCtraderOffline && !isDeltaOffline && !symData?.subscribed && (
             <div style={{ marginTop: 6, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
               Not subscribed — select this symbol in the watchlist to start receiving ticks.
             </div>
