@@ -3086,38 +3086,48 @@ const MiniControlBar = memo(function MiniControlBar({
           <ChevronDown style={{ width:11, height:11, color: GL_TEAL, opacity:0.85 }} />
         </button>
 
-        {/* Trade button — amber pill */}
+        {/* Trade button — white gloss pill */}
         <button
           onClick={onTrade}
           onPointerDown={e => {
             const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.09s ease, background 0.09s";
+            el.style.transition = "transform 0.09s ease";
             el.style.transform  = "scale(0.91)";
-            el.style.background = "#D18A22";
           }}
           onPointerUp={e => {
             const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1), background 0.18s";
+            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
             el.style.transform  = "scale(1)";
-            el.style.background = "#B8741A";
           }}
           onPointerCancel={e => {
             const el = e.currentTarget as HTMLElement;
-            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1), background 0.18s";
+            el.style.transition = "transform 0.30s cubic-bezier(0.34,1.56,0.64,1)";
             el.style.transform  = "scale(1)";
-            el.style.background = "#B8741A";
           }}
           style={{
             height:36, padding:"0 16px",
             borderRadius:9999, flexShrink:0,
             display:"flex", alignItems:"center", justifyContent:"center",
-            background:"#B8741A",
-            border:"1px solid rgba(255,178,60,0.28)",
+            background:"linear-gradient(180deg,#ffffff 0%,#d8d8d8 100%)",
+            border:"1px solid rgba(255,255,255,0.60)",
             cursor:"pointer",
-            boxShadow:"0 0 14px rgba(184,116,26,0.45), 0 2px 6px rgba(0,0,0,0.40)",
+            boxShadow:[
+              "0 1px 0 rgba(255,255,255,0.90) inset",
+              "0 -1px 0 rgba(0,0,0,0.18) inset",
+              "0 2px 8px rgba(0,0,0,0.35)",
+              "0 0 12px rgba(255,255,255,0.18)",
+            ].join(","),
+            position:"relative", overflow:"hidden",
           }}
         >
-          <span style={{ fontSize:12.5, fontWeight:600, color:"#FFFFFF", whiteSpace:"nowrap" }}>Trade</span>
+          {/* Glossy top sheen */}
+          <span aria-hidden style={{
+            position:"absolute", top:0, left:0, right:0, height:"50%",
+            background:"linear-gradient(180deg,rgba(255,255,255,0.55) 0%,rgba(255,255,255,0.0) 100%)",
+            borderRadius:"9999px 9999px 0 0",
+            pointerEvents:"none",
+          }} />
+          <span style={{ fontSize:12.5, fontWeight:700, color:"#0a0b14", whiteSpace:"nowrap", position:"relative", letterSpacing:"0.01em" }}>Trade</span>
         </button>
 
         {divider}
