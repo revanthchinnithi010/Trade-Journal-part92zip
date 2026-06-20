@@ -21,7 +21,8 @@ import {
   type Time,
 } from "lightweight-charts";
 import { useChartStore, type OHLCBar, type ChartType, type IndicatorState } from "@/store/chartStore";
-import { useLiveMarketContext, fmtPrice } from "@/contexts/LiveMarketContext";
+import { useLiveMarketContext, fmtPrice, fmtTickAge } from "@/contexts/LiveMarketContext";
+import { useMarketSession, type MarketType } from "@/lib/marketSession";
 import { SYMBOL_CATALOG } from "@/contexts/WatchlistContext";
 import { emitCrosshair, resetCrosshair } from "@/lib/crosshairState";
 import { RealtimeTradeAggregator, toSec } from "@/lib/realtimeTradeAggregator";
@@ -507,18 +508,40 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
-// ── Tick-rate overlay — shows live ticks/sec, pure DOM mutations, no React state ──
-function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObject<number> }) {
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const dotRef  = useRef<HTMLSpanElement>(null);
-  const txtRef  = useRef<HTMLSpanElement>(null);
+// ── Tick-rate overlay — market-aware, pure DOM mutations, no React state ────────
+// Shows:
+//   • "Market Closed · last Xm ago"  — when exchange session is closed
+//   • "N t/s"                        — live ticks flowing
+//   • "0 t/s · last Xm ago"          — market open but no recent ticks
+function TickRateOverlay({
+  tickCountRef,
+  lastTickTimeRef,
+  isMarketOpen: isOpen,
+  mktType,
+}: {
+  tickCountRef:    React.MutableRefObject<number>;
+  lastTickTimeRef: React.MutableRefObject<number>;
+  isMarketOpen:    boolean;
+  mktType:         MarketType;
+}) {
+  const wrapRef   = useRef<HTMLDivElement>(null);
+  const dotRef    = useRef<HTMLSpanElement>(null);
+  const txtRef    = useRef<HTMLSpanElement>(null);
+
+  // Keep a ref in sync with the prop so the setInterval closure always
+  // reads the current session state without stale capture.
+  const isOpenRef = useRef(isOpen);
+  isOpenRef.current = isOpen;
+
+  const mktTypeRef = useRef(mktType);
+  mktTypeRef.current = mktType;
 
   useEffect(() => {
     let prev = tickCountRef.current;
 
     const id = setInterval(() => {
-      const cur = tickCountRef.current;
-      const tps = cur - prev;
+      const cur  = tickCountRef.current;
+      const tps  = cur - prev;
       prev = cur;
 
       const wrap = wrapRef.current;
@@ -526,35 +549,49 @@ function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObjec
       const txt  = txtRef.current;
       if (!wrap || !dot || !txt) return;
 
-      txt.textContent = tps > 0 ? `${tps} t/s` : "0 t/s";
+      const open   = isOpenRef.current;
+      const lastTs = lastTickTimeRef.current;
 
-      // Green dot + full opacity when ticks are flowing; grey + dim when idle
+      if (!open) {
+        // ── Market closed ──────────────────────────────────────────────────
+        const ageStr = lastTs > 0 ? ` · last ${fmtTickAge(lastTs)}` : "";
+        txt.textContent      = `Market Closed${ageStr}`;
+        dot.style.background = "rgba(239,68,68,0.85)";
+        dot.style.boxShadow  = "none";
+        wrap.style.opacity   = "0.85";
+        return;
+      }
+
+      // ── Market open ────────────────────────────────────────────────────
+      const ageStr = lastTs > 0 && tps === 0 ? ` · ${fmtTickAge(lastTs)}` : "";
+      txt.textContent = tps > 0 ? `${tps} t/s` : `0 t/s${ageStr}`;
+
       if (tps > 0) {
-        dot.style.background  = "#22c55e";
-        dot.style.boxShadow   = "0 0 5px #22c55e";
-        wrap.style.opacity    = "1";
+        dot.style.background = "#22c55e";
+        dot.style.boxShadow  = "0 0 5px #22c55e";
+        wrap.style.opacity   = "1";
       } else {
-        dot.style.background  = "#6b7280";
-        dot.style.boxShadow   = "none";
-        wrap.style.opacity    = "0.45";
+        dot.style.background = "#6b7280";
+        dot.style.boxShadow  = "none";
+        wrap.style.opacity   = "0.45";
       }
     }, 1000);
 
     return () => clearInterval(id);
-  }, [tickCountRef]);
+  }, [tickCountRef, lastTickTimeRef]);
 
   return (
     <div
       ref={wrapRef}
       style={{
-        display:        "flex",
-        alignItems:     "center",
-        gap:            4,
-        marginLeft:     8,
-        flexShrink:     0,
-        opacity:        0.45,
-        transition:     "opacity 0.4s",
-        userSelect:     "none",
+        display:    "flex",
+        alignItems: "center",
+        gap:        4,
+        marginLeft: 8,
+        flexShrink: 0,
+        opacity:    isOpen ? 0.45 : 0.85,
+        transition: "opacity 0.4s",
+        userSelect: "none",
       }}
     >
       <span
@@ -563,7 +600,7 @@ function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObjec
           width:        6,
           height:       6,
           borderRadius: "50%",
-          background:   "#6b7280",
+          background:   isOpen ? "#6b7280" : "rgba(239,68,68,0.85)",
           flexShrink:   0,
           display:      "inline-block",
         }}
@@ -571,15 +608,15 @@ function TickRateOverlay({ tickCountRef }: { tickCountRef: React.MutableRefObjec
       <span
         ref={txtRef}
         style={{
-          fontFamily:   "ui-monospace, 'SF Mono', Menlo, monospace",
-          fontSize:     11,
-          color:        "rgba(255,255,255,0.75)",
+          fontFamily:    "ui-monospace, 'SF Mono', Menlo, monospace",
+          fontSize:      11,
+          color:         "rgba(255,255,255,0.75)",
           letterSpacing: "0.02em",
-          lineHeight:   1,
-          whiteSpace:   "nowrap",
+          lineHeight:    1,
+          whiteSpace:    "nowrap",
         }}
       >
-        0 t/s
+        {isOpen ? "0 t/s" : "Market Closed"}
       </span>
     </div>
   );
@@ -948,6 +985,17 @@ const CustomChart = memo(function CustomChart({
   // ── Tick-rate counter (incremented synchronously on every WS tick) ─────────
   // TickRateOverlay samples this once per second to display ticks/s.
   const tickCountRef = useRef(0);
+
+  // ── Market session tracking ────────────────────────────────────────────────
+  // lastTickTimeRef: wall-clock ms of the most recent accepted tick for this
+  //   symbol; written in the tick handler, read by TickRateOverlay each second.
+  // isMarketOpenRef: synced every render from useMarketSession() so the tick-
+  //   handler closure (which cannot safely call hooks) always sees the current
+  //   session state without stale capture.
+  const lastTickTimeRef  = useRef<number>(0);
+  const isMarketOpenRef  = useRef<boolean>(true);
+  const { isOpen: mktIsOpen, type: mktType } = useMarketSession(symbol);
+  isMarketOpenRef.current = mktIsOpen; // sync on every render — safe, not in a conditional
 
   // ── Real-time OHLC aggregator — builds live candle from raw price ticks ────
   // MT5/TradingView pattern: historical bars come from REST; the live bar is
@@ -3243,8 +3291,15 @@ const CustomChart = memo(function CustomChart({
           }
         }
 
+        // ── Market session guard ──────────────────────────────────────────────
+        // If the exchange is closed for this symbol (e.g. weekend for EURUSD),
+        // discard the incoming tick entirely so no fake price movement appears
+        // on the chart or in the tick-rate overlay.
+        if (!isMarketOpenRef.current) return;
+
         // Tick counter for the TickRateOverlay
         tickCountRef.current++;
+        lastTickTimeRef.current = Date.now();
 
         // Zero-latency price ref (read by LivePriceBox RAF loop every frame)
         tickDataRef.current.price = bar.close;
@@ -3481,7 +3536,12 @@ const CustomChart = memo(function CustomChart({
             }}>
               · {fmtIntervalLabel(interval)}
             </span>
-            <TickRateOverlay tickCountRef={tickCountRef} />
+            <TickRateOverlay
+              tickCountRef={tickCountRef}
+              lastTickTimeRef={lastTickTimeRef}
+              isMarketOpen={mktIsOpen}
+              mktType={mktType}
+            />
           </div>
           <LivePriceBox
             chart={chartCtx?.chart ?? null}
