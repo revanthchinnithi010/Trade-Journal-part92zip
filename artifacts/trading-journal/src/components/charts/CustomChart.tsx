@@ -563,7 +563,20 @@ function TickRateOverlay({
       }
 
       // ── Market open ────────────────────────────────────────────────────
-      const ageStr = lastTs > 0 && tps === 0 ? ` · ${fmtTickAge(lastTs)}` : "";
+      // lastTs === 0 means no tick has EVER arrived for this symbol/chart,
+      // which means there is no live WS feed (e.g. Yahoo Finance symbols).
+      const hasLiveFeed = lastTs > 0;
+
+      if (!hasLiveFeed) {
+        // No live feed — Yahoo Finance / REST-only symbols
+        txt.textContent      = "No Live Feed";
+        dot.style.background = "#6b7280";
+        dot.style.boxShadow  = "none";
+        wrap.style.opacity   = "0.55";
+        return;
+      }
+
+      const ageStr = tps === 0 ? ` · ${fmtTickAge(lastTs)}` : "";
       txt.textContent = tps > 0 ? `${tps} t/s` : `0 t/s${ageStr}`;
 
       if (tps > 0) {
@@ -626,7 +639,7 @@ function TickRateOverlay({
 function LivePriceBox({
   chart: _chart, series, interval,
   upColor = UP_COLOR, downColor = DOWN_COLOR,
-  textColor = "#ffffff", boxWidth, boxWidthRef, tickDataRef,
+  textColor = "#ffffff", boxWidth, boxWidthRef, tickDataRef, lastTickTimeRef,
   symbolOverride, slotMode = false, isMarketOpen = true,
 }: {
   chart:        IChartApi | null;
@@ -640,6 +653,8 @@ function LivePriceBox({
   boxWidthRef?: React.MutableRefObject<number>;
   /** Zero-latency tick data — written by WS handler, read by RAF loop without React cycle */
   tickDataRef?: React.MutableRefObject<{ price: number | null; open: number | null }>;
+  /** Wall-clock ms of the most recent accepted tick — 0 means no live feed exists for this symbol */
+  lastTickTimeRef?: React.MutableRefObject<number>;
   /** Per-pane symbol override — must be set for every slot so fmtPrice uses correct decimals */
   symbolOverride?: string;
   /** When true (slot mode), never fall back to global Zustand livePrice/liveOpen */
@@ -669,8 +684,8 @@ function LivePriceBox({
   // Single mutable bag — written on every render, read inside RAF loop.
   // Using one object avoids closure staleness without listing every dependency.
   const rc = useRef({
-    price:        livePrice,
-    open:         liveOpen,
+    price:           livePrice,
+    open:            liveOpen,
     symbol,
     slotMode,
     series,
@@ -681,6 +696,7 @@ function LivePriceBox({
     boxWidth,
     boxWidthRef,
     tickDataRef,
+    lastTickTimeRef,
     isMarketOpen,
     // Change-detection cache (skip redundant DOM writes)
     _col: "" as string,
@@ -689,19 +705,20 @@ function LivePriceBox({
     _px:  "" as string,
   });
   // Sync props/state → ref every render (runs before RAF reads them)
-  rc.current.price        = livePrice;
-  rc.current.open         = liveOpen;
-  rc.current.symbol       = symbol;
-  rc.current.slotMode     = slotMode;
-  rc.current.series       = series;
-  rc.current.interval     = interval;
-  rc.current.upColor      = upColor;
-  rc.current.downColor    = downColor;
-  rc.current.textColor    = textColor;
-  rc.current.boxWidth     = boxWidth;
-  rc.current.boxWidthRef  = boxWidthRef;
-  rc.current.tickDataRef  = tickDataRef;
-  rc.current.isMarketOpen = isMarketOpen;
+  rc.current.price            = livePrice;
+  rc.current.open             = liveOpen;
+  rc.current.symbol           = symbol;
+  rc.current.slotMode         = slotMode;
+  rc.current.series           = series;
+  rc.current.interval         = interval;
+  rc.current.upColor          = upColor;
+  rc.current.downColor        = downColor;
+  rc.current.textColor        = textColor;
+  rc.current.boxWidth         = boxWidth;
+  rc.current.boxWidthRef      = boxWidthRef;
+  rc.current.tickDataRef      = tickDataRef;
+  rc.current.lastTickTimeRef  = lastTickTimeRef;
+  rc.current.isMarketOpen     = isMarketOpen;
 
   // ── RAF loop — 60 fps, pure DOM mutations, zero React scheduler overhead ──
   useEffect(() => {
@@ -788,21 +805,26 @@ function LivePriceBox({
   }, []); // intentionally empty — all values read via rc ref
 
   // ── Countdown — 500 ms is plenty of precision for a seconds counter ───────
-  // Frozen to "—" when the market is closed (no new candles will form).
-  // rc.current.isMarketOpen is synced on every render so the setInterval
-  // closure always reads the current session state without stale capture.
+  // Frozen to "—" when:
+  //   • market is closed (no new candles will form), OR
+  //   • no live tick has ever arrived for this chart (Yahoo Finance / REST-only
+  //     symbols — lastTickTimeRef stays 0, no WS feed to drive candle formation)
+  // rc.current fields are synced on every render so the setInterval closure
+  // always reads current state without stale capture.
   useEffect(() => {
     const tick = () => {
       const el = cdSpanRef.current;
       if (!el) return;
-      el.textContent = (rc.current.isMarketOpen ?? true)
+      const marketOpen  = rc.current.isMarketOpen ?? true;
+      const hasLiveFeed = (rc.current.lastTickTimeRef?.current ?? 0) > 0;
+      el.textContent = (marketOpen && hasLiveFeed)
         ? calcCd(rc.current.interval)
         : "—";
     };
     tick();
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
-  }, []); // intentionally empty — reads interval + isMarketOpen via rc ref
+  }, []); // intentionally empty — reads interval + isMarketOpen + lastTickTimeRef via rc ref
 
   // ── Initial paint values (before first RAF fires) ─────────────────────────
   const initBull   = liveOpen == null || (livePrice ?? 0) >= (liveOpen ?? 0);
@@ -3248,6 +3270,12 @@ const CustomChart = memo(function CustomChart({
         const t = msg as unknown as { symbol?: string; price?: number; volume?: number; timestamp?: number };
         if (!t.symbol || t.symbol !== symRef.current || typeof t.price !== "number") return;
 
+        // ── Market session guard — FIRST thing, before any processing ──────────
+        // Discard ticks entirely when the exchange is closed (e.g. weekend for
+        // EURUSD/NAS100).  Guard is at the top so no chart update, no bar ingest,
+        // and no tick counter increment can occur during a closed session.
+        if (!isMarketOpenRef.current) return;
+
         const agg = tradeAggRef.current;
         if (!agg) return;
 
@@ -3268,7 +3296,6 @@ const CustomChart = memo(function CustomChart({
         const { bar } = result;
         const cs = mainRef.current;
         if (!cs) return;
-
 
         // ── Frame-coalescing chart update — tick path ─────────────────────
         // Store latest bar only (discards all intermediate ticks in same frame).
@@ -3300,12 +3327,6 @@ const CustomChart = memo(function CustomChart({
             });
           }
         }
-
-        // ── Market session guard ──────────────────────────────────────────────
-        // If the exchange is closed for this symbol (e.g. weekend for EURUSD),
-        // discard the incoming tick entirely so no fake price movement appears
-        // on the chart or in the tick-rate overlay.
-        if (!isMarketOpenRef.current) return;
 
         // Tick counter for the TickRateOverlay
         tickCountRef.current++;
@@ -3569,6 +3590,7 @@ const CustomChart = memo(function CustomChart({
             boxWidth={priceScaleW}
             boxWidthRef={priceScaleWRef}
             tickDataRef={tickDataRef}
+            lastTickTimeRef={lastTickTimeRef}
             symbolOverride={symbol}
             slotMode={propSymbol != null}
             isMarketOpen={mktIsOpen}

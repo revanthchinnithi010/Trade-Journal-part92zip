@@ -109,6 +109,17 @@ export function FeedDiagnostics({ symbol }: Props) {
     ? "cTrader ProtoOA real-time spot subscription"
     : (symData?.routingReason ?? getRoutingReason(symbol));
 
+  // Detect Yahoo Finance REST-only symbols (forex, metals, indices, commodities)
+  // These have NO live WS feed — candle data is fetched on-demand via REST only.
+  const isYahooSymbol = assetClass !== "crypto" && !isCtrader && !symData?.subscribed;
+  const feedStatus    = isCtrader
+    ? "streaming"
+    : isYahooSymbol
+    ? "REST only"
+    : (symData?.subscribed && provOk)
+    ? "streaming"
+    : "disconnected";
+
   // Poll /api/feed/diagnostics every 3 s
   useEffect(() => {
     let cancelled = false;
@@ -172,13 +183,17 @@ export function FeedDiagnostics({ symbol }: Props) {
     : `${Math.round(tickAgeMs / 3600_000)}h ago`
     : "—";
 
-  const subStatus   = isCtrader ? "Streaming ✓" : (symData?.subscribed ? "Subscribed ✓" : "Not subscribed");
-  const provStatus  = isCtrader ? "streaming" : (providerStat?.status ?? "unknown");
+  const subStatus   = isCtrader ? "Streaming ✓" : isYahooSymbol ? "REST (no WS)" : (symData?.subscribed ? "Subscribed ✓" : "Not subscribed");
+  const provStatus  = isCtrader ? "streaming" : isYahooSymbol ? "Yahoo Finance" : (providerStat?.status ?? "unknown");
   const statusStr   = `${provStatus}  ·  ${subStatus}`;
-  const statusColor = (isCtrader || (symData?.subscribed && provOk)) ? "#00FFB4" : "#FF9F43";
+  const statusColor = (isCtrader || (symData?.subscribed && provOk))
+    ? "#00FFB4"
+    : isYahooSymbol
+    ? "#F59E0B"
+    : "#FF9F43";
 
-  const classColor    = CLASS_COLOR[assetClass]             ?? CLASS_COLOR.unknown;
-  const providerColor = PROVIDER_COLOR[providerKey]          ?? PROVIDER_COLOR.unknown;
+  const classColor    = CLASS_COLOR[assetClass]  ?? CLASS_COLOR.unknown;
+  const providerColor = PROVIDER_COLOR[providerKey] ?? PROVIDER_COLOR.unknown;
 
   return (
     <div
@@ -194,15 +209,21 @@ export function FeedDiagnostics({ symbol }: Props) {
           display: "flex", alignItems: "center", gap: 5,
           padding: "3px 9px", borderRadius: 20,
           background: "rgba(0,0,0,0.65)",
-          border: `1px solid ${provOk ? "rgba(0,255,140,0.25)" : "rgba(255,100,100,0.25)"}`,
-          color: provOk ? "#00FFB4" : "#ff6b6b",
+          border: `1px solid ${
+            isYahooSymbol   ? "rgba(245,158,11,0.3)"
+            : !sessionOpen  ? "rgba(239,68,68,0.3)"
+            : provOk        ? "rgba(0,255,140,0.25)"
+            : "rgba(255,100,100,0.25)"
+          }`,
+          color: isYahooSymbol ? "#F59E0B" : !sessionOpen ? "#ef4444" : provOk ? "#00FFB4" : "#ff6b6b",
           cursor: "pointer", fontSize: 10, fontFamily: "monospace",
         }}
         title="Feed Diagnostics"
       >
-        {provOk ? <Wifi size={9} /> : <WifiOff size={9} />}
-        <span style={{ color: "rgba(255,255,255,0.5)" }}>Feed</span>
-        <Activity size={9} style={{ opacity: 0.5 }} />
+        {isYahooSymbol ? <Activity size={9} /> : (provOk && sessionOpen) ? <Wifi size={9} /> : <WifiOff size={9} />}
+        <span style={{ color: "rgba(255,255,255,0.5)" }}>
+          {!sessionOpen ? "Closed" : isYahooSymbol ? "REST" : "Feed"}
+        </span>
         {open ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
       </button>
 
@@ -251,10 +272,24 @@ export function FeedDiagnostics({ symbol }: Props) {
           {/* Provider selection */}
           <Row
             label="Provider"
-            value={liveProvider ? getProviderLabel(providerKey) : "—"}
-            color={providerColor}
+            value={isYahooSymbol ? "Yahoo Finance" : (liveProvider ? getProviderLabel(providerKey) : "—")}
+            color={isYahooSymbol ? "#F59E0B" : providerColor}
           />
-          <Row label="Status" value={statusStr} color={statusColor} />
+          <Row
+            label="Feed Status"
+            value={
+              !sessionOpen    ? "Market Closed"
+              : isYahooSymbol ? "REST only · no live WS"
+              : feedStatus === "streaming" ? "Streaming ✓"
+              : feedStatus
+            }
+            color={
+              !sessionOpen    ? "#ef4444"
+              : isYahooSymbol ? "#F59E0B"
+              : feedStatus === "streaming" ? "#00FFB4"
+              : "#FF9F43"
+            }
+          />
           {symData?.symbolId && (
             <Row label="Symbol ID" value={symData.symbolId} dimValue />
           )}
@@ -320,7 +355,19 @@ export function FeedDiagnostics({ symbol }: Props) {
             </>
           )}
 
-          {!isCtrader && !symData?.subscribed && (
+          {isYahooSymbol ? (
+            <div style={{
+              marginTop: 6, padding: "5px 8px", borderRadius: 4,
+              background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
+              fontSize: 10, color: "rgba(245,158,11,0.9)", lineHeight: 1.5,
+            }}>
+              <strong>No live feed</strong> — {getAssetClassLabel(assetClass)} data uses
+              Yahoo Finance REST. Candle countdown and live tick counter are frozen.
+              {sessionOpen
+                ? " Historical bars load on chart open."
+                : " Market is currently closed."}
+            </div>
+          ) : (!isCtrader && !symData?.subscribed) && (
             <div style={{ marginTop: 6, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
               Not subscribed — select this symbol in the watchlist to start receiving ticks.
             </div>
