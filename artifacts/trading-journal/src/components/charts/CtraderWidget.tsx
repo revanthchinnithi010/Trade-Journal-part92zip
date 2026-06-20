@@ -19,6 +19,34 @@ interface LogEntry { ts: number; level: LogLevel; msg: string; }
 interface OAuthConfig  { configured: boolean; redirectUri: string; authUrl: string | null; }
 interface TokenStatus  { ok: boolean; masked_token: string | null; expires_at: number; expired: boolean; error?: string; }
 interface OAuthStatus  { connected: boolean; expires_at?: number; expired?: boolean; updated_at?: string; error?: string; }
+interface SessionInfo {
+  sessionRestored:       boolean;
+  tokenValid:            boolean;
+  tokenExpired:          boolean;
+  tokenExists:           boolean;
+  expiresAt:             number;
+  hasRefreshToken:       boolean;
+  needsReauth:           boolean;
+  accountRestored:       boolean;
+  accountId:             number | null;
+  isLive:                boolean;
+  symbolsRestored:       number;
+  subscriptionsRestored: number;
+  engineStatus:          string;
+}
+interface SessionRestoreResult {
+  ok:                     boolean;
+  reason?:                string;
+  needsReauth?:           boolean;
+  needsSetup?:            boolean;
+  tokenRefreshed?:        boolean;
+  accountId?:             number;
+  isLive?:                boolean;
+  symbolsRestored?:       number;
+  subscriptionsRestored?: number;
+  engineStatus?:          string;
+  error?:                 string;
+}
 interface CtraderAccount {
   ctidTraderAccountId: number;
   traderLogin?: number;
@@ -162,6 +190,10 @@ export function CtraderWidget() {
   const [accountIdInput, setAccountIdInput] = useState("");
   const [selectedIsLive, setSelectedIsLive] = useState(false);
 
+  const [sessionInfo,    setSessionInfo]    = useState<SessionInfo | null>(null);
+  const [restoreLoading, setRestoreLoading] = useState(true);
+  const [restoreResult,  setRestoreResult]  = useState<SessionRestoreResult | null>(null);
+
   const [stepStates, setStepStates] = useState<Record<string, StepState>>({
     config: "idle", token: "idle", accounts: "idle", symbols: "idle",
   });
@@ -236,12 +268,77 @@ export function CtraderWidget() {
     } catch { /* no-op */ }
   }, []);
 
+  const restoreSession = useCallback(async () => {
+    setRestoreLoading(true);
+    log("step", "Checking for existing cTrader session…");
+    try {
+      const sessionRes  = await fetch(`${BASE}/api/ctrader/session`);
+      const session     = (await sessionRes.json()) as SessionInfo;
+      if (!mountedRef.current) return;
+      setSessionInfo(session);
+
+      if (!session.tokenExists) {
+        log("info", "No session stored — please complete OAuth login");
+        return;
+      }
+
+      if (session.sessionRestored || (session.tokenValid && session.accountRestored && session.symbolsRestored > 0)) {
+        log("info", "Existing session found — restoring silently…");
+        const restoreRes  = await fetch(`${BASE}/api/ctrader/session-restore`, { method: "POST" });
+        const restoreData = (await restoreRes.json()) as SessionRestoreResult;
+        if (!mountedRef.current) return;
+        setRestoreResult(restoreData);
+
+        if (restoreData.ok) {
+          const suffix = restoreData.tokenRefreshed ? " (token refreshed)" : "";
+          log("success", `Session restored${suffix} — ${restoreData.subscriptionsRestored ?? 0} subscriptions active`);
+          setStepStates(_p => ({ config: "success", token: "success", accounts: "success", symbols: "success" }));
+          if (session.accountId) {
+            setAccountIdInput(String(session.accountId));
+            setSelectedIsLive(session.isLive);
+          }
+          await loadStatus();
+          await loadSpotsStatus();
+        } else if (restoreData.needsReauth) {
+          log("warn", "Session expired and refresh failed — please re-authorize");
+        } else if (restoreData.needsSetup) {
+          log("warn", `Setup incomplete (${restoreData.reason}) — please wire symbols`);
+        } else {
+          log("warn", `Restore failed: ${restoreData.error ?? restoreData.reason ?? "unknown"}`);
+        }
+      } else if (session.tokenExpired && session.hasRefreshToken) {
+        log("info", "Token expired — attempting silent refresh…");
+        const restoreRes  = await fetch(`${BASE}/api/ctrader/session-restore`, { method: "POST" });
+        const restoreData = (await restoreRes.json()) as SessionRestoreResult;
+        if (!mountedRef.current) return;
+        setRestoreResult(restoreData);
+        if (restoreData.ok) {
+          log("success", "Token refreshed — session restored");
+          setStepStates(_p => ({ config: "success", token: "success", accounts: "success", symbols: "success" }));
+          await loadStatus();
+          await loadSpotsStatus();
+        } else {
+          log("warn", "Token refresh failed — please re-authorize");
+        }
+      } else {
+        log("info", "Partial session — complete setup steps below");
+        if (session.tokenValid) setStepStates(p => ({ ...p, token: "success" }));
+      }
+    } catch (err) {
+      if (!mountedRef.current) return;
+      log("warn", `Session check error: ${String(err)}`);
+    } finally {
+      if (mountedRef.current) setRestoreLoading(false);
+    }
+  }, [log, loadStatus, loadSpotsStatus]);
+
   useEffect(() => {
     log("info", "cTrader widget loaded");
-    loadConfig();
-    loadStatus();
-    loadSpotsStatus();
-  }, [loadConfig, loadStatus, loadSpotsStatus, log]);
+    restoreSession().then(() => {
+      loadConfig();
+      if (!sessionInfo?.tokenValid) loadStatus();
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -300,20 +397,22 @@ export function CtraderWidget() {
   const handleDisconnect = useCallback(async () => {
     if (disconnectLoading) return;
     setDisconnectLoading(true);
-    log("step", "Disconnecting — clearing stored tokens…");
+    log("step", "Disconnecting — clearing tokens, account config, and stopping engine…");
     try {
       await fetch(`${BASE}/api/ctrader/oauth/disconnect`, { method: "POST" });
       if (!mountedRef.current) return;
-      log("success", "Disconnected — tokens cleared");
+      log("success", "Disconnected — all session data cleared");
       setOaStatus(null); setTokenSt(null); setAccounts(null); setSymbols(null); setWiredCount(null);
-      setStepStates(p => ({ config: p.config, token: "idle", accounts: "idle", symbols: "idle" }));
+      setSessionInfo(null); setRestoreResult(null); setAccountIdInput(""); setSelectedIsLive(false);
+      setStepStates(_p => ({ config: "success", token: "idle", accounts: "idle", symbols: "idle" }));
+      loadSpotsStatus();
     } catch (err) {
       if (!mountedRef.current) return;
       log("error", `Disconnect error: ${String(err)}`);
     } finally {
       if (mountedRef.current) setDisconnectLoading(false);
     }
-  }, [disconnectLoading, log]);
+  }, [disconnectLoading, log, loadSpotsStatus]);
 
   const fetchAccounts = useCallback(async () => {
     if (accountsLoading) return;
@@ -475,8 +574,70 @@ export function CtraderWidget() {
 
   const connected = oaStatus?.connected && !oaStatus.expired;
 
+  const sessionOk = restoreResult?.ok ?? false;
+  const engineLive = (restoreResult?.engineStatus ?? sessionInfo?.engineStatus) === "streaming";
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
+
+      {/* ── Session restore banner ── */}
+      {restoreLoading ? (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12,
+          background: "rgba(148,163,184,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+        }}>
+          <Loader2 style={{ width: 14, height: 14, color: "rgba(148,163,184,0.50)", animation: "spin 1s linear infinite" }} />
+          <span style={{ fontSize: 12, color: "rgba(148,163,184,0.60)" }}>Checking for existing session…</span>
+        </div>
+      ) : sessionOk ? (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          padding: "10px 14px", borderRadius: 12,
+          background: "rgba(16,185,129,0.06)", border: "1px solid rgba(16,185,129,0.20)",
+        }}>
+          <CheckCircle2 style={{ width: 14, height: 14, color: "#34d399", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#34d399" }}>Session Restored</span>
+          {restoreResult?.tokenRefreshed && <CWBadge label="Token Refreshed" color="#fbbf24" bg="rgba(245,158,11,0.10)" />}
+          {engineLive && <CWBadge label={`Live Feed · ${restoreResult?.subscriptionsRestored ?? 0} subs`} color="#60a5fa" bg="rgba(59,130,246,0.10)" />}
+          <ActionBtn onClick={() => restoreSession()} variant="ghost" loading={restoreLoading}>
+            <RefreshCw style={{ width: 10, height: 10 }} /> Re-check
+          </ActionBtn>
+        </div>
+      ) : sessionInfo?.tokenExists ? (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap",
+          padding: "10px 14px", borderRadius: 12,
+          background: "rgba(245,158,11,0.05)", border: "1px solid rgba(245,158,11,0.18)",
+        }}>
+          <Clock style={{ width: 14, height: 14, color: "#fbbf24", flexShrink: 0 }} />
+          <span style={{ fontSize: 12, fontWeight: 700, color: "#fbbf24" }}>
+            {sessionInfo.tokenExpired ? "Token Expired — Re-authorize below" : "Partial Session — Complete setup below"}
+          </span>
+        </div>
+      ) : null}
+
+      {/* ── Session diagnostics ── */}
+      {sessionInfo && (
+        <div style={{
+          padding: "10px 14px", borderRadius: 11,
+          background: "rgba(0,0,0,0.20)", border: "1px solid rgba(255,255,255,0.07)",
+          display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px 12px",
+        }}>
+          {([
+            ["Session Restored", sessionInfo.sessionRestored, sessionOk],
+            ["Token Valid",      sessionInfo.tokenValid,      sessionInfo.tokenValid],
+            ["Account Restored", sessionInfo.accountRestored, sessionInfo.accountRestored],
+            [`Symbols (${sessionInfo.symbolsRestored})`,  sessionInfo.symbolsRestored > 0, sessionInfo.symbolsRestored > 0],
+            [`Subs (${restoreResult?.subscriptionsRestored ?? sessionInfo.subscriptionsRestored})`, (restoreResult?.subscriptionsRestored ?? sessionInfo.subscriptionsRestored) > 0, (restoreResult?.subscriptionsRestored ?? sessionInfo.subscriptionsRestored) > 0],
+            [`Engine: ${restoreResult?.engineStatus ?? sessionInfo.engineStatus}`, engineLive, engineLive],
+          ] as [string, boolean, boolean][]).map(([label, _bool, ok]) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: ok ? "#34d399" : "#6b7280", flexShrink: 0 }} />
+              <span style={{ fontSize: 10, color: ok ? "rgba(255,255,255,0.70)" : "rgba(148,163,184,0.40)", fontFamily: "monospace" }}>{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── Status banner ── */}
       <div style={{

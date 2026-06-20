@@ -916,7 +916,15 @@ export function createCtraderOAuthRouter(): Router {
     try {
       await ensureTokensTable();
       await pool.query("DELETE FROM ctrader_tokens");
-      logger.info("ctrader/oauth/disconnect: tokens cleared");
+      // Also clear account config so engine cannot auto-restart
+      await pool.query("DELETE FROM ctrader_spot_config WHERE id = 1").catch(() => {});
+      // Stop the tick engine
+      try {
+        const { ctraderTickEngine } = await import("../services/CtraderTickEngine.js");
+        ctraderTickEngine.stop();
+        logger.info("ctrader/oauth/disconnect: engine stopped");
+      } catch { /* engine may not be started */ }
+      logger.info("ctrader/oauth/disconnect: tokens + config cleared");
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "unknown";

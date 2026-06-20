@@ -17,8 +17,50 @@ import { Router } from "express";
 import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 import { pool } from "@workspace/db";
 import { db, watchlistTable } from "@workspace/db";
-import { decrypt } from "../services/BrokerEncryption.js";
+import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
+
+const CTRADER_TOKEN_URL_SPOTS = "https://openapi.ctrader.com/apps/token";
+
+/** Silently refresh the stored access token using the refresh token. */
+async function silentRefreshToken(): Promise<string | null> {
+  const clientId     = process.env["CTRADER_CLIENT_ID"];
+  const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+  if (!clientId || !clientSecret) return null;
+
+  try {
+    const row = await pool.query(
+      "SELECT id, refresh_token_enc FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+    );
+    if (!row.rows.length) return null;
+    const r = row.rows[0] as { id: number; refresh_token_enc: string };
+    const refreshToken = decrypt(r.refresh_token_enc);
+    if (!refreshToken) return null;
+
+    const resp = await fetch(CTRADER_TOKEN_URL_SPOTS, {
+      method:  "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token", refresh_token: refreshToken,
+        client_id: clientId, client_secret: clientSecret,
+      }).toString(),
+    });
+    type P = { access_token?: string; refresh_token?: string; expires_in?: number };
+    const data = (await resp.json()) as P;
+    if (!resp.ok || !data.access_token) return null;
+
+    const expiresAt = Math.floor(Date.now() / 1000) + (data.expires_in ?? 3600);
+    await pool.query(
+      "UPDATE ctrader_tokens SET access_token_enc=$1, refresh_token_enc=$2, expires_at=$3, updated_at=NOW() WHERE id=$4",
+      [encrypt(data.access_token), encrypt(data.refresh_token ?? refreshToken), expiresAt, r.id],
+    );
+    logger.info({ expiresAt }, "CtraderSpots: token silently refreshed");
+    return data.access_token;
+  } catch (err) {
+    logger.warn({ err }, "CtraderSpots: silent token refresh failed");
+    return null;
+  }
+}
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -216,12 +258,161 @@ export function createCtraderSpotsRouter(): Router {
     return res.json({ ok: true, status, sampleTicks });
   });
 
+  // ── GET /api/ctrader/session — full session state for frontend mount check ──
+  router.get("/ctrader/session", async (_req, res) => {
+    try {
+      await ensureTables();
+
+      const tokenRow = await pool.query(
+        "SELECT access_token_enc, refresh_token_enc, expires_at FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+      );
+      const tokenExists = tokenRow.rows.length > 0;
+      let tokenExpired = false;
+      let expiresAt    = 0;
+      let hasRefreshToken = false;
+      if (tokenExists) {
+        const r = tokenRow.rows[0] as { access_token_enc: string; refresh_token_enc: string; expires_at: number };
+        tokenExpired    = r.expires_at < Math.floor(Date.now() / 1000);
+        expiresAt       = r.expires_at;
+        hasRefreshToken = !!decrypt(r.refresh_token_enc);
+      }
+      const tokenValid = tokenExists && !tokenExpired;
+
+      const cfgRow = await pool.query(
+        "SELECT account_id, is_live FROM ctrader_spot_config WHERE id = 1",
+      ).catch(() => ({ rows: [] as unknown[] }));
+      const accountRestored = cfgRow.rows.length > 0;
+      const cfg = accountRestored ? cfgRow.rows[0] as { account_id: number; is_live: boolean } : null;
+
+      const symRow = await pool.query(
+        "SELECT COUNT(*)::int AS cnt FROM ctrader_symbols",
+      ).catch(() => ({ rows: [{ cnt: 0 }] as unknown[] }));
+      const symbolsRestored = Number((symRow.rows[0] as { cnt: number })?.cnt ?? 0);
+
+      const engineStatus = ctraderTickEngine.getStatus();
+
+      return res.json({
+        sessionRestored:      tokenValid && accountRestored && symbolsRestored > 0,
+        tokenValid,
+        tokenExpired,
+        tokenExists,
+        expiresAt,
+        hasRefreshToken,
+        needsReauth:          tokenExpired && !hasRefreshToken,
+        accountRestored,
+        accountId:            cfg ? Number(cfg.account_id) : null,
+        isLive:               cfg ? Boolean(cfg.is_live) : false,
+        symbolsRestored,
+        subscriptionsRestored: engineStatus.subscribedCount,
+        engineStatus:          engineStatus.status,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.warn({ err: msg }, "ctrader/session: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── POST /api/ctrader/session-restore — silently restore persisted session ──
+  router.post("/ctrader/session-restore", async (_req, res) => {
+    try {
+      await ensureTables();
+
+      // 1. Load token
+      const tokenRow = await pool.query(
+        "SELECT access_token_enc, expires_at FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+      );
+      if (!tokenRow.rows.length) {
+        return res.json({ ok: false, reason: "no_token", needsReauth: true });
+      }
+      const r = tokenRow.rows[0] as { access_token_enc: string; expires_at: number };
+      const isExpired = r.expires_at < Math.floor(Date.now() / 1000);
+      let tokenRefreshed = false;
+
+      if (isExpired) {
+        const refreshed = await silentRefreshToken();
+        if (!refreshed) {
+          return res.json({ ok: false, reason: "token_expired", needsReauth: true });
+        }
+        tokenRefreshed = true;
+      }
+
+      // 2. Verify account config
+      const cfgRow = await pool.query(
+        "SELECT account_id, is_live FROM ctrader_spot_config WHERE id = 1",
+      ).catch(() => ({ rows: [] as unknown[] }));
+      if (!cfgRow.rows.length) {
+        return res.json({ ok: false, reason: "no_account", needsSetup: true });
+      }
+      const cfg = cfgRow.rows[0] as { account_id: number; is_live: boolean };
+
+      // 3. Verify symbols cached
+      const symRow = await pool.query(
+        "SELECT COUNT(*)::int AS cnt FROM ctrader_symbols",
+      ).catch(() => ({ rows: [{ cnt: 0 }] as unknown[] }));
+      const symbolsRestored = Number((symRow.rows[0] as { cnt: number })?.cnt ?? 0);
+      if (symbolsRestored === 0) {
+        return res.json({ ok: false, reason: "no_symbols", needsSetup: true });
+      }
+
+      // 4. Start engine if not already streaming
+      const engineBefore = ctraderTickEngine.getStatus();
+      if (engineBefore.status !== "streaming") {
+        try {
+          const opts = await loadEngineOpts();
+          ctraderTickEngine.stop();
+          ctraderTickEngine.configure(opts);
+          ctraderTickEngine.start();
+          logger.info({ accountId: opts.ctidTraderAccountId }, "CtraderSpots: session-restore started engine");
+        } catch (startErr) {
+          const msg = startErr instanceof Error ? startErr.message : String(startErr);
+          logger.warn({ err: msg }, "CtraderSpots: session-restore engine start failed");
+          return res.json({ ok: false, reason: "engine_start_failed", error: msg });
+        }
+      }
+
+      // 5. Re-subscribe watchlist symbols
+      let subscriptionsRestored = 0;
+      try {
+        const { asc } = await import("drizzle-orm");
+        const items = await db.select({ symbol: watchlistTable.symbol })
+          .from(watchlistTable)
+          .orderBy(asc(watchlistTable.position));
+        for (const { symbol } of items) {
+          const row = await getCtraderSymbolRow(symbol);
+          if (row) { ctraderTickEngine.addSymbol(row.symbolId, row.symbolName); subscriptionsRestored++; }
+        }
+        if (subscriptionsRestored > 0) {
+          logger.info({ count: subscriptionsRestored }, "CtraderSpots: session-restore subscriptions restored");
+        }
+      } catch { /* non-fatal */ }
+
+      const engineFinal = ctraderTickEngine.getStatus();
+      return res.json({
+        ok:                    true,
+        tokenRefreshed,
+        accountId:             Number(cfg.account_id),
+        isLive:                Boolean(cfg.is_live),
+        symbolsRestored,
+        subscriptionsRestored: engineFinal.subscribedCount,
+        engineStatus:          engineFinal.status,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/session-restore: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
   return router;
 }
 
 // ── Auto-start helper (called from index.ts after migrations) ─────────────────
 
 export async function autoStartCtraderEngine(): Promise<void> {
+  // Ensure tables exist before any DB reads
+  await ensureTables().catch(() => {});
+
   const clientId     = process.env["CTRADER_CLIENT_ID"];
   const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
   if (!clientId || !clientSecret) {
@@ -250,6 +441,8 @@ export async function autoStartCtraderEngine(): Promise<void> {
  * subscribedIds Set and sent on the next ACCT_AUTH_RES.
  */
 export async function subscribeWatchlistCtraderSymbols(): Promise<void> {
+  // Ensure tables exist so getCtraderSymbolRow doesn't throw on first run
+  await ensureTables().catch(() => {});
   try {
     const { asc } = await import("drizzle-orm");
     const items = await db.select({ symbol: watchlistTable.symbol })
