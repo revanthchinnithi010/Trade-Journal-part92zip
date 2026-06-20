@@ -36,6 +36,7 @@ function brokerHeaders(account: BrokerAccount): Record<string, string> {
 
 const POLL_INTERVAL: Record<string, number> = {
   delta:   3_000,
+  ctrader: 15_000,
   default: 4_000,
 };
 

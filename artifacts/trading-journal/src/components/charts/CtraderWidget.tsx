@@ -4,6 +4,8 @@
  * Used in BrokerIntegrationModal and the standalone /ctrader-test page.
  */
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useBrokerStore } from "@/store/brokerStore";
+import type { BrokerAccount } from "@/types/broker";
 import {
   RefreshCw, Plug, PlugZap, CheckCircle2, XCircle, Clock,
   ChevronDown, ChevronRight, Copy, Check,
@@ -268,6 +270,51 @@ export function CtraderWidget() {
     } catch { /* no-op */ }
   }, []);
 
+  const connectToBrokerStore = useCallback(async (overrideAccountId?: number, overrideIsLive?: boolean) => {
+    const accountId = overrideAccountId ?? (accountIdInput ? Number(accountIdInput) : 0);
+    if (!accountId) { log("warn", "No accountId — skipping broker store connect"); return; }
+    const isLive = overrideIsLive ?? selectedIsLive;
+    const { connect } = useBrokerStore.getState();
+    const account: BrokerAccount = {
+      id:          accountId,
+      broker_id:   "ctrader",
+      label:       `cTrader ${isLive ? "Live" : "Demo"} #${accountId}`,
+      is_active:   true,
+      api_token:   "",
+      created_at:  new Date().toISOString(),
+    };
+    try {
+      await connect(account);
+      log("success", `Broker connected (account ${accountId}) — balance & positions polling active`);
+    } catch (err) {
+      log("warn", `Broker store connect failed: ${String(err)}`);
+    }
+  }, [accountIdInput, selectedIsLive, log]);
+
+  const runFullAutoSetup = useCallback(async () => {
+    log("step", "Auto-setup: fetching symbols + connecting broker…");
+    try {
+      const res  = await fetch(`${BASE}/api/ctrader/auto-setup`, { method: "POST" });
+      type SetupResult = { ok: boolean; accountId?: number; isLive?: boolean; symbolCount?: number; error?: string };
+      const data = (await res.json()) as SetupResult;
+      if (!mountedRef.current) return;
+      if (data.ok && data.accountId) {
+        log("success", `Auto-setup OK — ${data.symbolCount ?? 0} symbols, account ${data.accountId}`);
+        setAccountIdInput(String(data.accountId));
+        setSelectedIsLive(data.isLive ?? false);
+        setStepStates(_p => ({ config: "success", token: "success", accounts: "success", symbols: "success" }));
+        await Promise.all([loadStatus(), loadSpotsStatus()]);
+        await connectToBrokerStore(data.accountId, data.isLive ?? false);
+      } else {
+        log("error", `Auto-setup failed: ${data.error ?? "unknown error"}`);
+        await loadStatus();
+      }
+    } catch (err) {
+      if (!mountedRef.current) return;
+      log("error", `Auto-setup error: ${String(err)}`);
+    }
+  }, [log, loadStatus, loadSpotsStatus, connectToBrokerStore]);
+
   const restoreSession = useCallback(async () => {
     setRestoreLoading(true);
     log("step", "Checking for existing cTrader session…");
@@ -293,12 +340,15 @@ export function CtraderWidget() {
           const suffix = restoreData.tokenRefreshed ? " (token refreshed)" : "";
           log("success", `Session restored${suffix} — ${restoreData.subscriptionsRestored ?? 0} subscriptions active`);
           setStepStates(_p => ({ config: "success", token: "success", accounts: "success", symbols: "success" }));
-          if (session.accountId) {
-            setAccountIdInput(String(session.accountId));
-            setSelectedIsLive(session.isLive);
+          const acctId  = restoreData.accountId  ?? session.accountId  ?? undefined;
+          const acctLive = restoreData.isLive    ?? session.isLive;
+          if (acctId) {
+            setAccountIdInput(String(acctId));
+            setSelectedIsLive(acctLive);
           }
           await loadStatus();
           await loadSpotsStatus();
+          if (acctId) await connectToBrokerStore(acctId, acctLive);
         } else if (restoreData.needsReauth) {
           log("warn", "Session expired and refresh failed — please re-authorize");
         } else if (restoreData.needsSetup) {
@@ -317,6 +367,9 @@ export function CtraderWidget() {
           setStepStates(_p => ({ config: "success", token: "success", accounts: "success", symbols: "success" }));
           await loadStatus();
           await loadSpotsStatus();
+          const rId   = restoreData.accountId  ?? session.accountId  ?? undefined;
+          const rLive = restoreData.isLive     ?? session.isLive;
+          if (rId) await connectToBrokerStore(rId, rLive);
         } else {
           log("warn", "Token refresh failed — please re-authorize");
         }
@@ -330,7 +383,7 @@ export function CtraderWidget() {
     } finally {
       if (mountedRef.current) setRestoreLoading(false);
     }
-  }, [log, loadStatus, loadSpotsStatus]);
+  }, [log, loadStatus, loadSpotsStatus, connectToBrokerStore]);
 
   useEffect(() => {
     log("info", "cTrader widget loaded");
@@ -346,15 +399,16 @@ export function CtraderWidget() {
       if (e.data.status === "success") {
         log("success", `OAuth success — token: ${e.data.maskedToken ?? "?"}, expires: ${ts(e.data.expiresAt ?? 0)}`);
         popupRef.current = null;
-        loadStatus();
+        setOauthLoading(false);
+        runFullAutoSetup();
       } else {
         log("error", `OAuth error: ${e.data.message ?? "unknown"}`);
+        setOauthLoading(false);
       }
-      setOauthLoading(false);
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, [loadStatus, log]);
+  }, [runFullAutoSetup, log]);
 
   const startOAuth = useCallback(async () => {
     if (!config?.authUrl) { log("error", "No auth URL — check CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET"); return; }

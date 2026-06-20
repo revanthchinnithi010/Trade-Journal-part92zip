@@ -759,3 +759,232 @@ export async function fetchSymbolsVerbose(opts: {
     };
   });
 }
+
+// ── ProtoOA Reconcile — open positions + pending orders ───────────────────────
+// Payload types: PROTO_OA_RECONCILE_REQ=2124, PROTO_OA_RECONCILE_RES=2125
+// Flow: APP_AUTH → ACCT_AUTH → RECONCILE_REQ → RECONCILE_RES
+
+const PT_RECONCILE_REQ = 2124;
+const PT_RECONCILE_RES = 2125;
+
+function readVarintSafe(buf: Buffer, off: number): [number, number] {
+  let v = 0, mul = 1;
+  while (off < buf.length) {
+    const b = buf[off++];
+    v += (b & 0x7F) * mul;
+    mul *= 128;
+    if (!(b & 0x80)) break;
+  }
+  return [v, off];
+}
+
+interface PbFieldFull { fn: number; wt: number; v: number | Buffer }
+
+function parseMsgFull(buf: Buffer): PbFieldFull[] {
+  const out: PbFieldFull[] = [];
+  let o = 0;
+  while (o < buf.length) {
+    let tag: number;
+    try { [tag, o] = readVarintSafe(buf, o); } catch { break; }
+    const fn = Math.floor(tag / 8);
+    const wt = tag & 7;
+    if (fn === 0) break;
+    if (wt === 0) {
+      let v: number; [v, o] = readVarintSafe(buf, o);
+      out.push({ fn, wt, v });
+    } else if (wt === 2) {
+      let len: number; [len, o] = readVarintSafe(buf, o);
+      if (o + len > buf.length) break;
+      out.push({ fn, wt, v: buf.slice(o, o + len) });
+      o += len;
+    } else if (wt === 1) {
+      if (o + 8 > buf.length) break;
+      const dbl = buf.readDoubleLE(o);
+      out.push({ fn, wt: 1, v: dbl });
+      o += 8;
+    } else if (wt === 5) {
+      if (o + 4 > buf.length) break;
+      o += 4;
+    } else {
+      break;
+    }
+  }
+  return out;
+}
+
+function fGetVar(fields: PbFieldFull[], fn: number): number {
+  return (fields.find(f => f.fn === fn && f.wt === 0)?.v as number) ?? 0;
+}
+function fGetDbl(fields: PbFieldFull[], fn: number): number {
+  return (fields.find(f => f.fn === fn && f.wt === 1)?.v as number) ?? 0;
+}
+function fGetBytes(fields: PbFieldFull[], fn: number): Buffer | undefined {
+  const f = fields.find(f => f.fn === fn && f.wt === 2);
+  return f ? (f.v as Buffer) : undefined;
+}
+function fGetAllBytes(fields: PbFieldFull[], fn: number): Buffer[] {
+  return fields.filter(f => f.fn === fn && f.wt === 2).map(f => f.v as Buffer);
+}
+
+export interface ReconcilePosition {
+  positionId:    number;
+  symbolId:      number;
+  volume:        number;
+  side:          "BUY" | "SELL";
+  entryPrice:    number;
+  currentPrice:  number;
+  stopLoss:      number;
+  takeProfit:    number;
+  swap:          number;
+  unrealizedPnl: number;
+  moneyDigits:   number;
+  openTimestamp: number;
+}
+
+export interface ReconcileOrder {
+  orderId:       number;
+  symbolId:      number;
+  volume:        number;
+  side:          "BUY" | "SELL";
+  orderType:     number;
+  orderStatus:   number;
+  limitPrice:    number;
+  stopPrice:     number;
+  openTimestamp: number;
+}
+
+export interface ReconcileResult {
+  ok:         boolean;
+  error?:     string;
+  positions:  ReconcilePosition[];
+  orders:     ReconcileOrder[];
+  durationMs: number;
+}
+
+function parseTradeData(buf: Buffer): { symbolId: number; volume: number; side: "BUY" | "SELL"; openTimestamp: number } {
+  const f = parseMsgFull(buf);
+  return {
+    symbolId:      fGetVar(f, 1),
+    volume:        fGetVar(f, 2),
+    side:          fGetVar(f, 3) === 2 ? "SELL" : "BUY",
+    openTimestamp: fGetVar(f, 5),
+  };
+}
+
+function parseReconcilePosition(buf: Buffer): ReconcilePosition {
+  const f  = parseMsgFull(buf);
+  const td = fGetBytes(f, 2);
+  const t  = td ? parseTradeData(td) : { symbolId: 0, volume: 0, side: "BUY" as const, openTimestamp: 0 };
+  return {
+    positionId:    fGetVar(f, 1),
+    symbolId:      t.symbolId,
+    volume:        t.volume,
+    side:          t.side,
+    entryPrice:    fGetDbl(f, 8),
+    currentPrice:  fGetDbl(f, 19),
+    stopLoss:      fGetDbl(f, 9),
+    takeProfit:    fGetDbl(f, 10),
+    swap:          fGetVar(f, 4),
+    unrealizedPnl: fGetVar(f, 25),
+    moneyDigits:   fGetVar(f, 26) || 2,
+    openTimestamp: t.openTimestamp,
+  };
+}
+
+function parseReconcileOrder(buf: Buffer): ReconcileOrder {
+  const f  = parseMsgFull(buf);
+  const td = fGetBytes(f, 2);
+  const t  = td ? parseTradeData(td) : { symbolId: 0, volume: 0, side: "BUY" as const, openTimestamp: 0 };
+  return {
+    orderId:       fGetVar(f, 1),
+    symbolId:      t.symbolId,
+    volume:        t.volume,
+    side:          t.side,
+    orderType:     fGetVar(f, 3),
+    orderStatus:   fGetVar(f, 4),
+    limitPrice:    fGetDbl(f, 10),
+    stopPrice:     fGetDbl(f, 11),
+    openTimestamp: t.openTimestamp,
+  };
+}
+
+export async function reconcileAccount(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  timeoutMs?:          number;
+}): Promise<ReconcileResult> {
+  const { ctidTraderAccountId, isLive, accessToken, clientId, clientSecret, timeoutMs = 20_000 } = opts;
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0   = Date.now();
+
+  logger.info({ ctidTraderAccountId, isLive, host }, "ProtoOA reconcile: starting");
+
+  return new Promise(resolve => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish({ ok: false, error: `timeout after ${timeoutMs}ms` }), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(partial: Partial<ReconcileResult>) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      resolve({
+        ok: false, positions: [], orders: [], durationMs: Date.now() - t0,
+        ...partial,
+      });
+    }
+
+    conn.onConnect = () => {
+      conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret));
+    };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        logger.warn({ errorCode, description, step }, "ProtoOA reconcile: ERROR_RES");
+        finish({ ok: false, error: `ProtoOA error ${errorCode}: ${description}` });
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "reconcile";
+        const req = buildFrame(PT_RECONCILE_REQ, [
+          ...u32f(1, PT_RECONCILE_REQ),
+          ...u32f(2, ctidTraderAccountId),
+        ]);
+        conn.write("ReconcileReq", req);
+        return;
+      }
+
+      if (pt === PT_RECONCILE_RES && step === "reconcile") {
+        try {
+          const fields    = parseMsgFull(payload);
+          const posBufs   = fGetAllBytes(fields, 3);
+          const ordBufs   = fGetAllBytes(fields, 4);
+          const positions = posBufs.map(b => parseReconcilePosition(b));
+          const orders    = ordBufs.map(b => parseReconcileOrder(b));
+          logger.info({ positions: positions.length, orders: orders.length }, "ProtoOA reconcile: ✓ RES");
+          finish({ ok: true, positions, orders });
+        } catch (e) {
+          finish({ ok: false, error: `parse error: ${String(e)}` });
+        }
+        return;
+      }
+    };
+
+    conn.onError = (e) => finish({ ok: false, error: `socket error: ${e.message}` });
+    conn.onClose = () => { if (!settled) finish({ ok: false, error: "connection closed" }); };
+  });
+}

@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
-import { fetchSymbolsViaProtoOA, fetchSymbolsVerbose, probeAppAuth, type CtraderSymbol } from "../lib/ctraderProtoOA.js";
+import { fetchSymbolsViaProtoOA, fetchSymbolsVerbose, probeAppAuth, reconcileAccount, type CtraderSymbol } from "../lib/ctraderProtoOA.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
@@ -1055,6 +1055,162 @@ export function createCtraderOAuthRouter(): Router {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       logger.error({ err: msg }, "ctrader/auto-setup: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── Helper: load token + spot config from DB ──────────────────────────────
+  async function loadTokenAndConfig(): Promise<{
+    accessToken: string; clientId: string; clientSecret: string;
+    ctidTraderAccountId: number; isLive: boolean;
+  } | null> {
+    const clientId     = process.env["CTRADER_CLIENT_ID"];
+    const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+    if (!clientId || !clientSecret) return null;
+
+    const tokRow = await pool.query(
+      "SELECT access_token_enc FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+    );
+    if (!tokRow.rows.length) return null;
+    const accessToken = decrypt((tokRow.rows[0] as { access_token_enc: string }).access_token_enc);
+    if (!accessToken) return null;
+
+    const cfgRow = await pool.query(
+      "SELECT ctid_trader_account_id, is_live FROM ctrader_spot_config WHERE id = 1",
+    );
+    if (!cfgRow.rows.length) return null;
+    const cfg = cfgRow.rows[0] as { ctid_trader_account_id: number; is_live: boolean };
+
+    return {
+      accessToken, clientId, clientSecret,
+      ctidTraderAccountId: cfg.ctid_trader_account_id,
+      isLive: cfg.is_live,
+    };
+  }
+
+  // ── GET /api/ctrader/balance ──────────────────────────────────────────────
+  router.get("/ctrader/balance", async (_req, res) => {
+    try {
+      const ctx = await loadTokenAndConfig();
+      if (!ctx) return res.status(401).json({ ok: false, error: "cTrader not connected" });
+
+      const url = `${CTRADER_API_BASE}/connect/tradingaccounts?${CTRADER_TOKEN_PARAM}=${encodeURIComponent(ctx.accessToken)}`;
+      const r   = await fetch(url);
+      if (!r.ok) {
+        const body = await r.text();
+        return res.status(502).json({ ok: false, error: `Spotware REST ${r.status}: ${body.slice(0, 200)}` });
+      }
+      type AcctRow = { accountId: number; balance: number; equity: number; usedMargin: number; freeMargin: number; currency: string };
+      const data = (await r.json()) as { data?: AcctRow[] };
+      const rows = data.data ?? [];
+      const acct = rows.find(a => a.accountId === ctx.ctidTraderAccountId) ?? rows[0];
+      if (!acct) return res.status(404).json({ ok: false, error: "Account not found in Spotware response" });
+
+      const md = 2;
+      const scale = (v: number) => (v / Math.pow(10, md)).toFixed(2);
+      return res.json({
+        ok: true,
+        balance: {
+          coin:                 acct.currency ?? "USD",
+          equity:               scale(acct.equity  ?? acct.balance ?? 0),
+          walletBalance:        scale(acct.balance  ?? 0),
+          availableToWithdraw:  scale(acct.freeMargin ?? 0),
+          unrealisedPnl:        scale((acct.equity ?? acct.balance ?? 0) - (acct.balance ?? 0)),
+        },
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/balance: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── GET /api/ctrader/positions ────────────────────────────────────────────
+  router.get("/ctrader/positions", async (_req, res) => {
+    try {
+      const ctx = await loadTokenAndConfig();
+      if (!ctx) return res.status(401).json({ ok: false, error: "cTrader not connected" });
+
+      const result = await reconcileAccount({ ...ctx, timeoutMs: 18_000 });
+      if (!result.ok) return res.json({ ok: true, positions: [] });
+
+      // Build symbolId → name map from cached symbols table
+      const symbolIds = [...new Set(result.positions.map(p => p.symbolId))].filter(Boolean);
+      const nameMap   = new Map<number, string>();
+      if (symbolIds.length) {
+        const q = await pool.query(
+          `SELECT symbol_id, symbol_name FROM ctrader_symbols WHERE symbol_id = ANY($1::int[])`,
+          [symbolIds],
+        );
+        for (const row of q.rows as { symbol_id: number; symbol_name: string }[]) {
+          nameMap.set(row.symbol_id, row.symbol_name);
+        }
+      }
+
+      const positions = result.positions.map(p => {
+        const scale = Math.pow(10, p.moneyDigits || 2);
+        const lots  = p.volume / 10_000_000;  // ProtoOA volume: 1 standard lot = 10,000,000
+        return {
+          id:            String(p.positionId),
+          symbol:        nameMap.get(p.symbolId) ?? `SID:${p.symbolId}`,
+          side:          p.side === "BUY" ? "Long" : "Short",
+          size:          parseFloat(lots.toFixed(4)),
+          entryPrice:    p.entryPrice,
+          markPrice:     p.currentPrice || p.entryPrice,
+          unrealisedPnl: p.unrealizedPnl / scale,
+          leverage:      "1:1",
+          raw:           p,
+        };
+      });
+
+      return res.json({ ok: true, positions });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/positions: error");
+      return res.status(500).json({ ok: false, error: msg });
+    }
+  });
+
+  // ── GET /api/ctrader/orders ───────────────────────────────────────────────
+  router.get("/ctrader/orders", async (_req, res) => {
+    try {
+      const ctx = await loadTokenAndConfig();
+      if (!ctx) return res.status(401).json({ ok: false, error: "cTrader not connected" });
+
+      const result = await reconcileAccount({ ...ctx, timeoutMs: 18_000 });
+      if (!result.ok) return res.json({ ok: true, orders: [] });
+
+      const symbolIds = [...new Set(result.orders.map(o => o.symbolId))].filter(Boolean);
+      const nameMap   = new Map<number, string>();
+      if (symbolIds.length) {
+        const q = await pool.query(
+          `SELECT symbol_id, symbol_name FROM ctrader_symbols WHERE symbol_id = ANY($1::int[])`,
+          [symbolIds],
+        );
+        for (const row of q.rows as { symbol_id: number; symbol_name: string }[]) {
+          nameMap.set(row.symbol_id, row.symbol_name);
+        }
+      }
+
+      const ORDER_TYPE_MAP: Record<number, string> = { 1: "Market", 2: "Limit", 3: "Stop", 4: "StopLimit" };
+      const STATUS_MAP: Record<number, string>     = { 1: "Accepted", 2: "Filled", 3: "Rejected", 4: "Expired", 5: "InProcess", 6: "Waiting" };
+
+      const orders = result.orders.map(o => ({
+        id:        String(o.orderId),
+        symbol:    nameMap.get(o.symbolId) ?? `SID:${o.symbolId}`,
+        side:      o.side === "BUY" ? "Buy" : "Sell",
+        orderType: ORDER_TYPE_MAP[o.orderType] ?? "Unknown",
+        price:     o.limitPrice || o.stopPrice,
+        qty:       parseFloat((o.volume / 10_000_000).toFixed(4)),
+        status:    STATUS_MAP[o.orderStatus] ?? "Unknown",
+        createdAt: o.openTimestamp ? new Date(o.openTimestamp).toISOString() : new Date().toISOString(),
+        raw:       o,
+      }));
+
+      return res.json({ ok: true, orders });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ err: msg }, "ctrader/orders: error");
       return res.status(500).json({ ok: false, error: msg });
     }
   });
