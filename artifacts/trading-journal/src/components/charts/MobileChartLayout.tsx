@@ -3106,6 +3106,7 @@ const MiniControlBar = memo(function MiniControlBar({
           }}
           style={{
             height:36, padding:"0 16px",
+            marginLeft:6,
             borderRadius:9999, flexShrink:0,
             display:"flex", alignItems:"center", justifyContent:"center",
             background:"linear-gradient(180deg,#ffffff 0%,#d8d8d8 100%)",
