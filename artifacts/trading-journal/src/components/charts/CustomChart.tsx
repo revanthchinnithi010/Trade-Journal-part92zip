@@ -92,6 +92,45 @@ function calcVWAP(bars: OHLCBar[]): (number | null)[] {
   return out;
 }
 
+// ── Bar safety helpers ─────────────────────────────────────────────────────────
+/**
+ * Defensively sort + dedup a bar array before passing to Lightweight Charts.
+ * LWC asserts strictly ascending time order and throws if violated.
+ * Dedup keeps the LATEST bar for any duplicate timestamp.
+ * Returns a new array; never mutates the input.
+ */
+function safeSortDedup(bars: OHLCBar[]): OHLCBar[] {
+  if (bars.length < 2) return bars;
+  // Dedup: Map keeps last write per key → latest bar wins
+  const deduped = [...new Map(bars.map(b => [b.time, b])).values()];
+  deduped.sort((a, b) => a.time - b.time);
+  const dupCount = bars.length - deduped.length;
+  let outOfOrder = false;
+  for (let i = 1; i < deduped.length; i++) {
+    if (deduped[i].time <= deduped[i - 1].time) { outOfOrder = true; break; }
+  }
+  if (dupCount > 0 || outOfOrder) {
+    console.warn(`[Chart] safeSortDedup: fixed ${dupCount} duplicate(s)${outOfOrder ? " + ordering issue" : ""} in ${bars.length} bars`);
+  }
+  return deduped;
+}
+
+/**
+ * Validate a single bar's timestamp for series.update().
+ * Returns false (and warns) if the timestamp is invalid.
+ */
+function isValidBarTime(barTime: number, lastBarTime: number, context: string): boolean {
+  if (!Number.isFinite(barTime) || barTime <= 0) {
+    console.warn(`[Chart] ${context}: invalid bar.time=${barTime} — skipped`);
+    return false;
+  }
+  if (barTime < lastBarTime) {
+    console.warn(`[Chart] ${context}: out-of-order bar skipped (bar=${barTime}, last=${lastBarTime})`);
+    return false;
+  }
+  return true;
+}
+
 // ── Series helpers ─────────────────────────────────────────────────────────────
 function makeSeries(chart: IChartApi, ct: ChartType): ISeriesApi<SeriesType> {
   // lastValueVisible: false — we render our own combined live-price+countdown box
@@ -126,21 +165,25 @@ function toHeikinAshi(bars: OHLCBar[]): OHLCBar[] {
 
 function applyBars(series: ISeriesApi<SeriesType>, ct: ChartType, bars: OHLCBar[]) {
   if (bars.length === 0) return;
+  // Always sort + dedup before setData() — LWC asserts ascending order
+  const safe = safeSortDedup(bars);
   if (ct === "candles") {
-    (series as ISeriesApi<"Candlestick">).setData(bars.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
+    (series as ISeriesApi<"Candlestick">).setData(safe.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
   } else if (ct === "heikin_ashi") {
-    const ha = toHeikinAshi(bars);
+    const ha = toHeikinAshi(safe);
     (series as ISeriesApi<"Candlestick">).setData(ha.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
   } else if (ct === "bars") {
-    (series as ISeriesApi<"Bar">).setData(bars.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
+    (series as ISeriesApi<"Bar">).setData(safe.map(b => ({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close })));
   } else if (ct === "line" || ct === "line_with_markers") {
-    (series as ISeriesApi<"Line">).setData(bars.map(b => ({ time: b.time as Time, value: b.close })));
+    (series as ISeriesApi<"Line">).setData(safe.map(b => ({ time: b.time as Time, value: b.close })));
   } else {
-    (series as ISeriesApi<"Line">).setData(bars.map(b => ({ time: b.time as Time, value: b.close })));
+    (series as ISeriesApi<"Line">).setData(safe.map(b => ({ time: b.time as Time, value: b.close })));
   }
 }
 
-function updateBar(series: ISeriesApi<SeriesType>, ct: ChartType, b: OHLCBar) {
+function updateBar(series: ISeriesApi<SeriesType>, ct: ChartType, b: OHLCBar, lastBarTime = 0) {
+  // Validate timestamp before passing to LWC — out-of-order bars crash with assertion
+  if (!isValidBarTime(b.time, lastBarTime, "updateBar")) return;
   try {
     if (ct === "candles") {
       (series as ISeriesApi<"Candlestick">).update({ time: b.time as Time, open: b.open, high: b.high, low: b.low, close: b.close });
@@ -959,7 +1002,9 @@ const CustomChart = memo(function CustomChart({
       if (!b || !s) return;
       lastRenderMsRef.current = performance.now();
       pendingChartBarRef.current = null;
-      updateBar(s, ctRef.current, b);
+      // Pass last known bar time so updateBar can reject out-of-order updates
+      const lastTime = barsRef.current[barsRef.current.length - 1]?.time ?? 0;
+      updateBar(s, ctRef.current, b, lastTime);
     });
   }, []); // all deps are refs — stable forever
 
@@ -2906,10 +2951,26 @@ const CustomChart = memo(function CustomChart({
     sym:  string,
     iv:   string,
   ) => {
-    barsRef.current = bars;
+    // Ensure bars are sorted + deduped before storing — guards cache-hit path
+    // which returns bars directly without re-sorting.
+    const safeBars = safeSortDedup(bars);
+    if (safeBars.length !== bars.length) {
+      console.warn(`[Chart] applyBarArray(${sym}/${iv}): removed ${bars.length - safeBars.length} duplicate(s), ${safeBars.length} bars remaining`);
+    }
+
+    // Cancel any pending tick bar from the PREVIOUS symbol before we tear down
+    // the series. Without this, a queued RAF from the old symbol fires on the
+    // new series with an out-of-order timestamp → LWC assertion crash.
+    pendingChartBarRef.current = null;
+    if (chartUpdateRafRef.current !== null) {
+      cancelAnimationFrame(chartUpdateRafRef.current);
+      chartUpdateRafRef.current = null;
+    }
+
+    barsRef.current = safeBars;
 
     // Reset infinite-history state for this new symbol/interval
-    oldestBarTimeRef.current  = bars[0]?.time ?? null;
+    oldestBarTimeRef.current  = safeBars[0]?.time ?? null;
     hasMoreHistoryRef.current = true;
     isLoadingMoreRef.current  = false;
 
@@ -2930,13 +2991,13 @@ const CustomChart = memo(function CustomChart({
       });
     } catch { }
 
-    applyBars(cs, ctRef.current, bars);
+    applyBars(cs, ctRef.current, safeBars);
 
-    const lastClose = bars[bars.length - 1]?.close ?? 1;
+    const lastClose = safeBars[safeBars.length - 1]?.close ?? 1;
     const fmt       = pricePrecision(lastClose);
     try { cs.applyOptions({ priceFormat: { type: 'price', precision: fmt.precision, minMove: fmt.minMove } }); } catch { }
 
-    const last = bars[bars.length - 1];
+    const last = safeBars[safeBars.length - 1];
     if (last) {
       livePxRef.current = last.close;
       tickDataRef.current = { price: last.close, open: last.open };
@@ -2947,12 +3008,12 @@ const CustomChart = memo(function CustomChart({
     }
 
     for (const [key, s] of Object.entries(emaRefs.current) as [keyof IndicatorState, ISeriesApi<"Line">][]) {
-      fillIndicator(s, key, bars);
+      fillIndicator(s, key, safeBars);
     }
 
     activatePanRange(null);
 
-    const lastBarIdx = bars.length - 1;
+    const lastBarIdx = safeBars.length - 1;
     const vpKey      = `tv_vp_${sym}_${iv}`;
     const defaultRange = {
       from: Math.max(0, lastBarIdx - DEFAULT_VISIBLE_BARS + 1),
@@ -3213,14 +3274,24 @@ const CustomChart = memo(function CustomChart({
       if (!cs) return;
 
       const stored   = barsRef.current;
+      const lastTime = stored.length > 0 ? stored[stored.length - 1].time : 0;
       const isNewBar = bar.time !== emaLastBarTimeRef.current;
 
-      // Update the bars ring buffer (in-place mutation — no allocation)
-      if (stored.length > 0 && stored[stored.length - 1].time === bar.time) {
-        stored[stored.length - 1] = bar;
+      // Guard: reject bars with invalid or out-of-order timestamps before touching barsRef
+      if (!Number.isFinite(bar.time) || bar.time <= 0) {
+        console.warn(`[Chart] candle_update: invalid bar.time=${bar.time} — discarded`);
+      } else if (bar.time < lastTime) {
+        // Out-of-order bar from server (can happen when multiple symbols share a WS connection)
+        console.warn(`[Chart] candle_update: out-of-order bar skipped in barsRef (bar=${bar.time}, last=${lastTime})`);
+        // Still queue a series.update() — LWC may handle it or the try/catch in updateBar will absorb it
       } else {
-        stored.push(bar);
-        if (stored.length > 6000) stored.shift();
+        // Update the bars ring buffer (in-place mutation — no allocation)
+        if (stored.length > 0 && stored[stored.length - 1].time === bar.time) {
+          stored[stored.length - 1] = bar;
+        } else {
+          stored.push(bar);
+          if (stored.length > 6000) stored.shift();
+        }
       }
 
       // ── Candle / line series update — buffered via scheduleChartUpdate ──────
