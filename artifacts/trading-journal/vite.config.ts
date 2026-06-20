@@ -88,6 +88,13 @@ export default defineConfig({
         "**/node_modules/**",
       ],
     },
+    proxy: {
+      "/node_modules/.pnpm/expo-router": {
+        target: "http://localhost:23996",
+        changeOrigin: true,
+        ws: false,
+      },
+    },
   },
   preview: {
     port,
