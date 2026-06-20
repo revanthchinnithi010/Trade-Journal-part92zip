@@ -627,7 +627,7 @@ function LivePriceBox({
   chart: _chart, series, interval,
   upColor = UP_COLOR, downColor = DOWN_COLOR,
   textColor = "#ffffff", boxWidth, boxWidthRef, tickDataRef,
-  symbolOverride, slotMode = false,
+  symbolOverride, slotMode = false, isMarketOpen = true,
 }: {
   chart:        IChartApi | null;
   series:       ISeriesApi<SeriesType> | null;
@@ -644,6 +644,8 @@ function LivePriceBox({
   symbolOverride?: string;
   /** When true (slot mode), never fall back to global Zustand livePrice/liveOpen */
   slotMode?: boolean;
+  /** When false, freeze the candle countdown — market is closed, no new bars form */
+  isMarketOpen?: boolean;
 }) {
   const storeLivePrice = useChartStore(s => s.livePrice);
   const storeLiveOpen  = useChartStore(s => s.liveOpen);
@@ -667,8 +669,8 @@ function LivePriceBox({
   // Single mutable bag — written on every render, read inside RAF loop.
   // Using one object avoids closure staleness without listing every dependency.
   const rc = useRef({
-    price:       livePrice,
-    open:        liveOpen,
+    price:        livePrice,
+    open:         liveOpen,
     symbol,
     slotMode,
     series,
@@ -679,6 +681,7 @@ function LivePriceBox({
     boxWidth,
     boxWidthRef,
     tickDataRef,
+    isMarketOpen,
     // Change-detection cache (skip redundant DOM writes)
     _col: "" as string,
     _tc:  "" as string,
@@ -686,18 +689,19 @@ function LivePriceBox({
     _px:  "" as string,
   });
   // Sync props/state → ref every render (runs before RAF reads them)
-  rc.current.price       = livePrice;
-  rc.current.open        = liveOpen;
-  rc.current.symbol      = symbol;
-  rc.current.slotMode    = slotMode;
-  rc.current.series      = series;
-  rc.current.interval    = interval;
-  rc.current.upColor     = upColor;
-  rc.current.downColor   = downColor;
-  rc.current.textColor   = textColor;
-  rc.current.boxWidth    = boxWidth;
-  rc.current.boxWidthRef = boxWidthRef;
-  rc.current.tickDataRef = tickDataRef;
+  rc.current.price        = livePrice;
+  rc.current.open         = liveOpen;
+  rc.current.symbol       = symbol;
+  rc.current.slotMode     = slotMode;
+  rc.current.series       = series;
+  rc.current.interval     = interval;
+  rc.current.upColor      = upColor;
+  rc.current.downColor    = downColor;
+  rc.current.textColor    = textColor;
+  rc.current.boxWidth     = boxWidth;
+  rc.current.boxWidthRef  = boxWidthRef;
+  rc.current.tickDataRef  = tickDataRef;
+  rc.current.isMarketOpen = isMarketOpen;
 
   // ── RAF loop — 60 fps, pure DOM mutations, zero React scheduler overhead ──
   useEffect(() => {
@@ -784,15 +788,21 @@ function LivePriceBox({
   }, []); // intentionally empty — all values read via rc ref
 
   // ── Countdown — 500 ms is plenty of precision for a seconds counter ───────
+  // Frozen to "—" when the market is closed (no new candles will form).
+  // rc.current.isMarketOpen is synced on every render so the setInterval
+  // closure always reads the current session state without stale capture.
   useEffect(() => {
     const tick = () => {
       const el = cdSpanRef.current;
-      if (el) el.textContent = calcCd(rc.current.interval);
+      if (!el) return;
+      el.textContent = (rc.current.isMarketOpen ?? true)
+        ? calcCd(rc.current.interval)
+        : "—";
     };
     tick();
     const id = setInterval(tick, 500);
     return () => clearInterval(id);
-  }, []); // intentionally empty — reads interval via rc ref
+  }, []); // intentionally empty — reads interval + isMarketOpen via rc ref
 
   // ── Initial paint values (before first RAF fires) ─────────────────────────
   const initBull   = liveOpen == null || (livePrice ?? 0) >= (liveOpen ?? 0);
@@ -3324,6 +3334,12 @@ const CustomChart = memo(function CustomChart({
       }
 
       if (msg.type !== "candle_update" || msg.symbol !== symRef.current || msg.interval !== ivRef.current || !msg.bar) return;
+
+      // Market session gate — discard candle updates when the exchange is closed
+      // (belt-and-suspenders: the server shouldn't send updates without ticks,
+      // but stale cached messages can still arrive on reconnect).
+      if (!isMarketOpenRef.current) return;
+
       const bar = msg.bar;
       const cs  = mainRef.current;
       if (!cs) return;
@@ -3555,6 +3571,7 @@ const CustomChart = memo(function CustomChart({
             tickDataRef={tickDataRef}
             symbolOverride={symbol}
             slotMode={propSymbol != null}
+            isMarketOpen={mktIsOpen}
           />
           {children}
           {/* Price scale touch handler — highest z, covers rightmost strip for both mouse and touch drag */}

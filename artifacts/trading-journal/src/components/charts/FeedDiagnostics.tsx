@@ -7,6 +7,7 @@ import {
 import { useTickStore } from "@/store/tickStore";
 import { useCtraderSpotStore } from "@/store/ctraderSpotStore";
 import { Activity, Wifi, WifiOff, ChevronDown, ChevronUp } from "lucide-react";
+import { useMarketSession } from "@/lib/marketSession";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -86,6 +87,8 @@ export function FeedDiagnostics({ symbol }: Props) {
   const lastTpsRef    = useRef(Date.now());
   const prevCountRef  = useRef(0);
   const prevTickTsRef = useRef(0);
+
+  const { isOpen: sessionOpen, type: sessionType } = useMarketSession(symbol);
 
   // Live cTrader spot data — real-time bid/ask/spread/tickCount (no 3s poll delay)
   const ctraderSpot      = useCtraderSpotStore(s => s.spots[symbol] ?? null);
@@ -224,6 +227,24 @@ export function FeedDiagnostics({ symbol }: Props) {
           {/* Symbol identity */}
           <Row label="Symbol"      value={symbol}                        color="#F3FFF3" />
           <Row label="Asset Class" value={getAssetClassLabel(assetClass)} color={classColor} />
+          <Row
+            label="Market"
+            value={sessionOpen ? "Open ✓" : "Closed ✗"}
+            color={sessionOpen ? "#00FFB4" : "#ef4444"}
+          />
+          {!sessionOpen && (
+            <div style={{
+              marginTop: 4, padding: "4px 8px", borderRadius: 4,
+              background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.25)",
+              fontSize: 10, color: "rgba(239,68,68,0.85)", lineHeight: 1.4,
+            }}>
+              {sessionType === "forex" || sessionType === "commodity"
+                ? "Forex/commodity session closed (Sun 22:00–Fri 22:00 UTC)"
+                : sessionType === "index"
+                ? "Index session closed (Mon–Fri 00:00–22:00 UTC)"
+                : "Market session closed"}
+            </div>
+          )}
 
           <Divider />
 
