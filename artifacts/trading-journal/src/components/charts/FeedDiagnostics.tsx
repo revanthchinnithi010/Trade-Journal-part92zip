@@ -91,29 +91,37 @@ export function FeedDiagnostics({ symbol }: Props) {
   const { isOpen: sessionOpen, type: sessionType } = useMarketSession(symbol);
 
   // Live cTrader spot data — real-time bid/ask/spread/tickCount (no 3s poll delay)
-  const ctraderSpot      = useCtraderSpotStore(s => s.spots[symbol] ?? null);
-  const ctraderTickCount = useCtraderSpotStore(s => s.tickCounts[symbol] ?? 0);
+  const ctraderSpot       = useCtraderSpotStore(s => s.spots[symbol] ?? null);
+  const ctraderTickCount  = useCtraderSpotStore(s => s.tickCounts[symbol] ?? 0);
   const ctraderConnStatus = useCtraderSpotStore(s => s.connStatus);
-  const isCtrader = ctraderConnStatus === "streaming" && ctraderSpot !== null;
 
-  const symData      = diag?.perSymbol[symbol];
-  // Asset class: prefer server-classified value, fall back to client pattern
-  const assetClass   = (symData?.assetClass as AssetClass | undefined) ?? getAssetClass(symbol);
+  // ── Asset class must be derived BEFORE isCtrader (which depends on it) ───────
+  const symData    = diag?.perSymbol[symbol];
+  const assetClass = (symData?.assetClass as AssetClass | undefined) ?? getAssetClass(symbol);
+
+  // cTrader engine running? (regardless of whether a spot quote exists right now)
+  const ctraderConnected = ctraderConnStatus === "streaming";
+  // This symbol is a cTrader symbol if the engine is connected and it is non-crypto.
+  // Do NOT require ctraderSpot !== null — on a closed-market weekend, cTrader is
+  // connected but sends no ticks, so ctraderSpot stays null the entire session.
+  const isCtrader = ctraderConnected && assetClass !== "crypto";
+
   // Provider: prefer server routing (definitive), fall back to client priority rule
   const liveProvider = isCtrader ? "ctrader" : (symData?.provider ?? diag?.symbolRouting?.[symbol]);
   const providerKey  = (liveProvider ?? "unknown") as DataProvider;
   const providerStat = diag?.providers.find(p => p.name === liveProvider);
   const provOk       = isCtrader ? true : (providerStat?.status === "connected");
   // Routing reason: prefer server-generated, fall back to client derivation
-  const reason       = isCtrader
+  const reason = isCtrader
     ? "cTrader ProtoOA real-time spot subscription"
     : (symData?.routingReason ?? getRoutingReason(symbol));
 
-  // Detect Yahoo Finance REST-only symbols (forex, metals, indices, commodities)
-  // These have NO live WS feed — candle data is fetched on-demand via REST only.
-  const isYahooSymbol = assetClass !== "crypto" && !isCtrader && !symData?.subscribed;
-  const feedStatus    = isCtrader
-    ? "streaming"
+  // Yahoo Finance REST: non-crypto AND cTrader is NOT connected.
+  // Never classify a cTrader-connected symbol as Yahoo Finance.
+  const isYahooSymbol = assetClass !== "crypto" && !ctraderConnected;
+
+  const feedStatus = isCtrader
+    ? sessionOpen ? "streaming" : "market_closed"
     : isYahooSymbol
     ? "REST only"
     : (symData?.subscribed && provOk)
@@ -183,17 +191,24 @@ export function FeedDiagnostics({ symbol }: Props) {
     : `${Math.round(tickAgeMs / 3600_000)}h ago`
     : "—";
 
-  const subStatus   = isCtrader ? "Streaming ✓" : isYahooSymbol ? "REST (no WS)" : (symData?.subscribed ? "Subscribed ✓" : "Not subscribed");
-  const provStatus  = isCtrader ? "streaming" : isYahooSymbol ? "Yahoo Finance" : (providerStat?.status ?? "unknown");
-  const statusStr   = `${provStatus}  ·  ${subStatus}`;
-  const statusColor = (isCtrader || (symData?.subscribed && provOk))
-    ? "#00FFB4"
-    : isYahooSymbol
-    ? "#F59E0B"
-    : "#FF9F43";
-
   const classColor    = CLASS_COLOR[assetClass]  ?? CLASS_COLOR.unknown;
   const providerColor = PROVIDER_COLOR[providerKey] ?? PROVIDER_COLOR.unknown;
+
+  // Pill button appearance
+  const pillLive    = isCtrader ? sessionOpen : (provOk && sessionOpen);
+  const pillClosed  = !sessionOpen;
+  const pillColor   = pillClosed  ? "#ef4444"
+                    : pillLive    ? "#00FFB4"
+                    : isYahooSymbol ? "#F59E0B"
+                    : "#ff6b6b";
+  const pillBorder  = pillClosed  ? "rgba(239,68,68,0.3)"
+                    : pillLive    ? "rgba(0,255,140,0.25)"
+                    : isYahooSymbol ? "rgba(245,158,11,0.3)"
+                    : "rgba(255,100,100,0.25)";
+  const pillLabel   = pillClosed    ? "Closed"
+                    : isCtrader     ? "cTrader"
+                    : isYahooSymbol ? "REST"
+                    : "Feed";
 
   return (
     <div
@@ -209,21 +224,14 @@ export function FeedDiagnostics({ symbol }: Props) {
           display: "flex", alignItems: "center", gap: 5,
           padding: "3px 9px", borderRadius: 20,
           background: "rgba(0,0,0,0.65)",
-          border: `1px solid ${
-            isYahooSymbol   ? "rgba(245,158,11,0.3)"
-            : !sessionOpen  ? "rgba(239,68,68,0.3)"
-            : provOk        ? "rgba(0,255,140,0.25)"
-            : "rgba(255,100,100,0.25)"
-          }`,
-          color: isYahooSymbol ? "#F59E0B" : !sessionOpen ? "#ef4444" : provOk ? "#00FFB4" : "#ff6b6b",
+          border: `1px solid ${pillBorder}`,
+          color: pillColor,
           cursor: "pointer", fontSize: 10, fontFamily: "monospace",
         }}
         title="Feed Diagnostics"
       >
-        {isYahooSymbol ? <Activity size={9} /> : (provOk && sessionOpen) ? <Wifi size={9} /> : <WifiOff size={9} />}
-        <span style={{ color: "rgba(255,255,255,0.5)" }}>
-          {!sessionOpen ? "Closed" : isYahooSymbol ? "REST" : "Feed"}
-        </span>
+        {pillLive && !pillClosed ? <Wifi size={9} /> : isYahooSymbol ? <Activity size={9} /> : <WifiOff size={9} />}
+        <span style={{ color: "rgba(255,255,255,0.5)" }}>{pillLabel}</span>
         {open ? <ChevronDown size={9} /> : <ChevronUp size={9} />}
       </button>
 
@@ -246,10 +254,12 @@ export function FeedDiagnostics({ symbol }: Props) {
           </div>
 
           {/* Symbol identity */}
-          <Row label="Symbol"      value={symbol}                        color="#F3FFF3" />
+          <Row label="Symbol"      value={symbol}                         color="#F3FFF3" />
           <Row label="Asset Class" value={getAssetClassLabel(assetClass)} color={classColor} />
+
+          {/* Market session status */}
           <Row
-            label="Market"
+            label="Market Status"
             value={sessionOpen ? "Open ✓" : "Closed ✗"}
             color={sessionOpen ? "#00FFB4" : "#ef4444"}
           />
@@ -260,32 +270,34 @@ export function FeedDiagnostics({ symbol }: Props) {
               fontSize: 10, color: "rgba(239,68,68,0.85)", lineHeight: 1.4,
             }}>
               {sessionType === "forex" || sessionType === "commodity"
-                ? "Forex/commodity session closed (Sun 22:00–Fri 22:00 UTC)"
+                ? "Forex/commodity session closed (weekends)"
                 : sessionType === "index"
-                ? "Index session closed (Mon–Fri 00:00–22:00 UTC)"
+                ? "Index session closed (Mon–Fri only)"
                 : "Market session closed"}
             </div>
           )}
 
           <Divider />
 
-          {/* Provider selection */}
+          {/* Provider + feed status */}
           <Row
             label="Provider"
-            value={isYahooSymbol ? "Yahoo Finance" : (liveProvider ? getProviderLabel(providerKey) : "—")}
-            color={isYahooSymbol ? "#F59E0B" : providerColor}
+            value={liveProvider ? getProviderLabel(providerKey) : "Yahoo Finance"}
+            color={isCtrader ? "#F59E0B" : isYahooSymbol ? "#6b7280" : providerColor}
           />
           <Row
-            label="Feed Status"
+            label="Live Feed"
             value={
-              !sessionOpen    ? "Market Closed"
-              : isYahooSymbol ? "REST only · no live WS"
+              isCtrader && sessionOpen  ? "Active ✓"
+              : isCtrader && !sessionOpen ? "Waiting · Market Closed"
+              : isYahooSymbol           ? "REST only · no WS"
               : feedStatus === "streaming" ? "Streaming ✓"
               : feedStatus
             }
             color={
-              !sessionOpen    ? "#ef4444"
-              : isYahooSymbol ? "#F59E0B"
+              isCtrader && sessionOpen    ? "#00FFB4"
+              : isCtrader && !sessionOpen ? "#F59E0B"
+              : isYahooSymbol             ? "#6b7280"
               : feedStatus === "streaming" ? "#00FFB4"
               : "#FF9F43"
             }
@@ -296,14 +308,12 @@ export function FeedDiagnostics({ symbol }: Props) {
 
           {/* Routing reason */}
           {reason && (
-            <div
-              style={{
-                marginTop: 6, padding: "5px 8px",
-                background: "rgba(255,255,255,0.04)",
-                border: "1px solid rgba(255,255,255,0.08)",
-                borderRadius: 5,
-              }}
-            >
+            <div style={{
+              marginTop: 6, padding: "5px 8px",
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: 5,
+            }}>
               <div style={{ color: "rgba(255,255,255,0.22)", fontSize: 9, marginBottom: 3, letterSpacing: "0.06em" }}>
                 ROUTING REASON
               </div>
@@ -317,7 +327,7 @@ export function FeedDiagnostics({ symbol }: Props) {
 
           {/* Live tick metrics */}
           <Row
-            label="Last Tick"
+            label="Last Tick Time"
             value={tickAgeStr}
             color={tickAgeMs !== null && tickAgeMs < 5_000 ? "#00FFB4" : tickAgeMs !== null ? "#FF9F43" : "rgba(255,255,255,0.35)"}
           />
@@ -330,44 +340,61 @@ export function FeedDiagnostics({ symbol }: Props) {
             <Row label="Last Price" value={String(symData.lastPrice)} dimValue />
           )}
 
-          {/* cTrader live bid/ask/spread + cumulative tick counter */}
-          {isCtrader && ctraderSpot && (
+          {/* cTrader section — show whether market is open or closed */}
+          {isCtrader && (
             <>
               <Divider />
               <div style={{ color: "rgba(255,255,255,0.2)", fontSize: 9, marginBottom: 5, letterSpacing: "0.06em" }}>
-                CTRADER LIVE FEED
+                CTRADER FEED
               </div>
-              <Row label="Bid"    value={ctraderSpot.bid.toFixed(5)}    color="#4ADE80" />
-              <Row label="Ask"    value={ctraderSpot.ask.toFixed(5)}    color="#F87171" />
-              <Row label="Spread" value={ctraderSpot.spread.toFixed(5)} dimValue />
-              <Row
-                label="Tick Count"
-                value={ctraderTickCount > 0 ? ctraderTickCount.toLocaleString() : "0"}
-                color={ctraderTickCount > 0 ? "#00FFB4" : "rgba(255,255,255,0.35)"}
-              />
-              <Row
-                label="Last Tick At"
-                value={ctraderSpot.receivedAt
-                  ? new Date(ctraderSpot.receivedAt).toLocaleTimeString("en-US", { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", fractionalSecondDigits: 3 })
-                  : "—"}
-                color={tickAgeMs !== null && tickAgeMs < 2_000 ? "#00FFB4" : "#FF9F43"}
-              />
+              {ctraderSpot ? (
+                <>
+                  <Row label="Bid"    value={ctraderSpot.bid.toFixed(5)}    color="#4ADE80" />
+                  <Row label="Ask"    value={ctraderSpot.ask.toFixed(5)}    color="#F87171" />
+                  <Row label="Spread" value={ctraderSpot.spread.toFixed(5)} dimValue />
+                  <Row
+                    label="Tick Count"
+                    value={ctraderTickCount > 0 ? ctraderTickCount.toLocaleString() : "0"}
+                    color={ctraderTickCount > 0 ? "#00FFB4" : "rgba(255,255,255,0.35)"}
+                  />
+                  <Row
+                    label="Last Tick At"
+                    value={new Date(ctraderSpot.receivedAt).toLocaleTimeString("en-US", {
+                      hour12: false, hour: "2-digit", minute: "2-digit",
+                      second: "2-digit", fractionalSecondDigits: 3,
+                    })}
+                    color={tickAgeMs !== null && tickAgeMs < 2_000 ? "#00FFB4" : "#FF9F43"}
+                  />
+                </>
+              ) : (
+                <div style={{
+                  padding: "5px 8px", borderRadius: 4,
+                  background: "rgba(245,158,11,0.07)", border: "1px solid rgba(245,158,11,0.18)",
+                  fontSize: 10, color: "rgba(245,158,11,0.85)", lineHeight: 1.5,
+                }}>
+                  {sessionOpen
+                    ? "Engine connected · awaiting first quote…"
+                    : "Engine connected · market is closed. Quotes will resume when market opens."}
+                </div>
+              )}
             </>
           )}
 
-          {isYahooSymbol ? (
+          {/* Yahoo Finance banner — only when cTrader is NOT connected */}
+          {isYahooSymbol && (
             <div style={{
               marginTop: 6, padding: "5px 8px", borderRadius: 4,
-              background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.2)",
-              fontSize: 10, color: "rgba(245,158,11,0.9)", lineHeight: 1.5,
+              background: "rgba(107,114,128,0.08)", border: "1px solid rgba(107,114,128,0.2)",
+              fontSize: 10, color: "rgba(180,180,180,0.8)", lineHeight: 1.5,
             }}>
               <strong>No live feed</strong> — {getAssetClassLabel(assetClass)} data uses
-              Yahoo Finance REST. Candle countdown and live tick counter are frozen.
-              {sessionOpen
-                ? " Historical bars load on chart open."
-                : " Market is currently closed."}
+              Yahoo Finance REST (no WebSocket). Candle countdown is frozen.
+              {!sessionOpen && " Market is currently closed."}
             </div>
-          ) : (!isCtrader && !symData?.subscribed) && (
+          )}
+
+          {/* Not subscribed warning — only for Delta crypto symbols */}
+          {!isCtrader && !isYahooSymbol && !symData?.subscribed && (
             <div style={{ marginTop: 6, fontSize: 10, color: "#FF9F43", lineHeight: 1.4 }}>
               Not subscribed — select this symbol in the watchlist to start receiving ticks.
             </div>
