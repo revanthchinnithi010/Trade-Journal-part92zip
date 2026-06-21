@@ -2755,8 +2755,26 @@ function MiniWatchlistPopup({
   );
 }
 
-// ── L2 Orderbook WebSocket hook ──────────────────────────────────────────────
-const OB_MAX_LEVELS = 10;
+// ── L2 Orderbook — CSS animations injected once ──────────────────────────────
+if (typeof document !== "undefined") {
+  const _OB_STYLE_ID = "__ob_anim_v3__";
+  if (!document.getElementById(_OB_STYLE_ID)) {
+    const _s = document.createElement("style");
+    _s.id = _OB_STYLE_ID;
+    _s.textContent =
+      "@keyframes ob-fadein{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}" +
+      "@keyframes ob-fadeout{from{opacity:1}to{opacity:0.12}}" +
+      "@keyframes ob-pulse-bid{0%,100%{background-color:rgba(0,224,138,0.00)}50%{background-color:rgba(0,224,138,0.14)}}" +
+      "@keyframes ob-pulse-ask{0%,100%{background-color:rgba(255,91,91,0.00)}50%{background-color:rgba(255,91,91,0.14)}}" +
+      ".ob-wall-bid{animation:ob-pulse-bid 2.4s ease-in-out infinite}" +
+      ".ob-wall-ask{animation:ob-pulse-ask 2.4s ease-in-out infinite}" +
+      ".ob-row-new{animation:ob-fadein 0.18s ease-out both}" +
+      ".ob-row-gone{animation:ob-fadeout 0.22s ease-out both}";
+    document.head.appendChild(_s);
+  }
+}
+
+const OB_MAX_LEVELS = 12;
 interface OBLevel { price: string; size: string | number }
 type OBStatus = "connecting" | "connected" | "error";
 
@@ -2772,7 +2790,8 @@ interface OBDiag {
   source: string;
 }
 
-const OB_POLL_MS = 1500;
+// 250ms = ~4 updates/sec — feels alive without hammering the server
+const OB_POLL_MS = 250;
 
 function useOrderBook(symbol: string) {
   const [status,       setStatus]       = useState<OBStatus>("connecting");
@@ -2785,10 +2804,11 @@ function useOrderBook(symbol: string) {
     source: "/api/orderbook/:symbol → Delta India REST",
   });
 
-  const bidsRef     = useRef<OBLevel[]>([]);
-  const asksRef     = useRef<OBLevel[]>([]);
-  const pendingRaf  = useRef(false);
-  const onUpdateRef = useRef<(() => void) | null>(null);
+  const bidsRef      = useRef<OBLevel[]>([]);
+  const asksRef      = useRef<OBLevel[]>([]);
+  const pendingRaf   = useRef(false);
+  const onUpdateRef  = useRef<(() => void) | null>(null);
+  const pollCountRef = useRef(0); // stable ref, no re-render on increment
 
   const setOnUpdate = useCallback((fn: () => void) => { onUpdateRef.current = fn; }, []);
 
@@ -2799,6 +2819,7 @@ function useOrderBook(symbol: string) {
 
     bidsRef.current = [];
     asksRef.current = [];
+    pollCountRef.current = 0;
     setStatus("connecting");
     setBidCount(0);
     setAskCount(0);
@@ -2810,7 +2831,7 @@ function useOrderBook(symbol: string) {
       const t0 = Date.now();
       try {
         const resp = await fetch(`/api/orderbook/${encodeURIComponent(symbol)}?depth=${OB_MAX_LEVELS}`, {
-          signal: AbortSignal.timeout(4000),
+          signal: AbortSignal.timeout(3500),
         });
 
         if (destroyed) return;
@@ -2828,11 +2849,11 @@ function useOrderBook(symbol: string) {
         };
 
         if (destroyed) return;
-
         if (!data.success) throw new Error(data.error ?? "API returned success:false");
 
         bidsRef.current = (data.buy  ?? []).slice(0, OB_MAX_LEVELS);
         asksRef.current = (data.sell ?? []).slice(0, OB_MAX_LEVELS);
+        pollCountRef.current++;
 
         setStatus("connected");
         setDiag(d => ({
@@ -2859,7 +2880,6 @@ function useOrderBook(symbol: string) {
         if (destroyed) return;
         const msg = e instanceof Error ? e.message : String(e);
         if (!msg.includes("AbortError")) {
-          console.error("[OB] poll error:", msg);
           setStatus(prev => prev === "connected" ? "connected" : "error");
           setDiag(d => ({ ...d, errorCount: d.errorCount + 1, lastError: msg }));
         }
@@ -2878,82 +2898,99 @@ function useOrderBook(symbol: string) {
     };
   }, [symbol]);
 
-  return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag };
+  return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag, pollCountRef };
 }
 
 // ── OrderBook component ───────────────────────────────────────────────────────
 const OB_BID_COLOR  = "#00E08A";
 const OB_ASK_COLOR  = "#FF5B5B";
-const OB_DIM_COLOR  = "rgba(255,255,255,0.32)";
-const OB_BG_COLOR   = "#0F1618";
+const OB_DIM_COLOR  = "rgba(255,255,255,0.30)";
+const OB_BG_COLOR   = "#0B1012";
 const OB_HDR_COLOR  = "rgba(255,255,255,0.03)";
 const OB_BR_COLOR   = "rgba(255,255,255,0.05)";
-const OB_SPREAD_BG  = "#1A1A1A";
-const OB_ROW_H      = 22;  // px — fixed row height, no layout shift
+const OB_SPREAD_BG  = "#141A1C";
+const OB_ROW_H      = 21; // px — tight rows like Delta Exchange
 
 type OBRowRef = {
-  container:  HTMLDivElement  | null;
-  bar:        HTMLDivElement  | null;
-  price:      HTMLSpanElement | null;
-  size:       HTMLSpanElement | null;
-  indicator:  HTMLSpanElement | null;
+  container: HTMLDivElement  | null;
+  bar:       HTMLDivElement  | null;
+  price:     HTMLSpanElement | null;
+  size:      HTMLSpanElement | null;
+  indicator: HTMLSpanElement | null;
 };
 
 function makeOBRows(n: number): OBRowRef[] {
-  return Array.from({ length: n }, () => ({ container: null, bar: null, price: null, size: null, indicator: null }));
+  return Array.from({ length: n }, () => ({
+    container: null, bar: null, price: null, size: null, indicator: null,
+  }));
 }
 
-function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: boolean; onToggle: () => void }) {
-  const { bidsRef, asksRef, status, bidCount, askCount, setOnUpdate, diag } = useOrderBook(symbol);
+function OrderBook({ symbol, expanded, onToggle }: {
+  symbol: string; expanded: boolean; onToggle: () => void;
+}) {
+  const { bidsRef, asksRef, status, bidCount, askCount, setOnUpdate, diag, pollCountRef } =
+    useOrderBook(symbol);
 
-  const bidRowRefs  = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
-  const askRowRefs  = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
-  const spreadRef   = useRef<HTMLSpanElement | null>(null);
-  const midRef      = useRef<HTMLSpanElement | null>(null);
+  const bidRowRefs = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
+  const askRowRefs = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
+  const spreadRef  = useRef<HTMLSpanElement | null>(null);
+  const midRef     = useRef<HTMLSpanElement | null>(null);
 
-  // Previous sizes for diffing — keyed by display-slot index
-  const prevBidSizes = useRef<(number | null)[]>(Array(OB_MAX_LEVELS).fill(null));
-  const prevAskSizes = useRef<(number | null)[]>(Array(OB_MAX_LEVELS).fill(null));
+  // Track by PRICE KEY so shifts in the ladder don't trigger false diffs
+  const prevBidMap  = useRef<Map<string, number>>(new Map());
+  const prevAskMap  = useRef<Map<string, number>>(new Map());
 
-  // Timers for indicator auto-clear + flash auto-clear
-  const indTimers   = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
-  const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  // Per-slot previous bar pct — used for expand vs shrink timing
+  const prevBidPcts = useRef<number[]>(Array(OB_MAX_LEVELS).fill(0));
+  const prevAskPcts = useRef<number[]>(Array(OB_MAX_LEVELS).fill(0));
+
+  // Timer buckets
+  const indTimers    = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const flashTimers  = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const newRowTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // ── formatters ──────────────────────────────────────────────────────────────
   const fmtPrice = useCallback((p: string | number): string => {
     const n = typeof p === "number" ? p : parseFloat(p as string);
-    if (!isFinite(n)) return String(p);
-    if (n >= 1000) return n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-    if (n >= 1)    return n.toFixed(2);
+    if (!isFinite(n)) return "—";
+    if (n >= 10000) return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (n >= 1000)  return n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (n >= 1)     return n.toFixed(2);
     return n.toPrecision(4);
   }, []);
 
   const fmtSize = useCallback((s: string | number): string => {
     const n = typeof s === "number" ? s : parseFloat(s as string);
-    if (!isFinite(n)) return String(s);
+    if (!isFinite(n)) return "—";
     if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 10_000)    return `${(n / 1_000).toFixed(0)}K`;
     if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
     return String(Math.round(n));
   }, []);
 
-  // ── flash helper ────────────────────────────────────────────────────────────
+  // ── flash: instant → hold → fade ────────────────────────────────────────────
+  // Increase = brighter, shorter; Decrease = dimmer, longer (drain feeling)
   const flash = useCallback((
     key: string,
     el: HTMLDivElement,
     flashColor: string,
+    durationMs: number,
   ) => {
     clearTimeout(flashTimers.current[key]);
     el.style.transition = "none";
     el.style.backgroundColor = flashColor;
-    requestAnimationFrame(() => {
-      el.style.transition = "background-color 0.45s ease";
-    });
+    // Double-RAF to guarantee browser sees the instant color before the transition starts
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition = `background-color ${durationMs}ms ease-out`;
+      el.style.backgroundColor = "";
+    }));
     flashTimers.current[key] = setTimeout(() => {
-      el.style.backgroundColor = "transparent";
-    }, 300);
+      el.style.transition = "";
+      el.style.backgroundColor = "";
+    }, durationMs + 80);
   }, []);
 
-  // ── indicator helper ─────────────────────────────────────────────────────────
+  // ── ▲▼ change indicator ───────────────────────────────────────────────────────
   const showIndicator = useCallback((
     key: string,
     el: HTMLSpanElement,
@@ -2961,131 +2998,175 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
     isBid: boolean,
   ) => {
     clearTimeout(indTimers.current[key]);
-    el.textContent = increased ? "↑" : "↓";
+    el.textContent = increased ? "▲" : "▼";
     el.style.color = increased
       ? (isBid ? OB_BID_COLOR : OB_ASK_COLOR)
-      : (isBid ? "rgba(0,180,100,0.55)" : "rgba(220,60,60,0.55)");
+      : (isBid ? "rgba(0,180,100,0.45)" : "rgba(200,50,50,0.45)");
     el.style.opacity = "1";
     indTimers.current[key] = setTimeout(() => {
       el.style.opacity = "0";
-    }, 500);
+    }, increased ? 380 : 580);
   }, []);
 
-  // ── DOM update engine (called from RAF, zero React renders) ─────────────────
+  // ── Core DOM painter — called from RAF, zero React renders ───────────────────
   const updateDom = useCallback(() => {
     const bids = bidsRef.current;
     const asks = asksRef.current;
-
-    // Asks arrive ascending (lowest first) from Delta — reverse for display
-    // so the best (lowest) ask sits closest to the spread row at the bottom.
+    // Delta returns asks ascending (lowest first) — reverse so best ask is at bottom
     const askDisplay = [...asks].reverse();
 
-    // Max size across both sides for depth bars
+    // ── Wall detection: 3× average visible size ────────────────────────────────
+    const allSizes = [...bids, ...asks].map(l => parseFloat(String(l.size)));
+    const avgSize  = allSizes.length > 0
+      ? allSizes.reduce((a, b) => a + b, 0) / allSizes.length : 1;
+    const wallThreshold = avgSize * 3;
+
+    // Max size across both sides for depth-bar normalisation
     let maxSize = 0;
-    for (const l of [...bids, ...asks]) {
-      const s = parseFloat(String(l.size));
-      if (s > maxSize) maxSize = s;
-    }
+    for (const s of allSizes) { if (s > maxSize) maxSize = s; }
+    if (maxSize === 0) maxSize = 1;
 
-    // ── Ask rows ──────────────────────────────────────────────────────────────
-    const askLen = askDisplay.length;
-    for (let i = 0; i < OB_MAX_LEVELS; i++) {
-      const row   = askRowRefs.current[i];
-      const level = askDisplay[i];
-      const isBest = i === askLen - 1 && askLen > 0; // bottom row = best ask
+    const isFirstUpdate = pollCountRef.current <= 1;
 
-      if (!level) {
-        if (row.price)     { row.price.textContent = "—"; row.price.style.opacity = "0.13"; }
-        if (row.size)      { row.size.textContent  = "—"; row.size.style.opacity  = "0.13"; }
-        if (row.bar)       row.bar.style.width = "0%";
-        if (row.indicator) row.indicator.textContent = "";
-        prevAskSizes.current[i] = null;
-        continue;
+    // ── Paint one side ─────────────────────────────────────────────────────────
+    const paintSide = (
+      rowRefs: OBRowRef[],
+      levels: OBLevel[],
+      prevMap: Map<string, number>,
+      prevPcts: number[],
+      isBid: boolean,
+    ): Map<string, number> => {
+      const newMap = new Map<string, number>();
+      const len    = levels.length;
+
+      for (let i = 0; i < OB_MAX_LEVELS; i++) {
+        const row   = rowRefs[i];
+        const level = levels[i];
+        // Best bid = index 0; Best ask = last display index (closest to spread)
+        const isBest = isBid ? (i === 0 && len > 0) : (i === len - 1 && len > 0);
+
+        if (!level) {
+          // Slot is empty — fade out if it had data before
+          if (row.container) {
+            row.container.classList.remove("ob-wall-bid", "ob-wall-ask", "ob-row-new");
+            if (prevPcts[i] > 0) {
+              clearTimeout(newRowTimers.current[`gone_${isBid?"b":"a"}${i}`]);
+              row.container.classList.add("ob-row-gone");
+              newRowTimers.current[`gone_${isBid?"b":"a"}${i}`] = setTimeout(() => {
+                row.container?.classList.remove("ob-row-gone");
+              }, 240);
+            }
+          }
+          if (row.price)     row.price.textContent  = "—";
+          if (row.size)      row.size.textContent   = "—";
+          if (row.indicator) row.indicator.textContent = "";
+          if (row.bar) {
+            row.bar.style.transition = "width 0.28s ease-in";
+            row.bar.style.width = "0%";
+          }
+          prevPcts[i] = 0;
+          continue;
+        }
+
+        const priceKey = String(level.price);
+        const curSize  = parseFloat(String(level.size));
+        const prevSize = prevMap.get(priceKey) ?? null;
+        const isNew    = !prevMap.has(priceKey) && !isFirstUpdate;
+        const changed  = prevSize !== null && curSize !== prevSize;
+        newMap.set(priceKey, curSize);
+
+        const isWall = curSize >= wallThreshold;
+
+        // Container — opacity, fade-in class, wall pulse class
+        if (row.container) {
+          row.container.style.opacity = "1";
+
+          // New price level appearing: fade in
+          if (isNew) {
+            clearTimeout(newRowTimers.current[`new_${isBid?"b":"a"}${i}`]);
+            row.container.classList.remove("ob-row-gone");
+            row.container.classList.add("ob-row-new");
+            newRowTimers.current[`new_${isBid?"b":"a"}${i}`] = setTimeout(() => {
+              row.container?.classList.remove("ob-row-new");
+            }, 210);
+          }
+
+          // Wall pulse
+          if (isWall) {
+            row.container.classList.add(isBid ? "ob-wall-bid" : "ob-wall-ask");
+            row.container.classList.remove(isBid ? "ob-wall-ask" : "ob-wall-bid");
+          } else {
+            row.container.classList.remove("ob-wall-bid", "ob-wall-ask");
+          }
+        }
+
+        // Price
+        if (row.price) {
+          row.price.textContent  = fmtPrice(level.price);
+          row.price.style.color  = isBest
+            ? (isBid ? OB_BID_COLOR : OB_ASK_COLOR)
+            : (isBid ? "rgba(0,224,138,0.60)" : "rgba(255,91,91,0.65)");
+          row.price.style.fontWeight = isBest ? "700" : "500";
+          row.price.style.fontSize   = isBest ? "12px" : "11px";
+          row.price.style.opacity    = "1";
+        }
+
+        // Size
+        if (row.size) {
+          row.size.textContent  = fmtSize(curSize);
+          row.size.style.opacity = "1";
+          row.size.style.color  = isBest
+            ? "rgba(255,255,255,0.92)"
+            : isWall
+              ? (isBid ? OB_BID_COLOR : OB_ASK_COLOR)
+              : OB_DIM_COLOR;
+          row.size.style.fontWeight = (isBest || isWall) ? "600" : "400";
+        }
+
+        // Change flash + indicator
+        if (changed && row.container) {
+          const increased = curSize > prevSize!;
+          if (isBid) {
+            flash(
+              `b${i}`, row.container,
+              increased ? "rgba(0,210,130,0.42)" : "rgba(0,90,55,0.30)",
+              increased ? 320 : 520,
+            );
+          } else {
+            flash(
+              `a${i}`, row.container,
+              increased ? "rgba(255,50,50,0.42)" : "rgba(140,20,20,0.30)",
+              increased ? 320 : 520,
+            );
+          }
+          if (row.indicator) showIndicator(`${isBid?"b":"a"}i${i}`, row.indicator, increased, isBid);
+        }
+
+        // Depth bar — asymmetric transition: fast expand (new liquidity), slow shrink (drain)
+        if (row.bar) {
+          const pct     = Math.min((curSize / maxSize) * 100, 100);
+          const prevPct = prevPcts[i];
+
+          if (Math.abs(pct - prevPct) > 0.05) {
+            row.bar.style.transition = pct > prevPct
+              ? "width 0.15s ease-out, background-color 0.18s ease"   // expand → snappy
+              : "width 0.28s ease-in,  background-color 0.28s ease";  // shrink → gradual
+          }
+
+          const depthAlpha = isBest ? 0.42 : isWall ? 0.24 : 0.07 + (curSize / maxSize) * 0.21;
+          row.bar.style.width = `${pct}%`;
+          row.bar.style.background = isBid
+            ? `rgba(0,224,138,${depthAlpha.toFixed(2)})`
+            : `rgba(255,91,91,${depthAlpha.toFixed(2)})`;
+          prevPcts[i] = pct;
+        }
       }
 
-      const curSize  = parseFloat(String(level.size));
-      const prevSize = prevAskSizes.current[i];
-      const changed  = prevSize !== null && curSize !== prevSize;
+      return newMap;
+    };
 
-      // Price
-      if (row.price) {
-        row.price.textContent  = fmtPrice(level.price);
-        row.price.style.opacity = "1";
-        row.price.style.color   = isBest ? OB_ASK_COLOR : "rgba(255,91,91,0.70)";
-        row.price.style.fontWeight = isBest ? "700" : "500";
-      }
-
-      // Size + diff effects
-      if (row.size) {
-        row.size.textContent  = fmtSize(curSize);
-        row.size.style.opacity = "1";
-        row.size.style.color = isBest ? "rgba(255,255,255,0.85)" : OB_DIM_COLOR;
-      }
-
-      if (changed) {
-        const increased = curSize > prevSize!;
-        if (row.container) flash(`a${i}`, row.container, increased ? "rgba(255,50,50,0.28)" : "rgba(160,30,30,0.18)");
-        if (row.indicator) showIndicator(`ai${i}`, row.indicator, increased, false);
-      }
-
-      // Depth bar (grows right-to-left so bars align with the right/price edge)
-      if (row.bar && maxSize > 0) {
-        const pct = Math.min((curSize / maxSize) * 100, 100);
-        const alpha = isBest ? 0.35 : 0.08 + (curSize / maxSize) * 0.22;
-        row.bar.style.width      = `${pct}%`;
-        row.bar.style.background = `rgba(255,91,91,${alpha.toFixed(2)})`;
-      }
-
-      prevAskSizes.current[i] = curSize;
-    }
-
-    // ── Bid rows ──────────────────────────────────────────────────────────────
-    for (let i = 0; i < OB_MAX_LEVELS; i++) {
-      const row   = bidRowRefs.current[i];
-      const level = bids[i];
-      const isBest = i === 0 && bids.length > 0;  // top row = best bid
-
-      if (!level) {
-        if (row.price)     { row.price.textContent = "—"; row.price.style.opacity = "0.13"; }
-        if (row.size)      { row.size.textContent  = "—"; row.size.style.opacity  = "0.13"; }
-        if (row.bar)       row.bar.style.width = "0%";
-        if (row.indicator) row.indicator.textContent = "";
-        prevBidSizes.current[i] = null;
-        continue;
-      }
-
-      const curSize  = parseFloat(String(level.size));
-      const prevSize = prevBidSizes.current[i];
-      const changed  = prevSize !== null && curSize !== prevSize;
-
-      if (row.price) {
-        row.price.textContent  = fmtPrice(level.price);
-        row.price.style.opacity = "1";
-        row.price.style.color   = isBest ? OB_BID_COLOR : "rgba(0,224,138,0.65)";
-        row.price.style.fontWeight = isBest ? "700" : "500";
-      }
-
-      if (row.size) {
-        row.size.textContent  = fmtSize(curSize);
-        row.size.style.opacity = "1";
-        row.size.style.color = isBest ? "rgba(255,255,255,0.85)" : OB_DIM_COLOR;
-      }
-
-      if (changed) {
-        const increased = curSize > prevSize!;
-        if (row.container) flash(`b${i}`, row.container, increased ? "rgba(0,200,120,0.25)" : "rgba(0,120,70,0.18)");
-        if (row.indicator) showIndicator(`bi${i}`, row.indicator, increased, true);
-      }
-
-      if (row.bar && maxSize > 0) {
-        const pct = Math.min((curSize / maxSize) * 100, 100);
-        const alpha = isBest ? 0.35 : 0.08 + (curSize / maxSize) * 0.22;
-        row.bar.style.width      = `${pct}%`;
-        row.bar.style.background = `rgba(0,224,138,${alpha.toFixed(2)})`;
-      }
-
-      prevBidSizes.current[i] = curSize;
-    }
+    prevBidMap.current = paintSide(bidRowRefs.current, bids,       prevBidMap.current, prevBidPcts.current, true);
+    prevAskMap.current = paintSide(askRowRefs.current, askDisplay, prevAskMap.current, prevAskPcts.current, false);
 
     // ── Spread + Mid ──────────────────────────────────────────────────────────
     const bestBid = bids[0]  ? parseFloat(String(bids[0].price))  : NaN;
@@ -3096,67 +3177,62 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
       if (spreadRef.current) spreadRef.current.textContent = spread >= 0 ? fmtPrice(spread) : "—";
       if (midRef.current)    midRef.current.textContent    = fmtPrice(mid);
     }
-  }, [bidsRef, asksRef, fmtPrice, fmtSize, flash, showIndicator]);
+  }, [bidsRef, asksRef, fmtPrice, fmtSize, flash, showIndicator, pollCountRef]);
 
   useEffect(() => { setOnUpdate(updateDom); }, [setOnUpdate, updateDom]);
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Render — fixed DOM skeleton, all values written by updateDom ─────────────
   const hasData   = bidCount > 0 || askCount > 0;
-  const isLoading = !hasData && diag.pollCount <= 2;
+  const isLoading = !hasData && diag.pollCount <= 1;
   const hasError  = diag.errorCount > 0 && !hasData;
 
-  // Row JSX factory — shared pattern for bids + asks
-  const makeRow = (refs: OBRowRef[], i: number, side: "bid" | "ask") => {
-    const isBid = side === "bid";
-    return (
+  const makeRow = (refs: OBRowRef[], i: number, isBid: boolean) => (
+    <div
+      key={`${isBid?"b":"a"}-${i}`}
+      ref={el => { refs[i].container = el; }}
+      style={{
+        position: "relative", display: "flex", alignItems: "center",
+        height: OB_ROW_H, padding: "0 10px", overflow: "hidden",
+        // No transition here — opacity toggled directly in updateDom
+      }}
+    >
+      {/* Depth bar — right-anchored, behind text */}
       <div
-        key={`${side}-${i}`}
-        ref={el => { refs[i].container = el; }}
+        ref={el => { refs[i].bar = el; }}
         style={{
-          position: "relative", display: "flex", alignItems: "center",
-          height: OB_ROW_H, padding: "0 10px", overflow: "hidden",
+          position: "absolute", right: 0, top: 0, height: "100%", width: "0%",
+          pointerEvents: "none",
         }}
-      >
-        {/* Depth bar — right-anchored, behind text */}
-        <div
-          ref={el => { refs[i].bar = el; }}
-          style={{
-            position: "absolute", right: 0, top: 0, height: "100%", width: "0%",
-            transition: "width 0.35s ease, background 0.35s ease",
-            pointerEvents: "none",
-          }}
-        />
-        {/* Price */}
-        <span
-          ref={el => { refs[i].price = el; }}
-          style={{
-            flex: 1, fontSize: 11, fontWeight: 500, fontVariantNumeric: "tabular-nums",
-            color: isBid ? "rgba(0,224,138,0.65)" : "rgba(255,91,91,0.70)",
-            opacity: 0.13, position: "relative", zIndex: 1,
-            letterSpacing: "0.01em",
-          }}
-        >—</span>
-        {/* ↑↓ indicator */}
-        <span
-          ref={el => { refs[i].indicator = el; }}
-          style={{
-            fontSize: 8, fontWeight: 700, marginRight: 5, opacity: 0,
-            transition: "opacity 0.2s ease", position: "relative", zIndex: 1,
-            minWidth: 8, textAlign: "center",
-          }}
-        />
-        {/* Size */}
-        <span
-          ref={el => { refs[i].size = el; }}
-          style={{
-            fontSize: 10, fontVariantNumeric: "tabular-nums", minWidth: 50,
-            textAlign: "right", color: OB_DIM_COLOR, opacity: 0.13,
-            position: "relative", zIndex: 1,
-          }}
-        >—</span>
-      </div>
-    );
-  };
+      />
+      {/* Price */}
+      <span
+        ref={el => { refs[i].price = el; }}
+        style={{
+          flex: 1, fontSize: 11, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+          color: isBid ? "rgba(0,224,138,0.60)" : "rgba(255,91,91,0.65)",
+          position: "relative", zIndex: 1, letterSpacing: "0.01em", opacity: 0.12,
+        }}
+      >—</span>
+      {/* ▲▼ change indicator */}
+      <span
+        ref={el => { refs[i].indicator = el; }}
+        style={{
+          fontSize: 7, fontWeight: 700, marginRight: 4, opacity: 0,
+          transition: "opacity 0.15s ease", position: "relative", zIndex: 1,
+          minWidth: 7, textAlign: "center",
+        }}
+      />
+      {/* Size */}
+      <span
+        ref={el => { refs[i].size = el; }}
+        style={{
+          fontSize: 10, fontVariantNumeric: "tabular-nums", minWidth: 46,
+          textAlign: "right", color: OB_DIM_COLOR, opacity: 0.12,
+          position: "relative", zIndex: 1,
+        }}
+      >—</span>
+    </div>
+  );
 
   return (
     <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${OB_BR_COLOR}`, background: OB_BG_COLOR }}>
@@ -3166,8 +3242,8 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
         onClick={onToggle}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "8px 10px", background: OB_HDR_COLOR, border: "none", cursor: "pointer",
-          touchAction: "manipulation",
+          padding: "8px 10px", background: OB_HDR_COLOR, border: "none",
+          cursor: "pointer", touchAction: "manipulation",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
@@ -3176,26 +3252,19 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
           </span>
           <div style={{
             display: "flex", alignItems: "center", gap: 4, padding: "1px 6px", borderRadius: 4,
-            background: status === "connected" && hasData
-              ? "rgba(0,224,138,0.09)" : "rgba(255,255,255,0.05)",
+            background: status === "connected" && hasData ? "rgba(0,224,138,0.09)" : "rgba(255,255,255,0.05)",
           }}>
             <div style={{
               width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
-              background: status === "connected" && hasData ? OB_BID_COLOR
-                : status === "error" ? OB_ASK_COLOR : "#555",
+              background: status === "connected" && hasData ? OB_BID_COLOR : status === "error" ? OB_ASK_COLOR : "#555",
               boxShadow: status === "connected" && hasData ? `0 0 5px ${OB_BID_COLOR}99` : "none",
             }} />
-            <span style={{
-              fontSize: 9, fontWeight: 600,
-              color: status === "connected" && hasData ? OB_BID_COLOR : OB_DIM_COLOR,
-            }}>
+            <span style={{ fontSize: 9, fontWeight: 600, color: status === "connected" && hasData ? OB_BID_COLOR : OB_DIM_COLOR }}>
               {status === "connected" && hasData ? "Live" : status === "error" ? "Error" : "···"}
             </span>
           </div>
           {diag.lastPollMs > 0 && (
-            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.22)" }}>
-              {diag.lastPollMs}ms
-            </span>
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.18)" }}>{diag.lastPollMs}ms</span>
           )}
         </div>
         <ChevronDown style={{
@@ -3207,58 +3276,53 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
 
       {/* ── Collapsible body ── */}
       <div style={{
-        maxHeight: expanded ? (OB_MAX_LEVELS * OB_ROW_H * 2 + 80) : 0,
-        overflow: "hidden",
-        transition: "max-height 0.28s ease",
+        maxHeight: expanded ? (OB_MAX_LEVELS * OB_ROW_H * 2 + 60) : 0,
+        overflow: "hidden", transition: "max-height 0.28s ease",
       }}>
 
-        {/* Loading / error state */}
         {(isLoading || hasError) && (
-          <div style={{ padding: "18px 10px", textAlign: "center" }}>
+          <div style={{ padding: "16px 10px", textAlign: "center" }}>
             <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>
-              {hasError ? `⚠ ${diag.lastError}` : "Loading order book…"}
+              {hasError ? `⚠ ${diag.lastError}` : "Connecting to order book…"}
             </p>
           </div>
         )}
 
-        {/* Live book */}
         {hasData && (
           <>
-            {/* Column labels */}
+            {/* Column header */}
             <div style={{
               display: "flex", alignItems: "center", padding: "0 10px",
-              height: 20, background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}`,
+              height: 18, background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}`,
             }}>
-              <span style={{ flex: 1, fontSize: 9, color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em" }}>PRICE</span>
-              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em", minWidth: 50, textAlign: "right" }}>QTY</span>
+              <span style={{ flex: 1, fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em" }}>PRICE</span>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em", minWidth: 46, textAlign: "right" }}>QTY</span>
             </div>
 
-            {/* Ask rows — index 0 = highest (furthest from spread), last = best ask */}
-            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(askRowRefs.current, i, "ask"))}</div>
+            {/* Ask rows — index 0 = furthest from spread, last = best ask */}
+            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(askRowRefs.current, i, false))}</div>
 
-            {/* Spread / Mid row */}
+            {/* Spread / Mid */}
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "0 10px", height: 26,
-              background: OB_SPREAD_BG,
+              padding: "0 10px", height: 24, background: OB_SPREAD_BG,
               borderTop: `1px solid ${OB_BR_COLOR}`, borderBottom: `1px solid ${OB_BR_COLOR}`,
             }}>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.04em" }}>SPREAD</span>
-                <span ref={spreadRef} style={{ fontSize: 10, color: "rgba(255,255,255,0.60)", fontVariantNumeric: "tabular-nums" }}>—</span>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", letterSpacing: "0.04em" }}>SPREAD</span>
+                <span ref={spreadRef} style={{ fontSize: 10, color: "rgba(255,255,255,0.58)", fontVariantNumeric: "tabular-nums" }}>—</span>
               </div>
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.04em" }}>MID</span>
-                <span ref={midRef} style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>—</span>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", letterSpacing: "0.04em" }}>MID</span>
+                <span ref={midRef} style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.78)", fontVariantNumeric: "tabular-nums" }}>—</span>
               </div>
             </div>
 
             {/* Bid rows — index 0 = best bid */}
-            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(bidRowRefs.current, i, "bid"))}</div>
+            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(bidRowRefs.current, i, true))}</div>
 
-            {/* Footer: error if any */}
             {diag.errorCount > 0 && (
-              <div style={{ padding: "3px 10px", background: "rgba(255,91,91,0.06)" }}>
+              <div style={{ padding: "2px 10px", background: "rgba(255,91,91,0.05)" }}>
                 <span style={{ fontSize: 9, color: OB_ASK_COLOR }}>⚠ {diag.lastError}</span>
               </div>
             )}
