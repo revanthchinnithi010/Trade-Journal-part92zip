@@ -2863,7 +2863,7 @@ const OB_BG_COLOR  = "#0d0d0d";
 const OB_HDR_COLOR = "rgba(255,255,255,0.04)";
 const OB_BR_COLOR  = "rgba(255,255,255,0.07)";
 
-function OrderBook({ symbol }: { symbol: string }) {
+function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: boolean; onToggle: () => void }) {
   const { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate } =
     useOrderBook(symbol);
 
@@ -2937,112 +2937,104 @@ function OrderBook({ symbol }: { symbol: string }) {
     return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
   };
 
-  const rowStyle = (color: string): React.CSSProperties => ({
-    display: "flex", padding: "2px 10px", alignItems: "center",
-  });
-
   const isUnavailable = status === "error" && bidCount === 0 && askCount === 0;
 
   return (
-    <div style={{
-      flexShrink: 0, margin: "0 12px 8px",
-      borderRadius: 10, overflow: "hidden",
-      border: `1px solid ${OB_BR_COLOR}`,
-      background: OB_BG_COLOR,
-    }}>
-      {/* ── Header ── */}
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "6px 10px", background: OB_HDR_COLOR,
-        borderBottom: `1px solid ${OB_BR_COLOR}`,
-      }}>
-        <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
-          Order Book
-        </span>
-        <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-          <div style={{
-            width: 6, height: 6, borderRadius: "50%", flexShrink: 0,
-            background: status === "connected" ? OB_BID_COLOR : status === "error" ? OB_ASK_COLOR : "#666",
-            boxShadow: status === "connected" ? `0 0 5px ${OB_BID_COLOR}88` : "none",
-          }} />
-          <span style={{ fontSize: 10, color: OB_DIM_COLOR }}>
-            {status === "connected" ? "Live" : status === "error" ? "Offline" : "Connecting…"}
+    <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${OB_BR_COLOR}`, background: OB_BG_COLOR }}>
+
+      {/* ── Toggle header (always visible) ── */}
+      <button
+        onClick={onToggle}
+        style={{
+          width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "8px 10px", background: OB_HDR_COLOR, border: "none", cursor: "pointer",
+          touchAction: "manipulation",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.60)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Order Book
           </span>
-        </div>
-      </div>
-
-      {isUnavailable ? (
-        <div style={{ padding: "18px 10px", textAlign: "center" }}>
-          <span style={{ fontSize: 12, color: OB_DIM_COLOR }}>Order Book unavailable</span>
-        </div>
-      ) : (
-        <>
-          {/* ── Column headers ── */}
           <div style={{
-            display: "flex", padding: "3px 10px",
-            background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}`,
+            display: "flex", alignItems: "center", gap: 4,
+            padding: "1px 6px", borderRadius: 4,
+            background: status === "connected" ? "rgba(8,153,129,0.12)" : "rgba(255,255,255,0.05)",
           }}>
-            <span style={{ flex: 1, fontSize: 9, color: OB_DIM_COLOR, letterSpacing: "0.04em" }}>PRICE (USD)</span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", letterSpacing: "0.04em" }}>SIZE</span>
-          </div>
-
-          {/* ── Asks (red, reversed so lowest is nearest mid) ── */}
-          <div style={{ background: "rgba(242,54,69,0.035)" }}>
-            {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
-              <div key={`ask-${i}`} style={rowStyle(OB_ASK_COLOR)}>
-                <span
-                  ref={el => { askRowRefs.current[i].price = el; }}
-                  style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_ASK_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}
-                >—</span>
-                <span
-                  ref={el => { askRowRefs.current[i].size = el; }}
-                  style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}
-                >—</span>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Spread / mid ── */}
-          <div style={{
-            display: "flex", alignItems: "center", padding: "3px 10px",
-            background: "rgba(255,255,255,0.022)",
-            borderTop: `1px solid ${OB_BR_COLOR}`,
-            borderBottom: `1px solid ${OB_BR_COLOR}`,
-          }}>
-            <span style={{ fontSize: 10, color: OB_DIM_COLOR, flex: 1 }}>Spread</span>
-            <span ref={spreadRef} style={{ fontSize: 10, color: OB_DIM_COLOR, fontVariantNumeric: "tabular-nums" }}>—</span>
-          </div>
-
-          {/* ── Bids (green) ── */}
-          <div style={{ background: "rgba(8,153,129,0.035)" }}>
-            {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
-              <div key={`bid-${i}`} style={rowStyle(OB_BID_COLOR)}>
-                <span
-                  ref={el => { bidRowRefs.current[i].price = el; }}
-                  style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_BID_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}
-                >—</span>
-                <span
-                  ref={el => { bidRowRefs.current[i].size = el; }}
-                  style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}
-                >—</span>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Diagnostics footer ── */}
-          <div style={{
-            display: "flex", gap: 8, padding: "3px 10px",
-            borderTop: `1px solid ${OB_BR_COLOR}`, background: OB_HDR_COLOR,
-            flexWrap: "wrap",
-          }}>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Bids: {bidCount}</span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Asks: {askCount}</span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR, marginLeft: "auto" }}>
-              {fmtTime(lastUpdateMs)}
+            <div style={{
+              width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
+              background: status === "connected" ? OB_BID_COLOR : status === "error" ? OB_ASK_COLOR : "#555",
+              boxShadow: status === "connected" ? `0 0 4px ${OB_BID_COLOR}88` : "none",
+            }} />
+            <span style={{ fontSize: 9, color: status === "connected" ? OB_BID_COLOR : OB_DIM_COLOR, fontWeight: 600 }}>
+              {status === "connected" ? "Live" : status === "error" ? "Offline" : "···"}
             </span>
           </div>
-        </>
-      )}
+        </div>
+        <ChevronDown style={{
+          width: 13, height: 13, color: OB_DIM_COLOR, flexShrink: 0,
+          transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+          transition: "transform 0.22s ease",
+        }} />
+      </button>
+
+      {/* ── Collapsible body (max 250 px, internal scroll) ── */}
+      <div style={{
+        maxHeight: expanded ? (isUnavailable ? 56 : 250) : 0,
+        overflowY: expanded ? "auto" : "hidden",
+        overflowX: "hidden",
+        transition: "max-height 0.25s ease",
+      }}>
+        {isUnavailable ? (
+          <div style={{ padding: "16px 10px", textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: OB_DIM_COLOR }}>Order Book unavailable</span>
+          </div>
+        ) : (
+          <>
+            {/* Column headers */}
+            <div style={{ display: "flex", padding: "3px 10px", background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}` }}>
+              <span style={{ flex: 1, fontSize: 9, color: OB_DIM_COLOR, letterSpacing: "0.04em" }}>PRICE (USD)</span>
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", letterSpacing: "0.04em" }}>SIZE</span>
+            </div>
+
+            {/* Asks — reversed so lowest ask is nearest spread */}
+            <div style={{ background: "rgba(242,54,69,0.035)" }}>
+              {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
+                <div key={`ask-${i}`} style={{ display: "flex", padding: "2px 10px", alignItems: "center" }}>
+                  <span ref={el => { askRowRefs.current[i].price = el; }}
+                    style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_ASK_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
+                  <span ref={el => { askRowRefs.current[i].size = el; }}
+                    style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Spread */}
+            <div style={{ display: "flex", alignItems: "center", padding: "3px 10px", background: "rgba(255,255,255,0.022)", borderTop: `1px solid ${OB_BR_COLOR}`, borderBottom: `1px solid ${OB_BR_COLOR}` }}>
+              <span style={{ fontSize: 10, color: OB_DIM_COLOR, flex: 1 }}>Spread</span>
+              <span ref={spreadRef} style={{ fontSize: 10, color: OB_DIM_COLOR, fontVariantNumeric: "tabular-nums" }}>—</span>
+            </div>
+
+            {/* Bids */}
+            <div style={{ background: "rgba(8,153,129,0.035)" }}>
+              {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
+                <div key={`bid-${i}`} style={{ display: "flex", padding: "2px 10px", alignItems: "center" }}>
+                  <span ref={el => { bidRowRefs.current[i].price = el; }}
+                    style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_BID_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
+                  <span ref={el => { bidRowRefs.current[i].size = el; }}
+                    style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Diagnostics */}
+            <div style={{ display: "flex", gap: 8, padding: "3px 10px", borderTop: `1px solid ${OB_BR_COLOR}`, background: OB_HDR_COLOR, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Bids: {bidCount}</span>
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Asks: {askCount}</span>
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR, marginLeft: "auto" }}>{fmtTime(lastUpdateMs)}</span>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
@@ -3088,6 +3080,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [reduceOnly,     setReduceOnly]     = useState(false);
   const [submitted,      setSubmitted]      = useState(false);
   const [contractExpanded, setContractExpanded] = useState(false);
+  const [obExpanded,        setObExpanded]        = useState(false);
   const [contractData,     setContractData]     = useState<{
     type:string; lotSize:string; settlementCurrency:string;
     initialMargin:string; maintenanceMargin:string; maxLeverage:string;
@@ -3354,23 +3347,19 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
         onPointerCancel={onPU}
       >
 
-        {/* ── Fixed header (drag zone) ──────────────────────────────────── */}
+        {/* ── Sticky header: drag handle + symbol/price + stats ─────────── */}
         <div style={{
-          flexShrink:0,
-          touchAction:"none", cursor:"grab",
-          borderBottom:`1px solid ${TRADE_BORDER}`,
+          flexShrink: 0, touchAction: "none", cursor: "grab",
+          background: TRADE_BG,
+          boxShadow: `0 1px 0 ${TRADE_BORDER}`,
         }}>
           {/* Drag handle */}
-          <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:8 }}>
-            <div style={{ width:32, height:3, borderRadius:2, background:"rgba(255,255,255,0.20)" }} />
+          <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
+            <div style={{ width:36, height:3, borderRadius:2, background:"rgba(255,255,255,0.18)" }} />
           </div>
 
           {/* Symbol + price + close */}
-          <div style={{
-            display:"flex", alignItems:"center",
-            padding:"0 14px 12px", gap:10,
-          }}>
-            {/* Symbol info */}
+          <div style={{ display:"flex", alignItems:"center", padding:"0 14px 8px", gap:10 }}>
             <div style={{ flex:1, minWidth:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:4 }}>
                 <span style={{ fontSize:20, fontWeight:600, color:TEXT_HI, letterSpacing:"-0.02em", lineHeight:1.1 }}>
@@ -3380,8 +3369,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               </div>
               <p style={{ fontSize:11, color:TEXT_DIM, margin:"2px 0 0", lineHeight:1 }}>{subtitle}</p>
             </div>
-
-            {/* Live price */}
             <div style={{ textAlign:"right", flexShrink:0 }}>
               <div style={{ fontSize:16, fontWeight:700, color: isUp ? BUY_COLOR : SELL_COLOR, lineHeight:1.1 }}>
                 {fmtLive(livePrice)}
@@ -3390,8 +3377,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
               </p>
             </div>
-
-            {/* Close */}
             <button
               onClick={e => { e.stopPropagation(); doClose(); }}
               style={{
@@ -3404,67 +3389,64 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               <X style={{ width:14, height:14, color:TEXT_DIM }} />
             </button>
           </div>
-        </div>
 
-        {/* ── Stats row (tap to expand contract details) ─────────────── */}
-        <div style={{ flexShrink:0 }}>
-          <div
-            onClick={() => setContractExpanded(v => !v)}
-            style={{
-              display:"flex", alignItems:"center", gap:0,
-              padding:"7px 14px",
-              borderBottom: contractExpanded ? "none" : `1px solid ${TRADE_BORDER}`,
-              cursor:"pointer",
-            }}
-          >
+          {/* Stats row — always sticky, never scrolls away */}
+          <div style={{
+            display:"flex", padding:"6px 14px 8px", gap:0,
+            borderTop:`1px solid rgba(255,255,255,0.04)`,
+          }}>
             {[
               { label:"24h Vol",  value:"$736.6M" },
               { label:"OI",       value:"$57.2M"  },
               { label:"Fund/8h",  value:"0.0100%" },
             ].map((s, i) => (
               <div key={s.label} style={{
-                flex:1,
-                paddingLeft: i === 0 ? 0 : 12,
-                borderLeft: i > 0 ? `1px solid ${TRADE_BORDER}` : "none",
-                marginLeft: i > 0 ? 12 : 0,
+                flex:1, paddingLeft: i===0 ? 0 : 12,
+                borderLeft: i>0 ? `1px solid ${TRADE_BORDER}` : "none",
+                marginLeft: i>0 ? 12 : 0,
               }}>
                 <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1, margin:0 }}>{s.label}</p>
-                <p style={{ fontSize:11, color:TEXT_HI, marginTop:3, fontWeight:500, lineHeight:1 }}>{s.value}</p>
+                <p style={{ fontSize:11, color:TEXT_HI, marginTop:2, fontWeight:500, lineHeight:1 }}>{s.value}</p>
               </div>
             ))}
-            {/* Expand chevron */}
-            <ChevronDown style={{
-              width:13, height:13, color:ORG_COLOR, flexShrink:0, marginLeft:6,
-              transform: contractExpanded ? "rotate(180deg)" : "rotate(0deg)",
-              transition:"transform 0.22s ease",
-            }} />
+          </div>
+        </div>
+
+        {/* ── Single scrollable body ─────────────────────────────────────── */}
+        <div
+          ref={scrollRef}
+          style={{ flex:1, overflowY:"auto", overscrollBehavior:"contain" } as React.CSSProperties}
+        >
+
+          {/* Order Book — collapsible, default closed, max 250px when open */}
+          <div style={{ margin:"10px 12px 0" }}>
+            <OrderBook symbol={symbol} expanded={obExpanded} onToggle={() => setObExpanded(v=>!v)} />
           </div>
 
-          {/* ── Contract Details expandable ──────────────────────────── */}
+          {/* Contract Details — collapsible */}
           <div style={{
-            overflow:"hidden",
-            maxHeight: contractExpanded ? 400 : 0,
-            transition:"max-height 0.25s ease",
-            borderBottom: contractExpanded ? `1px solid ${TRADE_BORDER}` : "none",
+            margin:"8px 12px 0",
+            border:`1px solid ${TRADE_BORDER}`, borderRadius:10, overflow:"hidden",
+            background:"#111111",
           }}>
-            <div style={{
-              margin:"0 12px 10px",
-              background:"#111111",
-              border:`1px solid ${TRADE_BORDER}`,
-              borderRadius:10,
-              overflow:"hidden",
-            }}>
-              {/* Section title */}
-              <div style={{
-                padding:"9px 12px 7px",
-                borderBottom:`1px solid ${TRADE_BORDER}`,
-              }}>
-                <span style={{ fontSize:12, fontWeight:600, color:TEXT_HI, letterSpacing:"0.02em" }}>
-                  Contract Details
-                </span>
-              </div>
-
-              {/* Data rows */}
+            <button
+              onClick={() => setContractExpanded(v=>!v)}
+              style={{
+                width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+                padding:"8px 12px", background:"rgba(255,255,255,0.04)", border:"none",
+                cursor:"pointer", touchAction:"manipulation",
+              }}
+            >
+              <span style={{ fontSize:11, fontWeight:600, color:"rgba(255,255,255,0.55)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+                Contract Details
+              </span>
+              <ChevronDown style={{
+                width:13, height:13, color:TEXT_DIM, flexShrink:0,
+                transform: contractExpanded ? "rotate(180deg)" : "rotate(0deg)",
+                transition:"transform 0.22s ease",
+              }} />
+            </button>
+            <div style={{ maxHeight: contractExpanded ? 400 : 0, overflow:"hidden", transition:"max-height 0.25s ease" }}>
               {contractData ? (
                 <div style={{ padding:"4px 0" }}>
                   {([
@@ -3478,16 +3460,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                     ["Position Limit",       contractData.positionLimit],
                     ["Status",               contractData.status],
                   ] as [string, string][]).map(([label, value]) => (
-                    <div key={label} style={{
-                      display:"flex", justifyContent:"space-between", alignItems:"center",
-                      padding:"5px 12px",
-                    }}>
+                    <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 12px" }}>
                       <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
-                      <span style={{
-                        fontSize:13, fontWeight:500,
-                        color: label === "Status" && value === "Operational"
-                          ? BUY_COLOR : TEXT_HI,
-                      }}>{value}</span>
+                      <span style={{ fontSize:13, fontWeight:500, color: label==="Status" && value==="Operational" ? BUY_COLOR : TEXT_HI }}>{value}</span>
                     </div>
                   ))}
                 </div>
@@ -3498,18 +3473,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </div>
-        </div>
-
-        {/* ── Live Order Book ───────────────────────────────────────────── */}
-        <OrderBook symbol={symbol} />
-
-        {/* ── Scrollable body ───────────────────────────────────────────── */}
-        <div
-          ref={scrollRef}
-          style={{
-            flex:1, overflowY:"auto", overscrollBehavior:"contain",
-          } as React.CSSProperties}
-        >
 
           {/* Buy / Sell toggle */}
           <div style={{ display:"flex", gap:7, padding:"12px 14px 0" }}>
