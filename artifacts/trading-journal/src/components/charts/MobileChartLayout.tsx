@@ -3222,8 +3222,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   }}>
                     {/* Label below */}
                     <span style={{
-                      fontSize:9, fontWeight:600,
-                      color: active ? ORG_COLOR : "rgba(255,255,255,0.28)",
+                      fontSize:11, fontWeight:700,
+                      color: active ? ORG_COLOR : "rgba(255,255,255,0.55)",
                       marginTop:7, whiteSpace:"nowrap",
                       transition:"color 0.08s",
                     }}>{lv}x</span>
