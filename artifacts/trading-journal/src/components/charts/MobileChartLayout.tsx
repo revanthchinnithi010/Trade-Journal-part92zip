@@ -3082,18 +3082,17 @@ function OrderBook({ symbol, expanded, onToggle }: {
           row.container.style.opacity = "1";
 
           // New price level appearing at this slot.
-          // IMPORTANT: evict any lingering backgroundColor from the previous occupant
-          // before adding the fade-in class. Without this, a mid-flash eviction leaves
-          // the container permanently colored because changed=false skips flash().
+          // Reset any inline style the previous occupant's flash left behind.
+          // We do NOT cancel the old price's flash timer — with price-keyed
+          // timer keys the old timer will harmlessly fire on its captured element ref.
           if (isNew) {
-            const slotKey = `${isBid ? "b" : "a"}${i}`;
-            clearTimeout(flashTimers.current[slotKey]);
             row.container.style.transition = "";
             row.container.style.backgroundColor = "";
-            clearTimeout(newRowTimers.current[`new_${slotKey}`]);
+            const newKey = `new_${isBid ? "b" : "a"}${i}`;
+            clearTimeout(newRowTimers.current[newKey]);
             row.container.classList.remove("ob-row-gone");
             row.container.classList.add("ob-row-new");
-            newRowTimers.current[`new_${slotKey}`] = setTimeout(() => {
+            newRowTimers.current[newKey] = setTimeout(() => {
               row.container?.classList.remove("ob-row-new");
             }, 210);
           }
@@ -3130,23 +3129,18 @@ function OrderBook({ symbol, expanded, onToggle }: {
           row.size.style.fontWeight = (isBest || isWall) ? "600" : "400";
         }
 
-        // Change flash + indicator
+        // Change flash + indicator — keyed by PRICE so a level moving
+        // slots never cancels the wrong element's cleanup timer.
         if (changed && row.container) {
           const increased = curSize > prevSize!;
-          if (isBid) {
-            flash(
-              `b${i}`, row.container,
-              increased ? "rgba(0,210,130,0.42)" : "rgba(0,90,55,0.30)",
-              increased ? 320 : 520,
-            );
-          } else {
-            flash(
-              `a${i}`, row.container,
-              increased ? "rgba(255,50,50,0.42)" : "rgba(140,20,20,0.30)",
-              increased ? 320 : 520,
-            );
-          }
-          if (row.indicator) showIndicator(`${isBid?"b":"a"}i${i}`, row.indicator, increased, isBid);
+          flash(
+            `${isBid ? "b" : "a"}${priceKey}`, row.container,
+            increased
+              ? (isBid ? "rgba(0,210,130,0.42)" : "rgba(255,50,50,0.42)")
+              : (isBid ? "rgba(0,90,55,0.30)"   : "rgba(140,20,20,0.30)"),
+            increased ? 320 : 520,
+          );
+          if (row.indicator) showIndicator(`${isBid ? "b" : "a"}i${priceKey}`, row.indicator, increased, isBid);
         }
 
         // Depth bar — asymmetric transition: fast expand (new liquidity), slow shrink (drain)
