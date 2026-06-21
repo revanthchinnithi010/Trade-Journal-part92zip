@@ -19,37 +19,38 @@ export interface WatchlistEntry {
 export type Market = "Crypto" | "Forex" | "Indices" | "Commodities";
 
 export interface CatalogEntry {
-  tv:     string;
-  label:  string;
-  badge:  string;
-  market: Market;
+  tv:          string;
+  label:       string;
+  badge:       string;
+  market:      Market;
+  description: string;
 }
 
 export const SYMBOL_CATALOG: Record<string, CatalogEntry> = {
-  BTCUSD:  { tv: "BINANCE:BTCUSDT",  label: "BTC/USD",  badge: "BTC",  market: "Crypto" },
-  ETHUSD:  { tv: "BINANCE:ETHUSDT",  label: "ETH/USD",  badge: "ETH",  market: "Crypto" },
-  SOLUSD:  { tv: "BINANCE:SOLUSDT",  label: "SOL/USD",  badge: "SOL",  market: "Crypto" },
-  DOGEUSD: { tv: "BINANCE:DOGEUSDT", label: "DOGE/USD", badge: "DOGE", market: "Crypto" },
-  PEPEUSD: { tv: "BINANCE:PEPEUSDT", label: "PEPE/USD", badge: "PEPE", market: "Crypto" },
-  EURUSD:  { tv: "OANDA:EURUSD",     label: "EUR/USD",  badge: "EUR",  market: "Forex" },
-  GBPUSD:  { tv: "OANDA:GBPUSD",     label: "GBP/USD",  badge: "GBP",  market: "Forex" },
-  GBPJPY:  { tv: "OANDA:GBPJPY",     label: "GBP/JPY",  badge: "GBJ",  market: "Forex" },
-  USDJPY:  { tv: "OANDA:USDJPY",     label: "USD/JPY",  badge: "JPY",  market: "Forex" },
-  AUDUSD:  { tv: "OANDA:AUDUSD",     label: "AUD/USD",  badge: "AUD",  market: "Forex" },
-  USDCAD:  { tv: "OANDA:USDCAD",     label: "USD/CAD",  badge: "CAD",  market: "Forex" },
-  USDCHF:  { tv: "OANDA:USDCHF",     label: "USD/CHF",  badge: "CHF",  market: "Forex" },
-  NAS100:  { tv: "OANDA:NAS100USD",  label: "NAS100",   badge: "NAS",  market: "Indices" },
-  US30:    { tv: "OANDA:US30USD",    label: "US 30",    badge: "DJI",  market: "Indices" },
-  US500:   { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices" },
-  SPX500:  { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices" },
-  GER40:   { tv: "OANDA:DE30EUR",    label: "GER 40",   badge: "DAX",  market: "Indices" },
-  DE40:    { tv: "OANDA:DE30EUR",    label: "DAX 40",   badge: "DAX",  market: "Indices" },
-  UK100:   { tv: "OANDA:UK100GBP",   label: "UK 100",   badge: "FTSE", market: "Indices" },
-  XAUUSD:  { tv: "OANDA:XAUUSD",     label: "XAU/USD",  badge: "GOLD", market: "Commodities" },
-  XAGUSD:  { tv: "OANDA:XAGUSD",     label: "XAG/USD",  badge: "SILV", market: "Commodities" },
-  USOIL:   { tv: "TVC:USOIL",        label: "US Oil",   badge: "OIL",  market: "Commodities" },
-  UKOIL:   { tv: "TVC:UKOIL",        label: "UK Oil",   badge: "BRENT",market: "Commodities" },
-  NATGAS:  { tv: "TVC:NATGAS",       label: "Nat Gas",  badge: "GAS",  market: "Commodities" },
+  BTCUSD:  { tv: "BINANCE:BTCUSDT",  label: "BTC/USD",  badge: "BTC",  market: "Crypto",      description: "Bitcoin Perpetual" },
+  ETHUSD:  { tv: "BINANCE:ETHUSDT",  label: "ETH/USD",  badge: "ETH",  market: "Crypto",      description: "Ethereum Perpetual" },
+  SOLUSD:  { tv: "BINANCE:SOLUSDT",  label: "SOL/USD",  badge: "SOL",  market: "Crypto",      description: "Solana Perpetual" },
+  DOGEUSD: { tv: "BINANCE:DOGEUSDT", label: "DOGE/USD", badge: "DOGE", market: "Crypto",      description: "Dogecoin Perpetual" },
+  PEPEUSD: { tv: "BINANCE:PEPEUSDT", label: "PEPE/USD", badge: "PEPE", market: "Crypto",      description: "Pepe Perpetual" },
+  EURUSD:  { tv: "OANDA:EURUSD",     label: "EUR/USD",  badge: "EUR",  market: "Forex",       description: "Euro / US Dollar" },
+  GBPUSD:  { tv: "OANDA:GBPUSD",     label: "GBP/USD",  badge: "GBP",  market: "Forex",       description: "British Pound / US Dollar" },
+  GBPJPY:  { tv: "OANDA:GBPJPY",     label: "GBP/JPY",  badge: "GBJ",  market: "Forex",       description: "British Pound / Japanese Yen" },
+  USDJPY:  { tv: "OANDA:USDJPY",     label: "USD/JPY",  badge: "JPY",  market: "Forex",       description: "US Dollar / Japanese Yen" },
+  AUDUSD:  { tv: "OANDA:AUDUSD",     label: "AUD/USD",  badge: "AUD",  market: "Forex",       description: "Australian Dollar / US Dollar" },
+  USDCAD:  { tv: "OANDA:USDCAD",     label: "USD/CAD",  badge: "CAD",  market: "Forex",       description: "US Dollar / Canadian Dollar" },
+  USDCHF:  { tv: "OANDA:USDCHF",     label: "USD/CHF",  badge: "CHF",  market: "Forex",       description: "US Dollar / Swiss Franc" },
+  NAS100:  { tv: "OANDA:NAS100USD",  label: "NAS100",   badge: "NAS",  market: "Indices",     description: "Nasdaq 100 Index" },
+  US30:    { tv: "OANDA:US30USD",    label: "US 30",    badge: "DJI",  market: "Indices",     description: "Dow Jones Industrial" },
+  US500:   { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices",     description: "S&P 500 Index" },
+  SPX500:  { tv: "OANDA:SPX500USD",  label: "S&P 500",  badge: "SPX",  market: "Indices",     description: "S&P 500 Index" },
+  GER40:   { tv: "OANDA:DE30EUR",    label: "GER 40",   badge: "DAX",  market: "Indices",     description: "Germany 40 Index" },
+  DE40:    { tv: "OANDA:DE30EUR",    label: "DAX 40",   badge: "DAX",  market: "Indices",     description: "DAX 40 Index" },
+  UK100:   { tv: "OANDA:UK100GBP",   label: "UK 100",   badge: "FTSE", market: "Indices",     description: "FTSE 100 Index" },
+  XAUUSD:  { tv: "OANDA:XAUUSD",     label: "XAU/USD",  badge: "GOLD", market: "Commodities", description: "Gold / US Dollar" },
+  XAGUSD:  { tv: "OANDA:XAGUSD",     label: "XAG/USD",  badge: "SILV", market: "Commodities", description: "Silver / US Dollar" },
+  USOIL:   { tv: "TVC:USOIL",        label: "US Oil",   badge: "OIL",  market: "Commodities", description: "US Crude Oil (WTI)" },
+  UKOIL:   { tv: "TVC:UKOIL",        label: "UK Oil",   badge: "BRENT",market: "Commodities", description: "UK Crude Oil (Brent)" },
+  NATGAS:  { tv: "TVC:NATGAS",       label: "Nat Gas",  badge: "GAS",  market: "Commodities", description: "Natural Gas" },
 };
 
 const DEFAULT_SYMBOLS = [

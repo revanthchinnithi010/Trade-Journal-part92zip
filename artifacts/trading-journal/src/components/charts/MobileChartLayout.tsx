@@ -2799,7 +2799,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const changePct   = tick?.changePct ?? 0;
   const isUp        = changePct >= 0;
   const catEntry    = SYMBOL_CATALOG[symbol];
-  const subtitle    = catEntry?.label ?? symbol;
+  const subtitle    = catEntry?.description ?? catEntry?.label ?? symbol;
   const availMargin = balance ? parseFloat(balance.walletBalance) : 0;
   const isConnected = connectionStatus === "connected";
 
