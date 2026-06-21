@@ -3184,12 +3184,12 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               }}>{leverage}x</span>
             </div>
 
-            {/* Track area — pointer events drive the drag */}
+            {/* Track row — rail + thumb only */}
             <div
               ref={leverageTrackRef}
               onPointerDown={onLevPD}
               onPointerMove={onLevPM}
-              style={{ position:"relative", height:36, cursor:"pointer", userSelect:"none", touchAction:"none" }}
+              style={{ position:"relative", height:20, cursor:"pointer", userSelect:"none", touchAction:"none" }}
             >
               {/* Background rail */}
               <div style={{
@@ -3202,47 +3202,44 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               <div style={{
                 position:"absolute", top:"50%", left:0,
                 height:3, borderRadius:2,
-                background:`linear-gradient(90deg, ${ORG_COLOR}99, ${ORG_COLOR})`,
+                background:`linear-gradient(90deg, ${ORG_COLOR}88, ${ORG_COLOR})`,
                 width:`${levFillPct}%`,
                 transform:"translateY(-50%)",
                 transition:"width 0.08s",
               }} />
-
-              {/* Tick marks + labels */}
-              {leveragePresets.map((lv, i) => {
-                const pct = (i / (leveragePresets.length - 1)) * 100;
-                const active = leverage >= lv;
-                return (
-                  <div key={lv} style={{
-                    position:"absolute", top:"50%",
-                    left:`${pct}%`,
-                    transform:"translate(-50%, -50%)",
-                    display:"flex", flexDirection:"column", alignItems:"center",
-                    pointerEvents:"none",
-                  }}>
-                    {/* Label below */}
-                    <span style={{
-                      fontSize:11, fontWeight:700,
-                      color: active ? ORG_COLOR : "rgba(255,255,255,0.55)",
-                      marginTop:7, whiteSpace:"nowrap",
-                      transition:"color 0.08s",
-                    }}>{lv}x</span>
-                  </div>
-                );
-              })}
-
-              {/* Draggable thumb */}
+              {/* Thumb */}
               <div style={{
                 position:"absolute", top:"50%",
                 left:`${levFillPct}%`,
                 transform:"translate(-50%, -50%)",
                 width:20, height:20, borderRadius:"50%",
-                background:"#1a1a1a",
+                background:"#222",
                 border:`2.5px solid ${ORG_COLOR}`,
-                boxShadow:`0 0 10px ${ORG_COLOR}80, 0 0 4px ${ORG_COLOR}40`,
+                boxShadow:`0 0 10px ${ORG_COLOR}70, 0 0 4px ${ORG_COLOR}40`,
                 transition:"left 0.08s",
                 zIndex:3, pointerEvents:"none",
               }} />
+            </div>
+
+            {/* Labels row — separate, below the track */}
+            <div style={{ position:"relative", height:18, marginTop:6, pointerEvents:"none" }}>
+              {leveragePresets.map((lv, i) => {
+                const pct = (i / (leveragePresets.length - 1)) * 100;
+                const active = leverage >= lv;
+                const isFirst = i === 0;
+                const isLast  = i === leveragePresets.length - 1;
+                return (
+                  <span key={lv} style={{
+                    position:"absolute",
+                    left:`${pct}%`,
+                    transform: isFirst ? "none" : isLast ? "translateX(-100%)" : "translateX(-50%)",
+                    fontSize:11, fontWeight:700,
+                    color: active ? ORG_COLOR : "rgba(255,255,255,0.50)",
+                    whiteSpace:"nowrap",
+                    transition:"color 0.08s",
+                  }}>{lv}x</span>
+                );
+              })}
             </div>
           </div>
 
