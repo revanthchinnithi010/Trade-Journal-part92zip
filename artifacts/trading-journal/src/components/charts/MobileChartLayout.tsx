@@ -3341,18 +3341,20 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
           boxShadow:"0 -8px 48px rgba(0,0,0,0.90), 0 -1px 0 rgba(255,255,255,0.07)",
           willChange:"transform",
         }}
-        onPointerDown={onPD}
-        onPointerMove={onPM}
-        onPointerUp={onPU}
-        onPointerCancel={onPU}
       >
 
         {/* ── Sticky header: drag handle + symbol/price + stats ─────────── */}
-        <div style={{
-          flexShrink: 0, touchAction: "none", cursor: "grab",
-          background: TRADE_BG,
-          boxShadow: `0 1px 0 ${TRADE_BORDER}`,
-        }}>
+        <div
+          onPointerDown={onPD}
+          onPointerMove={onPM}
+          onPointerUp={onPU}
+          onPointerCancel={onPU}
+          style={{
+            flexShrink: 0, touchAction: "none", cursor: "grab",
+            background: TRADE_BG,
+            boxShadow: `0 1px 0 ${TRADE_BORDER}`,
+          }}
+        >
           {/* Drag handle */}
           <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:6 }}>
             <div style={{ width:36, height:3, borderRadius:2, background:"rgba(255,255,255,0.18)" }} />
@@ -3415,6 +3417,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
         {/* ── Single scrollable body ─────────────────────────────────────── */}
         <div
           ref={scrollRef}
+          onPointerDown={e => e.stopPropagation()}
           style={{ flex:1, overflowY:"auto", overscrollBehavior:"contain" } as React.CSSProperties}
         >
 
