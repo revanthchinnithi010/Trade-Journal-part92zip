@@ -2821,9 +2821,33 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const needsLimitPrice = orderType === "Limit" || orderType === "Stop-Limit";
   const needsStopPrice  = orderType === "Stop-Market" || orderType === "Stop-Limit";
 
-  // ── Leverage slider drag ──────────────────────────────────────────────────
+  // ── Leverage slider — dynamic from contract metadata ─────────────────────
   const leverageTrackRef = useRef<HTMLDivElement>(null);
-  const leveragePresets  = [1, 2, 5, 10, 25, 50, 100];
+
+  // Parse max leverage from live contract data (e.g. "200x" → 200)
+  const maxContractLev = useMemo(() => {
+    if (!contractData) return 100;
+    const n = parseInt(contractData.maxLeverage.replace(/x/i, ""), 10);
+    return isNaN(n) || n <= 0 ? 100 : n;
+  }, [contractData]);
+
+  // Generate preset breakpoints: [1,2,5,10,25,50] then 25-step increments up to max
+  const leveragePresets = useMemo<number[]>(() => {
+    const base = [1, 2, 5, 10, 25, 50].filter(v => v <= maxContractLev);
+    if (maxContractLev <= 50) return base;
+    const extras: number[] = [];
+    for (let v = 75; v <= maxContractLev; v += 25) extras.push(v);
+    if (!extras.length || extras[extras.length - 1] !== maxContractLev) {
+      extras.push(maxContractLev);
+    }
+    return [...base, ...extras];
+  }, [maxContractLev]);
+
+  // Clamp selected leverage to contract max on symbol change
+  useEffect(() => {
+    setLeverage(v => Math.min(v, maxContractLev));
+  }, [maxContractLev]);
+
   const levIdx     = leveragePresets.reduce((best, lv, i) =>
     Math.abs(lv - leverage) < Math.abs(leveragePresets[best] - leverage) ? i : best, 0);
   const levFillPct = (levIdx / (leveragePresets.length - 1)) * 100;
@@ -3257,9 +3281,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* Leverage — drag slider */}
+          {/* Leverage — drag slider (dynamic from contract metadata) */}
           <div style={{ padding:"10px 14px 0" }}>
-            {/* Label + value */}
+            {/* Label + selected value badge */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
               <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
               <span style={{
@@ -3269,21 +3293,19 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               }}>{leverage}x</span>
             </div>
 
-            {/* Track row — rail + thumb only */}
+            {/* Track row */}
             <div
               ref={leverageTrackRef}
               onPointerDown={onLevPD}
               onPointerMove={onLevPM}
               style={{ position:"relative", height:20, cursor:"pointer", userSelect:"none", touchAction:"none" }}
             >
-              {/* Background rail */}
               <div style={{
                 position:"absolute", top:"50%", left:0, right:0,
                 height:3, borderRadius:2,
                 background:"rgba(255,255,255,0.10)",
                 transform:"translateY(-50%)",
               }} />
-              {/* Filled rail */}
               <div style={{
                 position:"absolute", top:"50%", left:0,
                 height:3, borderRadius:2,
@@ -3292,7 +3314,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 transform:"translateY(-50%)",
                 transition:"width 0.08s",
               }} />
-              {/* Thumb */}
               <div style={{
                 position:"absolute", top:"50%",
                 left:`${levFillPct}%`,
@@ -3306,25 +3327,51 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               }} />
             </div>
 
-            {/* Labels row — separate, below the track */}
-            <div style={{ position:"relative", height:18, marginTop:6, pointerEvents:"none" }}>
-              {leveragePresets.map((lv, i) => {
-                const pct = (i / (leveragePresets.length - 1)) * 100;
-                const active = leverage >= lv;
-                const isFirst = i === 0;
-                const isLast  = i === leveragePresets.length - 1;
-                return (
-                  <span key={lv} style={{
-                    position:"absolute",
-                    left:`${pct}%`,
-                    transform: isFirst ? "none" : isLast ? "translateX(-100%)" : "translateX(-50%)",
-                    fontSize:11, fontWeight:700,
-                    color: active ? ORG_COLOR : "rgba(255,255,255,0.50)",
-                    whiteSpace:"nowrap",
-                    transition:"color 0.08s",
-                  }}>{lv}x</span>
-                );
-              })}
+            {/* Labels — sparse when > 8 presets to avoid overlap */}
+            {(() => {
+              const dense = leveragePresets.length > 8;
+              return (
+                <div style={{ position:"relative", height:18, marginTop:6, pointerEvents:"none" }}>
+                  {leveragePresets.map((lv, i) => {
+                    const pct     = (i / (leveragePresets.length - 1)) * 100;
+                    const isFirst = i === 0;
+                    const isLast  = i === leveragePresets.length - 1;
+                    const visible = !dense || isFirst || isLast || lv % 50 === 0;
+                    if (!visible) return null;
+                    return (
+                      <span key={lv} style={{
+                        position:"absolute",
+                        left:`${pct}%`,
+                        transform: isFirst ? "none" : isLast ? "translateX(-100%)" : "translateX(-50%)",
+                        fontSize: dense ? 10 : 11, fontWeight:700,
+                        color: leverage >= lv ? ORG_COLOR : "rgba(255,255,255,0.50)",
+                        whiteSpace:"nowrap",
+                        transition:"color 0.08s",
+                      }}>{lv}x</span>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+
+            {/* Diagnostics */}
+            <div style={{
+              display:"flex", justifyContent:"space-between",
+              marginTop:8, padding:"5px 8px",
+              background:"rgba(255,255,255,0.03)",
+              border:`1px solid ${TRADE_BORDER}`,
+              borderRadius:6,
+            }}>
+              <span style={{ fontSize:10, color:TEXT_DIM }}>
+                Contract Max&nbsp;
+                <span style={{ color:ORG_COLOR, fontWeight:700 }}>
+                  {contractData ? contractData.maxLeverage : "…"}
+                </span>
+              </span>
+              <span style={{ fontSize:10, color:TEXT_DIM }}>
+                Selected&nbsp;
+                <span style={{ color:TEXT_HI, fontWeight:700 }}>{leverage}x</span>
+              </span>
             </div>
           </div>
 
