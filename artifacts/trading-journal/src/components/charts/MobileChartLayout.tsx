@@ -2761,17 +2761,18 @@ interface OBLevel { price: string; size: string | number }
 type OBStatus = "connecting" | "connected" | "error";
 
 interface OBDiag {
-  wsUrl: string;
-  subSymbol: string;
-  connected: boolean;
-  subSent: boolean;
-  totalMsgs: number;
-  obMsgs: number;
-  seenTypes: string[];
-  lastRawSnippet: string;
-  lastObSymbol: string;
-  matchFail: string;
+  symbol: string;
+  pollCount: number;
+  errorCount: number;
+  lastError: string;
+  lastPollMs: number;
+  snapshotReceived: boolean;
+  bidCount: number;
+  askCount: number;
+  source: string;
 }
+
+const OB_POLL_MS = 1500;
 
 function useOrderBook(symbol: string) {
   const [status,       setStatus]       = useState<OBStatus>("connecting");
@@ -2779,30 +2780,22 @@ function useOrderBook(symbol: string) {
   const [bidCount,     setBidCount]     = useState(0);
   const [askCount,     setAskCount]     = useState(0);
   const [diag,         setDiag]         = useState<OBDiag>({
-    wsUrl: DELTA_WS_INDIA, subSymbol: "", connected: false, subSent: false,
-    totalMsgs: 0, obMsgs: 0, seenTypes: [], lastRawSnippet: "", lastObSymbol: "", matchFail: "",
+    symbol: "", pollCount: 0, errorCount: 0, lastError: "",
+    lastPollMs: 0, snapshotReceived: false, bidCount: 0, askCount: 0,
+    source: "/api/orderbook/:symbol → Delta India REST",
   });
 
-  const bidsRef      = useRef<OBLevel[]>([]);
-  const asksRef      = useRef<OBLevel[]>([]);
-  const pendingRaf   = useRef(false);
-  const onUpdateRef  = useRef<(() => void) | null>(null);
-  const diagRef      = useRef<OBDiag>(diag);
+  const bidsRef     = useRef<OBLevel[]>([]);
+  const asksRef     = useRef<OBLevel[]>([]);
+  const pendingRaf  = useRef(false);
+  const onUpdateRef = useRef<(() => void) | null>(null);
 
   const setOnUpdate = useCallback((fn: () => void) => { onUpdateRef.current = fn; }, []);
 
-  const flushDiag = useCallback(() => {
-    setDiag({ ...diagRef.current });
-  }, []);
-
   useEffect(() => {
     if (!symbol) return;
-    let ws: WebSocket | null = null;
     let destroyed = false;
-    let retryTimeout: ReturnType<typeof setTimeout> | null = null;
-    let pingInterval:  ReturnType<typeof setInterval>  | null = null;
-    let retryDelay = 1500;
-    let diagFlushTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
 
     bidsRef.current = [];
     asksRef.current = [];
@@ -2810,132 +2803,80 @@ function useOrderBook(symbol: string) {
     setBidCount(0);
     setAskCount(0);
     setLastUpdateMs(0);
+    setDiag(d => ({ ...d, symbol, pollCount: 0, errorCount: 0, lastError: "", snapshotReceived: false, bidCount: 0, askCount: 0 }));
 
-    diagRef.current = {
-      wsUrl: DELTA_WS_INDIA, subSymbol: symbol, connected: false, subSent: false,
-      totalMsgs: 0, obMsgs: 0, seenTypes: [], lastRawSnippet: "", lastObSymbol: "", matchFail: "",
-    };
-    setDiag({ ...diagRef.current });
-
-    const pushDiag = (update: Partial<OBDiag>) => {
-      diagRef.current = { ...diagRef.current, ...update };
-      if (diagFlushTimer) return;
-      diagFlushTimer = setTimeout(() => {
-        diagFlushTimer = null;
-        flushDiag();
-      }, 300);
-    };
-
-    const connect = () => {
+    const poll = async () => {
       if (destroyed) return;
-      console.log(`[OB] Connecting → ${DELTA_WS_INDIA} | symbol="${symbol}"`);
-      try { ws = new WebSocket(DELTA_WS_INDIA); }
-      catch (e) { console.error("[OB] new WebSocket failed", e); scheduleRetry(); return; }
+      const t0 = Date.now();
+      try {
+        const resp = await fetch(`/api/orderbook/${encodeURIComponent(symbol)}?depth=${OB_MAX_LEVELS}`, {
+          signal: AbortSignal.timeout(4000),
+        });
 
-      ws.onopen = () => {
-        if (destroyed) { ws?.close(); return; }
-        retryDelay = 1500;
-        setStatus("connected");
-        pushDiag({ connected: true });
+        if (destroyed) return;
 
-        const subMsg = {
-          type: "subscribe",
-          payload: { channels: [{ name: "l2orderbook", symbols: [symbol] }] },
-        };
-        console.log("[OB] Sending subscribe:", JSON.stringify(subMsg));
-        ws!.send(JSON.stringify(subMsg));
-        pushDiag({ subSent: true });
-
-        pingInterval = setInterval(() => {
-          if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
-        }, 25_000);
-      };
-
-      ws.onmessage = (ev) => {
-        const raw = ev.data as string;
-        try {
-          const msg = JSON.parse(raw) as Record<string, unknown>;
-          const t = String(msg.type ?? "");
-          const d = diagRef.current;
-
-          // Track all seen message types
-          const seenTypes = d.seenTypes.includes(t) ? d.seenTypes : [...d.seenTypes, t].slice(-10);
-          const totalMsgs = d.totalMsgs + 1;
-          pushDiag({ totalMsgs, seenTypes, lastRawSnippet: raw.slice(0, 200) });
-
-          // Verbose: log first 30 messages and all OB-related ones
-          if (totalMsgs <= 30 || t.toLowerCase().includes("orderbook") || t.toLowerCase().includes("l2")) {
-            console.log(`[OB] msg #${totalMsgs} type="${t}" sym="${msg.symbol ?? "?"}"`, msg);
-          }
-
-          // Match: accept l2orderbook or l2_orderbook
-          const isOB = t === "l2orderbook" || t === "l2_orderbook";
-          if (!isOB) return;
-
-          const msgSym = String(msg.symbol ?? "");
-          pushDiag({ lastObSymbol: msgSym, obMsgs: d.obMsgs + 1 });
-          console.log(`[OB] OB message: sym="${msgSym}" expected="${symbol}" buy=${Array.isArray(msg.buy) ? (msg.buy as unknown[]).length : "?"} sell=${Array.isArray(msg.sell) ? (msg.sell as unknown[]).length : "?"}`);
-
-          // Symbol matching: accept exact match or no symbol field
-          if (msgSym && msgSym !== symbol) {
-            pushDiag({ matchFail: `expected "${symbol}" got "${msgSym}"` });
-            console.warn(`[OB] Symbol mismatch: expected "${symbol}" got "${msgSym}"`);
-            return;
-          }
-
-          // Parse bids (buy) and asks (sell) — handle multiple field name variants
-          const rawBids = (msg.buy ?? msg.bids ?? msg.bid ?? []) as OBLevel[];
-          const rawAsks = (msg.sell ?? msg.asks ?? msg.ask ?? []) as OBLevel[];
-          bidsRef.current = rawBids.slice(0, OB_MAX_LEVELS);
-          asksRef.current = rawAsks.slice(0, OB_MAX_LEVELS);
-
-          console.log(`[OB] Parsed: ${bidsRef.current.length} bids, ${asksRef.current.length} asks`);
-
-          if (!pendingRaf.current) {
-            pendingRaf.current = true;
-            requestAnimationFrame(() => {
-              pendingRaf.current = false;
-              onUpdateRef.current?.();
-              setLastUpdateMs(Date.now());
-              setBidCount(bidsRef.current.length);
-              setAskCount(asksRef.current.length);
-            });
-          }
-        } catch (e) {
-          console.error("[OB] JSON parse error", e, raw.slice(0, 100));
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({ error: resp.statusText })) as { error?: string };
+          throw new Error(`HTTP ${resp.status}: ${body?.error ?? resp.statusText}`);
         }
-      };
 
-      ws.onclose = (e) => {
-        console.log(`[OB] Closed: code=${e.code} reason="${e.reason}"`);
-        if (pingInterval) clearInterval(pingInterval);
-        pingInterval = null;
-        pushDiag({ connected: false });
-        if (!destroyed) { setStatus("error"); scheduleRetry(); }
-      };
-      ws.onerror = (e) => {
-        console.error("[OB] WebSocket error", e);
-        ws?.close();
-      };
+        const data = await resp.json() as {
+          success: boolean;
+          buy?: OBLevel[];
+          sell?: OBLevel[];
+          error?: string;
+        };
+
+        if (destroyed) return;
+
+        if (!data.success) throw new Error(data.error ?? "API returned success:false");
+
+        bidsRef.current = (data.buy  ?? []).slice(0, OB_MAX_LEVELS);
+        asksRef.current = (data.sell ?? []).slice(0, OB_MAX_LEVELS);
+
+        setStatus("connected");
+        setDiag(d => ({
+          ...d, symbol,
+          pollCount: d.pollCount + 1,
+          lastPollMs: Date.now() - t0,
+          snapshotReceived: true,
+          bidCount: bidsRef.current.length,
+          askCount: asksRef.current.length,
+          lastError: "",
+        }));
+
+        if (!pendingRaf.current) {
+          pendingRaf.current = true;
+          requestAnimationFrame(() => {
+            pendingRaf.current = false;
+            onUpdateRef.current?.();
+            setLastUpdateMs(Date.now());
+            setBidCount(bidsRef.current.length);
+            setAskCount(asksRef.current.length);
+          });
+        }
+      } catch (e: unknown) {
+        if (destroyed) return;
+        const msg = e instanceof Error ? e.message : String(e);
+        if (!msg.includes("AbortError")) {
+          console.error("[OB] poll error:", msg);
+          setStatus(prev => prev === "connected" ? "connected" : "error");
+          setDiag(d => ({ ...d, errorCount: d.errorCount + 1, lastError: msg }));
+        }
+      }
+
+      if (!destroyed) {
+        pollTimer = setTimeout(poll, OB_POLL_MS);
+      }
     };
 
-    const scheduleRetry = () => {
-      if (destroyed) return;
-      retryTimeout = setTimeout(() => {
-        retryDelay = Math.min(retryDelay * 1.5, 15_000);
-        connect();
-      }, retryDelay);
-    };
+    poll();
 
-    connect();
     return () => {
       destroyed = true;
-      if (retryTimeout) clearTimeout(retryTimeout);
-      if (pingInterval)  clearInterval(pingInterval);
-      if (diagFlushTimer) clearTimeout(diagFlushTimer);
-      ws?.close(1000, "cleanup");
+      if (pollTimer) clearTimeout(pollTimer);
     };
-  }, [symbol, flushDiag]);
+  }, [symbol]);
 
   return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag };
 }
@@ -3082,48 +3023,36 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
         }}>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>WS</span>{" "}
-              <span style={{ color: diag.connected ? OB_BID_COLOR : OB_ASK_COLOR }}>
-                {diag.connected ? "✓ Connected" : "✗ Disconnected"}
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Source</span>{" "}
+              <span style={{ color: "rgba(255,255,255,0.55)" }}>REST poll</span>
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Symbol</span>{" "}
+              <span style={{ color: OB_BID_COLOR }}>{diag.symbol || symbol}</span>
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Polls</span> {diag.pollCount}
+            </span>
+            {diag.lastPollMs > 0 && (
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+                <span style={{ color: "rgba(255,255,255,0.40)" }}>Latency</span> {diag.lastPollMs}ms
               </span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Sub</span>{" "}
-              <span style={{ color: diag.subSent ? OB_BID_COLOR : "#888" }}>
-                {diag.subSent ? `✓ ${diag.subSymbol}` : "pending"}
-              </span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Msgs</span> {diag.totalMsgs}
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>OB msgs</span>{" "}
-              <span style={{ color: diag.obMsgs > 0 ? OB_BID_COLOR : "#888" }}>{diag.obMsgs}</span>
-            </span>
+            )}
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Types seen</span>{" "}
-              {diag.seenTypes.length > 0 ? diag.seenTypes.join(", ") : "none"}
-            </span>
-          </div>
-          {diag.lastObSymbol && (
-            <div style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>OB symbol</span>{" "}
-              <span style={{ color: diag.lastObSymbol === diag.subSymbol ? OB_BID_COLOR : OB_ASK_COLOR }}>
-                {diag.lastObSymbol}
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Snapshot</span>{" "}
+              <span style={{ color: diag.snapshotReceived ? OB_BID_COLOR : "#888" }}>
+                {diag.snapshotReceived ? "✓ received" : "pending"}
               </span>
-              {diag.matchFail && <span style={{ color: OB_ASK_COLOR }}> ⚠ {diag.matchFail}</span>}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: 8 }}>
+            </span>
             <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
               <span style={{ color: "rgba(255,255,255,0.40)" }}>Bids</span>{" "}
-              <span style={{ color: bidCount > 0 ? OB_BID_COLOR : "#888" }}>{bidCount}</span>
+              <span style={{ color: diag.bidCount > 0 ? OB_BID_COLOR : "#888" }}>{diag.bidCount}</span>
             </span>
             <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
               <span style={{ color: "rgba(255,255,255,0.40)" }}>Asks</span>{" "}
-              <span style={{ color: askCount > 0 ? OB_ASK_COLOR : "#888" }}>{askCount}</span>
+              <span style={{ color: diag.askCount > 0 ? OB_ASK_COLOR : "#888" }}>{diag.askCount}</span>
             </span>
             {lastUpdateMs > 0 && (
               <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
@@ -3131,14 +3060,19 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
               </span>
             )}
           </div>
+          {diag.errorCount > 0 && (
+            <div style={{ fontSize: 9, color: OB_ASK_COLOR }}>
+              ⚠ {diag.errorCount} error(s): {diag.lastError}
+            </div>
+          )}
         </div>
 
         {/* ── No data fallback ── */}
         {noDataYet && (
           <div style={{ padding: "14px 10px", textAlign: "center", borderBottom: `1px solid ${OB_BR_COLOR}` }}>
-            <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>No orderbook data received</p>
+            <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>Fetching orderbook…</p>
             <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", margin: "4px 0 0" }}>
-              Check console for [OB] logs · {diag.totalMsgs} msgs received
+              {diag.errorCount > 0 ? diag.lastError : `${diag.pollCount} poll(s) sent`}
             </p>
           </div>
         )}
