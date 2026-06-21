@@ -2871,6 +2871,23 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     pickLevFromX(e.clientX);
   }, [pickLevFromX]);
 
+  // Measure actual track width via ResizeObserver for responsive label density
+  const [leverageTrackW, setLeverageTrackW] = useState(330);
+  useEffect(() => {
+    const el = leverageTrackRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      setLeverageTrackW(entries[0].contentRect.width);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Dense mode: if pixels-per-step < 32, collapse to major marks only
+  // At 32px/step all labels (max "125x" ≈ 22px wide at 9px bold) fit with gap
+  const denseLabels = leveragePresets.length > 1 &&
+    (leverageTrackW / (leveragePresets.length - 1)) < 32;
+
   // order cost estimate (display only — no real calc without margin ratio)
   const orderCostUSD = useMemo(() => {
     const p = livePrice ?? 0;
@@ -3283,95 +3300,141 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
           {/* Leverage — drag slider (dynamic from contract metadata) */}
           <div style={{ padding:"10px 14px 0" }}>
-            {/* Label + selected value badge */}
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+            {/* Header row: label left, diagnostics right */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
               <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
-              <span style={{
-                fontSize:13, fontWeight:700, color:ORG_COLOR,
-                background:ORG_BG, border:`1px solid ${ORG_BORDER}`,
-                padding:"1px 8px", borderRadius:6,
-              }}>{leverage}x</span>
-            </div>
-
-            {/* Track row */}
-            <div
-              ref={leverageTrackRef}
-              onPointerDown={onLevPD}
-              onPointerMove={onLevPM}
-              style={{ position:"relative", height:20, cursor:"pointer", userSelect:"none", touchAction:"none" }}
-            >
-              <div style={{
-                position:"absolute", top:"50%", left:0, right:0,
-                height:3, borderRadius:2,
-                background:"rgba(255,255,255,0.10)",
-                transform:"translateY(-50%)",
-              }} />
-              <div style={{
-                position:"absolute", top:"50%", left:0,
-                height:3, borderRadius:2,
-                background:`linear-gradient(90deg, ${ORG_COLOR}88, ${ORG_COLOR})`,
-                width:`${levFillPct}%`,
-                transform:"translateY(-50%)",
-                transition:"width 0.08s",
-              }} />
-              <div style={{
-                position:"absolute", top:"50%",
-                left:`${levFillPct}%`,
-                transform:"translate(-50%, -50%)",
-                width:20, height:20, borderRadius:"50%",
-                background:"#222",
-                border:`2.5px solid ${ORG_COLOR}`,
-                boxShadow:`0 0 10px ${ORG_COLOR}70, 0 0 4px ${ORG_COLOR}40`,
-                transition:"left 0.08s",
-                zIndex:3, pointerEvents:"none",
-              }} />
-            </div>
-
-            {/* Labels — sparse when > 8 presets to avoid overlap */}
-            {(() => {
-              const dense = leveragePresets.length > 8;
-              return (
-                <div style={{ position:"relative", height:18, marginTop:6, pointerEvents:"none" }}>
-                  {leveragePresets.map((lv, i) => {
-                    const pct     = (i / (leveragePresets.length - 1)) * 100;
-                    const isFirst = i === 0;
-                    const isLast  = i === leveragePresets.length - 1;
-                    const visible = !dense || isFirst || isLast || lv % 50 === 0;
-                    if (!visible) return null;
-                    return (
-                      <span key={lv} style={{
-                        position:"absolute",
-                        left:`${pct}%`,
-                        transform: isFirst ? "none" : isLast ? "translateX(-100%)" : "translateX(-50%)",
-                        fontSize: dense ? 10 : 11, fontWeight:700,
-                        color: leverage >= lv ? ORG_COLOR : "rgba(255,255,255,0.50)",
-                        whiteSpace:"nowrap",
-                        transition:"color 0.08s",
-                      }}>{lv}x</span>
-                    );
-                  })}
-                </div>
-              );
-            })()}
-
-            {/* Diagnostics */}
-            <div style={{
-              display:"flex", justifyContent:"space-between",
-              marginTop:8, padding:"5px 8px",
-              background:"rgba(255,255,255,0.03)",
-              border:`1px solid ${TRADE_BORDER}`,
-              borderRadius:6,
-            }}>
-              <span style={{ fontSize:10, color:TEXT_DIM }}>
-                Contract Max&nbsp;
+              <span style={{ fontSize:11, color:TEXT_DIM }}>
+                Max&nbsp;
                 <span style={{ color:ORG_COLOR, fontWeight:700 }}>
                   {contractData ? contractData.maxLeverage : "…"}
                 </span>
-              </span>
-              <span style={{ fontSize:10, color:TEXT_DIM }}>
-                Selected&nbsp;
+                &nbsp;&nbsp;Selected&nbsp;
                 <span style={{ color:TEXT_HI, fontWeight:700 }}>{leverage}x</span>
               </span>
+            </div>
+
+            {/* Wrapper gives vertical room for the floating badge above the track */}
+            <div style={{ position:"relative", paddingTop:26 }}>
+
+              {/* Floating badge above thumb — always visible, shows exact value */}
+              <div style={{
+                position:"absolute",
+                top:0,
+                left:`${levFillPct}%`,
+                transform:"translateX(-50%)",
+                background:ORG_BG,
+                border:`1px solid ${ORG_BORDER}`,
+                borderRadius:5,
+                padding:"1px 7px",
+                fontSize:11, fontWeight:800, color:ORG_COLOR,
+                whiteSpace:"nowrap",
+                pointerEvents:"none",
+                transition:"left 0.07s",
+                zIndex:6,
+                letterSpacing:"-0.2px",
+              }}>{leverage}x</div>
+
+              {/* Connector line from badge to thumb */}
+              <div style={{
+                position:"absolute",
+                top:17,
+                left:`${levFillPct}%`,
+                transform:"translateX(-50%)",
+                width:1,
+                height:9,
+                background:ORG_COLOR,
+                opacity:0.5,
+                pointerEvents:"none",
+                transition:"left 0.07s",
+              }} />
+
+              {/* Track — rail + tick marks + filled + thumb */}
+              <div
+                ref={leverageTrackRef}
+                onPointerDown={onLevPD}
+                onPointerMove={onLevPM}
+                style={{ position:"relative", height:20, cursor:"pointer", userSelect:"none", touchAction:"none" }}
+              >
+                {/* Background rail */}
+                <div style={{
+                  position:"absolute", top:"50%", left:0, right:0,
+                  height:3, borderRadius:2,
+                  background:"rgba(255,255,255,0.09)",
+                  transform:"translateY(-50%)",
+                }} />
+                {/* Filled rail */}
+                <div style={{
+                  position:"absolute", top:"50%", left:0,
+                  height:3, borderRadius:2,
+                  background:`linear-gradient(90deg, ${ORG_COLOR}70, ${ORG_COLOR})`,
+                  width:`${levFillPct}%`,
+                  transform:"translateY(-50%)",
+                  transition:"width 0.07s",
+                }} />
+                {/* Tick marks for every preset — always rendered regardless of label mode */}
+                {leveragePresets.map((lv, i) => {
+                  const pct = (i / (leveragePresets.length - 1)) * 100;
+                  const active = leverage >= lv;
+                  return (
+                    <div key={lv} style={{
+                      position:"absolute",
+                      top:"50%",
+                      left:`${pct}%`,
+                      transform:"translate(-50%, -50%)",
+                      width:2, height: active ? 10 : 8,
+                      borderRadius:1,
+                      background: active ? ORG_COLOR : "rgba(255,255,255,0.25)",
+                      transition:"background 0.07s, height 0.07s",
+                      pointerEvents:"none",
+                      zIndex:1,
+                    }} />
+                  );
+                })}
+                {/* Thumb */}
+                <div style={{
+                  position:"absolute", top:"50%",
+                  left:`${levFillPct}%`,
+                  transform:"translate(-50%, -50%)",
+                  width:22, height:22, borderRadius:"50%",
+                  background:"#1a1a1a",
+                  border:`2.5px solid ${ORG_COLOR}`,
+                  boxShadow:`0 0 12px ${ORG_COLOR}60, 0 0 4px ${ORG_COLOR}40`,
+                  transition:"left 0.07s",
+                  zIndex:4, pointerEvents:"none",
+                }} />
+              </div>
+            </div>
+
+            {/* Label row — all presets in non-dense mode, major marks only in dense mode */}
+            <div style={{ position:"relative", height:16, marginTop:5, pointerEvents:"none" }}>
+              {leveragePresets.map((lv, i) => {
+                const pct     = (i / (leveragePresets.length - 1)) * 100;
+                const isFirst = i === 0;
+                const isLast  = i === leveragePresets.length - 1;
+                // Dense mode: show only first, multiples of 50, and last
+                const show = !denseLabels || isFirst || isLast || lv % 50 === 0;
+                if (!show) return null;
+                // Last label: right-anchor. First: left-anchor. Others: center.
+                // To prevent 175x / 200x overlap in dense→false borderline cases,
+                // skip penultimate if it would land within 20px of last.
+                const pxPos  = (pct / 100) * leverageTrackW;
+                const lastPx = leverageTrackW;
+                const isPenultimate = !isLast && i === leveragePresets.length - 2;
+                if (isPenultimate && !denseLabels && lastPx - pxPos < 30) return null;
+                return (
+                  <span key={lv} style={{
+                    position:"absolute",
+                    left: isLast ? "auto" : `${pct}%`,
+                    right: isLast ? 0 : "auto",
+                    transform: isFirst ? "none" : isLast ? "none" : "translateX(-50%)",
+                    fontSize: denseLabels ? 10 : 9, fontWeight:700,
+                    color: leverage >= lv ? ORG_COLOR : "rgba(255,255,255,0.40)",
+                    whiteSpace:"nowrap",
+                    transition:"color 0.07s",
+                    letterSpacing:"-0.3px",
+                  }}>{lv}x</span>
+                );
+              })}
             </div>
           </div>
 
