@@ -2765,7 +2765,7 @@ const ORG_BORDER  = "rgba(249,115,22,0.30)";
 const FIELD_BG    = "rgba(255,255,255,0.055)";
 const FIELD_BR    = "rgba(255,255,255,0.10)";
 const SECTION_BG  = "rgba(255,255,255,0.03)";
-const TRADE_BG    = "#0F1618";
+const TRADE_BG    = "#080808";
 const TRADE_CARD  = "#181818";
 const TRADE_BORDER = "rgba(255,255,255,0.06)";
 
