@@ -12,9 +12,11 @@ interface RawDeltaProduct {
   trading_status:          string;
   contract_value?:         string | number | null;
   contract_unit_currency?: string;
+  tick_size?:              string | number | null;
   initial_margin?:         string | number;
   maintenance_margin?:     string | number;
   default_leverage?:       string | number;
+  max_leverage?:           string | number;
   underlying_asset?:       { symbol: string };
   settling_asset?:         { symbol: string };
   spot_index?:             { symbol: string };
@@ -23,12 +25,16 @@ interface RawDeltaProduct {
 
 export interface ContractInfo {
   symbol:             string;
+  description:        string;
   type:               string;
   lotSize:            string;
+  lotSizeNum:         number;
+  tickSize:           string;
   settlementCurrency: string;
   initialMargin:      string;
   maintenanceMargin:  string;
   maxLeverage:        string;
+  maxLeverageNum:     number;
   underlyingIndex:    string;
   positionLimit:      string;
   status:             string;
@@ -54,17 +60,29 @@ function formatProduct(p: RawDeltaProduct): ContractInfo {
   const unit       = p.contract_unit_currency ?? underlying;
 
   const contractVal = parseFloat(String(p.contract_value ?? "1"));
-  const lotSize = !isNaN(contractVal) && contractVal > 0
-    ? `${contractVal} ${unit}`
-    : `1 ${unit}`;
+  const lotSizeNum  = !isNaN(contractVal) && contractVal > 0 ? contractVal : 1;
+  const lotSize     = `${lotSizeNum} ${unit}`;
 
-  const defLev = parseFloat(String(p.default_leverage ?? "0"));
-  const maxLeverage = !isNaN(defLev) && defLev > 0
-    ? `${Math.round(defLev)}x`
-    : (() => {
-        const im = parseFloat(String(p.initial_margin ?? "0"));
-        return (!isNaN(im) && im > 0) ? `${Math.round(100 / im)}x` : "—";
-      })();
+  // Tick size
+  const tickVal  = parseFloat(String(p.tick_size ?? "0"));
+  const tickSize = !isNaN(tickVal) && tickVal > 0 ? String(tickVal) : "—";
+
+  // Max leverage: prefer explicit max_leverage field, then derive from initial_margin
+  // Delta API initial_margin is a percentage (e.g. "0.5" = 0.5%, meaning 200x max)
+  const rawMaxLev  = parseFloat(String(p.max_leverage  ?? "0"));
+  const rawDefLev  = parseFloat(String(p.default_leverage ?? "0"));
+  const rawIM      = parseFloat(String(p.initial_margin ?? "0"));
+
+  let maxLeverageNum = 0;
+  if (!isNaN(rawMaxLev) && rawMaxLev > 0) {
+    maxLeverageNum = Math.round(rawMaxLev);
+  } else if (!isNaN(rawIM) && rawIM > 0) {
+    // initial_margin is a percentage: e.g. 0.5 means 0.5% → max lev = 100/0.5 = 200
+    maxLeverageNum = Math.round(100 / rawIM);
+  } else if (!isNaN(rawDefLev) && rawDefLev > 0) {
+    maxLeverageNum = Math.round(rawDefLev);
+  }
+  const maxLeverage = maxLeverageNum > 0 ? `${maxLeverageNum}x` : "—";
 
   const posLimit = (() => {
     const posLimitContracts = p.position_size_limit;
@@ -80,14 +98,24 @@ function formatProduct(p: RawDeltaProduct): ContractInfo {
   const underlyingIndex = p.spot_index?.symbol
     ?? `.DEX${underlying}${settling}`;
 
+  // Description: prefer short_description, then description, then human-readable fallback
+  const contractTypeLabel = CONTRACT_TYPE_LABELS[p.contract_type] ?? p.contract_type ?? "";
+  const description = p.short_description
+    ?? p.description
+    ?? (`${underlying} ${contractTypeLabel}`.trim() || p.symbol);
+
   return {
     symbol:             p.symbol,
+    description,
     type:               CONTRACT_TYPE_LABELS[p.contract_type] ?? p.contract_type ?? "—",
     lotSize,
+    lotSizeNum,
+    tickSize,
     settlementCurrency: settling,
     initialMargin:      toMarginPct(p.initial_margin),
     maintenanceMargin:  toMarginPct(p.maintenance_margin),
     maxLeverage,
+    maxLeverageNum,
     underlyingIndex,
     positionLimit:      posLimit,
     status:             p.trading_status === "operational" ? "Operational" : (p.trading_status ?? "—"),
@@ -132,7 +160,7 @@ export function createContractInfoRouter(): IRouter {
 
       const info = formatProduct(product);
       cache.set(symbol, { data: info, fetchedAt: Date.now() });
-      logger.info({ symbol }, "contract-info: fetched from Delta Exchange");
+      logger.info({ symbol, maxLeverageNum: info.maxLeverageNum, lotSizeNum: info.lotSizeNum }, "contract-info: fetched from Delta Exchange");
 
       res.setHeader("Cache-Control", "public, max-age=300");
       res.json(info);

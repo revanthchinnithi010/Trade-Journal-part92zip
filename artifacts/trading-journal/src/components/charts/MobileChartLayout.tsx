@@ -3312,25 +3312,33 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [contractExpanded, setContractExpanded] = useState(false);
   const [obExpanded,        setObExpanded]        = useState(false);
   const [contractData,     setContractData]     = useState<{
-    type:string; lotSize:string; settlementCurrency:string;
-    initialMargin:string; maintenanceMargin:string; maxLeverage:string;
+    symbol:string; description:string;
+    type:string; lotSize:string; lotSizeNum:number; tickSize:string;
+    settlementCurrency:string;
+    initialMargin:string; maintenanceMargin:string;
+    maxLeverage:string; maxLeverageNum:number;
     underlyingIndex:string; positionLimit:string; status:string;
   } | null>(null);
 
+  // Clear stale data immediately when symbol changes, then fetch fresh metadata
   useEffect(() => {
     if (!symbol) return;
+    setContractData(null);
+    setLeverage(1);
     const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    let cancelled = false;
     fetch(`${BASE}/api/contract-info/${encodeURIComponent(symbol)}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) setContractData(d); })
+      .then(d => { if (d && !cancelled) setContractData(d); })
       .catch(() => {});
+    return () => { cancelled = true; };
   }, [symbol]);
 
   const livePrice   = tick?.price ?? null;
   const changePct   = tick?.changePct ?? 0;
   const isUp        = changePct >= 0;
-  const catEntry    = SYMBOL_CATALOG[symbol];
-  const subtitle    = catEntry?.description ?? catEntry?.label ?? symbol;
+  // Description from live contract metadata (single source of truth)
+  const subtitle    = contractData?.description ?? "Loading…";
   const availMargin = balance ? parseFloat(balance.walletBalance) : 0;
   const isConnected = connectionStatus === "connected";
 
@@ -3340,11 +3348,10 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   // ── Leverage slider — dynamic from contract metadata ─────────────────────
   const leverageTrackRef = useRef<HTMLDivElement>(null);
 
-  // Parse max leverage from live contract data (e.g. "200x" → 200)
+  // Max leverage from live contract metadata (raw number, no string parsing)
   const maxContractLev = useMemo(() => {
     if (!contractData) return 100;
-    const n = parseInt(contractData.maxLeverage.replace(/x/i, ""), 10);
-    return isNaN(n) || n <= 0 ? 100 : n;
+    return contractData.maxLeverageNum > 0 ? contractData.maxLeverageNum : 100;
   }, [contractData]);
 
   // Generate preset breakpoints: [1,2,5,10,25,50] then 25-step increments up to max
@@ -3404,13 +3411,16 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const denseLabels = leveragePresets.length > 1 &&
     (leverageTrackW / (leveragePresets.length - 1)) < 32;
 
-  // order cost estimate (display only — no real calc without margin ratio)
+  // Actual contract lot size from metadata (never hardcoded)
+  const contractLotSize = contractData?.lotSizeNum ?? null;
+
+  // order cost estimate: price × lotSize × qty / leverage
   const orderCostUSD = useMemo(() => {
-    const p = livePrice ?? 0;
-    const lotSize = 0.001;
-    if (!p) return "0.00";
-    return ((p * lotSize * lotQty) / leverage).toFixed(2);
-  }, [livePrice, lotQty, leverage]);
+    const p  = livePrice ?? 0;
+    const ls = contractLotSize ?? 0;
+    if (!p || !ls) return "—";
+    return ((p * ls * lotQty) / leverage).toFixed(2);
+  }, [livePrice, lotQty, leverage, contractLotSize]);
 
   const handleSubmit = useCallback(() => {
     setSubmitted(true);
@@ -3679,29 +3689,53 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 transition:"transform 0.22s ease",
               }} />
             </button>
-            <div style={{ maxHeight: contractExpanded ? 400 : 0, overflow:"hidden", transition:"max-height 0.25s ease" }}>
+            <div style={{ maxHeight: contractExpanded ? 600 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
               {contractData ? (
                 <div style={{ padding:"4px 0" }}>
                   {([
-                    ["Type",                 contractData.type],
-                    ["Lot Size",             contractData.lotSize],
-                    ["Settlement Currency",  contractData.settlementCurrency],
-                    ["Initial Margin",       contractData.initialMargin],
-                    ["Maintenance Margin",   contractData.maintenanceMargin],
-                    ["Max Leverage",         contractData.maxLeverage],
-                    ["Underlying Index",     contractData.underlyingIndex],
-                    ["Position Limit",       contractData.positionLimit],
-                    ["Status",               contractData.status],
+                    ["Type",                contractData.type],
+                    ["Description",         contractData.description],
+                    ["Lot Size",            contractData.lotSize],
+                    ["Tick Size",           contractData.tickSize],
+                    ["Settlement Currency", contractData.settlementCurrency],
+                    ["Initial Margin",      contractData.initialMargin],
+                    ["Maintenance Margin",  contractData.maintenanceMargin],
+                    ["Max Leverage",        contractData.maxLeverage],
+                    ["Underlying Index",    contractData.underlyingIndex],
+                    ["Position Limit",      contractData.positionLimit],
+                    ["Status",              contractData.status],
                   ] as [string, string][]).map(([label, value]) => (
                     <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 12px" }}>
                       <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
                       <span style={{ fontSize:13, fontWeight:500, color: label==="Status" && value==="Operational" ? BUY_COLOR : TEXT_HI }}>{value}</span>
                     </div>
                   ))}
+                  {/* Diagnostics strip */}
+                  <div style={{
+                    margin:"8px 10px 4px",
+                    padding:"7px 10px",
+                    borderRadius:7,
+                    background:"rgba(255,255,255,0.04)",
+                    border:"1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <div style={{ fontSize:10, color:ORG_COLOR, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:5 }}>
+                      ✓ Metadata Loaded — {contractData.symbol}
+                    </div>
+                    {([
+                      ["Lot Size",     contractData.lotSizeNum],
+                      ["Max Leverage", `${contractData.maxLeverageNum}x`],
+                      ["Description",  contractData.description],
+                    ] as [string, string|number][]).map(([k, v]) => (
+                      <div key={k} style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"rgba(255,255,255,0.45)", marginTop:2 }}>
+                        <span>{k}</span>
+                        <span style={{ color:"rgba(255,255,255,0.65)", fontWeight:600 }}>{String(v)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 <div style={{ padding:"14px 12px", textAlign:"center" }}>
-                  <span style={{ fontSize:12, color:TEXT_DIM }}>Loading…</span>
+                  <span style={{ fontSize:12, color:TEXT_DIM }}>Loading contract metadata…</span>
                 </div>
               )}
             </div>
@@ -3957,7 +3991,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 }}
               />
               <span style={{ fontSize:11, color:TEXT_DIM, flexShrink:0 }}>
-                ≈ {(lotQty * 0.001).toFixed(3)} {symbol.slice(0,3)}
+                {contractLotSize != null
+                  ? `≈ ${(lotQty * contractLotSize).toFixed(contractLotSize < 0.01 ? 4 : contractLotSize < 1 ? 3 : 2)} ${contractData?.settlementCurrency ?? symbol.slice(0,3)}`
+                  : "loading…"}
               </span>
             </div>
             {/* % quick select */}
