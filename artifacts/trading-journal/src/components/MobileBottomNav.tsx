@@ -22,6 +22,7 @@ import {
   Bell,
 } from "lucide-react";
 import { useNotifications } from "@/contexts/NotificationsContext";
+import { useChartStore } from "@/store/chartStore";
 
 type NavTab =
   | { kind: "link"; href: string; label: string; Icon: React.ElementType }
@@ -122,6 +123,7 @@ function spawnBubbles(container: HTMLElement, cx: number, cy: number) {
 export function MobileBottomNav() {
   const [location] = useLocation();
   const { unreadCount } = useNotifications();
+  const mobileChartFullscreen = useChartStore(s => s.mobileChartFullscreen);
   const pillRef    = useRef<HTMLDivElement>(null);
   const outerRef   = useRef<HTMLDivElement>(null);
   const [tabW, setTabW] = useState(0);
@@ -147,16 +149,18 @@ export function MobileBottomNav() {
     };
   }, []);
 
-  // When location changes (real navigation), sync visualIdx and cancel any revert
+  // When location changes (real navigation), sync visualIdx — but NEVER during
+  // fullscreen because the location can transiently read an incorrect value while
+  // the chart layout is toggling, which would reset the bubble to the wrong tab.
   useEffect(() => {
-    if (activeIdx >= 0) {
+    if (activeIdx >= 0 && !mobileChartFullscreen) {
       if (revertTimer.current) {
         clearTimeout(revertTimer.current);
         revertTimer.current = null;
       }
       setVisualIdx(activeIdx);
     }
-  }, [activeIdx]);
+  }, [activeIdx, mobileChartFullscreen]);
 
   const circleX = tabW > 0 && visualIdx >= 0
     ? visualIdx * tabW + (tabW - CIRCLE_D) / 2

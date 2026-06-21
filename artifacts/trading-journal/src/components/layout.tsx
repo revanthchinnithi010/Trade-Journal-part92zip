@@ -574,12 +574,18 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       </main>
 
       {/* ── Mobile bottom navigation bar ── */}
-      {/* Always mounted so visualIdx / animation state survive fullscreen toggles.
-          Fullscreen only hides it via display:none — never unmounts it. */}
+      {/* Always mounted — visibility:hidden (not display:none) so the pill keeps
+          its clientWidth, ResizeObserver never fires tabW=0, and animation state
+          is fully preserved across fullscreen toggles. */}
       {isMobile && (
         <div style={{
-          position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 60,
-          display: mobileChartFullscreen ? "none" : "block",
+          position:      "fixed",
+          left:          0,
+          right:         0,
+          bottom:        0,
+          zIndex:        60,
+          visibility:    mobileChartFullscreen ? "hidden" : "visible",
+          pointerEvents: mobileChartFullscreen ? "none"   : "auto",
         }}>
           <MobileBottomNav />
         </div>
