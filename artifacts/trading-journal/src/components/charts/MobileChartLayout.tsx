@@ -2806,6 +2806,32 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const needsLimitPrice = orderType === "Limit" || orderType === "Stop-Limit";
   const needsStopPrice  = orderType === "Stop-Market" || orderType === "Stop-Limit";
 
+  // ── Leverage slider drag ──────────────────────────────────────────────────
+  const leverageTrackRef = useRef<HTMLDivElement>(null);
+  const leveragePresets  = [1, 2, 5, 10, 25, 50, 100];
+  const levIdx     = leveragePresets.reduce((best, lv, i) =>
+    Math.abs(lv - leverage) < Math.abs(leveragePresets[best] - leverage) ? i : best, 0);
+  const levFillPct = (levIdx / (leveragePresets.length - 1)) * 100;
+
+  const pickLevFromX = useCallback((clientX: number) => {
+    const el = leverageTrackRef.current;
+    if (!el) return;
+    const { left, width } = el.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (clientX - left) / width));
+    const idx = Math.round(pct * (leveragePresets.length - 1));
+    setLeverage(leveragePresets[idx]);
+  }, [leveragePresets]);
+
+  const onLevPD = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pickLevFromX(e.clientX);
+  }, [pickLevFromX]);
+
+  const onLevPM = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.buttons === 0) return;
+    pickLevFromX(e.clientX);
+  }, [pickLevFromX]);
+
   // order cost estimate (display only — no real calc without margin ratio)
   const orderCostUSD = useMemo(() => {
     const p = livePrice ?? 0;
@@ -2942,8 +2968,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
   const orderTypes: Array<"Market" | "Limit" | "Stop-Market" | "Stop-Limit"> =
     ["Market", "Limit", "Stop-Market", "Stop-Limit"];
-
-  const leveragePresets = [1, 2, 5, 10, 25, 50, 100];
 
   const sideColor = side === "buy" ? BUY_COLOR : SELL_COLOR;
   const sideLabel = side === "buy" ? "Buy / Long" : "Sell / Short";
@@ -3148,51 +3172,85 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* Leverage */}
+          {/* Leverage — drag slider */}
           <div style={{ padding:"10px 14px 0" }}>
-            <div style={{
-              display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:7,
-            }}>
+            {/* Label + value */}
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
               <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
-              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                <button
-                  onClick={() => setLeverage(v => Math.max(1, v - 1))}
-                  style={{
-                    width:24, height:24, borderRadius:6,
-                    background:"rgba(255,255,255,0.06)", border:`1px solid ${TRADE_BORDER}`,
-                    display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer",
-                  }}
-                ><Minus style={{ width:11, height:11, color:TEXT_DIM }} /></button>
-                <span style={{ fontSize:14, fontWeight:700, color:ORG_COLOR, minWidth:32, textAlign:"center" }}>
-                  {leverage}x
-                </span>
-                <button
-                  onClick={() => setLeverage(v => Math.min(200, v + 1))}
-                  style={{
-                    width:24, height:24, borderRadius:6,
-                    background:"rgba(255,255,255,0.06)", border:`1px solid ${TRADE_BORDER}`,
-                    display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer",
-                  }}
-                ><Plus style={{ width:11, height:11, color:TEXT_DIM }} /></button>
-              </div>
+              <span style={{
+                fontSize:13, fontWeight:700, color:ORG_COLOR,
+                background:ORG_BG, border:`1px solid ${ORG_BORDER}`,
+                padding:"1px 8px", borderRadius:6,
+              }}>{leverage}x</span>
             </div>
-            {/* Leverage chips — horizontal scroll pills */}
-            <div style={{
-              display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none", paddingBottom:1,
-            } as React.CSSProperties}>
-              {leveragePresets.map(lv => (
-                <button
-                  key={lv}
-                  onClick={() => setLeverage(lv)}
-                  style={{
-                    flexShrink:0, padding:"4px 13px", height:28, borderRadius:20,
-                    fontSize:12, fontWeight:600, cursor:"pointer", transition:"all 0.12s",
-                    background: leverage === lv ? ORG_BG : "rgba(255,255,255,0.05)",
-                    color:      leverage === lv ? ORG_COLOR : TEXT_DIM,
-                    border:     leverage === lv ? `1px solid ${ORG_BORDER}` : `1px solid rgba(255,255,255,0.07)`,
-                  }}
-                >{lv}x</button>
-              ))}
+
+            {/* Track area — pointer events drive the drag */}
+            <div
+              ref={leverageTrackRef}
+              onPointerDown={onLevPD}
+              onPointerMove={onLevPM}
+              style={{ position:"relative", height:36, cursor:"pointer", userSelect:"none", touchAction:"none" }}
+            >
+              {/* Background rail */}
+              <div style={{
+                position:"absolute", top:"50%", left:0, right:0,
+                height:3, borderRadius:2,
+                background:"rgba(255,255,255,0.10)",
+                transform:"translateY(-50%)",
+              }} />
+              {/* Filled rail */}
+              <div style={{
+                position:"absolute", top:"50%", left:0,
+                height:3, borderRadius:2,
+                background:`linear-gradient(90deg, ${ORG_COLOR}99, ${ORG_COLOR})`,
+                width:`${levFillPct}%`,
+                transform:"translateY(-50%)",
+                transition:"width 0.08s",
+              }} />
+
+              {/* Tick marks + labels */}
+              {leveragePresets.map((lv, i) => {
+                const pct = (i / (leveragePresets.length - 1)) * 100;
+                const active = leverage >= lv;
+                return (
+                  <div key={lv} style={{
+                    position:"absolute", top:"50%",
+                    left:`${pct}%`,
+                    transform:"translate(-50%, -50%)",
+                    display:"flex", flexDirection:"column", alignItems:"center",
+                    pointerEvents:"none",
+                  }}>
+                    {/* Tick dot */}
+                    <div style={{
+                      width: active ? 6 : 5,
+                      height: active ? 6 : 5,
+                      borderRadius:"50%",
+                      background: active ? ORG_COLOR : "rgba(255,255,255,0.22)",
+                      transition:"all 0.08s",
+                    }} />
+                    {/* Label below */}
+                    <span style={{
+                      fontSize:9, fontWeight:600,
+                      color: active ? ORG_COLOR : "rgba(255,255,255,0.28)",
+                      marginTop:7, whiteSpace:"nowrap",
+                      transition:"color 0.08s",
+                    }}>{lv}x</span>
+                  </div>
+                );
+              })}
+
+              {/* Draggable thumb */}
+              <div style={{
+                position:"absolute", top:"50%",
+                left:`${levFillPct}%`,
+                transform:"translate(-50%, -50%)",
+                width:20, height:20, borderRadius:"50%",
+                background:"#1a1a1a",
+                border:`2.5px solid ${ORG_COLOR}`,
+                boxShadow:`0 0 10px ${ORG_COLOR}80, 0 0 4px ${ORG_COLOR}40`,
+                transition:"left 0.08s",
+                zIndex:3, pointerEvents:"none",
+              }} />
             </div>
           </div>
 
