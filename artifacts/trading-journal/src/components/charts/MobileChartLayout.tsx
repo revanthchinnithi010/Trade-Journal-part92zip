@@ -3010,10 +3010,10 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
             {/* Live price */}
             <div style={{ textAlign:"right", flexShrink:0 }}>
-              <div style={{ fontSize:24, fontWeight:700, color: isUp ? BUY_COLOR : SELL_COLOR, lineHeight:1.1 }}>
+              <div style={{ fontSize:16, fontWeight:700, color: isUp ? BUY_COLOR : SELL_COLOR, lineHeight:1.1 }}>
                 {fmtLive(livePrice)}
               </div>
-              <p style={{ fontSize:12, color: isUp ? BUY_COLOR : SELL_COLOR, marginTop:2, lineHeight:1 }}>
+              <p style={{ fontSize:11, color: isUp ? BUY_COLOR : SELL_COLOR, marginTop:2, lineHeight:1 }}>
                 {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
               </p>
             </div>
