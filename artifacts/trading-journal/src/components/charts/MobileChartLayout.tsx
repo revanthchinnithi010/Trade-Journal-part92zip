@@ -2794,6 +2794,21 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [slPrice,        setSlPrice]        = useState("");
   const [reduceOnly,     setReduceOnly]     = useState(false);
   const [submitted,      setSubmitted]      = useState(false);
+  const [contractExpanded, setContractExpanded] = useState(false);
+  const [contractData,     setContractData]     = useState<{
+    type:string; lotSize:string; settlementCurrency:string;
+    initialMargin:string; maintenanceMargin:string; maxLeverage:string;
+    underlyingIndex:string; positionLimit:string; status:string;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!symbol) return;
+    const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/contract-info/${encodeURIComponent(symbol)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setContractData(d); })
+      .catch(() => {});
+  }, [symbol]);
 
   const livePrice   = tick?.price ?? null;
   const changePct   = tick?.changePct ?? 0;
@@ -3057,28 +3072,98 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
           </div>
         </div>
 
-        {/* ── Stats row ─────────────────────────────────────────────────── */}
-        <div style={{
-          display:"flex", alignItems:"center", gap:0,
-          padding:"7px 14px",
-          borderBottom:`1px solid ${TRADE_BORDER}`,
-          flexShrink:0,
-        }}>
-          {[
-            { label:"24h Vol",  value:"$736.6M"  },
-            { label:"OI",       value:"$57.2M"   },
-            { label:"Fund/8h",  value:"0.0100%"  },
-          ].map((s, i) => (
-            <div key={s.label} style={{
-              flex:1,
-              paddingLeft: i === 0 ? 0 : 12,
-              borderLeft: i > 0 ? `1px solid ${TRADE_BORDER}` : "none",
-              marginLeft: i > 0 ? 12 : 0,
+        {/* ── Stats row (tap to expand contract details) ─────────────── */}
+        <div style={{ flexShrink:0 }}>
+          <div
+            onClick={() => setContractExpanded(v => !v)}
+            style={{
+              display:"flex", alignItems:"center", gap:0,
+              padding:"7px 14px",
+              borderBottom: contractExpanded ? "none" : `1px solid ${TRADE_BORDER}`,
+              cursor:"pointer",
+            }}
+          >
+            {[
+              { label:"24h Vol",  value:"$736.6M" },
+              { label:"OI",       value:"$57.2M"  },
+              { label:"Fund/8h",  value:"0.0100%" },
+            ].map((s, i) => (
+              <div key={s.label} style={{
+                flex:1,
+                paddingLeft: i === 0 ? 0 : 12,
+                borderLeft: i > 0 ? `1px solid ${TRADE_BORDER}` : "none",
+                marginLeft: i > 0 ? 12 : 0,
+              }}>
+                <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1, margin:0 }}>{s.label}</p>
+                <p style={{ fontSize:11, color:TEXT_HI, marginTop:3, fontWeight:500, lineHeight:1 }}>{s.value}</p>
+              </div>
+            ))}
+            {/* Expand chevron */}
+            <ChevronDown style={{
+              width:13, height:13, color:ORG_COLOR, flexShrink:0, marginLeft:6,
+              transform: contractExpanded ? "rotate(180deg)" : "rotate(0deg)",
+              transition:"transform 0.22s ease",
+            }} />
+          </div>
+
+          {/* ── Contract Details expandable ──────────────────────────── */}
+          <div style={{
+            overflow:"hidden",
+            maxHeight: contractExpanded ? 400 : 0,
+            transition:"max-height 0.25s ease",
+            borderBottom: contractExpanded ? `1px solid ${TRADE_BORDER}` : "none",
+          }}>
+            <div style={{
+              margin:"0 12px 10px",
+              background:"#111111",
+              border:`1px solid ${TRADE_BORDER}`,
+              borderRadius:10,
+              overflow:"hidden",
             }}>
-              <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1, margin:0 }}>{s.label}</p>
-              <p style={{ fontSize:11, color:TEXT_HI, marginTop:3, fontWeight:500, lineHeight:1 }}>{s.value}</p>
+              {/* Section title */}
+              <div style={{
+                padding:"9px 12px 7px",
+                borderBottom:`1px solid ${TRADE_BORDER}`,
+              }}>
+                <span style={{ fontSize:12, fontWeight:600, color:TEXT_HI, letterSpacing:"0.02em" }}>
+                  Contract Details
+                </span>
+              </div>
+
+              {/* Data rows */}
+              {contractData ? (
+                <div style={{ padding:"4px 0" }}>
+                  {([
+                    ["Type",                 contractData.type],
+                    ["Lot Size",             contractData.lotSize],
+                    ["Settlement Currency",  contractData.settlementCurrency],
+                    ["Initial Margin",       contractData.initialMargin],
+                    ["Maintenance Margin",   contractData.maintenanceMargin],
+                    ["Max Leverage",         contractData.maxLeverage],
+                    ["Underlying Index",     contractData.underlyingIndex],
+                    ["Position Limit",       contractData.positionLimit],
+                    ["Status",               contractData.status],
+                  ] as [string, string][]).map(([label, value]) => (
+                    <div key={label} style={{
+                      display:"flex", justifyContent:"space-between", alignItems:"center",
+                      padding:"5px 12px",
+                    }}>
+                      <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
+                      <span style={{
+                        fontSize:13, fontWeight:500,
+                        color: label === "Status" && value === "Operational"
+                          ? BUY_COLOR : TEXT_HI,
+                      }}>{value}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ padding:"14px 12px", textAlign:"center" }}>
+                  <span style={{ fontSize:12, color:TEXT_DIM }}>Loading…</span>
+                </div>
+              )}
             </div>
-          ))}
+          </div>
         </div>
 
         {/* ── Scrollable body ───────────────────────────────────────────── */}
