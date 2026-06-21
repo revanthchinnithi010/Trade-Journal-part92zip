@@ -3385,6 +3385,12 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     underlyingIndex:string; positionLimit:string; status:string;
   } | null>(null);
 
+  const [tickerData, setTickerData] = useState<{
+    symbol:string; markPrice:string; indexPrice:string;
+    volume24h:string; openInterest:string; fundingRate:string; fetchedAt:number;
+  } | null>(null);
+  const [tickerLoading, setTickerLoading] = useState(false);
+
   // Clear stale data immediately when symbol changes, then fetch fresh metadata
   useEffect(() => {
     if (!symbol) return;
@@ -3396,6 +3402,25 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d && !cancelled) setContractData(d); })
       .catch(() => {});
+    return () => { cancelled = true; };
+  }, [symbol]);
+
+  // Fetch live ticker stats (24h vol, OI, funding, mark/index price) on symbol change
+  useEffect(() => {
+    if (!symbol) return;
+    setTickerData(null);
+    setTickerLoading(true);
+    const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    let cancelled = false;
+    fetch(`${BASE}/api/ticker/${encodeURIComponent(symbol)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        if (!cancelled) {
+          if (d?.success) setTickerData(d);
+          setTickerLoading(false);
+        }
+      })
+      .catch(() => { if (!cancelled) setTickerLoading(false); });
     return () => { cancelled = true; };
   }, [symbol]);
 
@@ -3697,26 +3722,61 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {/* Stats row — always sticky, never scrolls away */}
-          <div style={{
-            display:"flex", padding:"6px 14px 8px", gap:0,
-            borderTop:`1px solid rgba(255,255,255,0.04)`,
-          }}>
-            {[
-              { label:"24h Vol",  value:"$736.6M" },
-              { label:"OI",       value:"$57.2M"  },
-              { label:"Fund/8h",  value:"0.0100%" },
-            ].map((s, i) => (
-              <div key={s.label} style={{
-                flex:1, paddingLeft: i===0 ? 0 : 12,
-                borderLeft: i>0 ? `1px solid ${TRADE_BORDER}` : "none",
-                marginLeft: i>0 ? 12 : 0,
-              }}>
-                <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1, margin:0 }}>{s.label}</p>
-                <p style={{ fontSize:11, color:TEXT_HI, marginTop:2, fontWeight:500, lineHeight:1 }}>{s.value}</p>
+          {/* Stats rows — always sticky, never scrolls away */}
+          {(() => {
+            const DIM  = "rgba(255,255,255,0.55)";
+            const loading = tickerLoading && !tickerData;
+            const ph = (w = 36) => (
+              <span style={{
+                display:"inline-block", width:w, height:9, borderRadius:3,
+                background:"rgba(255,255,255,0.09)", verticalAlign:"middle",
+                animation:"pulse 1.4s ease-in-out infinite",
+              }} />
+            );
+            const val = (v: string | undefined, w?: number) =>
+              loading ? ph(w) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{v ?? "—"}</span>;
+
+            // funding rate color: positive = red (pay), negative = green (receive), per Delta convention
+            const frStr = tickerData?.fundingRate ?? "";
+            const frNum = parseFloat(frStr);
+            const frColor = isNaN(frNum) ? TEXT_HI : frNum > 0 ? SELL_COLOR : frNum < 0 ? BUY_COLOR : TEXT_HI;
+
+            const row1 = [
+              { label:"24h Vol",  node: val(tickerData?.volume24h,  44) },
+              { label:"OI",       node: val(tickerData?.openInterest, 40) },
+              { label:"Fund/8h",  node: loading ? ph(38) : (
+                <span style={{ fontSize:11, color: tickerData ? frColor : TEXT_HI, fontWeight:500, lineHeight:1 }}>
+                  {tickerData?.fundingRate ?? "—"}
+                </span>
+              )},
+            ];
+            const row2 = [
+              { label:"Mark",  node: val(tickerData?.markPrice,  52) },
+              { label:"Index", node: val(tickerData?.indexPrice, 52) },
+              { label:"",      node: null },
+            ];
+
+            return (
+              <div style={{ borderTop:`1px solid rgba(255,255,255,0.04)` }}>
+                {[row1, row2].map((row, ri) => (
+                  <div key={ri} style={{
+                    display:"flex", padding: ri === 0 ? "6px 14px 5px" : "0 14px 8px", gap:0,
+                  }}>
+                    {row.map((s, i) => (
+                      <div key={s.label || i} style={{
+                        flex:1, paddingLeft: i===0 ? 0 : 12,
+                        borderLeft: i>0 ? `1px solid ${TRADE_BORDER}` : "none",
+                        marginLeft: i>0 ? 12 : 0,
+                      }}>
+                        {s.label && <p style={{ fontSize:9.5, color:DIM, lineHeight:1, margin:0, marginBottom:2 }}>{s.label}</p>}
+                        {s.node}
+                      </div>
+                    ))}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
         </div>
 
         {/* ── Single scrollable body ─────────────────────────────────────── */}
@@ -3787,9 +3847,18 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                       ✓ Metadata Loaded — {contractData.symbol}
                     </div>
                     {([
-                      ["Lot Size",     contractData.lotSizeNum],
-                      ["Max Leverage", `${contractData.maxLeverageNum}x`],
-                      ["Description",  contractData.description],
+                      ["Selected Symbol",    contractData.symbol],
+                      ["Contract ID",        contractData.underlyingIndex],
+                      ["Lot Size",           contractData.lotSizeNum],
+                      ["Max Leverage",       `${contractData.maxLeverageNum}x`],
+                      ["Metadata Source",    "Delta Exchange REST"],
+                      ["Last Meta Fetch",    new Date(Date.now()).toLocaleTimeString()],
+                      ...(tickerData ? [
+                        ["Last Ticker Fetch", new Date(tickerData.fetchedAt).toLocaleTimeString()],
+                        ["Ticker Source",     "Delta India /v2/tickers"],
+                        ["Mark Price",        tickerData.markPrice],
+                        ["Index Price",       tickerData.indexPrice],
+                      ] : []),
                     ] as [string, string|number][]).map(([k, v]) => (
                       <div key={k} style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"rgba(255,255,255,0.45)", marginTop:2 }}>
                         <span>{k}</span>

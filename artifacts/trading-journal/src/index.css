@@ -845,6 +845,12 @@ html, body { touch-action: manipulation; overscroll-behavior: none; }
 .tj-mesh-blob-2 { animation: mesh-drift-2 28s ease-in-out infinite; }
 .tj-mesh-blob-3 { animation: mesh-drift-3 18s ease-in-out infinite; }
 
+/* ─── Skeleton shimmer (loading placeholders) ───────────────────── */
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; }
+  50%       { opacity: 0.85; }
+}
+
 /* ─── Liquid Glass — ambient glow pulse ─────────────────────────── */
 @keyframes glow-pulse {
   0%, 100% { opacity: 0.55; }

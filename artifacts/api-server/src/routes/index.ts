@@ -30,6 +30,7 @@ import { createCtraderOAuthRouter } from "./ctrader_oauth.js";
 import { createCtraderSpotsRouter } from "./ctrader_spots.js";
 import { createContractInfoRouter } from "./contract_info.js";
 import { createOrderbookRouter } from "./orderbook.js";
+import { createTickerRouter } from "./ticker.js";
 import type { AlertEngine } from "../services/AlertEngine.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import type { FeedHealthMonitor } from "../services/FeedHealthMonitor.js";
@@ -84,6 +85,7 @@ export function createRouter(deps: {
   router.use(createCtraderSpotsRouter());
   router.use(createContractInfoRouter());
   router.use(createOrderbookRouter());
+  router.use(createTickerRouter());
 
   return router;
 }
