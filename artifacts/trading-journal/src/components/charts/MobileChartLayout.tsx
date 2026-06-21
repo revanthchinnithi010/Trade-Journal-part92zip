@@ -2760,18 +2760,40 @@ const OB_MAX_LEVELS = 10;
 interface OBLevel { price: string; size: string | number }
 type OBStatus = "connecting" | "connected" | "error";
 
+interface OBDiag {
+  wsUrl: string;
+  subSymbol: string;
+  connected: boolean;
+  subSent: boolean;
+  totalMsgs: number;
+  obMsgs: number;
+  seenTypes: string[];
+  lastRawSnippet: string;
+  lastObSymbol: string;
+  matchFail: string;
+}
+
 function useOrderBook(symbol: string) {
   const [status,       setStatus]       = useState<OBStatus>("connecting");
   const [lastUpdateMs, setLastUpdateMs] = useState(0);
   const [bidCount,     setBidCount]     = useState(0);
   const [askCount,     setAskCount]     = useState(0);
+  const [diag,         setDiag]         = useState<OBDiag>({
+    wsUrl: DELTA_WS_INDIA, subSymbol: "", connected: false, subSent: false,
+    totalMsgs: 0, obMsgs: 0, seenTypes: [], lastRawSnippet: "", lastObSymbol: "", matchFail: "",
+  });
 
   const bidsRef      = useRef<OBLevel[]>([]);
   const asksRef      = useRef<OBLevel[]>([]);
   const pendingRaf   = useRef(false);
   const onUpdateRef  = useRef<(() => void) | null>(null);
+  const diagRef      = useRef<OBDiag>(diag);
 
   const setOnUpdate = useCallback((fn: () => void) => { onUpdateRef.current = fn; }, []);
+
+  const flushDiag = useCallback(() => {
+    setDiag({ ...diagRef.current });
+  }, []);
 
   useEffect(() => {
     if (!symbol) return;
@@ -2780,6 +2802,7 @@ function useOrderBook(symbol: string) {
     let retryTimeout: ReturnType<typeof setTimeout> | null = null;
     let pingInterval:  ReturnType<typeof setInterval>  | null = null;
     let retryDelay = 1500;
+    let diagFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
     bidsRef.current = [];
     asksRef.current = [];
@@ -2788,32 +2811,86 @@ function useOrderBook(symbol: string) {
     setAskCount(0);
     setLastUpdateMs(0);
 
+    diagRef.current = {
+      wsUrl: DELTA_WS_INDIA, subSymbol: symbol, connected: false, subSent: false,
+      totalMsgs: 0, obMsgs: 0, seenTypes: [], lastRawSnippet: "", lastObSymbol: "", matchFail: "",
+    };
+    setDiag({ ...diagRef.current });
+
+    const pushDiag = (update: Partial<OBDiag>) => {
+      diagRef.current = { ...diagRef.current, ...update };
+      if (diagFlushTimer) return;
+      diagFlushTimer = setTimeout(() => {
+        diagFlushTimer = null;
+        flushDiag();
+      }, 300);
+    };
+
     const connect = () => {
       if (destroyed) return;
+      console.log(`[OB] Connecting → ${DELTA_WS_INDIA} | symbol="${symbol}"`);
       try { ws = new WebSocket(DELTA_WS_INDIA); }
-      catch { scheduleRetry(); return; }
+      catch (e) { console.error("[OB] new WebSocket failed", e); scheduleRetry(); return; }
 
       ws.onopen = () => {
         if (destroyed) { ws?.close(); return; }
         retryDelay = 1500;
         setStatus("connected");
-        ws!.send(JSON.stringify({
+        pushDiag({ connected: true });
+
+        const subMsg = {
           type: "subscribe",
           payload: { channels: [{ name: "l2orderbook", symbols: [symbol] }] },
-        }));
+        };
+        console.log("[OB] Sending subscribe:", JSON.stringify(subMsg));
+        ws!.send(JSON.stringify(subMsg));
+        pushDiag({ subSent: true });
+
         pingInterval = setInterval(() => {
-          if (ws?.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }));
-          }
+          if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "ping" }));
         }, 25_000);
       };
 
       ws.onmessage = (ev) => {
+        const raw = ev.data as string;
         try {
-          const msg = JSON.parse(ev.data as string);
-          if (msg.type !== "l2orderbook" || msg.symbol !== symbol) return;
-          bidsRef.current = (msg.buy  ?? []).slice(0, OB_MAX_LEVELS) as OBLevel[];
-          asksRef.current = (msg.sell ?? []).slice(0, OB_MAX_LEVELS) as OBLevel[];
+          const msg = JSON.parse(raw) as Record<string, unknown>;
+          const t = String(msg.type ?? "");
+          const d = diagRef.current;
+
+          // Track all seen message types
+          const seenTypes = d.seenTypes.includes(t) ? d.seenTypes : [...d.seenTypes, t].slice(-10);
+          const totalMsgs = d.totalMsgs + 1;
+          pushDiag({ totalMsgs, seenTypes, lastRawSnippet: raw.slice(0, 200) });
+
+          // Verbose: log first 30 messages and all OB-related ones
+          if (totalMsgs <= 30 || t.toLowerCase().includes("orderbook") || t.toLowerCase().includes("l2")) {
+            console.log(`[OB] msg #${totalMsgs} type="${t}" sym="${msg.symbol ?? "?"}"`, msg);
+          }
+
+          // Match: accept l2orderbook or l2_orderbook
+          const isOB = t === "l2orderbook" || t === "l2_orderbook";
+          if (!isOB) return;
+
+          const msgSym = String(msg.symbol ?? "");
+          pushDiag({ lastObSymbol: msgSym, obMsgs: d.obMsgs + 1 });
+          console.log(`[OB] OB message: sym="${msgSym}" expected="${symbol}" buy=${Array.isArray(msg.buy) ? (msg.buy as unknown[]).length : "?"} sell=${Array.isArray(msg.sell) ? (msg.sell as unknown[]).length : "?"}`);
+
+          // Symbol matching: accept exact match or no symbol field
+          if (msgSym && msgSym !== symbol) {
+            pushDiag({ matchFail: `expected "${symbol}" got "${msgSym}"` });
+            console.warn(`[OB] Symbol mismatch: expected "${symbol}" got "${msgSym}"`);
+            return;
+          }
+
+          // Parse bids (buy) and asks (sell) — handle multiple field name variants
+          const rawBids = (msg.buy ?? msg.bids ?? msg.bid ?? []) as OBLevel[];
+          const rawAsks = (msg.sell ?? msg.asks ?? msg.ask ?? []) as OBLevel[];
+          bidsRef.current = rawBids.slice(0, OB_MAX_LEVELS);
+          asksRef.current = rawAsks.slice(0, OB_MAX_LEVELS);
+
+          console.log(`[OB] Parsed: ${bidsRef.current.length} bids, ${asksRef.current.length} asks`);
+
           if (!pendingRaf.current) {
             pendingRaf.current = true;
             requestAnimationFrame(() => {
@@ -2824,15 +2901,22 @@ function useOrderBook(symbol: string) {
               setAskCount(asksRef.current.length);
             });
           }
-        } catch { /* ignore malformed */ }
+        } catch (e) {
+          console.error("[OB] JSON parse error", e, raw.slice(0, 100));
+        }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (e) => {
+        console.log(`[OB] Closed: code=${e.code} reason="${e.reason}"`);
         if (pingInterval) clearInterval(pingInterval);
         pingInterval = null;
+        pushDiag({ connected: false });
         if (!destroyed) { setStatus("error"); scheduleRetry(); }
       };
-      ws.onerror = () => ws?.close();
+      ws.onerror = (e) => {
+        console.error("[OB] WebSocket error", e);
+        ws?.close();
+      };
     };
 
     const scheduleRetry = () => {
@@ -2848,11 +2932,12 @@ function useOrderBook(symbol: string) {
       destroyed = true;
       if (retryTimeout) clearTimeout(retryTimeout);
       if (pingInterval)  clearInterval(pingInterval);
+      if (diagFlushTimer) clearTimeout(diagFlushTimer);
       ws?.close(1000, "cleanup");
     };
-  }, [symbol]);
+  }, [symbol, flushDiag]);
 
-  return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate };
+  return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag };
 }
 
 // ── OrderBook component ───────────────────────────────────────────────────────
@@ -2864,7 +2949,7 @@ const OB_HDR_COLOR = "rgba(255,255,255,0.04)";
 const OB_BR_COLOR  = "rgba(255,255,255,0.07)";
 
 function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: boolean; onToggle: () => void }) {
-  const { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate } =
+  const { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag } =
     useOrderBook(symbol);
 
   type RowRef = { price: HTMLSpanElement | null; size: HTMLSpanElement | null };
@@ -2937,7 +3022,8 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
     return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
   };
 
-  const isUnavailable = status === "error" && bidCount === 0 && askCount === 0;
+  const hasData = bidCount > 0 || askCount > 0;
+  const noDataYet = status === "connected" && !hasData && diag.totalMsgs > 5;
 
   return (
     <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${OB_BR_COLOR}`, background: OB_BG_COLOR }}>
@@ -2966,9 +3052,12 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
               boxShadow: status === "connected" ? `0 0 4px ${OB_BID_COLOR}88` : "none",
             }} />
             <span style={{ fontSize: 9, color: status === "connected" ? OB_BID_COLOR : OB_DIM_COLOR, fontWeight: 600 }}>
-              {status === "connected" ? "Live" : status === "error" ? "Offline" : "···"}
+              {status === "connected" ? (hasData ? "Live" : "Connected") : status === "error" ? "Offline" : "···"}
             </span>
           </div>
+          {hasData && (
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>{bidCount}B / {askCount}A</span>
+          )}
         </div>
         <ChevronDown style={{
           width: 13, height: 13, color: OB_DIM_COLOR, flexShrink: 0,
@@ -2979,16 +3068,83 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
 
       {/* ── Collapsible body (max 250 px, internal scroll) ── */}
       <div style={{
-        maxHeight: expanded ? (isUnavailable ? 56 : 250) : 0,
+        maxHeight: expanded ? 320 : 0,
         overflowY: expanded ? "auto" : "hidden",
         overflowX: "hidden",
         transition: "max-height 0.25s ease",
       }}>
-        {isUnavailable ? (
-          <div style={{ padding: "16px 10px", textAlign: "center" }}>
-            <span style={{ fontSize: 12, color: OB_DIM_COLOR }}>Order Book unavailable</span>
+
+        {/* ── Diagnostics panel (always shown when expanded) ── */}
+        <div style={{
+          padding: "6px 10px", background: "rgba(0,0,0,0.40)",
+          borderBottom: `1px solid ${OB_BR_COLOR}`,
+          display: "flex", flexDirection: "column", gap: 3,
+        }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>WS</span>{" "}
+              <span style={{ color: diag.connected ? OB_BID_COLOR : OB_ASK_COLOR }}>
+                {diag.connected ? "✓ Connected" : "✗ Disconnected"}
+              </span>
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Sub</span>{" "}
+              <span style={{ color: diag.subSent ? OB_BID_COLOR : "#888" }}>
+                {diag.subSent ? `✓ ${diag.subSymbol}` : "pending"}
+              </span>
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Msgs</span> {diag.totalMsgs}
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>OB msgs</span>{" "}
+              <span style={{ color: diag.obMsgs > 0 ? OB_BID_COLOR : "#888" }}>{diag.obMsgs}</span>
+            </span>
           </div>
-        ) : (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Types seen</span>{" "}
+              {diag.seenTypes.length > 0 ? diag.seenTypes.join(", ") : "none"}
+            </span>
+          </div>
+          {diag.lastObSymbol && (
+            <div style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>OB symbol</span>{" "}
+              <span style={{ color: diag.lastObSymbol === diag.subSymbol ? OB_BID_COLOR : OB_ASK_COLOR }}>
+                {diag.lastObSymbol}
+              </span>
+              {diag.matchFail && <span style={{ color: OB_ASK_COLOR }}> ⚠ {diag.matchFail}</span>}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Bids</span>{" "}
+              <span style={{ color: bidCount > 0 ? OB_BID_COLOR : "#888" }}>{bidCount}</span>
+            </span>
+            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+              <span style={{ color: "rgba(255,255,255,0.40)" }}>Asks</span>{" "}
+              <span style={{ color: askCount > 0 ? OB_ASK_COLOR : "#888" }}>{askCount}</span>
+            </span>
+            {lastUpdateMs > 0 && (
+              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
+                <span style={{ color: "rgba(255,255,255,0.40)" }}>Updated</span> {fmtTime(lastUpdateMs)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* ── No data fallback ── */}
+        {noDataYet && (
+          <div style={{ padding: "14px 10px", textAlign: "center", borderBottom: `1px solid ${OB_BR_COLOR}` }}>
+            <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>No orderbook data received</p>
+            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", margin: "4px 0 0" }}>
+              Check console for [OB] logs · {diag.totalMsgs} msgs received
+            </p>
+          </div>
+        )}
+
+        {/* ── Live orderbook rows ── */}
+        {hasData && (
           <>
             {/* Column headers */}
             <div style={{ display: "flex", padding: "3px 10px", background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}` }}>
@@ -3024,13 +3180,6 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
                     style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
                 </div>
               ))}
-            </div>
-
-            {/* Diagnostics */}
-            <div style={{ display: "flex", gap: 8, padding: "3px 10px", borderTop: `1px solid ${OB_BR_COLOR}`, background: OB_HDR_COLOR, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Bids: {bidCount}</span>
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>Asks: {askCount}</span>
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR, marginLeft: "auto" }}>{fmtTime(lastUpdateMs)}</span>
             </div>
           </>
         )}
