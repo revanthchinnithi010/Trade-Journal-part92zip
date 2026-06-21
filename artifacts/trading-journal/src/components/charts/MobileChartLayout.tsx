@@ -3046,22 +3046,22 @@ function OrderBook({ symbol, expanded, onToggle }: {
         const isBest = isBid ? (i === 0 && len > 0) : (i === len - 1 && len > 0);
 
         if (!level) {
-          // Slot is empty — fade out if it had data before
+          // Slot is now empty — clear instantly, no animation.
+          // Never animate empty slots: if multiple slots empty simultaneously (ladder shift)
+          // it causes the whole book to dim/flicker as a block.
+          const slotKey = `${isBid ? "b" : "a"}${i}`;
+          clearTimeout(flashTimers.current[slotKey]);
+          clearTimeout(newRowTimers.current[`new_${slotKey}`]);
           if (row.container) {
-            row.container.classList.remove("ob-wall-bid", "ob-wall-ask", "ob-row-new");
-            if (prevPcts[i] > 0) {
-              clearTimeout(newRowTimers.current[`gone_${isBid?"b":"a"}${i}`]);
-              row.container.classList.add("ob-row-gone");
-              newRowTimers.current[`gone_${isBid?"b":"a"}${i}`] = setTimeout(() => {
-                row.container?.classList.remove("ob-row-gone");
-              }, 240);
-            }
+            row.container.classList.remove("ob-wall-bid", "ob-wall-ask", "ob-row-new", "ob-row-gone");
+            row.container.style.backgroundColor = "";
+            row.container.style.transition = "";
           }
-          if (row.price)     row.price.textContent  = "—";
-          if (row.size)      row.size.textContent   = "—";
+          if (row.price)     { row.price.textContent = "—"; row.price.style.opacity = "0.15"; }
+          if (row.size)      { row.size.textContent  = "—"; row.size.style.opacity  = "0.15"; }
           if (row.indicator) row.indicator.textContent = "";
           if (row.bar) {
-            row.bar.style.transition = "width 0.28s ease-in";
+            row.bar.style.transition = "width 0.25s ease-in";
             row.bar.style.width = "0%";
           }
           prevPcts[i] = 0;
@@ -3081,12 +3081,19 @@ function OrderBook({ symbol, expanded, onToggle }: {
         if (row.container) {
           row.container.style.opacity = "1";
 
-          // New price level appearing: fade in
+          // New price level appearing at this slot.
+          // IMPORTANT: evict any lingering backgroundColor from the previous occupant
+          // before adding the fade-in class. Without this, a mid-flash eviction leaves
+          // the container permanently colored because changed=false skips flash().
           if (isNew) {
-            clearTimeout(newRowTimers.current[`new_${isBid?"b":"a"}${i}`]);
+            const slotKey = `${isBid ? "b" : "a"}${i}`;
+            clearTimeout(flashTimers.current[slotKey]);
+            row.container.style.transition = "";
+            row.container.style.backgroundColor = "";
+            clearTimeout(newRowTimers.current[`new_${slotKey}`]);
             row.container.classList.remove("ob-row-gone");
             row.container.classList.add("ob-row-new");
-            newRowTimers.current[`new_${isBid?"b":"a"}${i}`] = setTimeout(() => {
+            newRowTimers.current[`new_${slotKey}`] = setTimeout(() => {
               row.container?.classList.remove("ob-row-new");
             }, 210);
           }
