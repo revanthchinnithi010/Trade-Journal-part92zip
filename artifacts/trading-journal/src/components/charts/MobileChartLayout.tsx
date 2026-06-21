@@ -3220,14 +3220,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                     display:"flex", flexDirection:"column", alignItems:"center",
                     pointerEvents:"none",
                   }}>
-                    {/* Tick dot */}
-                    <div style={{
-                      width: active ? 6 : 5,
-                      height: active ? 6 : 5,
-                      borderRadius:"50%",
-                      background: active ? ORG_COLOR : "rgba(255,255,255,0.22)",
-                      transition:"all 0.08s",
-                    }} />
                     {/* Label below */}
                     <span style={{
                       fontSize:9, fontWeight:600,
