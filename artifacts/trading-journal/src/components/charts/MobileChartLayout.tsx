@@ -2882,27 +2882,45 @@ function useOrderBook(symbol: string) {
 }
 
 // ── OrderBook component ───────────────────────────────────────────────────────
-const OB_BID_COLOR = "#089981";
-const OB_ASK_COLOR = "#F23645";
-const OB_DIM_COLOR = "rgba(255,255,255,0.35)";
-const OB_BG_COLOR  = "#0d0d0d";
-const OB_HDR_COLOR = "rgba(255,255,255,0.04)";
-const OB_BR_COLOR  = "rgba(255,255,255,0.07)";
+const OB_BID_COLOR  = "#00E08A";
+const OB_ASK_COLOR  = "#FF5B5B";
+const OB_DIM_COLOR  = "rgba(255,255,255,0.32)";
+const OB_BG_COLOR   = "#0F1618";
+const OB_HDR_COLOR  = "rgba(255,255,255,0.03)";
+const OB_BR_COLOR   = "rgba(255,255,255,0.05)";
+const OB_SPREAD_BG  = "#1A1A1A";
+const OB_ROW_H      = 22;  // px — fixed row height, no layout shift
+
+type OBRowRef = {
+  container:  HTMLDivElement  | null;
+  bar:        HTMLDivElement  | null;
+  price:      HTMLSpanElement | null;
+  size:       HTMLSpanElement | null;
+  indicator:  HTMLSpanElement | null;
+};
+
+function makeOBRows(n: number): OBRowRef[] {
+  return Array.from({ length: n }, () => ({ container: null, bar: null, price: null, size: null, indicator: null }));
+}
 
 function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: boolean; onToggle: () => void }) {
-  const { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag } =
-    useOrderBook(symbol);
+  const { bidsRef, asksRef, status, bidCount, askCount, setOnUpdate, diag } = useOrderBook(symbol);
 
-  type RowRef = { price: HTMLSpanElement | null; size: HTMLSpanElement | null };
-  const bidRowRefs = useRef<RowRef[]>(
-    Array.from({ length: OB_MAX_LEVELS }, () => ({ price: null, size: null }))
-  );
-  const askRowRefs = useRef<RowRef[]>(
-    Array.from({ length: OB_MAX_LEVELS }, () => ({ price: null, size: null }))
-  );
-  const spreadRef = useRef<HTMLSpanElement | null>(null);
+  const bidRowRefs  = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
+  const askRowRefs  = useRef<OBRowRef[]>(makeOBRows(OB_MAX_LEVELS));
+  const spreadRef   = useRef<HTMLSpanElement | null>(null);
+  const midRef      = useRef<HTMLSpanElement | null>(null);
 
-  const fmtPrice = useCallback((p: string | number) => {
+  // Previous sizes for diffing — keyed by display-slot index
+  const prevBidSizes = useRef<(number | null)[]>(Array(OB_MAX_LEVELS).fill(null));
+  const prevAskSizes = useRef<(number | null)[]>(Array(OB_MAX_LEVELS).fill(null));
+
+  // Timers for indicator auto-clear + flash auto-clear
+  const indTimers   = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const flashTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  // ── formatters ──────────────────────────────────────────────────────────────
+  const fmtPrice = useCallback((p: string | number): string => {
     const n = typeof p === "number" ? p : parseFloat(p as string);
     if (!isFinite(n)) return String(p);
     if (n >= 1000) return n.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -2910,66 +2928,240 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
     return n.toPrecision(4);
   }, []);
 
+  const fmtSize = useCallback((s: string | number): string => {
+    const n = typeof s === "number" ? s : parseFloat(s as string);
+    if (!isFinite(n)) return String(s);
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000)     return `${(n / 1_000).toFixed(1)}K`;
+    return String(Math.round(n));
+  }, []);
+
+  // ── flash helper ────────────────────────────────────────────────────────────
+  const flash = useCallback((
+    key: string,
+    el: HTMLDivElement,
+    flashColor: string,
+  ) => {
+    clearTimeout(flashTimers.current[key]);
+    el.style.transition = "none";
+    el.style.backgroundColor = flashColor;
+    requestAnimationFrame(() => {
+      el.style.transition = "background-color 0.45s ease";
+    });
+    flashTimers.current[key] = setTimeout(() => {
+      el.style.backgroundColor = "transparent";
+    }, 300);
+  }, []);
+
+  // ── indicator helper ─────────────────────────────────────────────────────────
+  const showIndicator = useCallback((
+    key: string,
+    el: HTMLSpanElement,
+    increased: boolean,
+    isBid: boolean,
+  ) => {
+    clearTimeout(indTimers.current[key]);
+    el.textContent = increased ? "↑" : "↓";
+    el.style.color = increased
+      ? (isBid ? OB_BID_COLOR : OB_ASK_COLOR)
+      : (isBid ? "rgba(0,180,100,0.55)" : "rgba(220,60,60,0.55)");
+    el.style.opacity = "1";
+    indTimers.current[key] = setTimeout(() => {
+      el.style.opacity = "0";
+    }, 500);
+  }, []);
+
+  // ── DOM update engine (called from RAF, zero React renders) ─────────────────
   const updateDom = useCallback(() => {
     const bids = bidsRef.current;
     const asks = asksRef.current;
 
-    // Asks: display reversed so lowest ask (best) is at bottom (nearest spread)
+    // Asks arrive ascending (lowest first) from Delta — reverse for display
+    // so the best (lowest) ask sits closest to the spread row at the bottom.
     const askDisplay = [...asks].reverse();
+
+    // Max size across both sides for depth bars
+    let maxSize = 0;
+    for (const l of [...bids, ...asks]) {
+      const s = parseFloat(String(l.size));
+      if (s > maxSize) maxSize = s;
+    }
+
+    // ── Ask rows ──────────────────────────────────────────────────────────────
+    const askLen = askDisplay.length;
     for (let i = 0; i < OB_MAX_LEVELS; i++) {
-      const row = askRowRefs.current[i];
+      const row   = askRowRefs.current[i];
       const level = askDisplay[i];
+      const isBest = i === askLen - 1 && askLen > 0; // bottom row = best ask
+
+      if (!level) {
+        if (row.price)     { row.price.textContent = "—"; row.price.style.opacity = "0.13"; }
+        if (row.size)      { row.size.textContent  = "—"; row.size.style.opacity  = "0.13"; }
+        if (row.bar)       row.bar.style.width = "0%";
+        if (row.indicator) row.indicator.textContent = "";
+        prevAskSizes.current[i] = null;
+        continue;
+      }
+
+      const curSize  = parseFloat(String(level.size));
+      const prevSize = prevAskSizes.current[i];
+      const changed  = prevSize !== null && curSize !== prevSize;
+
+      // Price
       if (row.price) {
-        row.price.textContent  = level ? fmtPrice(level.price) : "—";
-        row.price.style.opacity = level ? "1" : "0.2";
+        row.price.textContent  = fmtPrice(level.price);
+        row.price.style.opacity = "1";
+        row.price.style.color   = isBest ? OB_ASK_COLOR : "rgba(255,91,91,0.70)";
+        row.price.style.fontWeight = isBest ? "700" : "500";
       }
+
+      // Size + diff effects
       if (row.size) {
-        row.size.textContent  = level ? String(level.size) : "—";
-        row.size.style.opacity = level ? "1" : "0.2";
+        row.size.textContent  = fmtSize(curSize);
+        row.size.style.opacity = "1";
+        row.size.style.color = isBest ? "rgba(255,255,255,0.85)" : OB_DIM_COLOR;
       }
+
+      if (changed) {
+        const increased = curSize > prevSize!;
+        if (row.container) flash(`a${i}`, row.container, increased ? "rgba(255,50,50,0.28)" : "rgba(160,30,30,0.18)");
+        if (row.indicator) showIndicator(`ai${i}`, row.indicator, increased, false);
+      }
+
+      // Depth bar (grows right-to-left so bars align with the right/price edge)
+      if (row.bar && maxSize > 0) {
+        const pct = Math.min((curSize / maxSize) * 100, 100);
+        const alpha = isBest ? 0.35 : 0.08 + (curSize / maxSize) * 0.22;
+        row.bar.style.width      = `${pct}%`;
+        row.bar.style.background = `rgba(255,91,91,${alpha.toFixed(2)})`;
+      }
+
+      prevAskSizes.current[i] = curSize;
     }
 
+    // ── Bid rows ──────────────────────────────────────────────────────────────
     for (let i = 0; i < OB_MAX_LEVELS; i++) {
-      const row = bidRowRefs.current[i];
+      const row   = bidRowRefs.current[i];
       const level = bids[i];
+      const isBest = i === 0 && bids.length > 0;  // top row = best bid
+
+      if (!level) {
+        if (row.price)     { row.price.textContent = "—"; row.price.style.opacity = "0.13"; }
+        if (row.size)      { row.size.textContent  = "—"; row.size.style.opacity  = "0.13"; }
+        if (row.bar)       row.bar.style.width = "0%";
+        if (row.indicator) row.indicator.textContent = "";
+        prevBidSizes.current[i] = null;
+        continue;
+      }
+
+      const curSize  = parseFloat(String(level.size));
+      const prevSize = prevBidSizes.current[i];
+      const changed  = prevSize !== null && curSize !== prevSize;
+
       if (row.price) {
-        row.price.textContent  = level ? fmtPrice(level.price) : "—";
-        row.price.style.opacity = level ? "1" : "0.2";
+        row.price.textContent  = fmtPrice(level.price);
+        row.price.style.opacity = "1";
+        row.price.style.color   = isBest ? OB_BID_COLOR : "rgba(0,224,138,0.65)";
+        row.price.style.fontWeight = isBest ? "700" : "500";
       }
+
       if (row.size) {
-        row.size.textContent  = level ? String(level.size) : "—";
-        row.size.style.opacity = level ? "1" : "0.2";
+        row.size.textContent  = fmtSize(curSize);
+        row.size.style.opacity = "1";
+        row.size.style.color = isBest ? "rgba(255,255,255,0.85)" : OB_DIM_COLOR;
       }
+
+      if (changed) {
+        const increased = curSize > prevSize!;
+        if (row.container) flash(`b${i}`, row.container, increased ? "rgba(0,200,120,0.25)" : "rgba(0,120,70,0.18)");
+        if (row.indicator) showIndicator(`bi${i}`, row.indicator, increased, true);
+      }
+
+      if (row.bar && maxSize > 0) {
+        const pct = Math.min((curSize / maxSize) * 100, 100);
+        const alpha = isBest ? 0.35 : 0.08 + (curSize / maxSize) * 0.22;
+        row.bar.style.width      = `${pct}%`;
+        row.bar.style.background = `rgba(0,224,138,${alpha.toFixed(2)})`;
+      }
+
+      prevBidSizes.current[i] = curSize;
     }
 
-    // Spread
-    if (spreadRef.current) {
-      const bestBid = bids[0]  ? parseFloat(String(bids[0].price))  : NaN;
-      const bestAsk = asks[0]  ? parseFloat(String(asks[0].price))  : NaN;
-      if (isFinite(bestBid) && isFinite(bestAsk)) {
-        const spread = bestAsk - bestBid;
-        spreadRef.current.textContent = spread >= 0 ? fmtPrice(spread) : "—";
-      } else {
-        spreadRef.current.textContent = "—";
-      }
+    // ── Spread + Mid ──────────────────────────────────────────────────────────
+    const bestBid = bids[0]  ? parseFloat(String(bids[0].price))  : NaN;
+    const bestAsk = asks[0]  ? parseFloat(String(asks[0].price))  : NaN;
+    if (isFinite(bestBid) && isFinite(bestAsk)) {
+      const spread = bestAsk - bestBid;
+      const mid    = (bestBid + bestAsk) / 2;
+      if (spreadRef.current) spreadRef.current.textContent = spread >= 0 ? fmtPrice(spread) : "—";
+      if (midRef.current)    midRef.current.textContent    = fmtPrice(mid);
     }
-  }, [bidsRef, asksRef, fmtPrice]);
+  }, [bidsRef, asksRef, fmtPrice, fmtSize, flash, showIndicator]);
 
   useEffect(() => { setOnUpdate(updateDom); }, [setOnUpdate, updateDom]);
 
-  const fmtTime = (ms: number) => {
-    if (!ms) return "—";
-    const d = new Date(ms);
-    return `${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}:${String(d.getSeconds()).padStart(2,"0")}`;
-  };
+  // ── Render ──────────────────────────────────────────────────────────────────
+  const hasData   = bidCount > 0 || askCount > 0;
+  const isLoading = !hasData && diag.pollCount <= 2;
+  const hasError  = diag.errorCount > 0 && !hasData;
 
-  const hasData = bidCount > 0 || askCount > 0;
-  const noDataYet = status === "connected" && !hasData && diag.totalMsgs > 5;
+  // Row JSX factory — shared pattern for bids + asks
+  const makeRow = (refs: OBRowRef[], i: number, side: "bid" | "ask") => {
+    const isBid = side === "bid";
+    return (
+      <div
+        key={`${side}-${i}`}
+        ref={el => { refs[i].container = el; }}
+        style={{
+          position: "relative", display: "flex", alignItems: "center",
+          height: OB_ROW_H, padding: "0 10px", overflow: "hidden",
+        }}
+      >
+        {/* Depth bar — right-anchored, behind text */}
+        <div
+          ref={el => { refs[i].bar = el; }}
+          style={{
+            position: "absolute", right: 0, top: 0, height: "100%", width: "0%",
+            transition: "width 0.35s ease, background 0.35s ease",
+            pointerEvents: "none",
+          }}
+        />
+        {/* Price */}
+        <span
+          ref={el => { refs[i].price = el; }}
+          style={{
+            flex: 1, fontSize: 11, fontWeight: 500, fontVariantNumeric: "tabular-nums",
+            color: isBid ? "rgba(0,224,138,0.65)" : "rgba(255,91,91,0.70)",
+            opacity: 0.13, position: "relative", zIndex: 1,
+            letterSpacing: "0.01em",
+          }}
+        >—</span>
+        {/* ↑↓ indicator */}
+        <span
+          ref={el => { refs[i].indicator = el; }}
+          style={{
+            fontSize: 8, fontWeight: 700, marginRight: 5, opacity: 0,
+            transition: "opacity 0.2s ease", position: "relative", zIndex: 1,
+            minWidth: 8, textAlign: "center",
+          }}
+        />
+        {/* Size */}
+        <span
+          ref={el => { refs[i].size = el; }}
+          style={{
+            fontSize: 10, fontVariantNumeric: "tabular-nums", minWidth: 50,
+            textAlign: "right", color: OB_DIM_COLOR, opacity: 0.13,
+            position: "relative", zIndex: 1,
+          }}
+        >—</span>
+      </div>
+    );
+  };
 
   return (
     <div style={{ borderRadius: 10, overflow: "hidden", border: `1px solid ${OB_BR_COLOR}`, background: OB_BG_COLOR }}>
 
-      {/* ── Toggle header (always visible) ── */}
+      {/* ── Toggle header ── */}
       <button
         onClick={onToggle}
         style={{
@@ -2983,21 +3175,27 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
             Order Book
           </span>
           <div style={{
-            display: "flex", alignItems: "center", gap: 4,
-            padding: "1px 6px", borderRadius: 4,
-            background: status === "connected" ? "rgba(8,153,129,0.12)" : "rgba(255,255,255,0.05)",
+            display: "flex", alignItems: "center", gap: 4, padding: "1px 6px", borderRadius: 4,
+            background: status === "connected" && hasData
+              ? "rgba(0,224,138,0.09)" : "rgba(255,255,255,0.05)",
           }}>
             <div style={{
               width: 5, height: 5, borderRadius: "50%", flexShrink: 0,
-              background: status === "connected" ? OB_BID_COLOR : status === "error" ? OB_ASK_COLOR : "#555",
-              boxShadow: status === "connected" ? `0 0 4px ${OB_BID_COLOR}88` : "none",
+              background: status === "connected" && hasData ? OB_BID_COLOR
+                : status === "error" ? OB_ASK_COLOR : "#555",
+              boxShadow: status === "connected" && hasData ? `0 0 5px ${OB_BID_COLOR}99` : "none",
             }} />
-            <span style={{ fontSize: 9, color: status === "connected" ? OB_BID_COLOR : OB_DIM_COLOR, fontWeight: 600 }}>
-              {status === "connected" ? (hasData ? "Live" : "Connected") : status === "error" ? "Offline" : "···"}
+            <span style={{
+              fontSize: 9, fontWeight: 600,
+              color: status === "connected" && hasData ? OB_BID_COLOR : OB_DIM_COLOR,
+            }}>
+              {status === "connected" && hasData ? "Live" : status === "error" ? "Error" : "···"}
             </span>
           </div>
-          {hasData && (
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>{bidCount}B / {askCount}A</span>
+          {diag.lastPollMs > 0 && (
+            <span style={{ fontSize: 9, color: "rgba(255,255,255,0.22)" }}>
+              {diag.lastPollMs}ms
+            </span>
           )}
         </div>
         <ChevronDown style={{
@@ -3007,114 +3205,63 @@ function OrderBook({ symbol, expanded, onToggle }: { symbol: string; expanded: b
         }} />
       </button>
 
-      {/* ── Collapsible body (max 250 px, internal scroll) ── */}
+      {/* ── Collapsible body ── */}
       <div style={{
-        maxHeight: expanded ? 320 : 0,
-        overflowY: expanded ? "auto" : "hidden",
-        overflowX: "hidden",
-        transition: "max-height 0.25s ease",
+        maxHeight: expanded ? (OB_MAX_LEVELS * OB_ROW_H * 2 + 80) : 0,
+        overflow: "hidden",
+        transition: "max-height 0.28s ease",
       }}>
 
-        {/* ── Diagnostics panel (always shown when expanded) ── */}
-        <div style={{
-          padding: "6px 10px", background: "rgba(0,0,0,0.40)",
-          borderBottom: `1px solid ${OB_BR_COLOR}`,
-          display: "flex", flexDirection: "column", gap: 3,
-        }}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Source</span>{" "}
-              <span style={{ color: "rgba(255,255,255,0.55)" }}>REST poll</span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Symbol</span>{" "}
-              <span style={{ color: OB_BID_COLOR }}>{diag.symbol || symbol}</span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Polls</span> {diag.pollCount}
-            </span>
-            {diag.lastPollMs > 0 && (
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-                <span style={{ color: "rgba(255,255,255,0.40)" }}>Latency</span> {diag.lastPollMs}ms
-              </span>
-            )}
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Snapshot</span>{" "}
-              <span style={{ color: diag.snapshotReceived ? OB_BID_COLOR : "#888" }}>
-                {diag.snapshotReceived ? "✓ received" : "pending"}
-              </span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Bids</span>{" "}
-              <span style={{ color: diag.bidCount > 0 ? OB_BID_COLOR : "#888" }}>{diag.bidCount}</span>
-            </span>
-            <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-              <span style={{ color: "rgba(255,255,255,0.40)" }}>Asks</span>{" "}
-              <span style={{ color: diag.askCount > 0 ? OB_ASK_COLOR : "#888" }}>{diag.askCount}</span>
-            </span>
-            {lastUpdateMs > 0 && (
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR }}>
-                <span style={{ color: "rgba(255,255,255,0.40)" }}>Updated</span> {fmtTime(lastUpdateMs)}
-              </span>
-            )}
-          </div>
-          {diag.errorCount > 0 && (
-            <div style={{ fontSize: 9, color: OB_ASK_COLOR }}>
-              ⚠ {diag.errorCount} error(s): {diag.lastError}
-            </div>
-          )}
-        </div>
-
-        {/* ── No data fallback ── */}
-        {noDataYet && (
-          <div style={{ padding: "14px 10px", textAlign: "center", borderBottom: `1px solid ${OB_BR_COLOR}` }}>
-            <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>Fetching orderbook…</p>
-            <p style={{ fontSize: 10, color: "rgba(255,255,255,0.22)", margin: "4px 0 0" }}>
-              {diag.errorCount > 0 ? diag.lastError : `${diag.pollCount} poll(s) sent`}
+        {/* Loading / error state */}
+        {(isLoading || hasError) && (
+          <div style={{ padding: "18px 10px", textAlign: "center" }}>
+            <p style={{ fontSize: 12, color: OB_DIM_COLOR, margin: 0 }}>
+              {hasError ? `⚠ ${diag.lastError}` : "Loading order book…"}
             </p>
           </div>
         )}
 
-        {/* ── Live orderbook rows ── */}
+        {/* Live book */}
         {hasData && (
           <>
-            {/* Column headers */}
-            <div style={{ display: "flex", padding: "3px 10px", background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}` }}>
-              <span style={{ flex: 1, fontSize: 9, color: OB_DIM_COLOR, letterSpacing: "0.04em" }}>PRICE (USD)</span>
-              <span style={{ fontSize: 9, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", letterSpacing: "0.04em" }}>SIZE</span>
+            {/* Column labels */}
+            <div style={{
+              display: "flex", alignItems: "center", padding: "0 10px",
+              height: 20, background: OB_HDR_COLOR, borderBottom: `1px solid ${OB_BR_COLOR}`,
+            }}>
+              <span style={{ flex: 1, fontSize: 9, color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em" }}>PRICE</span>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.28)", letterSpacing: "0.05em", minWidth: 50, textAlign: "right" }}>QTY</span>
             </div>
 
-            {/* Asks — reversed so lowest ask is nearest spread */}
-            <div style={{ background: "rgba(242,54,69,0.035)" }}>
-              {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
-                <div key={`ask-${i}`} style={{ display: "flex", padding: "2px 10px", alignItems: "center" }}>
-                  <span ref={el => { askRowRefs.current[i].price = el; }}
-                    style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_ASK_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
-                  <span ref={el => { askRowRefs.current[i].size = el; }}
-                    style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
-                </div>
-              ))}
+            {/* Ask rows — index 0 = highest (furthest from spread), last = best ask */}
+            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(askRowRefs.current, i, "ask"))}</div>
+
+            {/* Spread / Mid row */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "0 10px", height: 26,
+              background: OB_SPREAD_BG,
+              borderTop: `1px solid ${OB_BR_COLOR}`, borderBottom: `1px solid ${OB_BR_COLOR}`,
+            }}>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.04em" }}>SPREAD</span>
+                <span ref={spreadRef} style={{ fontSize: 10, color: "rgba(255,255,255,0.60)", fontVariantNumeric: "tabular-nums" }}>—</span>
+              </div>
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", letterSpacing: "0.04em" }}>MID</span>
+                <span ref={midRef} style={{ fontSize: 10, color: "rgba(255,255,255,0.75)", fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>—</span>
+              </div>
             </div>
 
-            {/* Spread */}
-            <div style={{ display: "flex", alignItems: "center", padding: "3px 10px", background: "rgba(255,255,255,0.022)", borderTop: `1px solid ${OB_BR_COLOR}`, borderBottom: `1px solid ${OB_BR_COLOR}` }}>
-              <span style={{ fontSize: 10, color: OB_DIM_COLOR, flex: 1 }}>Spread</span>
-              <span ref={spreadRef} style={{ fontSize: 10, color: OB_DIM_COLOR, fontVariantNumeric: "tabular-nums" }}>—</span>
-            </div>
+            {/* Bid rows — index 0 = best bid */}
+            <div>{Array.from({ length: OB_MAX_LEVELS }, (_, i) => makeRow(bidRowRefs.current, i, "bid"))}</div>
 
-            {/* Bids */}
-            <div style={{ background: "rgba(8,153,129,0.035)" }}>
-              {Array.from({ length: OB_MAX_LEVELS }, (_, i) => (
-                <div key={`bid-${i}`} style={{ display: "flex", padding: "2px 10px", alignItems: "center" }}>
-                  <span ref={el => { bidRowRefs.current[i].price = el; }}
-                    style={{ flex: 1, fontSize: 11, fontWeight: 500, color: OB_BID_COLOR, fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
-                  <span ref={el => { bidRowRefs.current[i].size = el; }}
-                    style={{ fontSize: 10, color: OB_DIM_COLOR, minWidth: 55, textAlign: "right", fontVariantNumeric: "tabular-nums", opacity: 0.2 }}>—</span>
-                </div>
-              ))}
-            </div>
+            {/* Footer: error if any */}
+            {diag.errorCount > 0 && (
+              <div style={{ padding: "3px 10px", background: "rgba(255,91,91,0.06)" }}>
+                <span style={{ fontSize: 9, color: OB_ASK_COLOR }}>⚠ {diag.lastError}</span>
+              </div>
+            )}
           </>
         )}
       </div>
