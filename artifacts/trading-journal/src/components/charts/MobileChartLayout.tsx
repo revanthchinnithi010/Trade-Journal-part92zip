@@ -2765,6 +2765,9 @@ const ORG_BORDER  = "rgba(249,115,22,0.30)";
 const FIELD_BG    = "rgba(255,255,255,0.055)";
 const FIELD_BR    = "rgba(255,255,255,0.10)";
 const SECTION_BG  = "rgba(255,255,255,0.03)";
+const TRADE_BG    = "#0F1618";
+const TRADE_CARD  = "#181818";
+const TRADE_BORDER = "rgba(255,255,255,0.06)";
 
 // ── TradeSheet — full-screen, drag to collapse / close ─────────────────────
 function TradeSheet({ onClose }: { onClose: () => void }) {
@@ -2942,9 +2945,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
   const leveragePresets = [1, 2, 5, 10, 25, 50, 100];
 
-  const sideColor  = side === "buy" ? BUY_COLOR  : SELL_COLOR;
-  const sideBg     = side === "buy" ? BUY_BG     : SELL_BG;
-  const sideLabel  = side === "buy" ? "Buy / Long" : "Sell / Short";
+  const sideColor = side === "buy" ? BUY_COLOR : SELL_COLOR;
+  const sideLabel = side === "buy" ? "Buy / Long" : "Sell / Short";
 
   return createPortal(
     <>
@@ -2954,8 +2956,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
         onClick={doClose}
         style={{
           position:"fixed", inset:0, zIndex:9200,
-          background:"rgba(0,0,0,0.65)",
-          backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)",
+          background:"rgba(0,0,0,0.72)",
+          backdropFilter:"blur(3px)", WebkitBackdropFilter:"blur(3px)",
           transition:"opacity 0.22s",
         }}
       />
@@ -2966,11 +2968,11 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
         style={{
           position:"fixed", bottom:0, left:0, right:0,
           height:"100dvh", zIndex:9201,
-          background:"#090b14",
-          borderRadius:"20px 20px 0 0",
+          background:TRADE_BG,
+          borderRadius:"18px 18px 0 0",
           display:"flex", flexDirection:"column",
           overflow:"hidden",
-          boxShadow:"0 -8px 64px rgba(0,0,0,0.85), 0 -1px 0 rgba(255,255,255,0.08)",
+          boxShadow:"0 -8px 48px rgba(0,0,0,0.90), 0 -1px 0 rgba(255,255,255,0.07)",
           willChange:"transform",
         }}
         onPointerDown={onPD}
@@ -2978,193 +2980,149 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
         onPointerUp={onPU}
         onPointerCancel={onPU}
       >
-        {/* ── Drag header ────────────────────────────────────────────────── */}
+
+        {/* ── Fixed header (drag zone) ──────────────────────────────────── */}
         <div style={{
-          flexShrink:0, padding:"12px 16px 0",
-          display:"flex", flexDirection:"column", alignItems:"center", gap:10,
+          flexShrink:0,
           touchAction:"none", cursor:"grab",
+          borderBottom:`1px solid ${TRADE_BORDER}`,
         }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"rgba(255,255,255,0.22)" }} />
-          <div style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ width:36 }} />
-            <span style={{ fontSize:16, fontWeight:700, color:TEXT_HI, letterSpacing:"0.01em" }}>Trade</span>
+          {/* Drag handle */}
+          <div style={{ display:"flex", justifyContent:"center", paddingTop:10, paddingBottom:8 }}>
+            <div style={{ width:32, height:3, borderRadius:2, background:"rgba(255,255,255,0.20)" }} />
+          </div>
+
+          {/* Symbol + price + close */}
+          <div style={{
+            display:"flex", alignItems:"center",
+            padding:"0 14px 12px", gap:10,
+          }}>
+            {/* Symbol info */}
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+                <span style={{ fontSize:20, fontWeight:600, color:TEXT_HI, letterSpacing:"-0.02em", lineHeight:1.1 }}>
+                  {symbol}
+                </span>
+                <ChevronDown style={{ width:13, height:13, color:ORG_COLOR, flexShrink:0 }} />
+              </div>
+              <p style={{ fontSize:11, color:TEXT_DIM, margin:"2px 0 0", lineHeight:1 }}>{subtitle}</p>
+            </div>
+
+            {/* Live price */}
+            <div style={{ textAlign:"right", flexShrink:0 }}>
+              <div style={{ fontSize:24, fontWeight:700, color: isUp ? BUY_COLOR : SELL_COLOR, lineHeight:1.1 }}>
+                {fmtLive(livePrice)}
+              </div>
+              <p style={{ fontSize:12, color: isUp ? BUY_COLOR : SELL_COLOR, marginTop:2, lineHeight:1 }}>
+                {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
+              </p>
+            </div>
+
+            {/* Close */}
             <button
               onClick={e => { e.stopPropagation(); doClose(); }}
               style={{
-                width:36, height:36, borderRadius:10,
+                width:30, height:30, borderRadius:8, flexShrink:0,
                 display:"flex", alignItems:"center", justifyContent:"center",
-                background:BTN_BG, border:`1px solid ${BTN_BORDER}`, cursor:"pointer",
+                background:"rgba(255,255,255,0.06)", border:`1px solid ${TRADE_BORDER}`,
+                cursor:"pointer",
               }}
             >
-              <X style={{ width:16, height:16, color:TEXT_DIM }} />
+              <X style={{ width:14, height:14, color:TEXT_DIM }} />
             </button>
           </div>
         </div>
 
-        {/* ── Scrollable content ─────────────────────────────────────────── */}
+        {/* ── Stats row ─────────────────────────────────────────────────── */}
+        <div style={{
+          display:"flex", alignItems:"center", gap:0,
+          padding:"7px 14px",
+          borderBottom:`1px solid ${TRADE_BORDER}`,
+          flexShrink:0,
+        }}>
+          {[
+            { label:"24h Vol",  value:"$736.6M"  },
+            { label:"OI",       value:"$57.2M"   },
+            { label:"Fund/8h",  value:"0.0100%"  },
+          ].map((s, i) => (
+            <div key={s.label} style={{
+              flex:1,
+              paddingLeft: i === 0 ? 0 : 12,
+              borderLeft: i > 0 ? `1px solid ${TRADE_BORDER}` : "none",
+              marginLeft: i > 0 ? 12 : 0,
+            }}>
+              <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1, margin:0 }}>{s.label}</p>
+              <p style={{ fontSize:11, color:TEXT_HI, marginTop:3, fontWeight:500, lineHeight:1 }}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Scrollable body ───────────────────────────────────────────── */}
         <div
           ref={scrollRef}
           style={{
             flex:1, overflowY:"auto", overscrollBehavior:"contain",
-            paddingBottom:24,
           } as React.CSSProperties}
         >
-          {/* Account mode tabs */}
-          <div style={{
-            display:"flex", alignItems:"center", gap:0,
-            padding:"10px 16px 8px",
-            borderBottom:`1px solid ${DIVIDER}`,
-          }}>
-            {(["main","isolated"] as const).map(m => (
+
+          {/* Buy / Sell toggle */}
+          <div style={{ display:"flex", gap:7, padding:"12px 14px 0" }}>
+            {(["buy","sell"] as const).map(s => (
               <button
-                key={m}
-                onClick={() => setAccountMode(m)}
+                key={s}
+                onClick={() => setSide(s)}
                 style={{
-                  padding:"4px 12px", fontSize:13, fontWeight:600,
-                  color: accountMode === m ? ORG_COLOR : TEXT_DIM,
-                  background:"none", border:"none", cursor:"pointer",
-                  borderBottom: accountMode === m ? `2px solid ${ORG_COLOR}` : "2px solid transparent",
-                  textTransform:"capitalize", transition:"color 0.14s",
+                  flex:1, height:44, borderRadius:9, border:"none",
+                  cursor:"pointer", fontSize:14, fontWeight:700,
+                  transition:"background 0.15s, box-shadow 0.15s",
+                  background: side === s
+                    ? (s === "buy" ? BUY_COLOR : SELL_COLOR)
+                    : (s === "buy" ? "rgba(8,153,129,0.10)" : "rgba(242,54,69,0.10)"),
+                  color: side === s ? "#fff" : (s === "buy" ? BUY_COLOR : SELL_COLOR),
+                  boxShadow: side === s
+                    ? `0 2px 14px ${s === "buy" ? "rgba(8,153,129,0.28)" : "rgba(242,54,69,0.28)"}`
+                    : "none",
                 }}
               >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
+                {s === "buy" ? "Buy / Long" : "Sell / Short"}
               </button>
             ))}
-            <button style={{
-              marginLeft:"auto", display:"flex", alignItems:"center", gap:4,
-              background:"none", border:"none", cursor:"pointer",
-              color:TEXT_DIM, fontSize:12,
-            }}>
-              <span>Cross · 10x</span>
-              <ChevronDown style={{ width:13, height:13 }} />
-            </button>
           </div>
 
-          {/* Symbol header — live price */}
+          {/* Order type tabs */}
           <div style={{
-            display:"flex", alignItems:"flex-start", justifyContent:"space-between",
-            padding:"12px 16px",
-            borderBottom:`1px solid ${DIVIDER}`,
-          }}>
-            <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-              <Star style={{ width:18, height:18, color:ORG_COLOR, fill:ORG_COLOR, flexShrink:0, marginTop:2 }} />
-              <div>
-                <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                  <span style={{ fontSize:16, fontWeight:700, color:TEXT_HI }}>{symbol}</span>
-                  <ChevronDown style={{ width:14, height:14, color:ORG_COLOR }} />
-                </div>
-                <p style={{ fontSize:11, color:TEXT_DIM, marginTop:1 }}>{subtitle}</p>
-              </div>
-            </div>
-            <div style={{ textAlign:"right" }}>
-              <div style={{
-                fontSize:22, fontWeight:700,
-                color: isUp ? BUY_COLOR : SELL_COLOR,
-                display:"flex", alignItems:"center", gap:3, justifyContent:"flex-end",
-              }}>
-                {fmtLive(livePrice)}
-                {isUp
-                  ? <ChevronUp   style={{ width:18, height:18 }} />
-                  : <ChevronDown style={{ width:18, height:18 }} />}
-              </div>
-              <p style={{ fontSize:11, color: isUp ? BUY_COLOR : SELL_COLOR, marginTop:1 }}>
-                {changePct >= 0 ? "+" : ""}{changePct.toFixed(2)}%
-              </p>
-            </div>
-          </div>
-
-          {/* Market stats bar */}
-          <div style={{
-            display:"flex", alignItems:"center", gap:20,
-            padding:"8px 16px",
-            borderBottom:`1px solid ${DIVIDER}`,
-          }}>
-            {[
-              { label:"24h Vol", value:"$736.6M" },
-              { label:"OI",      value:"$57.2M"  },
-              { label:"Fund/8h", value:"0.0100%" },
-            ].map(s => (
-              <div key={s.label}>
-                <p style={{ fontSize:10, color:TEXT_DIM, lineHeight:1.2 }}>{s.label}</p>
-                <p style={{ fontSize:12, color:TEXT_HI, marginTop:1, fontWeight:500 }}>{s.value}</p>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Buy / Sell skewed toggle ──────────────────────────────────── */}
-          <div style={{ padding:"14px 16px 0" }}>
-            <div style={{
-              display:"flex", borderRadius:10, overflow:"hidden",
-              border:`1px solid ${DIVIDER}`,
-              height:48,
-            }}>
-              {(["buy","sell"] as const).map((s, i) => (
-                <button
-                  key={s}
-                  onClick={() => setSide(s)}
-                  style={{
-                    flex:1, position:"relative",
-                    background: side === s
-                      ? (s === "buy" ? BUY_COLOR : SELL_COLOR)
-                      : "rgba(255,255,255,0.04)",
-                    border:"none", cursor:"pointer",
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    transition:"background 0.18s",
-                    clipPath: i === 0
-                      ? "polygon(0 0,calc(100% - 10px) 0,100% 100%,0 100%)"
-                      : "polygon(10px 0,100% 0,100% 100%,0 100%)",
-                    margin: i === 0 ? "0 -1px 0 0" : "0 0 0 -1px",
-                    zIndex: side === s ? 2 : 1,
-                  }}
-                >
-                  <span style={{
-                    fontSize:13, fontWeight:700,
-                    color: side === s ? "#fff" : (s === "buy" ? BUY_COLOR : SELL_COLOR),
-                    letterSpacing:"0.02em",
-                  }}>
-                    {s === "buy" ? "Buy / Long" : "Sell / Short"}
-                  </span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* ── Order type horizontal pills ───────────────────────────────── */}
-          <div style={{
-            display:"flex", gap:6, padding:"12px 16px 0",
-            overflowX:"auto",
-          }}>
+            display:"flex", gap:4, padding:"10px 14px 0",
+            overflowX:"auto", scrollbarWidth:"none",
+          } as React.CSSProperties}>
             {orderTypes.map(t => (
               <button
                 key={t}
                 onClick={() => setOrderType(t)}
                 style={{
-                  padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:600,
-                  whiteSpace:"nowrap", cursor:"pointer", transition:"all 0.14s",
-                  background: orderType === t ? FIELD_BG : "none",
+                  flexShrink:0, padding:"5px 11px", borderRadius:6,
+                  fontSize:12, fontWeight:600, whiteSpace:"nowrap",
+                  cursor:"pointer", transition:"all 0.13s",
+                  background: orderType === t ? TRADE_CARD : "none",
                   color: orderType === t ? TEXT_HI : TEXT_DIM,
-                  border: orderType === t ? `1px solid ${FIELD_BR}` : `1px solid transparent`,
+                  border: orderType === t ? `1px solid rgba(255,255,255,0.10)` : "1px solid transparent",
                 }}
-              >
-                {t}
-              </button>
+              >{t}</button>
             ))}
           </div>
 
-          {/* ── Limit / Stop price inputs ─────────────────────────────────── */}
+          {/* Limit / Stop price inputs */}
           {(needsLimitPrice || needsStopPrice) && (
-            <div style={{ padding:"10px 16px 0", display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ padding:"10px 14px 0", display:"flex", flexDirection:"column", gap:7 }}>
               {needsStopPrice && (
                 <div>
                   <p style={{ fontSize:11, color:TEXT_DIM, marginBottom:4 }}>Stop Price (USD)</p>
                   <input
                     type="number" inputMode="decimal"
-                    value={stopPrice}
-                    onChange={e => setStopPrice(e.target.value)}
+                    value={stopPrice} onChange={e => setStopPrice(e.target.value)}
                     placeholder={livePrice ? String(Math.round(livePrice)) : "0.0"}
                     style={{
-                      width:"100%", height:44, borderRadius:10,
-                      background:FIELD_BG, border:`1px solid ${FIELD_BR}`,
+                      width:"100%", height:40, borderRadius:8,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
                       color:TEXT_HI, fontSize:14, padding:"0 12px",
                       boxSizing:"border-box", outline:"none",
                     }}
@@ -3176,12 +3134,11 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   <p style={{ fontSize:11, color:TEXT_DIM, marginBottom:4 }}>Limit Price (USD)</p>
                   <input
                     type="number" inputMode="decimal"
-                    value={limitPrice}
-                    onChange={e => setLimitPrice(e.target.value)}
+                    value={limitPrice} onChange={e => setLimitPrice(e.target.value)}
                     placeholder={livePrice ? String(Math.round(livePrice)) : "0.0"}
                     style={{
-                      width:"100%", height:44, borderRadius:10,
-                      background:FIELD_BG, border:`1px solid ${FIELD_BR}`,
+                      width:"100%", height:40, borderRadius:8,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
                       color:TEXT_HI, fontSize:14, padding:"0 12px",
                       boxSizing:"border-box", outline:"none",
                     }}
@@ -3191,163 +3148,155 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* ── Leverage stepper ──────────────────────────────────────────── */}
-          <div style={{ padding:"12px 16px 0" }}>
+          {/* Leverage */}
+          <div style={{ padding:"10px 14px 0" }}>
             <div style={{
-              display:"flex", alignItems:"center", justifyContent:"space-between",
-              height:44, borderRadius:10, background:FIELD_BG, border:`1px solid ${FIELD_BR}`,
-              padding:"0 12px",
+              display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:7,
             }}>
-              <span style={{ fontSize:12, color:TEXT_DIM }}>Leverage</span>
-              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
+              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
                 <button
                   onClick={() => setLeverage(v => Math.max(1, v - 1))}
                   style={{
-                    width:28, height:28, borderRadius:8,
-                    background:BTN_BG, border:`1px solid ${BTN_BORDER}`,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer",
+                    width:24, height:24, borderRadius:6,
+                    background:"rgba(255,255,255,0.06)", border:`1px solid ${TRADE_BORDER}`,
+                    display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer",
                   }}
-                ><Minus style={{ width:13, height:13, color:TEXT_DIM }} /></button>
-                <span style={{ fontSize:14, fontWeight:700, color:ORG_COLOR, minWidth:36, textAlign:"center" }}>
+                ><Minus style={{ width:11, height:11, color:TEXT_DIM }} /></button>
+                <span style={{ fontSize:14, fontWeight:700, color:ORG_COLOR, minWidth:32, textAlign:"center" }}>
                   {leverage}x
                 </span>
                 <button
                   onClick={() => setLeverage(v => Math.min(200, v + 1))}
                   style={{
-                    width:28, height:28, borderRadius:8,
-                    background:BTN_BG, border:`1px solid ${BTN_BORDER}`,
-                    display:"flex", alignItems:"center", justifyContent:"center",
-                    cursor:"pointer",
+                    width:24, height:24, borderRadius:6,
+                    background:"rgba(255,255,255,0.06)", border:`1px solid ${TRADE_BORDER}`,
+                    display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer",
                   }}
-                ><Plus style={{ width:13, height:13, color:TEXT_DIM }} /></button>
+                ><Plus style={{ width:11, height:11, color:TEXT_DIM }} /></button>
               </div>
             </div>
-            {/* Leverage quick presets */}
-            <div style={{ display:"flex", gap:5, marginTop:8 }}>
+            {/* Leverage chips — horizontal scroll pills */}
+            <div style={{
+              display:"flex", gap:6, overflowX:"auto", scrollbarWidth:"none", paddingBottom:1,
+            } as React.CSSProperties}>
               {leveragePresets.map(lv => (
                 <button
                   key={lv}
                   onClick={() => setLeverage(lv)}
                   style={{
-                    flex:1, height:26, borderRadius:6, fontSize:11, fontWeight:600,
-                    cursor:"pointer", transition:"all 0.12s",
-                    background: leverage === lv ? ORG_BG : BTN_BG,
+                    flexShrink:0, padding:"4px 13px", height:28, borderRadius:20,
+                    fontSize:12, fontWeight:600, cursor:"pointer", transition:"all 0.12s",
+                    background: leverage === lv ? ORG_BG : "rgba(255,255,255,0.05)",
                     color:      leverage === lv ? ORG_COLOR : TEXT_DIM,
-                    border:     leverage === lv ? `1px solid ${ORG_BORDER}` : `1px solid ${BTN_BORDER}`,
+                    border:     leverage === lv ? `1px solid ${ORG_BORDER}` : `1px solid rgba(255,255,255,0.07)`,
                   }}
-                >
-                  {lv}x
-                </button>
+                >{lv}x</button>
               ))}
             </div>
           </div>
 
-          {/* ── Quantity input ────────────────────────────────────────────── */}
-          <div style={{ padding:"12px 16px 0" }}>
-            <p style={{ fontSize:11, color:TEXT_DIM, marginBottom:6 }}>Quantity</p>
-            <div style={{
-              display:"flex", alignItems:"center",
-              height:48, borderRadius:10, background:FIELD_BG, border:`1px solid ${FIELD_BR}`,
-              padding:"0 4px 0 12px",
-            }}>
-              <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center" }}>
-                <input
-                  type="number" inputMode="decimal"
-                  value={lotQty}
-                  onChange={e => setLotQty(Math.max(1, Number(e.target.value) || 1))}
-                  style={{
-                    background:"none", border:"none", outline:"none",
-                    color:TEXT_HI, fontSize:15, fontWeight:600, width:"100%",
-                  }}
-                />
-                <span style={{ fontSize:10, color:TEXT_DIM }}>
-                  = {(lotQty * 0.001).toFixed(3)} {symbol.slice(0, 3)}
-                </span>
-              </div>
+          {/* Quantity */}
+          <div style={{ padding:"10px 14px 0" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
+              <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
               <div style={{
-                height:36, borderRadius:8, padding:"0 10px",
-                background:BTN_BG, border:`1px solid ${BTN_BORDER}`,
-                display:"flex", alignItems:"center", gap:4, cursor:"pointer", flexShrink:0,
+                display:"flex", alignItems:"center", gap:3, cursor:"pointer",
+                padding:"2px 8px", borderRadius:5, background:"rgba(255,255,255,0.04)",
               }}>
-                <span style={{ fontSize:12, color:TEXT_HI, fontWeight:600 }}>Lot</span>
-                <ChevronDown style={{ width:12, height:12, color:TEXT_DIM }} />
+                <span style={{ fontSize:11, color:TEXT_HI, fontWeight:600 }}>Lot</span>
+                <ChevronDown style={{ width:10, height:10, color:TEXT_DIM }} />
               </div>
             </div>
-
+            <div style={{
+              display:"flex", alignItems:"center",
+              height:40, borderRadius:8, background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
+              padding:"0 10px",
+            }}>
+              <input
+                type="number" inputMode="decimal"
+                value={lotQty}
+                onChange={e => setLotQty(Math.max(1, Number(e.target.value) || 1))}
+                style={{
+                  flex:1, background:"none", border:"none", outline:"none",
+                  color:TEXT_HI, fontSize:14, fontWeight:600,
+                }}
+              />
+              <span style={{ fontSize:11, color:TEXT_DIM, flexShrink:0 }}>
+                ≈ {(lotQty * 0.001).toFixed(3)} {symbol.slice(0,3)}
+              </span>
+            </div>
             {/* % quick select */}
-            <div style={{ display:"flex", justifyContent:"space-between", marginTop:8 }}>
+            <div style={{ display:"flex", gap:4, marginTop:6 }}>
               {[10,25,50,75,100].map(pct => (
                 <button
                   key={pct}
                   style={{
-                    flex:1, height:26, borderRadius:6, fontSize:11,
-                    fontWeight:600, cursor:"pointer",
-                    background:BTN_BG, border:`1px solid ${BTN_BORDER}`,
-                    color:TEXT_DIM, margin:"0 2px",
+                    flex:1, height:25, borderRadius:5, fontSize:11, fontWeight:600,
+                    cursor:"pointer",
+                    background:"rgba(255,255,255,0.05)", border:`1px solid rgba(255,255,255,0.07)`,
+                    color:TEXT_DIM,
                     display:"flex", alignItems:"center", justifyContent:"center", gap:1,
                   }}
                 >
-                  {pct}<Percent style={{ width:9, height:9 }} />
+                  {pct}<Percent style={{ width:8, height:8 }} />
                 </button>
               ))}
             </div>
           </div>
 
-          {/* ── Bracket order (TP / SL) ───────────────────────────────────── */}
-          <div style={{ padding:"12px 16px 0" }}>
+          {/* TP / SL */}
+          <div style={{ padding:"10px 14px 0" }}>
             <div style={{
               display:"flex", alignItems:"center", justifyContent:"space-between",
-              padding:"10px 12px", borderRadius:10,
-              background: bracketEnabled ? ORG_BG : SECTION_BG,
-              border:`1px solid ${bracketEnabled ? ORG_BORDER : FIELD_BR}`,
+              padding:"8px 11px", borderRadius:8,
+              background: bracketEnabled ? ORG_BG : TRADE_CARD,
+              border:`1px solid ${bracketEnabled ? ORG_BORDER : "rgba(255,255,255,0.07)"}`,
             }}>
               <span style={{ fontSize:13, fontWeight:600, color: bracketEnabled ? ORG_COLOR : TEXT_HI }}>
-                Bracket Order
+                TP / SL
               </span>
               <button
                 onClick={() => setBracketEnabled(v => !v)}
                 style={{
-                  height:30, padding:"0 10px", borderRadius:8, fontSize:12, fontWeight:600,
-                  background: bracketEnabled ? ORG_BG : BTN_BG,
-                  border:`1px solid ${bracketEnabled ? ORG_BORDER : BTN_BORDER}`,
+                  height:25, padding:"0 10px", borderRadius:6, fontSize:12, fontWeight:600,
+                  background: bracketEnabled ? ORG_BG : "rgba(255,255,255,0.06)",
+                  border:`1px solid ${bracketEnabled ? ORG_BORDER : TRADE_BORDER}`,
                   color: bracketEnabled ? ORG_COLOR : TEXT_DIM,
-                  cursor:"pointer", display:"flex", alignItems:"center", gap:5,
-                  transition:"all 0.14s",
+                  cursor:"pointer", display:"flex", alignItems:"center", gap:4,
+                  transition:"all 0.13s",
                 }}
               >
-                {bracketEnabled ? <Minus style={{ width:12, height:12 }} /> : <Plus style={{ width:12, height:12 }} />}
-                {bracketEnabled ? "Remove TP/SL" : "Add TP/SL"}
+                {bracketEnabled ? <Minus style={{ width:10, height:10 }} /> : <Plus style={{ width:10, height:10 }} />}
+                {bracketEnabled ? "Remove" : "Add"}
               </button>
             </div>
             {bracketEnabled && (
-              <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:8 }}>
-                <div>
-                  <p style={{ fontSize:11, color:BUY_COLOR, marginBottom:4, fontWeight:600 }}>Take Profit (USD)</p>
+              <div style={{ display:"flex", gap:8, marginTop:7 }}>
+                <div style={{ flex:1 }}>
+                  <p style={{ fontSize:11, color:BUY_COLOR, marginBottom:4, fontWeight:600 }}>Take Profit</p>
                   <input
                     type="number" inputMode="decimal"
-                    value={tpPrice}
-                    onChange={e => setTpPrice(e.target.value)}
+                    value={tpPrice} onChange={e => setTpPrice(e.target.value)}
                     placeholder="TP Price"
                     style={{
-                      width:"100%", height:44, borderRadius:10,
-                      background:FIELD_BG, border:`1px solid rgba(8,153,129,0.30)`,
-                      color:TEXT_HI, fontSize:14, padding:"0 12px",
+                      width:"100%", height:40, borderRadius:8,
+                      background:TRADE_CARD, border:"1px solid rgba(8,153,129,0.28)",
+                      color:TEXT_HI, fontSize:14, padding:"0 10px",
                       boxSizing:"border-box", outline:"none",
                     }}
                   />
                 </div>
-                <div>
-                  <p style={{ fontSize:11, color:SELL_COLOR, marginBottom:4, fontWeight:600 }}>Stop Loss (USD)</p>
+                <div style={{ flex:1 }}>
+                  <p style={{ fontSize:11, color:SELL_COLOR, marginBottom:4, fontWeight:600 }}>Stop Loss</p>
                   <input
                     type="number" inputMode="decimal"
-                    value={slPrice}
-                    onChange={e => setSlPrice(e.target.value)}
+                    value={slPrice} onChange={e => setSlPrice(e.target.value)}
                     placeholder="SL Price"
                     style={{
-                      width:"100%", height:44, borderRadius:10,
-                      background:FIELD_BG, border:`1px solid rgba(242,54,69,0.30)`,
-                      color:TEXT_HI, fontSize:14, padding:"0 12px",
+                      width:"100%", height:40, borderRadius:8,
+                      background:TRADE_CARD, border:"1px solid rgba(242,54,69,0.28)",
+                      color:TEXT_HI, fontSize:14, padding:"0 10px",
                       boxSizing:"border-box", outline:"none",
                     }}
                   />
@@ -3356,105 +3305,71 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             )}
           </div>
 
-          {/* ── Order summary rows ────────────────────────────────────────── */}
-          <div style={{ padding:"12px 16px 0", display:"flex", flexDirection:"column", gap:6 }}>
-            {[
-              { label:"Funds required",   value:`${orderCostUSD} USD` },
-              { label:"Available Margin", value: isConnected ? `${availMargin.toFixed(2)} USD` : "—" },
-            ].map(row => (
-              <div
-                key={row.label}
-                style={{
-                  display:"flex", justifyContent:"space-between", alignItems:"center",
-                  padding:"8px 12px", borderRadius:8, background:SECTION_BG,
-                }}
-              >
-                <span style={{ fontSize:12, color:TEXT_DIM }}>{row.label}</span>
-                <span style={{ fontSize:12, color:TEXT_HI, fontWeight:600 }}>{row.value}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* ── Submit button ─────────────────────────────────────────────── */}
-          <div style={{ padding:"14px 16px 0" }}>
-            <button
-              onClick={handleSubmit}
-              style={{
-                width:"100%", height:52, borderRadius:12,
-                background: submitted ? "rgba(255,255,255,0.1)" : sideColor,
-                border:"none", cursor:"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:16, fontWeight:700,
-                color: submitted ? TEXT_DIM : "#fff",
-                transition:"all 0.2s",
-                boxShadow: submitted ? "none" : `0 4px 20px ${side === "buy" ? "rgba(8,153,129,0.35)" : "rgba(242,54,69,0.35)"}`,
-              }}
-            >
-              {submitted ? "Order Placed ✓" : sideLabel}
-            </button>
-          </div>
-
-          {/* ── Reduce Only ───────────────────────────────────────────────── */}
-          <div style={{ padding:"12px 16px 0" }}>
+          {/* Reduce Only */}
+          <div style={{ padding:"10px 14px" }}>
             <button
               onClick={() => setReduceOnly(v => !v)}
               style={{
-                display:"flex", alignItems:"center", gap:8,
+                display:"flex", alignItems:"center", gap:7,
                 background:"none", border:"none", cursor:"pointer", padding:0,
               }}
             >
               {reduceOnly
-                ? <CheckSquare style={{ width:17, height:17, color:ORG_COLOR }} />
-                : <Square      style={{ width:17, height:17, color:TEXT_DIM }} />
+                ? <CheckSquare style={{ width:15, height:15, color:ORG_COLOR }} />
+                : <Square      style={{ width:15, height:15, color:TEXT_DIM }} />
               }
-              <span style={{ fontSize:13, color: reduceOnly ? TEXT_HI : TEXT_DIM }}>Reduce Only</span>
+              <span style={{ fontSize:12, color: reduceOnly ? TEXT_HI : TEXT_DIM }}>Reduce Only</span>
             </button>
           </div>
 
-          {/* ── Scalper badge ─────────────────────────────────────────────── */}
-          <div style={{
-            margin:"10px 16px 0",
-            padding:"8px 12px",
-            borderRadius:10, background:SECTION_BG, border:`1px solid ${FIELD_BR}`,
-            display:"flex", alignItems:"center", justifyContent:"space-between",
-          }}>
-            <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <div style={{
-                width:8, height:8, borderRadius:"50%", background:BUY_COLOR,
-                boxShadow:`0 0 6px ${BUY_COLOR}`,
-              }} />
-              <span style={{ fontSize:12, color:BUY_COLOR, fontWeight:600 }}>Scalper Active</span>
-            </div>
-            <span style={{
-              padding:"2px 8px", borderRadius:20, fontSize:11, fontWeight:700,
-              background:"rgba(8,153,129,0.14)", color:BUY_COLOR,
-            }}>30m</span>
-          </div>
-
-          {/* ── Fees / Calculator ─────────────────────────────────────────── */}
-          <div style={{
-            display:"flex", gap:8, padding:"10px 16px 0",
-          }}>
-            {[
-              { label:"Fees", Icon: SlidersHorizontal },
-              { label:"Calculator", Icon: Calculator },
-            ].map(({ label, Icon }) => (
-              <button
-                key={label}
-                style={{
-                  flex:1, height:38, borderRadius:10,
-                  background:BTN_BG, border:`1px solid ${BTN_BORDER}`,
-                  display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                  cursor:"pointer", color:TEXT_DIM, fontSize:12, fontWeight:500,
-                }}
-              >
-                <Icon style={{ width:13, height:13 }} />
-                {label}
-              </button>
-            ))}
-          </div>
-
         </div>
+
+        {/* ── Sticky footer ─────────────────────────────────────────────── */}
+        <div style={{
+          flexShrink:0,
+          borderTop:`1px solid ${TRADE_BORDER}`,
+          padding:"10px 14px 16px",
+          background:TRADE_BG,
+        }}>
+          {/* Margin / balance row */}
+          <div style={{
+            display:"flex", justifyContent:"space-between", alignItems:"flex-end",
+            marginBottom:10,
+          }}>
+            <div>
+              <p style={{ fontSize:11, color:TEXT_DIM, lineHeight:1, margin:0 }}>Margin Required</p>
+              <p style={{ fontSize:12, fontWeight:600, color:TEXT_HI, marginTop:4, lineHeight:1 }}>
+                {orderCostUSD} USD
+              </p>
+            </div>
+            <div style={{ textAlign:"right" }}>
+              <p style={{ fontSize:11, color:TEXT_DIM, lineHeight:1, margin:0 }}>Available</p>
+              <p style={{ fontSize:12, fontWeight:600, color:TEXT_HI, marginTop:4, lineHeight:1 }}>
+                {isConnected ? `${availMargin.toFixed(2)} USD` : "—"}
+              </p>
+            </div>
+          </div>
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            style={{
+              width:"100%", height:44, borderRadius:10,
+              background: submitted ? "rgba(255,255,255,0.08)" : sideColor,
+              border:"none", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:15, fontWeight:700,
+              color: submitted ? TEXT_DIM : "#fff",
+              letterSpacing:"0.01em",
+              transition:"all 0.18s",
+              boxShadow: submitted ? "none"
+                : `0 3px 16px ${side === "buy" ? "rgba(8,153,129,0.28)" : "rgba(242,54,69,0.28)"}`,
+            }}
+          >
+            {submitted ? "Order Placed ✓" : sideLabel}
+          </button>
+        </div>
+
       </div>
     </>,
     document.body
