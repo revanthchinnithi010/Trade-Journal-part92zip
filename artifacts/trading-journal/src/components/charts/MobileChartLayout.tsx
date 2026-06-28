@@ -60,6 +60,7 @@ import ptDotsUrl    from "@assets/new3dots1_1780601317279.svg";
 import ptAlertUrl   from "@assets/new_alert1_1780601317242.svg";
 import ptSettingUrl from "@assets/setting1_1780601636025.svg";
 import { DELTA_WS_INDIA } from "@/lib/broker-ws/DeltaWsClient";
+import { resolveBroker, brokerLabel, type ResolvedBroker } from "@/lib/brokerRouter";
 
 function hexToRgba(hex: string, alpha: number): string {
   const h = (hex || "#089981").replace("#", "").slice(0, 6).padEnd(6, "0");
@@ -2925,9 +2926,56 @@ function makeOBRows(n: number): OBRowRef[] {
   }));
 }
 
-function OrderBook({ symbol, expanded, onToggle }: {
-  symbol: string; expanded: boolean; onToggle: () => void;
+function OrderBook({ symbol, expanded, onToggle, broker }: {
+  symbol: string; expanded: boolean; onToggle: () => void; broker?: ResolvedBroker;
 }) {
+  // cTrader order book not available via ProtoOA REST — show informational placeholder
+  if (broker === "ctrader") {
+    return (
+      <div style={{
+        border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, overflow:"hidden",
+        background:"#111111",
+      }}>
+        <button
+          onClick={onToggle}
+          style={{
+            width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+            padding:"8px 12px", background:"rgba(255,255,255,0.04)", border:"none",
+            cursor:"pointer", touchAction:"manipulation",
+          }}
+        >
+          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+            <span style={{ fontSize:11, fontWeight:600, color:"rgba(255,255,255,0.55)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+              Order Book
+            </span>
+            <span style={{
+              fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase",
+              padding:"1px 6px", borderRadius:4,
+              background:"rgba(56,189,248,0.12)", color:"#38bdf8",
+            }}>cTRADER</span>
+          </div>
+          <ChevronDown style={{
+            width:13, height:13, color:"rgba(255,255,255,0.35)", flexShrink:0,
+            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
+            transition:"transform 0.22s ease",
+          }} />
+        </button>
+        <div style={{ maxHeight: expanded ? 120 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
+          <div style={{
+            padding:"14px 16px", display:"flex", flexDirection:"column", gap:6, alignItems:"center",
+          }}>
+            <span style={{ fontSize:12, color:"rgba(255,255,255,0.40)", textAlign:"center", lineHeight:1.5 }}>
+              Order Book not available for this broker/account.
+            </span>
+            <span style={{ fontSize:11, color:"rgba(255,255,255,0.25)", textAlign:"center" }}>
+              DOM data requires a cTrader Pro account with Level II access.
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const { bidsRef, asksRef, status, bidCount, askCount, setOnUpdate, diag, pollCountRef } =
     useOrderBook(symbol);
 
@@ -3362,14 +3410,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const tick     = useSymbolTick(symbol);
   const { balance, connectionStatus, activeBrokerId, connectedAccounts } = useBrokerStore();
 
-  const activeBroker = useMemo<"delta" | "ctrader">(() => {
-    if ((activeBrokerId === "delta" || activeBrokerId === "ctrader") && connectedAccounts[activeBrokerId]) {
-      return activeBrokerId;
-    }
-    if (connectedAccounts["delta"])   return "delta";
-    if (connectedAccounts["ctrader"]) return "ctrader";
-    return "delta";
-  }, [activeBrokerId, connectedAccounts]);
+  // Symbol-driven broker routing — deterministic, no manual selection required.
+  // Both broker sessions stay alive; only the data source switches.
+  const activeBroker: ResolvedBroker = resolveBroker(symbol);
 
   const [side,           setSide]           = useState<"buy" | "sell">("buy");
   const [orderType,      setOrderType]      = useState<"Market" | "Limit" | "Stop-Market" | "Stop-Limit">("Market");
@@ -3413,9 +3456,14 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     return () => { cancelled = true; };
   }, [symbol, activeBroker]);
 
-  // Fetch live ticker stats (24h vol, OI, funding, mark/index price) on symbol change
+  // Fetch live ticker stats (24h vol, OI, funding, mark/index price) — Delta only.
+  // cTrader symbols use contract spec fields instead; skip this fetch entirely.
   useEffect(() => {
-    if (!symbol) return;
+    if (!symbol || activeBroker === "ctrader") {
+      setTickerData(null);
+      setTickerLoading(false);
+      return;
+    }
     setTickerData(null);
     setTickerLoading(true);
     const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
@@ -3430,15 +3478,21 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
       })
       .catch(() => { if (!cancelled) setTickerLoading(false); });
     return () => { cancelled = true; };
-  }, [symbol]);
+  }, [symbol, activeBroker]);
 
   const livePrice   = tick?.price ?? null;
   const changePct   = tick?.changePct ?? 0;
   const isUp        = changePct >= 0;
   // Description from live contract metadata (single source of truth)
   const subtitle    = contractSpec?.description ?? "Loading…";
-  const availMargin = balance ? parseFloat(balance.walletBalance) : 0;
-  const isConnected = connectionStatus === "connected";
+  // Balance: use cTrader account equity when symbol is cTrader, otherwise Delta wallet
+  const ctraderAccount = connectedAccounts["ctrader"];
+  const availMargin = activeBroker === "ctrader"
+    ? (ctraderAccount?.balance ? parseFloat(String(ctraderAccount.balance.equity ?? ctraderAccount.balance.walletBalance ?? 0)) : 0)
+    : (balance ? parseFloat(balance.walletBalance) : 0);
+  const isConnected = activeBroker === "ctrader"
+    ? !!ctraderAccount
+    : connectionStatus === "connected";
 
   const needsLimitPrice = orderType === "Limit" || orderType === "Stop-Limit";
   const needsStopPrice  = orderType === "Stop-Market" || orderType === "Stop-Limit";
@@ -3803,9 +3857,67 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </button>
           </div>
 
-          {/* Stats rows — always sticky, never scrolls away */}
+          {/* Stats rows — broker-aware, always sticky, never scrolls away */}
           {(() => {
             const DIM  = "rgba(255,255,255,0.55)";
+
+            // ── cTrader symbol: show contract properties from spec ────────────
+            if (activeBroker === "ctrader") {
+              const specLoading = !contractSpec;
+              const ph = (w = 36) => (
+                <span style={{
+                  display:"inline-block", width:w, height:9, borderRadius:3,
+                  background:"rgba(255,255,255,0.09)", verticalAlign:"middle",
+                  animation:"pulse 1.4s ease-in-out infinite",
+                }} />
+              );
+              const specVal = (label: string, fallback?: number) => {
+                if (specLoading) return ph(fallback ?? 36);
+                const f = contractSpec!.fields.find(f => f.label === label);
+                return <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{f?.value ?? "—"}</span>;
+              };
+              const leverageField = contractSpec?.fields.find(f => f.label === "Max Leverage");
+              const sizeField     = contractSpec?.fields.find(f => f.label.toLowerCase().includes("min volume") || f.label.toLowerCase().includes("lot size") || f.label.toLowerCase().includes("contract size"));
+              const execField     = contractSpec?.fields.find(f => f.label.toLowerCase().includes("trade mode") || f.label.toLowerCase().includes("execution"));
+
+              const row1ct = [
+                { label:"Leverage",   node: specLoading ? ph(40) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{leverageField?.value ?? (contractSpec?.maxLeverageNum ? `${contractSpec.maxLeverageNum}x` : "—")}</span> },
+                { label:"Min Volume", node: specLoading ? ph(40) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{sizeField?.value ?? "—"}</span> },
+                { label:"Execution",  node: specLoading ? ph(44) : <span style={{ fontSize:11, color: execField?.highlight ? BUY_COLOR : TEXT_HI, fontWeight:500, lineHeight:1 }}>{execField?.value ?? "Market"}</span> },
+              ];
+              const row2ct = [
+                { label:"Settlement",  node: specVal("Settlement Currency", 36) },
+                { label:"Pip Position", node: specVal("Pip Position", 20) },
+                { label: "", node: (
+                  <span style={{
+                    fontSize:9, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase",
+                    padding:"2px 6px", borderRadius:4,
+                    background:"rgba(56,189,248,0.12)", color:"#38bdf8",
+                  }}>cTRADER</span>
+                )},
+              ];
+              return (
+                <div style={{ borderTop:`1px solid rgba(255,255,255,0.04)` }}>
+                  {[row1ct, row2ct].map((row, ri) => (
+                    <div key={ri} style={{ display:"flex", padding: ri === 0 ? "6px 14px 5px" : "0 14px 8px", gap:0 }}>
+                      {row.map((s, i) => (
+                        <div key={s.label || i} style={{
+                          flex:1, paddingLeft: i===0 ? 0 : 12,
+                          borderLeft: i>0 ? `1px solid ${TRADE_BORDER}` : "none",
+                          marginLeft: i>0 ? 12 : 0,
+                          display:"flex", flexDirection:"column", justifyContent:"flex-end",
+                        }}>
+                          {s.label && <p style={{ fontSize:9.5, color:DIM, lineHeight:1, margin:0, marginBottom:2 }}>{s.label}</p>}
+                          {s.node}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              );
+            }
+
+            // ── Delta symbol: show funding, OI, mark/index ───────────────────
             const loading = tickerLoading && !tickerData;
             const ph = (w = 36) => (
               <span style={{
@@ -3817,7 +3929,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             const val = (v: string | undefined, w?: number) =>
               loading ? ph(w) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{v ?? "—"}</span>;
 
-            // funding rate color: positive = red (pay), negative = green (receive), per Delta convention
             const frStr = tickerData?.fundingRate ?? "";
             const frNum = parseFloat(frStr);
             const frColor = isNaN(frNum) ? TEXT_HI : frNum > 0 ? SELL_COLOR : frNum < 0 ? BUY_COLOR : TEXT_HI;
@@ -3869,7 +3980,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
           {/* Order Book — collapsible, default closed, max 250px when open */}
           <div style={{ margin:"10px 12px 0" }}>
-            <OrderBook symbol={symbol} expanded={obExpanded} onToggle={() => setObExpanded(v=>!v)} />
+            <OrderBook symbol={symbol} expanded={obExpanded} onToggle={() => setObExpanded(v=>!v)} broker={activeBroker} />
           </div>
 
           {/* Contract Details — collapsible, broker-aware */}
@@ -4032,155 +4143,184 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* Leverage — drag slider (dynamic from contract metadata) */}
+          {/* Leverage — drag slider (Delta) or margin info (cTrader) */}
           <div style={{ padding:"10px 14px 0" }}>
             {/* Header row: label left, diagnostics right */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
               <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
-              <span style={{ fontSize:11, color:TEXT_DIM }}>
-                Max&nbsp;
-                <span style={{ color:ORG_COLOR, fontWeight:700 }}>
-                  {contractSpec && contractSpec.maxLeverageNum > 0 ? `${contractSpec.maxLeverageNum}x` : "…"}
+              {activeBroker === "ctrader" ? (
+                <span style={{ fontSize:11, color:TEXT_DIM }}>
+                  Account&nbsp;
+                  <span style={{ color:"#38bdf8", fontWeight:700 }}>
+                    {contractSpec && contractSpec.maxLeverageNum > 0 ? `${contractSpec.maxLeverageNum}x` : "—"}
+                  </span>
+                  &nbsp;&nbsp;
+                  <span style={{ fontSize:10, color:"rgba(56,189,248,0.6)" }}>Set by broker</span>
                 </span>
-                &nbsp;&nbsp;Selected&nbsp;
-                <span style={{ color:TEXT_HI, fontWeight:700 }}>{leverage}x</span>
-              </span>
+              ) : (
+                <span style={{ fontSize:11, color:TEXT_DIM }}>
+                  Max&nbsp;
+                  <span style={{ color:ORG_COLOR, fontWeight:700 }}>
+                    {contractSpec && contractSpec.maxLeverageNum > 0 ? `${contractSpec.maxLeverageNum}x` : "…"}
+                  </span>
+                  &nbsp;&nbsp;Selected&nbsp;
+                  <span style={{ color:TEXT_HI, fontWeight:700 }}>{leverage}x</span>
+                </span>
+              )}
             </div>
-
-            {/* Wrapper gives vertical room for the floating badge above the track */}
-            <div style={{ position:"relative", paddingTop:26 }}>
-
-              {/* Floating badge above thumb — scales up while dragging to show preview */}
+            {activeBroker === "ctrader" && (
               <div style={{
-                position:"absolute",
-                top:0,
-                left:`${levFillPct}%`,
-                transform: levDragging ? "translateX(-50%) scale(1.18)" : "translateX(-50%)",
-                background: levDragging ? ORG_COLOR : ORG_BG,
-                border:`1px solid ${ORG_BORDER}`,
-                borderRadius:5,
-                padding: levDragging ? "3px 10px" : "1px 7px",
-                fontSize: levDragging ? 13 : 11,
-                fontWeight:800,
-                color: levDragging ? "#000" : ORG_COLOR,
-                whiteSpace:"nowrap",
-                pointerEvents:"none",
-                transition:"left 0.07s, transform 0.12s, background 0.12s, padding 0.12s, font-size 0.12s, color 0.12s",
-                zIndex:6,
-                letterSpacing:"-0.2px",
-                boxShadow: levDragging ? `0 0 18px ${ORG_COLOR}70` : "none",
-              }}>{displayLev}x</div>
+                padding:"10px 12px",
+                borderRadius:8,
+                background:"rgba(56,189,248,0.05)",
+                border:"1px solid rgba(56,189,248,0.12)",
+                marginBottom:4,
+                display:"flex", alignItems:"center", gap:8,
+              }}>
+                <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", lineHeight:1.4 }}>
+                  Leverage is set by your cTrader account and instrument margin requirements.
+                  {contractSpec?.maxLeverageNum ? ` Max: ${contractSpec.maxLeverageNum}x` : ""}
+                </span>
+              </div>
+            )}
 
-              {/* Connector line from badge to thumb */}
-              <div style={{
-                position:"absolute",
-                top:17,
-                left:`${levFillPct}%`,
-                transform:"translateX(-50%)",
-                width:1,
-                height:9,
-                background:ORG_COLOR,
-                opacity:0.5,
-                pointerEvents:"none",
-                transition:"left 0.07s",
-              }} />
+            {/* Leverage slider — only for Delta (cTrader shows margin note above) */}
+            {activeBroker !== "ctrader" && <>
+              {/* Wrapper gives vertical room for the floating badge above the track */}
+              <div style={{ position:"relative", paddingTop:26 }}>
 
-              {/* Track — rail + tick marks + filled + thumb */}
-              <div
-                ref={leverageTrackRef}
-                onPointerDown={onLevPD}
-                onPointerMove={onLevPM}
-                onPointerUp={onLevPU}
-                onPointerCancel={onLevPU}
-                style={{ position:"relative", height:20, cursor: levDragging ? "grabbing" : "pointer", userSelect:"none", touchAction:"none" }}
-              >
-                {/* Background rail */}
+                {/* Floating badge above thumb — scales up while dragging to show preview */}
                 <div style={{
-                  position:"absolute", top:"50%", left:0, right:0,
-                  height:3, borderRadius:2,
-                  background:"rgba(255,255,255,0.09)",
-                  transform:"translateY(-50%)",
-                }} />
-                {/* Filled rail */}
+                  position:"absolute",
+                  top:0,
+                  left:`${levFillPct}%`,
+                  transform: levDragging ? "translateX(-50%) scale(1.18)" : "translateX(-50%)",
+                  background: levDragging ? ORG_COLOR : ORG_BG,
+                  border:`1px solid ${ORG_BORDER}`,
+                  borderRadius:5,
+                  padding: levDragging ? "3px 10px" : "1px 7px",
+                  fontSize: levDragging ? 13 : 11,
+                  fontWeight:800,
+                  color: levDragging ? "#000" : ORG_COLOR,
+                  whiteSpace:"nowrap",
+                  pointerEvents:"none",
+                  transition:"left 0.07s, transform 0.12s, background 0.12s, padding 0.12s, font-size 0.12s, color 0.12s",
+                  zIndex:6,
+                  letterSpacing:"-0.2px",
+                  boxShadow: levDragging ? `0 0 18px ${ORG_COLOR}70` : "none",
+                }}>{displayLev}x</div>
+
+                {/* Connector line from badge to thumb */}
                 <div style={{
-                  position:"absolute", top:"50%", left:0,
-                  height:3, borderRadius:2,
-                  background:`linear-gradient(90deg, ${ORG_COLOR}70, ${ORG_COLOR})`,
-                  width:`${levFillPct}%`,
-                  transform:"translateY(-50%)",
-                  transition:"width 0.07s",
+                  position:"absolute",
+                  top:17,
+                  left:`${levFillPct}%`,
+                  transform:"translateX(-50%)",
+                  width:1,
+                  height:9,
+                  background:ORG_COLOR,
+                  opacity:0.5,
+                  pointerEvents:"none",
+                  transition:"left 0.07s",
                 }} />
-                {/* Tick marks for every preset — always rendered regardless of label mode */}
+
+                {/* Track — rail + tick marks + filled + thumb */}
+                <div
+                  ref={leverageTrackRef}
+                  onPointerDown={onLevPD}
+                  onPointerMove={onLevPM}
+                  onPointerUp={onLevPU}
+                  onPointerCancel={onLevPU}
+                  style={{ position:"relative", height:20, cursor: levDragging ? "grabbing" : "pointer", userSelect:"none", touchAction:"none" }}
+                >
+                  {/* Background rail */}
+                  <div style={{
+                    position:"absolute", top:"50%", left:0, right:0,
+                    height:3, borderRadius:2,
+                    background:"rgba(255,255,255,0.09)",
+                    transform:"translateY(-50%)",
+                  }} />
+                  {/* Filled rail */}
+                  <div style={{
+                    position:"absolute", top:"50%", left:0,
+                    height:3, borderRadius:2,
+                    background:`linear-gradient(90deg, ${ORG_COLOR}70, ${ORG_COLOR})`,
+                    width:`${levFillPct}%`,
+                    transform:"translateY(-50%)",
+                    transition:"width 0.07s",
+                  }} />
+                  {/* Tick marks for every preset — always rendered regardless of label mode */}
+                  {leveragePresets.map((lv, i) => {
+                    const pct = (i / (leveragePresets.length - 1)) * 100;
+                    const active = leverage >= lv;
+                    return (
+                      <div key={lv} style={{
+                        position:"absolute",
+                        top:"50%",
+                        left:`${pct}%`,
+                        transform:"translate(-50%, -50%)",
+                        width:2, height: active ? 10 : 8,
+                        borderRadius:1,
+                        background: active ? ORG_COLOR : "rgba(255,255,255,0.25)",
+                        transition:"background 0.07s, height 0.07s",
+                        pointerEvents:"none",
+                        zIndex:1,
+                      }} />
+                    );
+                  })}
+                  {/* Thumb */}
+                  <div style={{
+                    position:"absolute", top:"50%",
+                    left:`${levFillPct}%`,
+                    transform:"translate(-50%, -50%)",
+                    width:22, height:22, borderRadius:"50%",
+                    background:"#1a1a1a",
+                    border:`2.5px solid ${ORG_COLOR}`,
+                    boxShadow:`0 0 12px ${ORG_COLOR}60, 0 0 4px ${ORG_COLOR}40`,
+                    transition:"left 0.07s",
+                    zIndex:4, pointerEvents:"none",
+                  }} />
+                </div>
+              </div>
+
+              {/* Label row — tappable labels (intentional lever change) */}
+              <div style={{ position:"relative", height:20, marginTop:3 }}>
                 {leveragePresets.map((lv, i) => {
-                  const pct = (i / (leveragePresets.length - 1)) * 100;
-                  const active = leverage >= lv;
+                  const pct     = (i / (leveragePresets.length - 1)) * 100;
+                  const isFirst = i === 0;
+                  const isLast  = i === leveragePresets.length - 1;
+                  const show = !denseLabels || isFirst || isLast || lv % 50 === 0;
+                  if (!show) return null;
+                  const pxPos  = (pct / 100) * leverageTrackW;
+                  const lastPx = leverageTrackW;
+                  const isPenultimate = !isLast && i === leveragePresets.length - 2;
+                  if (isPenultimate && !denseLabels && lastPx - pxPos < 30) return null;
+                  const isActive = leverage >= lv;
                   return (
-                    <div key={lv} style={{
-                      position:"absolute",
-                      top:"50%",
-                      left:`${pct}%`,
-                      transform:"translate(-50%, -50%)",
-                      width:2, height: active ? 10 : 8,
-                      borderRadius:1,
-                      background: active ? ORG_COLOR : "rgba(255,255,255,0.25)",
-                      transition:"background 0.07s, height 0.07s",
-                      pointerEvents:"none",
-                      zIndex:1,
-                    }} />
+                    <span
+                      key={lv}
+                      onClick={() => {
+                        setLeverage(lv);
+                        if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(25);
+                      }}
+                      style={{
+                        position:"absolute",
+                        left: isLast ? "auto" : `${pct}%`,
+                        right: isLast ? 0 : "auto",
+                        transform: isFirst ? "none" : isLast ? "none" : "translateX(-50%)",
+                        fontSize: denseLabels ? 10 : 9, fontWeight:700,
+                        color: isActive ? ORG_COLOR : "rgba(255,255,255,0.40)",
+                        whiteSpace:"nowrap",
+                        transition:"color 0.07s",
+                        letterSpacing:"-0.3px",
+                        cursor:"pointer",
+                        padding:"4px 3px",
+                        userSelect:"none",
+                      }}>{lv}x</span>
                   );
                 })}
-                {/* Thumb */}
-                <div style={{
-                  position:"absolute", top:"50%",
-                  left:`${levFillPct}%`,
-                  transform:"translate(-50%, -50%)",
-                  width:22, height:22, borderRadius:"50%",
-                  background:"#1a1a1a",
-                  border:`2.5px solid ${ORG_COLOR}`,
-                  boxShadow:`0 0 12px ${ORG_COLOR}60, 0 0 4px ${ORG_COLOR}40`,
-                  transition:"left 0.07s",
-                  zIndex:4, pointerEvents:"none",
-                }} />
               </div>
-            </div>
-
-            {/* Label row — tappable labels (intentional lever change) */}
-            <div style={{ position:"relative", height:20, marginTop:3 }}>
-              {leveragePresets.map((lv, i) => {
-                const pct     = (i / (leveragePresets.length - 1)) * 100;
-                const isFirst = i === 0;
-                const isLast  = i === leveragePresets.length - 1;
-                const show = !denseLabels || isFirst || isLast || lv % 50 === 0;
-                if (!show) return null;
-                const pxPos  = (pct / 100) * leverageTrackW;
-                const lastPx = leverageTrackW;
-                const isPenultimate = !isLast && i === leveragePresets.length - 2;
-                if (isPenultimate && !denseLabels && lastPx - pxPos < 30) return null;
-                const isActive = leverage >= lv;
-                return (
-                  <span
-                    key={lv}
-                    onClick={() => {
-                      setLeverage(lv);
-                      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(25);
-                    }}
-                    style={{
-                      position:"absolute",
-                      left: isLast ? "auto" : `${pct}%`,
-                      right: isLast ? 0 : "auto",
-                      transform: isFirst ? "none" : isLast ? "none" : "translateX(-50%)",
-                      fontSize: denseLabels ? 10 : 9, fontWeight:700,
-                      color: isActive ? ORG_COLOR : "rgba(255,255,255,0.40)",
-                      whiteSpace:"nowrap",
-                      transition:"color 0.07s",
-                      letterSpacing:"-0.3px",
-                      cursor:"pointer",
-                      padding:"4px 3px",
-                      userSelect:"none",
-                    }}>{lv}x</span>
-                );
-              })}
-            </div>
+            </>}
           </div>
 
           {/* Quantity */}

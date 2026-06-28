@@ -430,15 +430,37 @@ export function createContractInfoRouter(): IRouter {
 
   // ── Broker-aware unified spec ──────────────────────────────────────────────
   // GET /api/contract-spec/:symbol?broker=delta|ctrader
+  // When ?broker is omitted, auto-detects from symbol (same logic as frontend brokerRouter.ts).
+
+  /** Symbols always served by cTrader. Keep in sync with brokerRouter.ts CTRADER_SYMBOL_SET. */
+  const CTRADER_AUTO = new Set([
+    "EURUSD","GBPUSD","USDJPY","AUDUSD","USDCAD","USDCHF","NZDUSD",
+    "EURGBP","EURJPY","EURAUD","EURCAD","EURCHF","EURNZD",
+    "GBPJPY","GBPAUD","GBPCAD","GBPCHF","GBPNZD",
+    "AUDJPY","AUDCAD","AUDCHF","AUDNZD",
+    "CADJPY","CADCHF","CHFJPY","NZDJPY","NZDCAD","NZDCHF",
+    "XAUUSD","XAGUSD","XPTUSD","XPDUSD",
+    "USOIL","UKOIL","NATGAS","BRENTOIL",
+    "NAS100","US30","US500","SPX500","DOW30",
+    "GER40","DE40","UK100","JP225","AUS200",
+    "FRA40","EUSTX50","SPA35","ESP35",
+  ]);
+
+  function autoDetectBroker(sym: string): "delta" | "ctrader" {
+    const s = sym.toUpperCase();
+    if (CTRADER_AUTO.has(s)) return "ctrader";
+    if (/^(US|NAS|NDX|UK|GER|DE|AUS|JPN?|FRA|SPA|ESP|HK|SG|IT)\d+$/.test(s)) return "ctrader";
+    if (/^[A-Z]{6}$/.test(s) && !s.endsWith("USD")) return "ctrader";
+    return "delta";
+  }
+
   router.get("/contract-spec/:symbol", async (req, res): Promise<void> => {
     const symbol = (req.params["symbol"] ?? "").toUpperCase();
-    const broker = ((req.query["broker"] as string | undefined) ?? "delta").toLowerCase();
+    const brokerParam = (req.query["broker"] as string | undefined)?.toLowerCase();
+    const broker: "delta" | "ctrader" =
+      (brokerParam === "delta" || brokerParam === "ctrader") ? brokerParam : autoDetectBroker(symbol);
 
     if (!symbol) { res.status(400).json({ error: "Symbol is required" }); return; }
-    if (broker !== "delta" && broker !== "ctrader") {
-      res.status(400).json({ error: "broker must be 'delta' or 'ctrader'" });
-      return;
-    }
 
     const cacheKey = `${broker}:${symbol}`;
     const hit      = specCache.get(cacheKey);
