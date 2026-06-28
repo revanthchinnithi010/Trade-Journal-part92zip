@@ -988,3 +988,136 @@ export async function reconcileAccount(opts: {
     conn.onClose = () => { if (!settled) finish({ ok: false, error: "connection closed" }); };
   });
 }
+
+// ── fetchSingleSymbolSpec — full ProtoOA spec for one symbol ──────────────────
+// Flow: APP_AUTH → ACCT_AUTH → SYMBOL_BY_ID_REQ (1 id) → SYMBOL_BY_ID_RES
+// Uses parseMsgFull so double fields (fn=29 initialMargin, fn=30 maintenanceMargin) decode correctly.
+
+export interface CtraderSymbolSpec {
+  symbolId:          number;
+  digits:            number;
+  pipPosition:       number;
+  minVolume:         number | null;   // raw: divide by 100 for standard lots
+  maxVolume:         number | null;
+  stepVolume:        number | null;
+  tradeMode:         number | null;   // 0=ENABLED, 1=DISABLED, 2=CLOSE_ONLY
+  swapType:          number | null;   // 0=PIPS, 1=PERCENTAGE
+  swapRollover3Days: number | null;
+  initialMarginPct:  number | null;   // double percentage (e.g. 3.333)
+  maintenancePct:    number | null;   // double percentage
+  commissionType:    number | null;
+  scheduleTimeZone:  string | null;
+  description:       string | null;
+  durationMs:        number;
+}
+
+export async function fetchSingleSymbolSpec(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  symbolId:            number;
+  timeoutMs?:          number;
+}): Promise<CtraderSymbolSpec> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, symbolId, timeoutMs = 10_000,
+  } = opts;
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0   = Date.now();
+
+  logger.info({ ctidTraderAccountId, symbolId, isLive, host }, "ProtoOA fetchSingleSymbolSpec: starting");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish(null, `timeout after ${timeoutMs}ms`), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(spec: CtraderSymbolSpec | null, err?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      if (err || !spec) reject(new Error(err ?? "fetchSingleSymbolSpec: no result"));
+      else resolve(spec);
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish(null, `socket error: ${e.message}`);
+    conn.onClose   = () => { if (!settled) finish(null, "connection closed"); };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        finish(null, `ProtoOA error ${errorCode}: ${description}`);
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "symbol_spec";
+        conn.write("SymbolByIdReq", mkSymbolByIdReq(ctidTraderAccountId, [symbolId]));
+        return;
+      }
+
+      if (pt === PT.SYMBOL_BY_ID_RES && step === "symbol_spec") {
+        try {
+          const outer  = parseMsgFull(payload);
+          const symBuf = outer.find(f => f.fn === 3 && f.wt === 2)?.v as Buffer | undefined;
+          if (!symBuf) { finish(null, "SYMBOL_BY_ID_RES: no symbol sub-message"); return; }
+
+          const sf     = parseMsgFull(symBuf);
+          const getVar = (fn: number): number | null => {
+            const f = sf.find(x => x.fn === fn && x.wt === 0);
+            return f !== undefined ? (f.v as number) : null;
+          };
+          const getDbl = (fn: number): number | null => {
+            const f = sf.find(x => x.fn === fn && x.wt === 1);
+            return f !== undefined ? (f.v as number) : null;
+          };
+          const getStr = (fn: number): string | null => {
+            const f = sf.find(x => x.fn === fn && x.wt === 2);
+            return f ? (f.v as Buffer).toString("utf8") : null;
+          };
+
+          const spec: CtraderSymbolSpec = {
+            symbolId:          getVar(1) ?? symbolId,
+            digits:            getVar(2) ?? 5,
+            pipPosition:       getVar(3) ?? 4,
+            minVolume:         getVar(10),
+            maxVolume:         getVar(9),
+            stepVolume:        getVar(11),
+            tradeMode:         getVar(32),
+            swapType:          getVar(34),
+            swapRollover3Days: getVar(6),
+            initialMarginPct:  getDbl(29),
+            maintenancePct:    getDbl(30),
+            commissionType:    getVar(14),
+            scheduleTimeZone:  getStr(13),
+            description:       getStr(37),
+            durationMs:        Date.now() - t0,
+          };
+
+          logger.info({
+            symbolId, digits: spec.digits, pipPosition: spec.pipPosition,
+            tradeMode: spec.tradeMode, initialMarginPct: spec.initialMarginPct,
+            minVolume: spec.minVolume, durationMs: spec.durationMs,
+          }, "ProtoOA fetchSingleSymbolSpec: ✓");
+          finish(spec);
+        } catch (e) {
+          finish(null, `parse error: ${String(e)}`);
+        }
+        return;
+      }
+    };
+  });
+}

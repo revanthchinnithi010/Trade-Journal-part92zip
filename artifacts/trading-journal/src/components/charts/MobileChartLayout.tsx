@@ -3360,7 +3360,16 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   // ── Trading form state ────────────────────────────────────────────────────
   const symbol   = useChartStore(s => s.symbol);
   const tick     = useSymbolTick(symbol);
-  const { balance, connectionStatus } = useBrokerStore();
+  const { balance, connectionStatus, activeBrokerId, connectedAccounts } = useBrokerStore();
+
+  const activeBroker = useMemo<"delta" | "ctrader">(() => {
+    if ((activeBrokerId === "delta" || activeBrokerId === "ctrader") && connectedAccounts[activeBrokerId]) {
+      return activeBrokerId;
+    }
+    if (connectedAccounts["delta"])   return "delta";
+    if (connectedAccounts["ctrader"]) return "ctrader";
+    return "delta";
+  }, [activeBrokerId, connectedAccounts]);
 
   const [side,           setSide]           = useState<"buy" | "sell">("buy");
   const [orderType,      setOrderType]      = useState<"Market" | "Limit" | "Stop-Market" | "Stop-Limit">("Market");
@@ -3376,14 +3385,13 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [submitted,      setSubmitted]      = useState(false);
   const [contractExpanded, setContractExpanded] = useState(false);
   const [obExpanded,        setObExpanded]        = useState(false);
-  const [contractData,     setContractData]     = useState<{
-    symbol:string; description:string;
-    type:string; lotSize:string; lotSizeNum:number; tickSize:string;
-    settlementCurrency:string;
-    initialMargin:string; maintenanceMargin:string;
-    maxLeverage:string; maxLeverageNum:number;
-    underlyingIndex:string; positionLimit:string; status:string;
-  } | null>(null);
+  type BrokerContractSpec = {
+    broker: "delta" | "ctrader"; symbol: string; fetchedAt: number;
+    description: string; maxLeverageNum: number; lotSizeNum: number;
+    settlementCurrency: string; partial?: boolean;
+    fields: Array<{ label: string; value: string; highlight?: boolean }>;
+  };
+  const [contractSpec, setContractSpec] = useState<BrokerContractSpec | null>(null);
 
   const [tickerData, setTickerData] = useState<{
     symbol:string; markPrice:string; indexPrice:string;
@@ -3391,19 +3399,19 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   } | null>(null);
   const [tickerLoading, setTickerLoading] = useState(false);
 
-  // Clear stale data immediately when symbol changes, then fetch fresh metadata
+  // Clear stale spec immediately when symbol or broker changes, then fetch fresh metadata
   useEffect(() => {
     if (!symbol) return;
-    setContractData(null);
+    setContractSpec(null);
     setLeverage(1);
     const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
     let cancelled = false;
-    fetch(`${BASE}/api/contract-info/${encodeURIComponent(symbol)}`)
+    fetch(`${BASE}/api/contract-spec/${encodeURIComponent(symbol)}?broker=${activeBroker}`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d && !cancelled) setContractData(d); })
+      .then(d => { if (d && !cancelled) setContractSpec(d); })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [symbol]);
+  }, [symbol, activeBroker]);
 
   // Fetch live ticker stats (24h vol, OI, funding, mark/index price) on symbol change
   useEffect(() => {
@@ -3428,7 +3436,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const changePct   = tick?.changePct ?? 0;
   const isUp        = changePct >= 0;
   // Description from live contract metadata (single source of truth)
-  const subtitle    = contractData?.description ?? "Loading…";
+  const subtitle    = contractSpec?.description ?? "Loading…";
   const availMargin = balance ? parseFloat(balance.walletBalance) : 0;
   const isConnected = connectionStatus === "connected";
 
@@ -3440,9 +3448,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
   // Max leverage from live contract metadata (raw number, no string parsing)
   const maxContractLev = useMemo(() => {
-    if (!contractData) return 100;
-    return contractData.maxLeverageNum > 0 ? contractData.maxLeverageNum : 100;
-  }, [contractData]);
+    if (!contractSpec) return 100;
+    return contractSpec.maxLeverageNum > 0 ? contractSpec.maxLeverageNum : 100;
+  }, [contractSpec]);
 
   // Generate preset breakpoints: [1,2,5,10,25,50] then 25-step increments up to max
   const leveragePresets = useMemo<number[]>(() => {
@@ -3531,7 +3539,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     (leverageTrackW / (leveragePresets.length - 1)) < 32;
 
   // Actual contract lot size from metadata (never hardcoded)
-  const contractLotSize = contractData?.lotSizeNum ?? null;
+  const contractLotSize = contractSpec?.lotSizeNum ?? null;
 
   // order cost estimate: price × lotSize × qty / leverage
   const orderCostUSD = useMemo(() => {
@@ -3864,7 +3872,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             <OrderBook symbol={symbol} expanded={obExpanded} onToggle={() => setObExpanded(v=>!v)} />
           </div>
 
-          {/* Contract Details — collapsible */}
+          {/* Contract Details — collapsible, broker-aware */}
           <div style={{
             margin:"8px 12px 0",
             border:`1px solid ${TRADE_BORDER}`, borderRadius:10, overflow:"hidden",
@@ -3878,66 +3886,59 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 cursor:"pointer", touchAction:"manipulation",
               }}
             >
-              <span style={{ fontSize:11, fontWeight:600, color:"rgba(255,255,255,0.55)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
-                Contract Details
-              </span>
+              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                <span style={{ fontSize:11, fontWeight:600, color:"rgba(255,255,255,0.55)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
+                  Contract Details
+                </span>
+                {contractSpec && (
+                  <span style={{
+                    fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase",
+                    padding:"1px 6px", borderRadius:4,
+                    background: contractSpec.broker === "delta" ? "rgba(247,147,26,0.12)" : "rgba(56,189,248,0.12)",
+                    color:       contractSpec.broker === "delta" ? ORG_COLOR : "#38bdf8",
+                  }}>
+                    {contractSpec.broker === "delta" ? "DELTA" : "cTRADER"}
+                  </span>
+                )}
+              </div>
               <ChevronDown style={{
                 width:13, height:13, color:TEXT_DIM, flexShrink:0,
                 transform: contractExpanded ? "rotate(180deg)" : "rotate(0deg)",
                 transition:"transform 0.22s ease",
               }} />
             </button>
-            <div style={{ maxHeight: contractExpanded ? 600 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
-              {contractData ? (
+            <div style={{ maxHeight: contractExpanded ? 700 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
+              {contractSpec ? (
                 <div style={{ padding:"4px 0" }}>
-                  {([
-                    ["Type",                contractData.type],
-                    ["Description",         contractData.description],
-                    ["Lot Size",            contractData.lotSize],
-                    ["Tick Size",           contractData.tickSize],
-                    ["Settlement Currency", contractData.settlementCurrency],
-                    ["Initial Margin",      contractData.initialMargin],
-                    ["Maintenance Margin",  contractData.maintenanceMargin],
-                    ["Max Leverage",        contractData.maxLeverage],
-                    ["Underlying Index",    contractData.underlyingIndex],
-                    ["Position Limit",      contractData.positionLimit],
-                    ["Status",              contractData.status],
-                  ] as [string, string][]).map(([label, value]) => (
+                  {contractSpec.fields.map(({ label, value, highlight }) => (
                     <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 12px" }}>
                       <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
-                      <span style={{ fontSize:13, fontWeight:500, color: label==="Status" && value==="Operational" ? BUY_COLOR : TEXT_HI }}>{value}</span>
+                      <span style={{ fontSize:13, fontWeight:500, color: highlight ? BUY_COLOR : TEXT_HI }}>
+                        {value}
+                      </span>
                     </div>
                   ))}
-                  {/* Diagnostics strip */}
-                  <div style={{
-                    margin:"8px 10px 4px",
-                    padding:"7px 10px",
-                    borderRadius:7,
-                    background:"rgba(255,255,255,0.04)",
-                    border:"1px solid rgba(255,255,255,0.07)",
-                  }}>
-                    <div style={{ fontSize:10, color:ORG_COLOR, fontWeight:700, letterSpacing:"0.08em", textTransform:"uppercase", marginBottom:5 }}>
-                      ✓ Metadata Loaded — {contractData.symbol}
+                  {contractSpec.partial && (
+                    <div style={{ padding:"4px 12px 6px" }}>
+                      <span style={{ fontSize:10.5, color:TEXT_DIM, fontStyle:"italic" }}>
+                        Extended spec loading… re-open to refresh.
+                      </span>
                     </div>
-                    {([
-                      ["Selected Symbol",    contractData.symbol],
-                      ["Contract ID",        contractData.underlyingIndex],
-                      ["Lot Size",           contractData.lotSizeNum],
-                      ["Max Leverage",       `${contractData.maxLeverageNum}x`],
-                      ["Metadata Source",    "Delta Exchange REST"],
-                      ["Last Meta Fetch",    new Date(Date.now()).toLocaleTimeString()],
-                      ...(tickerData ? [
-                        ["Last Ticker Fetch", new Date(tickerData.fetchedAt).toLocaleTimeString()],
-                        ["Ticker Source",     "Delta India /v2/tickers"],
-                        ["Mark Price",        tickerData.markPrice],
-                        ["Index Price",       tickerData.indexPrice],
-                      ] : []),
-                    ] as [string, string|number][]).map(([k, v]) => (
-                      <div key={k} style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:"rgba(255,255,255,0.45)", marginTop:2 }}>
-                        <span>{k}</span>
-                        <span style={{ color:"rgba(255,255,255,0.65)", fontWeight:600 }}>{String(v)}</span>
-                      </div>
-                    ))}
+                  )}
+                  <div style={{
+                    margin:"6px 10px 6px",
+                    padding:"5px 10px",
+                    borderRadius:7,
+                    background:"rgba(255,255,255,0.03)",
+                    border:"1px solid rgba(255,255,255,0.06)",
+                    display:"flex", alignItems:"center", justifyContent:"space-between",
+                  }}>
+                    <span style={{ fontSize:9.5, color: contractSpec.broker === "delta" ? ORG_COLOR : "#38bdf8", fontWeight:700, textTransform:"uppercase", letterSpacing:"0.06em" }}>
+                      {contractSpec.broker === "delta" ? "Delta Exchange REST" : "cTrader ProtoOA"}
+                    </span>
+                    <span style={{ fontSize:9.5, color:"rgba(255,255,255,0.35)" }}>
+                      {new Date(contractSpec.fetchedAt).toLocaleTimeString()}
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -4039,7 +4040,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               <span style={{ fontSize:11, color:TEXT_DIM }}>
                 Max&nbsp;
                 <span style={{ color:ORG_COLOR, fontWeight:700 }}>
-                  {contractData ? contractData.maxLeverage : "…"}
+                  {contractSpec && contractSpec.maxLeverageNum > 0 ? `${contractSpec.maxLeverageNum}x` : "…"}
                 </span>
                 &nbsp;&nbsp;Selected&nbsp;
                 <span style={{ color:TEXT_HI, fontWeight:700 }}>{leverage}x</span>
@@ -4210,7 +4211,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               />
               <span style={{ fontSize:11, color:TEXT_DIM, flexShrink:0 }}>
                 {contractLotSize != null
-                  ? `≈ ${(lotQty * contractLotSize).toFixed(contractLotSize < 0.01 ? 4 : contractLotSize < 1 ? 3 : 2)} ${contractData?.settlementCurrency ?? symbol.slice(0,3)}`
+                  ? `≈ ${(lotQty * contractLotSize).toFixed(contractLotSize < 0.01 ? 4 : contractLotSize < 1 ? 3 : 2)} ${contractSpec?.settlementCurrency ?? symbol.slice(0,3)}`
                   : "loading…"}
               </span>
             </div>
@@ -4458,7 +4459,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 ["Order Type",  orderType],
                 ["Quantity",    `${lotQty} lot${lotQty !== 1 ? "s" : ""}`],
                 ["Lot Size",    contractLotSize != null
-                  ? `${contractLotSize} ${contractData?.settlementCurrency ?? ""}`.trim()
+                  ? `${contractLotSize} ${contractSpec?.settlementCurrency ?? ""}`.trim()
                   : "—"],
                 ["Leverage",    `${leverage}x`],
                 ["Entry Price", orderType === "Market" ? "Market (best available)" : (limitPrice || "—")],
