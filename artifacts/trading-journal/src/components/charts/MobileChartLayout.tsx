@@ -3461,28 +3461,57 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     setLeverage(v => Math.min(v, maxContractLev));
   }, [maxContractLev]);
 
-  const levIdx     = leveragePresets.reduce((best, lv, i) =>
-    Math.abs(lv - leverage) < Math.abs(leveragePresets[best] - leverage) ? i : best, 0);
-  const levFillPct = (levIdx / (leveragePresets.length - 1)) * 100;
+  // ── Leverage drag-only safety ─────────────────────────────────────────────
+  // A simple tap never changes leverage. Only an intentional drag (≥ LEV_DRAG_PX)
+  // or an explicit label tap can change the value.
+  const LEV_DRAG_PX     = 8;
+  const levDragActive   = useRef(false);
+  const levDragStartX   = useRef(0);
+  const [levDragging,   setLevDragging]   = useState(false);
+  const [levPreview,    setLevPreview]    = useState(1);
 
-  const pickLevFromX = useCallback((clientX: number) => {
+  const pickIdxFromX = useCallback((clientX: number): number => {
     const el = leverageTrackRef.current;
-    if (!el) return;
+    if (!el) return 0;
     const { left, width } = el.getBoundingClientRect();
     const pct = Math.max(0, Math.min(1, (clientX - left) / width));
-    const idx = Math.round(pct * (leveragePresets.length - 1));
-    setLeverage(leveragePresets[idx]);
+    return Math.round(pct * (leveragePresets.length - 1));
   }, [leveragePresets]);
+
+  // While dragging, display follows the preview; at rest it follows committed leverage
+  const displayLev = levDragging ? levPreview : leverage;
+  const levIdx     = leveragePresets.reduce((best, lv, i) =>
+    Math.abs(lv - displayLev) < Math.abs(leveragePresets[best] - displayLev) ? i : best, 0);
+  const levFillPct = leveragePresets.length > 1
+    ? (levIdx / (leveragePresets.length - 1)) * 100 : 0;
 
   const onLevPD = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     e.currentTarget.setPointerCapture(e.pointerId);
-    pickLevFromX(e.clientX);
-  }, [pickLevFromX]);
+    levDragActive.current  = false;
+    levDragStartX.current  = e.clientX;
+    setLevPreview(leverage);
+  }, [leverage]);
 
   const onLevPM = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.buttons === 0) return;
-    pickLevFromX(e.clientX);
-  }, [pickLevFromX]);
+    const moved = Math.abs(e.clientX - levDragStartX.current);
+    if (!levDragActive.current && moved < LEV_DRAG_PX) return;
+    levDragActive.current = true;
+    if (!levDragging) setLevDragging(true);
+    const idx = pickIdxFromX(e.clientX);
+    setLevPreview(leveragePresets[idx] ?? leverage);
+  }, [levDragging, leveragePresets, leverage, pickIdxFromX]);
+
+  const onLevPU = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (levDragActive.current) {
+      const idx = pickIdxFromX(e.clientX);
+      const val = leveragePresets[idx] ?? leverage;
+      setLeverage(val);
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(30);
+    }
+    levDragActive.current = false;
+    setLevDragging(false);
+  }, [leveragePresets, leverage, pickIdxFromX]);
 
   // Measure actual track width via ResizeObserver for responsive label density
   const [leverageTrackW, setLeverageTrackW] = useState(330);
@@ -3512,10 +3541,54 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     return ((p * ls * lotQty) / leverage).toFixed(2);
   }, [livePrice, lotQty, leverage, contractLotSize]);
 
-  const handleSubmit = useCallback(() => {
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 1800);
+  // ── Trading safety: confirm-before-order setting ─────────────────────────
+  const SAFETY_LS_KEY = "tj_require_confirm_v1";
+  const [requireConfirm, setRequireConfirm] = useState(() => {
+    try { return localStorage.getItem(SAFETY_LS_KEY) !== "false"; } catch { return true; }
+  });
+  const toggleRequireConfirm = useCallback(() => {
+    setRequireConfirm(v => {
+      const next = !v;
+      try { localStorage.setItem(SAFETY_LS_KEY, String(next)); } catch {}
+      return next;
+    });
   }, []);
+
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [submitting,  setSubmitting]  = useState(false);
+  const [toastMsg,    setToastMsg]    = useState<{ text: string; ok: boolean } | null>(null);
+  const submitLockRef = useRef(false);
+
+  const showToast = useCallback((text: string, ok: boolean) => {
+    setToastMsg({ text, ok });
+    setTimeout(() => setToastMsg(null), 2800);
+  }, []);
+
+  const doSubmitOrder = useCallback(async () => {
+    if (submitLockRef.current) return;
+    submitLockRef.current = true;
+    setSubmitting(true);
+    try {
+      // TODO: wire to real broker order API when connected
+      await new Promise<void>(r => setTimeout(r, 1100));
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate([40, 20, 40]);
+      setShowConfirm(false);
+      setSubmitted(true);
+      setTimeout(() => setSubmitted(false), 2200);
+      showToast("Order placed successfully", true);
+    } catch {
+      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(200);
+      showToast("Order failed — please try again", false);
+    } finally {
+      setSubmitting(false);
+      submitLockRef.current = false;
+    }
+  }, [showToast]);
+
+  const handleSubmit = useCallback(() => {
+    if (requireConfirm) { setShowConfirm(true); }
+    else                { void doSubmitOrder(); }
+  }, [requireConfirm, doSubmitOrder]);
 
   // ── Snap / drag machinery ────────────────────────────────────────────────
   const snapYRef = useRef({
@@ -3976,23 +4049,26 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             {/* Wrapper gives vertical room for the floating badge above the track */}
             <div style={{ position:"relative", paddingTop:26 }}>
 
-              {/* Floating badge above thumb — always visible, shows exact value */}
+              {/* Floating badge above thumb — scales up while dragging to show preview */}
               <div style={{
                 position:"absolute",
                 top:0,
                 left:`${levFillPct}%`,
-                transform:"translateX(-50%)",
-                background:ORG_BG,
+                transform: levDragging ? "translateX(-50%) scale(1.18)" : "translateX(-50%)",
+                background: levDragging ? ORG_COLOR : ORG_BG,
                 border:`1px solid ${ORG_BORDER}`,
                 borderRadius:5,
-                padding:"1px 7px",
-                fontSize:11, fontWeight:800, color:ORG_COLOR,
+                padding: levDragging ? "3px 10px" : "1px 7px",
+                fontSize: levDragging ? 13 : 11,
+                fontWeight:800,
+                color: levDragging ? "#000" : ORG_COLOR,
                 whiteSpace:"nowrap",
                 pointerEvents:"none",
-                transition:"left 0.07s",
+                transition:"left 0.07s, transform 0.12s, background 0.12s, padding 0.12s, font-size 0.12s, color 0.12s",
                 zIndex:6,
                 letterSpacing:"-0.2px",
-              }}>{leverage}x</div>
+                boxShadow: levDragging ? `0 0 18px ${ORG_COLOR}70` : "none",
+              }}>{displayLev}x</div>
 
               {/* Connector line from badge to thumb */}
               <div style={{
@@ -4013,7 +4089,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 ref={leverageTrackRef}
                 onPointerDown={onLevPD}
                 onPointerMove={onLevPM}
-                style={{ position:"relative", height:20, cursor:"pointer", userSelect:"none", touchAction:"none" }}
+                onPointerUp={onLevPU}
+                onPointerCancel={onLevPU}
+                style={{ position:"relative", height:20, cursor: levDragging ? "grabbing" : "pointer", userSelect:"none", touchAction:"none" }}
               >
                 {/* Background rail */}
                 <div style={{
@@ -4065,34 +4143,40 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               </div>
             </div>
 
-            {/* Label row — all presets in non-dense mode, major marks only in dense mode */}
-            <div style={{ position:"relative", height:16, marginTop:5, pointerEvents:"none" }}>
+            {/* Label row — tappable labels (intentional lever change) */}
+            <div style={{ position:"relative", height:20, marginTop:3 }}>
               {leveragePresets.map((lv, i) => {
                 const pct     = (i / (leveragePresets.length - 1)) * 100;
                 const isFirst = i === 0;
                 const isLast  = i === leveragePresets.length - 1;
-                // Dense mode: show only first, multiples of 50, and last
                 const show = !denseLabels || isFirst || isLast || lv % 50 === 0;
                 if (!show) return null;
-                // Last label: right-anchor. First: left-anchor. Others: center.
-                // To prevent 175x / 200x overlap in dense→false borderline cases,
-                // skip penultimate if it would land within 20px of last.
                 const pxPos  = (pct / 100) * leverageTrackW;
                 const lastPx = leverageTrackW;
                 const isPenultimate = !isLast && i === leveragePresets.length - 2;
                 if (isPenultimate && !denseLabels && lastPx - pxPos < 30) return null;
+                const isActive = leverage >= lv;
                 return (
-                  <span key={lv} style={{
-                    position:"absolute",
-                    left: isLast ? "auto" : `${pct}%`,
-                    right: isLast ? 0 : "auto",
-                    transform: isFirst ? "none" : isLast ? "none" : "translateX(-50%)",
-                    fontSize: denseLabels ? 10 : 9, fontWeight:700,
-                    color: leverage >= lv ? ORG_COLOR : "rgba(255,255,255,0.40)",
-                    whiteSpace:"nowrap",
-                    transition:"color 0.07s",
-                    letterSpacing:"-0.3px",
-                  }}>{lv}x</span>
+                  <span
+                    key={lv}
+                    onClick={() => {
+                      setLeverage(lv);
+                      if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(25);
+                    }}
+                    style={{
+                      position:"absolute",
+                      left: isLast ? "auto" : `${pct}%`,
+                      right: isLast ? 0 : "auto",
+                      transform: isFirst ? "none" : isLast ? "none" : "translateX(-50%)",
+                      fontSize: denseLabels ? 10 : 9, fontWeight:700,
+                      color: isActive ? ORG_COLOR : "rgba(255,255,255,0.40)",
+                      whiteSpace:"nowrap",
+                      transition:"color 0.07s",
+                      letterSpacing:"-0.3px",
+                      cursor:"pointer",
+                      padding:"4px 3px",
+                      userSelect:"none",
+                    }}>{lv}x</span>
                 );
               })}
             </div>
@@ -4235,10 +4319,23 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
           padding:"10px 14px 16px",
           background:TRADE_BG,
         }}>
+          {/* Toast */}
+          {toastMsg && (
+            <div style={{
+              marginBottom:8, padding:"8px 12px", borderRadius:8,
+              background: toastMsg.ok ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)",
+              border:`1px solid ${toastMsg.ok ? "rgba(8,153,129,0.40)" : "rgba(242,54,69,0.40)"}`,
+              fontSize:12, fontWeight:600, textAlign:"center",
+              color: toastMsg.ok ? BUY_COLOR : SELL_COLOR,
+            }}>
+              {toastMsg.ok ? "✓" : "✕"} {toastMsg.text}
+            </div>
+          )}
+
           {/* Margin / balance row */}
           <div style={{
             display:"flex", justifyContent:"space-between", alignItems:"flex-end",
-            marginBottom:10,
+            marginBottom:8,
           }}>
             <div>
               <p style={{ fontSize:11, color:TEXT_DIM, lineHeight:1, margin:0 }}>Margin Required</p>
@@ -4254,27 +4351,191 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
+          {/* Safety toggle row */}
+          <div style={{
+            display:"flex", alignItems:"center", justifyContent:"space-between",
+            marginBottom:9, padding:"5px 9px", borderRadius:7,
+            background:"rgba(255,255,255,0.03)", border:`1px solid ${TRADE_BORDER}`,
+          }}>
+            <span style={{ fontSize:11, color:TEXT_DIM }}>Confirm before order</span>
+            <button
+              onClick={toggleRequireConfirm}
+              style={{
+                width:40, height:22, borderRadius:11, border:"none", flexShrink:0,
+                background: requireConfirm ? ORG_COLOR : "rgba(255,255,255,0.12)",
+                cursor:"pointer", position:"relative", transition:"background 0.2s",
+              }}
+            >
+              <div style={{
+                position:"absolute", top:3,
+                left: requireConfirm ? "calc(100% - 19px)" : 3,
+                width:16, height:16, borderRadius:"50%", background:"#fff",
+                transition:"left 0.2s",
+                boxShadow:"0 1px 4px rgba(0,0,0,0.40)",
+              }} />
+            </button>
+          </div>
+
           {/* Submit */}
           <button
             onClick={handleSubmit}
+            disabled={submitting || submitted}
             style={{
-              width:"100%", height:44, borderRadius:10,
-              background: submitted ? "rgba(255,255,255,0.08)" : sideColor,
-              border:"none", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center",
+              width:"100%", height:46, borderRadius:10,
+              background: submitted ? "rgba(8,153,129,0.14)" : sideColor,
+              border: submitted ? `1px solid rgba(8,153,129,0.35)` : "none",
+              cursor: (submitting || submitted) ? "not-allowed" : "pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", gap:7,
               fontSize:15, fontWeight:700,
-              color: submitted ? TEXT_DIM : "#fff",
+              color: submitted ? BUY_COLOR : "#fff",
               letterSpacing:"0.01em",
               transition:"all 0.18s",
-              boxShadow: submitted ? "none"
-                : `0 3px 16px ${side === "buy" ? "rgba(8,153,129,0.28)" : "rgba(242,54,69,0.28)"}`,
+              opacity: submitting ? 0.8 : 1,
+              boxShadow: (submitted || submitting) ? "none"
+                : `0 3px 16px ${side === "buy" ? "rgba(8,153,129,0.30)" : "rgba(242,54,69,0.30)"}`,
             }}
           >
-            {submitted ? "Order Placed ✓" : sideLabel}
+            {submitted
+              ? "Order Placed ✓"
+              : requireConfirm
+                ? `Review & ${sideLabel}`
+                : sideLabel
+            }
           </button>
         </div>
 
       </div>
+
+      {/* ── Order Confirmation Sheet ───────────────────────────────────────── */}
+      {showConfirm && createPortal(
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => { if (!submitting) setShowConfirm(false); }}
+            style={{
+              position:"fixed", inset:0, zIndex:9300,
+              background:"rgba(0,0,0,0.70)",
+              backdropFilter:"blur(3px)", WebkitBackdropFilter:"blur(3px)",
+            }}
+          />
+          {/* Sheet */}
+          <div style={{
+            position:"fixed", bottom:0, left:0, right:0, zIndex:9301,
+            background:"#111111",
+            borderRadius:"20px 20px 0 0",
+            boxShadow:"0 -8px 48px rgba(0,0,0,0.90), 0 -1px 0 rgba(255,255,255,0.08)",
+            overflow:"hidden",
+          }}>
+            {/* Handle */}
+            <div style={{ display:"flex", justifyContent:"center", paddingTop:12, paddingBottom:8 }}>
+              <div style={{ width:32, height:3, borderRadius:2, background:"rgba(255,255,255,0.20)" }} />
+            </div>
+
+            {/* Header */}
+            <div style={{
+              padding:"0 16px 12px",
+              borderBottom:`1px solid ${TRADE_BORDER}`,
+              display:"flex", alignItems:"center", justifyContent:"space-between",
+            }}>
+              <div>
+                <div style={{ fontSize:16, fontWeight:700, color:TEXT_HI }}>Confirm Order</div>
+                <div style={{ fontSize:12, color:TEXT_DIM, marginTop:2 }}>Review before placing</div>
+              </div>
+              <div style={{
+                padding:"3px 10px", borderRadius:6, fontSize:12, fontWeight:700,
+                background: side === "buy" ? "rgba(8,153,129,0.15)" : "rgba(242,54,69,0.15)",
+                color: side === "buy" ? BUY_COLOR : SELL_COLOR,
+                border:`1px solid ${side === "buy" ? "rgba(8,153,129,0.35)" : "rgba(242,54,69,0.35)"}`,
+              }}>
+                {side === "buy" ? "BUY / LONG" : "SELL / SHORT"}
+              </div>
+            </div>
+
+            {/* Details */}
+            <div style={{ padding:"8px 16px 0" }}>
+              {(([
+                ["Symbol",      symbol],
+                ["Order Type",  orderType],
+                ["Quantity",    `${lotQty} lot${lotQty !== 1 ? "s" : ""}`],
+                ["Lot Size",    contractLotSize != null
+                  ? `${contractLotSize} ${contractData?.settlementCurrency ?? ""}`.trim()
+                  : "—"],
+                ["Leverage",    `${leverage}x`],
+                ["Entry Price", orderType === "Market" ? "Market (best available)" : (limitPrice || "—")],
+                ...(needsStopPrice ? [["Stop Trigger", stopPrice || "—"]] : []),
+                ...(bracketEnabled ? [
+                  ["Take Profit", tpPrice || "—"],
+                  ["Stop Loss",   slPrice  || "—"],
+                ] : []),
+                ["Est. Margin",        `${orderCostUSD} USD`],
+                ["Est. Fees (~0.05%)", orderCostUSD !== "—"
+                  ? `${(parseFloat(orderCostUSD) * 0.0005).toFixed(4)} USD`
+                  : "—"],
+              ] as [string, string][])).map(([label, value]) => (
+                <div key={label} style={{
+                  display:"flex", justifyContent:"space-between", alignItems:"center",
+                  padding:"6px 0",
+                  borderBottom:`1px solid rgba(255,255,255,0.04)`,
+                }}>
+                  <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
+                  <span style={{
+                    fontSize:12, fontWeight:600,
+                    color: label === "Leverage" ? ORG_COLOR
+                      : (label === "Take Profit" ? BUY_COLOR
+                      : label === "Stop Loss" ? SELL_COLOR
+                      : TEXT_HI),
+                  }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Action buttons */}
+            <div style={{ display:"flex", gap:10, padding:"14px 16px 28px" }}>
+              <button
+                onClick={() => setShowConfirm(false)}
+                disabled={submitting}
+                style={{
+                  flex:1, height:48, borderRadius:10, cursor: submitting ? "not-allowed" : "pointer",
+                  background:"none", border:`1px solid ${TRADE_BORDER}`,
+                  fontSize:14, fontWeight:600, color:TEXT_DIM,
+                  opacity: submitting ? 0.45 : 1, transition:"opacity 0.15s",
+                }}
+              >Cancel</button>
+              <button
+                onClick={() => void doSubmitOrder()}
+                disabled={submitting}
+                style={{
+                  flex:2, height:48, borderRadius:10, cursor: submitting ? "not-allowed" : "pointer",
+                  background: submitting ? "rgba(255,255,255,0.06)" : sideColor,
+                  border:"none",
+                  fontSize:14, fontWeight:700, color: submitting ? TEXT_DIM : "#fff",
+                  display:"flex", alignItems:"center", justifyContent:"center", gap:8,
+                  boxShadow: submitting ? "none"
+                    : `0 3px 18px ${side === "buy" ? "rgba(8,153,129,0.32)" : "rgba(242,54,69,0.32)"}`,
+                  transition:"all 0.18s",
+                }}
+              >
+                {submitting ? (
+                  <>
+                    <div style={{
+                      width:16, height:16, borderRadius:"50%",
+                      border:"2.5px solid rgba(255,255,255,0.25)",
+                      borderTopColor:"#fff",
+                      animation:"spin 0.65s linear infinite",
+                      flexShrink:0,
+                    }} />
+                    Placing order…
+                  </>
+                ) : (
+                  `Confirm ${sideLabel}`
+                )}
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body
+      )}
+
     </>,
     document.body
   );
