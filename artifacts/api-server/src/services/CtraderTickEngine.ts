@@ -33,6 +33,8 @@ const PT = {
   SPOT_EVENT:            2131,
   ERROR_RES:             2142,
   HEARTBEAT_EVENT:       51,
+  TRENDBARS_REQ:         2137,
+  TRENDBARS_RES:         2138,
 } as const;
 
 const PT_NAME: Record<number, string> = {
@@ -41,6 +43,22 @@ const PT_NAME: Record<number, string> = {
   2127: "SUBSCRIBE_SPOTS_REQ", 2128: "SUBSCRIBE_SPOTS_RES",
   2129: "UNSUBSCRIBE_SPOTS_REQ", 2130: "UNSUBSCRIBE_SPOTS_RES",
   2131: "SPOT_EVENT", 2142: "ERROR_RES", 51: "HEARTBEAT_EVENT",
+  2137: "TRENDBARS_REQ", 2138: "TRENDBARS_RES",
+};
+
+// ── OHLC bar type (returned by fetchTrendbarsOnSession) ──────────────────────
+export interface CtraderOHLCBar {
+  time:   number; // unix seconds (UTC)
+  open:   number;
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number;
+}
+
+/** TrendbarPeriod enum values for supported intervals */
+const INTERVAL_TO_OA_PERIOD: Partial<Record<string, number>> = {
+  "1": 1, "3": 3, "5": 5, "15": 7, "30": 8, "60": 9, "240": 10, "D": 12, "W": 13,
 };
 
 // ── Protobuf encoding helpers ─────────────────────────────────────────────────
@@ -53,6 +71,22 @@ function varint(n: number): number[] {
     out.push(r > 0 ? b | 0x80 : b);
   } while (r > 0);
   return out;
+}
+
+/** 64-bit-safe varint — works for any safe JS integer (e.g. unix ms timestamps). */
+function varint64(n: number): number[] {
+  const out: number[] = [];
+  while (n > 0x7F) {
+    out.push((n & 0x7F) | 0x80);
+    n = Math.floor(n / 128);
+  }
+  out.push(n & 0x7F);
+  return out;
+}
+
+/** Field encoder using 64-bit-safe varint — use for timestamps and large IDs. */
+function u64f(fn: number, v: number): number[] {
+  return [...varint64((fn << 3) | 0), ...varint64(v)];
 }
 
 function u32f(fn: number, v: number): number[] { return [...varint((fn << 3) | 0), ...varint(v)]; }
@@ -204,6 +238,15 @@ export interface EngineOptions {
   symbolMap:           Map<number, string>;
 }
 
+// ── Pending trendbars request (FIFO — one outstanding request per connection) ─
+interface PendingTrendbars {
+  symbolId: number;
+  interval: string;
+  resolve:  (bars: CtraderOHLCBar[]) => void;
+  reject:   (err: Error) => void;
+  timer:    NodeJS.Timeout;
+}
+
 // ── CtraderTickEngine ─────────────────────────────────────────────────────────
 export class CtraderTickEngine extends EventEmitter {
   private _status: EngineStatus = "idle";
@@ -225,6 +268,9 @@ export class CtraderTickEngine extends EventEmitter {
   private reconnectDelay = 2_000;
   private reconnectCount = 0;
   private stopped = false;
+
+  /** FIFO queue for outstanding GET_TRENDBARS requests on the live session. */
+  private pendingTrendbarsQueue: PendingTrendbars[] = [];
 
   configure(opts: EngineOptions): void { this.opts = opts; }
 
@@ -310,6 +356,59 @@ export class CtraderTickEngine extends EventEmitter {
   getLastTick(symbolId: number): CtraderTick | null { return this.lastTickMap.get(symbolId) ?? null; }
   getAllLastTicks(): CtraderTick[]                   { return [...this.lastTickMap.values()]; }
 
+  /**
+   * Fetch historical OHLC bars for a symbol by sending GET_TRENDBARS_REQ on the
+   * existing authenticated streaming session. Avoids the cost of opening a new
+   * TLS connection + re-authenticating (which standalone fetchTrendbars does).
+   *
+   * Returns a Promise that resolves once GET_TRENDBARS_RES arrives.
+   * Rejects if the engine is not streaming, or if the response times out.
+   *
+   * Callers should cache the result — each call sends a new request.
+   */
+  fetchTrendbarsOnSession(
+    symbolId: number,
+    interval: string,
+    count    = 500,
+    timeoutMs = 15_000,
+  ): Promise<CtraderOHLCBar[]> {
+    if (this._status !== "streaming" || !this.conn) {
+      return Promise.reject(
+        new Error(`CtraderTickEngine.fetchTrendbarsOnSession: engine is "${this._status}" — not streaming`),
+      );
+    }
+
+    const period = INTERVAL_TO_OA_PERIOD[interval];
+    if (period === undefined) {
+      return Promise.reject(new Error(`fetchTrendbarsOnSession: unsupported interval "${interval}"`));
+    }
+
+    return new Promise<CtraderOHLCBar[]>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        const idx = this.pendingTrendbarsQueue.findIndex(p => p.resolve === resolve);
+        if (idx >= 0) this.pendingTrendbarsQueue.splice(idx, 1);
+        reject(new Error(
+          `fetchTrendbarsOnSession timeout (${timeoutMs}ms) for symbolId=${symbolId} interval=${interval}`,
+        ));
+      }, timeoutMs);
+
+      this.pendingTrendbarsQueue.push({ symbolId, interval, resolve, reject, timer });
+
+      try {
+        this.conn!.write(this._buildTrendbarsReq(symbolId, period, count));
+        logger.info(
+          { symbolId, interval, period, count, queueLen: this.pendingTrendbarsQueue.length },
+          "CtraderTickEngine: GET_TRENDBARS_REQ sent on live session",
+        );
+      } catch (e) {
+        const idx = this.pendingTrendbarsQueue.findIndex(p => p.resolve === resolve);
+        if (idx >= 0) this.pendingTrendbarsQueue.splice(idx, 1);
+        clearTimeout(timer);
+        reject(new Error(`fetchTrendbarsOnSession send error: ${String(e)}`));
+      }
+    });
+  }
+
   // ── Private helpers ─────────────────────────────────────────────────────────
   private _setStatus(s: EngineStatus, extra: Partial<EngineStatusPayload> = {}): void {
     this._status = s;
@@ -320,8 +419,23 @@ export class CtraderTickEngine extends EventEmitter {
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
   }
 
+  /** Reject all pending trendbars promises — called when the connection drops. */
+  private _flushPendingTrendbars(reason: string): void {
+    if (this.pendingTrendbarsQueue.length === 0) return;
+    logger.warn(
+      { count: this.pendingTrendbarsQueue.length, reason },
+      "CtraderTickEngine: flushing pending trendbars queue (connection lost)",
+    );
+    for (const p of this.pendingTrendbarsQueue) {
+      clearTimeout(p.timer);
+      p.reject(new Error(`fetchTrendbarsOnSession: connection lost (${reason})`));
+    }
+    this.pendingTrendbarsQueue = [];
+  }
+
   private _scheduleReconnect(reason: string): void {
     if (this.stopped) return;
+    this._flushPendingTrendbars(reason);
     this._clearTimer();
     this.reconnectCount++;
     const delay = Math.min(
@@ -429,6 +543,8 @@ export class CtraderTickEngine extends EventEmitter {
       case "streaming": {
         if (pt === PT.SPOT_EVENT) {
           this._handleSpotEvent(payload);
+        } else if (pt === PT.TRENDBARS_RES) {
+          this._handleTrendbarsRes(payload);
         } else if (pt === PT.SUBSCRIBE_SPOTS_RES) {
           logger.debug("CtraderTickEngine: SUBSCRIBE_SPOTS_RES ack (dynamic add)");
         } else if (pt === PT.UNSUBSCRIBE_SPOTS_RES) {
@@ -480,6 +596,132 @@ export class CtraderTickEngine extends EventEmitter {
     }
 
     this.emit("tick", tick);
+  }
+
+  // ── Trendbars helpers ────────────────────────────────────────────────────────
+
+  /** Build a GET_TRENDBARS_REQ frame using 64-bit-safe varint for the timestamp. */
+  private _buildTrendbarsReq(symbolId: number, period: number, count: number): Buffer {
+    const { ctidTraderAccountId } = this.opts!;
+    const toMs = Date.now() + 60_000; // 1-min future margin
+    return buildFrame(PT.TRENDBARS_REQ, [
+      ...u64f(1, PT.TRENDBARS_REQ),    // self-describing payloadType
+      ...u64f(2, ctidTraderAccountId), // field 2 = ctidTraderAccountId
+      ...u64f(4, toMs),               // field 4 = toTimestamp (ms) — no fromTimestamp (mutually exclusive with count)
+      ...u64f(5, period),             // field 5 = TrendbarPeriod enum
+      ...u64f(6, symbolId),           // field 6 = symbolId
+      ...u64f(7, count),              // field 7 = count (max 4000)
+    ]);
+  }
+
+  /**
+   * Full-precision protobuf parser (int64-safe: uses multiply, not bit-shift).
+   * Required for sint64 fields in ProtoOATrendbar (prices, timestamps).
+   */
+  private _parseMsgFull(buf: Buffer): Array<{ fn: number; wt: number; v: number | Buffer }> {
+    const out: Array<{ fn: number; wt: number; v: number | Buffer }> = [];
+    let o = 0;
+    while (o < buf.length) {
+      let tag = 0, mul = 1;
+      while (o < buf.length) {
+        const b = buf[o++];
+        tag += (b & 0x7F) * mul;
+        mul *= 128;
+        if (!(b & 0x80)) break;
+      }
+      const fn = Math.floor(tag / 8), wt = tag & 7;
+      if (fn === 0) break;
+      if (wt === 0) {
+        let v = 0, vm = 1;
+        while (o < buf.length) {
+          const b = buf[o++];
+          v += (b & 0x7F) * vm;
+          vm *= 128;
+          if (!(b & 0x80)) break;
+        }
+        out.push({ fn, wt, v });
+      } else if (wt === 2) {
+        let len = 0, lm = 1;
+        while (o < buf.length) {
+          const b = buf[o++];
+          len += (b & 0x7F) * lm;
+          lm *= 128;
+          if (!(b & 0x80)) break;
+        }
+        if (o + len > buf.length) break;
+        out.push({ fn, wt, v: buf.slice(o, o + len) });
+        o += len;
+      } else if (wt === 1) { o += 8; }
+      else if (wt === 5) { o += 4; }
+      else break;
+    }
+    return out;
+  }
+
+  /** ZigZag64 decode: converts unsigned varint to signed sint64. */
+  private _zigzag64(n: number): number {
+    return (n & 1) ? -(Math.floor(n / 2) + 1) : Math.floor(n / 2);
+  }
+
+  /**
+   * Decode a GET_TRENDBARS_RES payload into OHLCBar[].
+   * ProtoOATrendbar fields:
+   *   1=volume (uint64), 3=low (sint64), 4=deltaOpen (sint64),
+   *   5=deltaClose (sint64), 6=deltaHigh (sint64), 7=utcTimestampInMinutes (sint64)
+   * Prices are in 1/100000 units. Timestamp is in minutes (multiply by 60 → unix seconds).
+   */
+  private _decodeTrendbars(payload: Buffer): CtraderOHLCBar[] {
+    const outerFields = this._parseMsgFull(payload);
+    const trendbarBufs = outerFields
+      .filter(f => f.fn === 4 && f.wt === 2)
+      .map(f => f.v as Buffer);
+
+    const bars: CtraderOHLCBar[] = [];
+    for (const tb of trendbarBufs) {
+      const f       = this._parseMsgFull(tb);
+      const getRaw  = (fn: number): number =>
+        (f.find(x => x.fn === fn && x.wt === 0)?.v as number) ?? 0;
+
+      const volume = getRaw(1);
+      const low          = this._zigzag64(getRaw(3));
+      const deltaOpen    = this._zigzag64(getRaw(4));
+      const deltaClose   = this._zigzag64(getRaw(5));
+      const deltaHigh    = this._zigzag64(getRaw(6));
+      const tsMinutes    = this._zigzag64(getRaw(7));
+
+      const lowPrice   = low                  / 100_000;
+      const openPrice  = (low + deltaOpen)    / 100_000;
+      const closePrice = (low + deltaClose)   / 100_000;
+      const highPrice  = (low + deltaHigh)    / 100_000;
+      const timeSec    = tsMinutes * 60;
+
+      if (timeSec <= 0 || !Number.isFinite(lowPrice) || lowPrice <= 0) continue;
+
+      bars.push({ time: timeSec, open: openPrice, high: highPrice, low: lowPrice, close: closePrice, volume });
+    }
+
+    bars.sort((a, b) => a.time - b.time);
+    return bars;
+  }
+
+  /** Handle an incoming GET_TRENDBARS_RES by shifting the FIFO queue. */
+  private _handleTrendbarsRes(payload: Buffer): void {
+    const pending = this.pendingTrendbarsQueue.shift();
+    if (!pending) {
+      logger.warn("CtraderTickEngine: unexpected GET_TRENDBARS_RES — no pending request in queue");
+      return;
+    }
+    clearTimeout(pending.timer);
+    try {
+      const bars = this._decodeTrendbars(payload);
+      logger.info(
+        { symbolId: pending.symbolId, interval: pending.interval, bars: bars.length },
+        "CtraderTickEngine: fetchTrendbarsOnSession ✓",
+      );
+      pending.resolve(bars);
+    } catch (e) {
+      pending.reject(new Error(`fetchTrendbarsOnSession decode error: ${String(e)}`));
+    }
   }
 
   // ── Message builders ─────────────────────────────────────────────────────────

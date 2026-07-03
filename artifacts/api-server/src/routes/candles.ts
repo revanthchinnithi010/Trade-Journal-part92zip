@@ -21,6 +21,7 @@ import type { CandleAggregator, OHLCBar, CandleInterval } from "../services/Cand
 import type { MarketDataService } from "../services/MarketDataService.js";
 import { fetchDeltaCandles } from "../services/deltaHistoryService.js";
 import { fetchTrendbars } from "../lib/ctraderProtoOA.js";
+import { ctraderTickEngine } from "../services/CtraderTickEngine.js";
 import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
@@ -122,6 +123,13 @@ export function createCandlesRouter(
     // ── cTrader symbols (forex, indices, metals, commodities) ─────────────────
     // Fetch completed historical bars via ProtoOA GetTrendbars and merge with
     // the live CandleAggregator's current open bar.
+    //
+    // Strategy (fastest first):
+    //   1. Cache hit  → serve instantly (5-min TTL)
+    //   2. Engine session → send GET_TRENDBARS_REQ on the live authenticated
+    //      streaming connection (no new TLS handshake, uses current token)
+    //   3. Standalone fetchTrendbars → opens a new TLS connection + re-auth
+    //      (fallback when engine is not yet streaming)
     if (CTRADER_SYMBOLS.has(symbol)) {
       const cacheKey = `${symbol}:${interval}`;
       const cached   = trendbarsCache.get(cacheKey);
@@ -138,16 +146,9 @@ export function createCandlesRouter(
         return;
       }
 
-      // Slow path: fetch historical bars from ProtoOA (~1–2 s)
-      logger.info({ symbol, interval }, "candles: cTrader — fetching ProtoOA trendbars");
+      // Resolve symbol → symbolId (required for both code paths below)
+      let symbolId: number;
       try {
-        const clientId     = process.env["CTRADER_CLIENT_ID"];
-        const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
-        if (!clientId || !clientSecret) throw new Error("CTRADER_CLIENT_ID/SECRET not set in env");
-
-        const creds = await getCtraderCreds();
-
-        // Resolve symbol → symbolId via ctrader_symbols DB table
         const symRow = await pool.query<{ symbol_id: number }>(
           "SELECT symbol_id FROM ctrader_symbols WHERE UPPER(symbol_name) = UPPER($1) LIMIT 1",
           [symbol],
@@ -155,20 +156,52 @@ export function createCandlesRouter(
         if (!symRow.rows.length) {
           throw new Error(`Symbol "${symbol}" not found in ctrader_symbols — run auto-setup first`);
         }
-        const symbolId = Number(symRow.rows[0].symbol_id);
+        symbolId = Number(symRow.rows[0].symbol_id);
+      } catch (err) {
+        logger.warn({ symbol, interval, err: String(err) }, "candles: cTrader symbolId lookup FAILED");
+        res.json(aggBars.slice(-501));
+        return;
+      }
 
-        logger.info({ symbol, symbolId, interval }, "candles: cTrader — symbolId resolved, requesting trendbars");
+      // Slow path: fetch historical bars from cTrader ProtoOA
+      logger.info(
+        { symbol, symbolId, interval, engineStatus: ctraderTickEngine.getStatus().status },
+        "candles: cTrader — fetching trendbars",
+      );
 
-        const trendbars = await fetchTrendbars({
-          ctidTraderAccountId: creds.accountId,
-          isLive:              creds.isLive,
-          accessToken:         creds.token,
-          clientId,
-          clientSecret,
-          symbolId,
-          interval,
-          count: 500,
-        });
+      try {
+        let trendbars: OHLCBar[];
+
+        const engineStatus = ctraderTickEngine.getStatus().status;
+        if (engineStatus === "streaming") {
+          // ── Preferred: reuse existing authenticated session ─────────────────
+          // Sends GET_TRENDBARS_REQ on the live TLS connection.
+          // No new connection, no re-auth — typically resolves in <200 ms.
+          logger.info({ symbol, symbolId, interval }, "candles: cTrader — using engine session for trendbars");
+          trendbars = await ctraderTickEngine.fetchTrendbarsOnSession(symbolId, interval, 500) as OHLCBar[];
+        } else {
+          // ── Fallback: open a new standalone TLS connection (~1–2 s) ─────────
+          const clientId     = process.env["CTRADER_CLIENT_ID"];
+          const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+          if (!clientId || !clientSecret) throw new Error("CTRADER_CLIENT_ID/SECRET not set in env");
+
+          const creds = await getCtraderCreds();
+
+          logger.info(
+            { symbol, symbolId, interval, engineStatus },
+            "candles: cTrader — engine not streaming, using standalone fetchTrendbars",
+          );
+          trendbars = await fetchTrendbars({
+            ctidTraderAccountId: creds.accountId,
+            isLive:              creds.isLive,
+            accessToken:         creds.token,
+            clientId,
+            clientSecret,
+            symbolId,
+            interval,
+            count: 500,
+          });
+        }
 
         // Cache the completed historical bars (current open bar comes from aggregator)
         trendbarsCache.set(cacheKey, { bars: trendbars, fetchedAt: Date.now() });
@@ -182,8 +215,8 @@ export function createCandlesRouter(
         res.json(merged);
       } catch (err) {
         // Fallback: serve live aggregated bars only — better than an error
-        logger.warn(
-          { symbol, interval, err: String(err) },
+        logger.error(
+          { symbol, symbolId, interval, err: String(err) },
           "candles: cTrader trendbars FAILED — falling back to aggregated-only",
         );
         res.json(aggregator.getBars(symbol, iv).slice(-501));

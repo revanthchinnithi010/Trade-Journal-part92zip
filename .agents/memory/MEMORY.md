@@ -1,3 +1,4 @@
+- [cTrader trendbars on live session](ctrader-trendbars-session.md) — fetchTrendbarsOnSession() on CtraderTickEngine uses the live streaming TLS session; avoids new connection + re-auth per candle request; FIFO pendingTrendbarsQueue routes GET_TRENDBARS_RES(2138) back to callers; candles.ts prefers this over standalone fetchTrendbars
 - [Charts terminal architecture](charts-terminal.md) — all chart work lives in artifacts/trading-journal/src/pages/charts.tsx + src/components/charts/* only; never a separate artifact
 - [Drawings deletion persistence](drawings-deletion.md) — deleted drawing IDs stored in localStorage; must filter on API load via resetDrawings() not setDrawings()
 - [Chart settings architecture](chart-settings.md) — ChartSettings interface in SettingsPanel.tsx; applied reactively to lightweight-charts via useEffect in CustomChart.tsx; settings passed as prop
