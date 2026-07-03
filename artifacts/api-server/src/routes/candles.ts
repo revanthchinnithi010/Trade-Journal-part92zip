@@ -39,12 +39,24 @@ const CTRADER_SYMBOLS = new Set([
   "EURGBP", "EURJPY", "EURAUD", "GBPAUD", "NZDUSD",
 ]);
 
+/** ProtoOA TrendbarPeriod enum — kept in sync with CtraderTickEngine */
+const INTERVAL_TO_OA_PERIOD: Partial<Record<string, number>> = {
+  "1": 1, "3": 3, "5": 5, "15": 7, "30": 8, "60": 9, "240": 10, "D": 12, "W": 13,
+};
+
+/** Human-readable timeframe names for diagnostics */
+const INTERVAL_LABEL: Partial<Record<string, string>> = {
+  "1": "1m", "3": "3m", "5": "5m", "15": "15m", "30": "30m",
+  "60": "1H", "120": "2H", "240": "4H", "D": "Daily", "W": "Weekly",
+};
+
 /**
  * Merge historical (older) bars with live aggregator bars (newer).
  *
  * Contract:
  *  - aggregated bars have newer or equal timestamps vs. historical
  *  - returns up to 501 bars: ≤500 completed + 1 current open bar
+ *  - NEVER clears historical bars when new live bars arrive
  */
 function mergeBars(historical: OHLCBar[], aggregated: OHLCBar[]): OHLCBar[] {
   if (aggregated.length === 0) return historical.slice(-500);
@@ -99,12 +111,127 @@ interface TrendbarsEntry { bars: OHLCBar[]; fetchedAt: number; }
 const trendbarsCache = new Map<string, TrendbarsEntry>();
 const TRENDBARS_CACHE_TTL = 5 * 60_000;
 
+/**
+ * Resolve clientId + clientSecret for the standalone fetchTrendbars fallback.
+ *
+ * Priority:
+ *  1. Engine's in-memory credentials (when engine was configured even if not streaming)
+ *  2. CTRADER_CLIENT_ID / CTRADER_CLIENT_SECRET env vars
+ *
+ * Throws if neither source provides the credentials.
+ */
+function resolveClientCreds(): { clientId: string; clientSecret: string } {
+  // Preferred: reuse the engine's in-memory credentials (avoids env-var dependency)
+  const engineCreds = ctraderTickEngine.getEngineCredentials();
+  if (engineCreds?.clientId && engineCreds?.clientSecret) {
+    return { clientId: engineCreds.clientId, clientSecret: engineCreds.clientSecret };
+  }
+
+  // Fallback: env vars
+  const clientId     = process.env["CTRADER_CLIENT_ID"];
+  const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+  if (clientId && clientSecret) {
+    return { clientId, clientSecret };
+  }
+
+  throw new Error(
+    "cTrader client credentials unavailable: engine not configured and " +
+    "CTRADER_CLIENT_ID/CTRADER_CLIENT_SECRET env vars not set",
+  );
+}
+
 export function createCandlesRouter(
   aggregator:  CandleAggregator,
   _marketData: MarketDataService,
 ): IRouter {
   const router: IRouter = Router();
 
+  // ── GET /api/candles/ctrader/diagnostic/:symbol/:interval ─────────────────
+  // Returns detailed diagnostics for the historical candle pipeline without
+  // serving the full candle array.  Bypasses the 5-minute cache.
+  router.get("/candles/ctrader/diagnostic/:symbol/:interval", async (req, res): Promise<void> => {
+    const symbol   = (req.params["symbol"]   ?? "").toUpperCase().trim();
+    const interval =  req.params["interval"] ?? "";
+
+    const engineStatus   = ctraderTickEngine.getStatus();
+    const engineCreds    = ctraderTickEngine.getEngineCredentials();
+    const period         = INTERVAL_TO_OA_PERIOD[interval] ?? null;
+    const timeframeLabel = INTERVAL_LABEL[interval] ?? interval;
+
+    const diag: Record<string, unknown> = {
+      symbol,
+      interval,
+      timeframeLabel,
+      period,
+      isCtraderSymbol: CTRADER_SYMBOLS.has(symbol),
+      engineStatus:    engineStatus.status,
+      engineAccountId: engineStatus.accountId,
+      engineIsLive:    engineStatus.isLive,
+      engineHasCreds:  !!engineCreds,
+      envVarsPresent: {
+        CTRADER_CLIENT_ID:     !!process.env["CTRADER_CLIENT_ID"],
+        CTRADER_CLIENT_SECRET: !!process.env["CTRADER_CLIENT_SECRET"],
+      },
+    };
+
+    // Resolve symbolId
+    let symbolId: number | null = null;
+    try {
+      const symRow = await pool.query<{ symbol_id: number }>(
+        "SELECT symbol_id FROM ctrader_symbols WHERE UPPER(symbol_name) = UPPER($1) LIMIT 1",
+        [symbol],
+      );
+      symbolId = symRow.rows.length ? Number(symRow.rows[0].symbol_id) : null;
+      diag["symbolId"]       = symbolId;
+      diag["symbolIdFound"]  = symbolId !== null;
+    } catch (e) {
+      diag["symbolIdError"] = String(e);
+    }
+
+    // Request timestamps
+    const now    = Date.now();
+    const toMs   = now + 60_000;
+    const fromMs = now - 500 * 60 * 60_000; // 500 × 1H as worst-case safety span
+    diag["requestTimestamps"] = {
+      nowMs:   now,
+      toMs,
+      fromMs,
+      nowISO:  new Date(now).toISOString(),
+      toISO:   new Date(toMs).toISOString(),
+      fromISO: new Date(fromMs).toISOString(),
+    };
+
+    const aggBars = aggregator.getBars(symbol, interval as CandleInterval);
+    diag["aggregatorBars"] = aggBars.length;
+
+    // If engine is streaming and symbolId known, attempt a live trendbars fetch
+    if (engineStatus.status === "streaming" && symbolId !== null && period !== null) {
+      const t0 = Date.now();
+      try {
+        const bars = await ctraderTickEngine.fetchTrendbarsOnSession(symbolId, interval, 10, 15_000);
+        diag["liveSessionFetch"] = {
+          ok:         true,
+          bars:       bars.length,
+          durationMs: Date.now() - t0,
+          firstBar:   bars[0]     ? { time: bars[0].time,     iso: new Date(bars[0].time * 1000).toISOString(),     open: bars[0].open }     : null,
+          lastBar:    bars.at(-1) ? { time: bars.at(-1)!.time, iso: new Date(bars.at(-1)!.time * 1000).toISOString(), close: bars.at(-1)!.close } : null,
+        };
+      } catch (e) {
+        diag["liveSessionFetch"] = { ok: false, error: String(e), durationMs: Date.now() - t0 };
+      }
+    } else {
+      diag["liveSessionFetch"] = {
+        skipped: true,
+        reason: engineStatus.status !== "streaming"
+          ? `engine not streaming (status=${engineStatus.status})`
+          : symbolId === null ? "symbolId not found" : "period mapping missing",
+      };
+    }
+
+    res.json(diag);
+  });
+
+  // ── GET /api/candles/:symbol/:interval ────────────────────────────────────
   router.get("/candles/:symbol/:interval", async (req, res): Promise<void> => {
     const symbol   = (req.params["symbol"]   ?? "").toUpperCase().trim();
     const interval =  req.params["interval"] ?? "";
@@ -129,7 +256,8 @@ export function createCandlesRouter(
     //   2. Engine session → send GET_TRENDBARS_REQ on the live authenticated
     //      streaming connection (no new TLS handshake, uses current token)
     //   3. Standalone fetchTrendbars → opens a new TLS connection + re-auth
-    //      (fallback when engine is not yet streaming)
+    //      (fallback when engine is not yet streaming; uses engine's cached
+    //       credentials or env vars — whichever is available)
     if (CTRADER_SYMBOLS.has(symbol)) {
       const cacheKey = `${symbol}:${interval}`;
       const cached   = trendbarsCache.get(cacheKey);
@@ -139,7 +267,15 @@ export function createCandlesRouter(
       if (cached && Date.now() - cached.fetchedAt < TRENDBARS_CACHE_TTL) {
         const merged = mergeBars(cached.bars, aggBars);
         logger.info(
-          { symbol, interval, cached: cached.bars.length, agg: aggBars.length, merged: merged.length },
+          {
+            symbol, interval,
+            timeframe:  INTERVAL_LABEL[interval] ?? interval,
+            cached:     cached.bars.length,
+            agg:        aggBars.length,
+            merged:     merged.length,
+            firstTime:  cached.bars[0]     ? new Date(cached.bars[0].time     * 1000).toISOString() : null,
+            lastTime:   cached.bars.at(-1) ? new Date(cached.bars.at(-1)!.time * 1000).toISOString() : null,
+          },
           "candles: cTrader cache-hit ✓",
         );
         res.json(merged);
@@ -163,34 +299,53 @@ export function createCandlesRouter(
         return;
       }
 
-      // Slow path: fetch historical bars from cTrader ProtoOA
-      logger.info(
-        { symbol, symbolId, interval, engineStatus: ctraderTickEngine.getStatus().status },
-        "candles: cTrader — fetching trendbars",
-      );
+      const period         = INTERVAL_TO_OA_PERIOD[interval];
+      const timeframeLabel = INTERVAL_LABEL[interval] ?? interval;
+      const engineStatus   = ctraderTickEngine.getStatus();
+      const toMs           = Date.now() + 60_000;   // 1 min future margin (ProtoOA)
+
+      // Diagnostic log — shows exactly what we're about to request
+      logger.info({
+        symbol, symbolId, interval, timeframeLabel, period,
+        count:         500,
+        toISO:         new Date(toMs).toISOString(),
+        engineStatus:  engineStatus.status,
+        engineIsLive:  engineStatus.isLive,
+        engineAcctId:  engineStatus.accountId,
+      }, "candles: cTrader — fetching trendbars");
 
       try {
         let trendbars: OHLCBar[];
+        const t0 = Date.now();
 
-        const engineStatus = ctraderTickEngine.getStatus().status;
-        if (engineStatus === "streaming") {
+        if (engineStatus.status === "streaming") {
           // ── Preferred: reuse existing authenticated session ─────────────────
           // Sends GET_TRENDBARS_REQ on the live TLS connection.
           // No new connection, no re-auth — typically resolves in <200 ms.
-          logger.info({ symbol, symbolId, interval }, "candles: cTrader — using engine session for trendbars");
+          logger.info({ symbol, symbolId, interval, timeframeLabel },
+            "candles: cTrader — using engine session for trendbars");
           trendbars = await ctraderTickEngine.fetchTrendbarsOnSession(symbolId, interval, 500) as OHLCBar[];
+          logger.info({
+            symbol, symbolId, interval, timeframeLabel,
+            bars:      trendbars.length,
+            durationMs: Date.now() - t0,
+            firstTime: trendbars[0]     ? new Date(trendbars[0].time     * 1000).toISOString() : null,
+            lastTime:  trendbars.at(-1) ? new Date(trendbars.at(-1)!.time * 1000).toISOString() : null,
+          }, "candles: cTrader — engine session trendbars result");
         } else {
           // ── Fallback: open a new standalone TLS connection (~1–2 s) ─────────
-          const clientId     = process.env["CTRADER_CLIENT_ID"];
-          const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
-          if (!clientId || !clientSecret) throw new Error("CTRADER_CLIENT_ID/SECRET not set in env");
-
+          // Use engine's stored credentials if available, otherwise env vars.
+          const { clientId, clientSecret } = resolveClientCreds();
           const creds = await getCtraderCreds();
 
-          logger.info(
-            { symbol, symbolId, interval, engineStatus },
-            "candles: cTrader — engine not streaming, using standalone fetchTrendbars",
-          );
+          logger.info({
+            symbol, symbolId, interval, timeframeLabel,
+            engineStatus: engineStatus.status,
+            accountId:    creds.accountId,
+            isLive:       creds.isLive,
+            toISO:        new Date(toMs).toISOString(),
+          }, "candles: cTrader — engine not streaming, using standalone fetchTrendbars");
+
           trendbars = await fetchTrendbars({
             ctidTraderAccountId: creds.accountId,
             isLive:              creds.isLive,
@@ -201,6 +356,14 @@ export function createCandlesRouter(
             interval,
             count: 500,
           });
+
+          logger.info({
+            symbol, symbolId, interval, timeframeLabel,
+            bars:      trendbars.length,
+            durationMs: Date.now() - t0,
+            firstTime: trendbars[0]     ? new Date(trendbars[0].time     * 1000).toISOString() : null,
+            lastTime:  trendbars.at(-1) ? new Date(trendbars.at(-1)!.time * 1000).toISOString() : null,
+          }, "candles: cTrader — standalone trendbars result");
         }
 
         // Cache the completed historical bars (current open bar comes from aggregator)
@@ -209,14 +372,24 @@ export function createCandlesRouter(
         const freshAgg = aggregator.getBars(symbol, iv);
         const merged   = mergeBars(trendbars, freshAgg);
         logger.info(
-          { symbol, symbolId, interval, historical: trendbars.length, agg: freshAgg.length, merged: merged.length },
-          "candles: cTrader trendbars ✓",
+          {
+            symbol, symbolId, interval, timeframeLabel,
+            historical: trendbars.length,
+            agg:        freshAgg.length,
+            merged:     merged.length,
+            firstTime:  merged[0]     ? new Date(merged[0].time     * 1000).toISOString() : null,
+            lastTime:   merged.at(-1) ? new Date(merged.at(-1)!.time * 1000).toISOString() : null,
+            apiError:   trendbars.length === 0 ? "WARNING: 0 historical bars returned — check symbolId/period/logs" : null,
+          },
+          trendbars.length > 0
+            ? "candles: cTrader trendbars ✓"
+            : "candles: cTrader trendbars EMPTY — serving aggregator-only bars",
         );
         res.json(merged);
       } catch (err) {
         // Fallback: serve live aggregated bars only — better than an error
         logger.error(
-          { symbol, symbolId, interval, err: String(err) },
+          { symbol, symbolId, interval, timeframeLabel, err: String(err) },
           "candles: cTrader trendbars FAILED — falling back to aggregated-only",
         );
         res.json(aggregator.getBars(symbol, iv).slice(-501));

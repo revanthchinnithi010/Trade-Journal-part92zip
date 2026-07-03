@@ -357,6 +357,28 @@ export class CtraderTickEngine extends EventEmitter {
   getAllLastTicks(): CtraderTick[]                   { return [...this.lastTickMap.values()]; }
 
   /**
+   * Expose the engine's stored credentials so callers can open a standalone
+   * ProtoOA connection even when the engine is not currently streaming.
+   * Returns null when the engine has never been configured.
+   */
+  getEngineCredentials(): {
+    clientId:            string;
+    clientSecret:        string;
+    ctidTraderAccountId: number;
+    accessToken:         string;
+    isLive:              boolean;
+  } | null {
+    if (!this.opts) return null;
+    return {
+      clientId:            this.opts.clientId,
+      clientSecret:        this.opts.clientSecret,
+      ctidTraderAccountId: this.opts.ctidTraderAccountId,
+      accessToken:         this.opts.accessToken,
+      isLive:              this.opts.isLive,
+    };
+  }
+
+  /**
    * Fetch historical OHLC bars for a symbol by sending GET_TRENDBARS_REQ on the
    * existing authenticated streaming session. Avoids the cost of opening a new
    * TLS connection + re-authenticating (which standalone fetchTrendbars does).
@@ -670,24 +692,51 @@ export class CtraderTickEngine extends EventEmitter {
    *   5=deltaClose (sint64), 6=deltaHigh (sint64), 7=utcTimestampInMinutes (sint64)
    * Prices are in 1/100000 units. Timestamp is in minutes (multiply by 60 → unix seconds).
    */
-  private _decodeTrendbars(payload: Buffer): CtraderOHLCBar[] {
+  private _decodeTrendbars(payload: Buffer, symbolId?: number, interval?: string): CtraderOHLCBar[] {
     const outerFields = this._parseMsgFull(payload);
     const trendbarBufs = outerFields
       .filter(f => f.fn === 4 && f.wt === 2)
       .map(f => f.v as Buffer);
 
+    // ── Diagnostic: log outer response fields ──────────────────────────────
+    const outerPeriod  = (outerFields.find(f => f.fn === 3 && f.wt === 0)?.v as number) ?? null;
+    const outerAcctId  = (outerFields.find(f => f.fn === 2 && f.wt === 0)?.v as number) ?? null;
+    const hasMore      = (outerFields.find(f => f.fn === 6 && f.wt === 0)?.v as number) ?? 0;
+    logger.info({
+      symbolId, interval,
+      payloadBytes:    payload.length,
+      outerFieldCount: outerFields.length,
+      trendbarCount:   trendbarBufs.length,
+      outerPeriod, outerAcctId, hasMore,
+    }, "CtraderTickEngine: _decodeTrendbars — outer RES fields");
+
+    if (trendbarBufs.length === 0) {
+      logger.warn({
+        symbolId, interval,
+        outerFields: outerFields.map(f => ({ fn: f.fn, wt: f.wt, isBuffer: Buffer.isBuffer(f.v) })),
+      }, "CtraderTickEngine: _decodeTrendbars — ZERO trendbar buffers in RES (empty response)");
+    }
+
     const bars: CtraderOHLCBar[] = [];
-    for (const tb of trendbarBufs) {
+    let filtered = 0;
+    for (let i = 0; i < trendbarBufs.length; i++) {
+      const tb = trendbarBufs[i];
       const f       = this._parseMsgFull(tb);
       const getRaw  = (fn: number): number =>
         (f.find(x => x.fn === fn && x.wt === 0)?.v as number) ?? 0;
 
       const volume = getRaw(1);
-      const low          = this._zigzag64(getRaw(3));
-      const deltaOpen    = this._zigzag64(getRaw(4));
-      const deltaClose   = this._zigzag64(getRaw(5));
-      const deltaHigh    = this._zigzag64(getRaw(6));
-      const tsMinutes    = this._zigzag64(getRaw(7));
+      const rawLow       = getRaw(3);
+      const rawDeltaOpen = getRaw(4);
+      const rawDeltaClose= getRaw(5);
+      const rawDeltaHigh = getRaw(6);
+      const rawTsMin     = getRaw(7);
+
+      const low          = this._zigzag64(rawLow);
+      const deltaOpen    = this._zigzag64(rawDeltaOpen);
+      const deltaClose   = this._zigzag64(rawDeltaClose);
+      const deltaHigh    = this._zigzag64(rawDeltaHigh);
+      const tsMinutes    = this._zigzag64(rawTsMin);
 
       const lowPrice   = low                  / 100_000;
       const openPrice  = (low + deltaOpen)    / 100_000;
@@ -695,12 +744,43 @@ export class CtraderTickEngine extends EventEmitter {
       const highPrice  = (low + deltaHigh)    / 100_000;
       const timeSec    = tsMinutes * 60;
 
-      if (timeSec <= 0 || !Number.isFinite(lowPrice) || lowPrice <= 0) continue;
+      // Log the first 3 and last bar for diagnostics
+      if (i < 3 || i === trendbarBufs.length - 1) {
+        logger.info({
+          barIdx: i, symbolId, interval,
+          rawFields: { rawLow, rawDeltaOpen, rawDeltaClose, rawDeltaHigh, rawTsMin },
+          decoded:   { low, deltaOpen, deltaClose, deltaHigh, tsMinutes },
+          prices:    { open: openPrice, high: highPrice, low: lowPrice, close: closePrice },
+          timeSec,   volume,
+          timeISO: timeSec > 0 ? new Date(timeSec * 1000).toISOString() : "(invalid)",
+        }, "CtraderTickEngine: trendbar sample");
+      }
+
+      if (timeSec <= 0 || !Number.isFinite(lowPrice) || lowPrice <= 0) {
+        filtered++;
+        if (filtered <= 3) {
+          logger.warn({
+            barIdx: i, timeSec, lowPrice, rawLow, rawTsMin,
+            reason: timeSec <= 0 ? "timeSec<=0" : !Number.isFinite(lowPrice) ? "non-finite" : "lowPrice<=0",
+          }, "CtraderTickEngine: trendbar FILTERED");
+        }
+        continue;
+      }
 
       bars.push({ time: timeSec, open: openPrice, high: highPrice, low: lowPrice, close: closePrice, volume });
     }
 
     bars.sort((a, b) => a.time - b.time);
+
+    logger.info({
+      symbolId, interval,
+      trendbarBufsTotal: trendbarBufs.length,
+      barsDecoded:       bars.length,
+      barsFiltered:      filtered,
+      firstBar: bars[0]     ? { time: bars[0].time, iso: new Date(bars[0].time * 1000).toISOString(), open: bars[0].open }     : null,
+      lastBar:  bars.at(-1) ? { time: bars.at(-1)!.time, iso: new Date(bars.at(-1)!.time * 1000).toISOString(), close: bars.at(-1)!.close } : null,
+    }, "CtraderTickEngine: _decodeTrendbars complete");
+
     return bars;
   }
 
@@ -713,13 +793,23 @@ export class CtraderTickEngine extends EventEmitter {
     }
     clearTimeout(pending.timer);
     try {
-      const bars = this._decodeTrendbars(payload);
+      const bars = this._decodeTrendbars(payload, pending.symbolId, pending.interval);
       logger.info(
-        { symbolId: pending.symbolId, interval: pending.interval, bars: bars.length },
-        "CtraderTickEngine: fetchTrendbarsOnSession ✓",
+        {
+          symbolId: pending.symbolId,
+          interval: pending.interval,
+          bars: bars.length,
+          firstTime: bars[0]     ? new Date(bars[0].time     * 1000).toISOString() : null,
+          lastTime:  bars.at(-1) ? new Date(bars.at(-1)!.time * 1000).toISOString() : null,
+        },
+        bars.length > 0
+          ? "CtraderTickEngine: fetchTrendbarsOnSession ✓"
+          : "CtraderTickEngine: fetchTrendbarsOnSession — 0 bars decoded (check symbolId/period/logs above)",
       );
       pending.resolve(bars);
     } catch (e) {
+      logger.error({ symbolId: pending.symbolId, interval: pending.interval, err: String(e) },
+        "CtraderTickEngine: fetchTrendbarsOnSession decode error");
       pending.reject(new Error(`fetchTrendbarsOnSession decode error: ${String(e)}`));
     }
   }
