@@ -695,7 +695,7 @@ export class CtraderTickEngine extends EventEmitter {
   private _decodeTrendbars(payload: Buffer, symbolId?: number, interval?: string): CtraderOHLCBar[] {
     const outerFields = this._parseMsgFull(payload);
     const trendbarBufs = outerFields
-      .filter(f => f.fn === 4 && f.wt === 2)
+      .filter(f => f.fn === 5 && f.wt === 2)
       .map(f => f.v as Buffer);
 
     // ── Diagnostic: log outer response fields ──────────────────────────────
@@ -715,6 +715,20 @@ export class CtraderTickEngine extends EventEmitter {
         symbolId, interval,
         outerFields: outerFields.map(f => ({ fn: f.fn, wt: f.wt, isBuffer: Buffer.isBuffer(f.v) })),
       }, "CtraderTickEngine: _decodeTrendbars — ZERO trendbar buffers in RES (empty response)");
+    }
+
+    // ── Hex-dump first trendbar for encoding diagnosis ──────────────────────
+    if (trendbarBufs.length > 0) {
+      const firstTb = trendbarBufs[0];
+      const parsedFirst = this._parseMsgFull(firstTb);
+      logger.warn({
+        hexDump: firstTb.slice(0, 64).toString('hex'),
+        byteLen: firstTb.length,
+        parsedFields: parsedFirst.map(x => ({
+          fn: x.fn, wt: x.wt,
+          v: Buffer.isBuffer(x.v) ? `<bytes len=${(x.v as Buffer).length}>` : x.v,
+        })),
+      }, "CtraderTickEngine: TRENDBAR FIRST BYTES DUMP");
     }
 
     const bars: CtraderOHLCBar[] = [];
