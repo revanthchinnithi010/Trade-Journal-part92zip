@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { randomBytes } from "crypto";
 import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
@@ -58,19 +58,33 @@ async function getStoredToken(): Promise<{ token: string; expiresAt: number } | 
   return { token, expiresAt: r.expires_at };
 }
 
+/**
+ * Resolve the OAuth redirect URI.
+ * Priority:
+ *   1. CTRADER_REDIRECT_URI env var (explicit, always correct for deployed app)
+ *   2. x-forwarded-proto / x-forwarded-host request headers (Replit proxy)
+ *   3. req.protocol / req.hostname fallback
+ */
+function getRedirectUri(req: Request): string {
+  const envUri = process.env["CTRADER_REDIRECT_URI"];
+  if (envUri) return envUri;
+  const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
+  const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
+  return `${proto}://${host}/api/ctrader/oauth/callback`;
+}
+
 export function createCtraderOAuthRouter(): Router {
   const router = Router();
 
   router.get("/ctrader/debug-config", (req, res) => {
     const clientId     = process.env["CTRADER_CLIENT_ID"];
     const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
-    const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-    const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
     res.json({
       hasClientId:     !!clientId,
       hasClientSecret: !!clientSecret,
       clientIdLength:  clientId?.length ?? 0,
-      redirectUri:     `${proto}://${host}/api/ctrader/oauth/callback`,
+      redirectUri:     getRedirectUri(req),
+      redirectUriSource: process.env["CTRADER_REDIRECT_URI"] ? "CTRADER_REDIRECT_URI env var" : "x-forwarded headers",
     });
   });
 
@@ -81,9 +95,7 @@ export function createCtraderOAuthRouter(): Router {
     const hasClientSecret = !!clientSecret;
     const configured      = hasClientId && hasClientSecret;
 
-    const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-    const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
-    const redirectUri = `${proto}://${host}/api/ctrader/oauth/callback`;
+    const redirectUri = getRedirectUri(req);
 
     let authUrl: string | null = null;
     if (configured) {
@@ -129,10 +141,7 @@ export function createCtraderOAuthRouter(): Router {
     }
 
     try {
-      const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-      const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
-      const redirectUri = `${proto}://${host}/api/ctrader/oauth/callback`;
-
+      const redirectUri  = getRedirectUri(req);
       const clientId     = process.env["CTRADER_CLIENT_ID"]!;
       const clientSecret = process.env["CTRADER_CLIENT_SECRET"]!;
 
