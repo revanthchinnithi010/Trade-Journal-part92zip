@@ -37,6 +37,8 @@ export const SUPPORTED_KEYS = [
   "TELEGRAM_CHAT_ID",
   "SESSION_SECRET",
   "DATABASE_URL",
+  "CTRADER_CLIENT_ID",
+  "CTRADER_CLIENT_SECRET",
 ] as const;
 
 export type SupportedKey = typeof SUPPORTED_KEYS[number];

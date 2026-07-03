@@ -18,7 +18,7 @@ const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 type LogLevel = "info" | "success" | "error" | "warn" | "step";
 interface LogEntry { ts: number; level: LogLevel; msg: string; }
 
-interface OAuthConfig  { configured: boolean; redirectUri: string; authUrl: string | null; }
+interface OAuthConfig  { configured: boolean; hasClientId: boolean; hasClientSecret: boolean; redirectUri: string; authUrl: string | null; }
 interface TokenStatus  { ok: boolean; masked_token: string | null; expires_at: number; expired: boolean; error?: string; }
 interface OAuthStatus  { connected: boolean; expires_at?: number; expired?: boolean; updated_at?: string; error?: string; }
 interface SessionInfo {
@@ -766,15 +766,31 @@ export function CtraderWidget() {
         {config ? (
           <>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <CWBadge label={config.configured ? "Client ID Set" : "Client ID Missing"} color={config.configured ? "#34d399" : "#f87171"} bg={config.configured ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"} />
-              <CWBadge label={config.configured ? "Client Secret Set" : "Client Secret Missing"} color={config.configured ? "#34d399" : "#f87171"} bg={config.configured ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"} />
+              <CWBadge
+                label={(config.hasClientId ?? config.configured) ? "Client ID ✓" : "Client ID Missing"}
+                color={(config.hasClientId ?? config.configured) ? "#34d399" : "#f87171"}
+                bg={(config.hasClientId ?? config.configured) ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"}
+              />
+              <CWBadge
+                label={(config.hasClientSecret ?? config.configured) ? "Client Secret ✓" : "Client Secret Missing"}
+                color={(config.hasClientSecret ?? config.configured) ? "#34d399" : "#f87171"}
+                bg={(config.hasClientSecret ?? config.configured) ? "rgba(16,185,129,0.10)" : "rgba(239,68,68,0.10)"}
+              />
             </div>
             <MonoBox label="Redirect URI" value={config.redirectUri} copyable />
             {config.authUrl && <MonoBox label="Auth URL Preview" value={config.authUrl.slice(0, 120) + (config.authUrl.length > 120 ? "…" : "")} />}
             {!config.configured && (
               <div style={{ padding: "10px 12px", borderRadius: 9, fontSize: 11, lineHeight: 1.6, background: "rgba(239,68,68,0.07)", border: "1px solid rgba(239,68,68,0.18)", color: "rgba(255,255,255,0.70)" }}>
-                Set <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_ID</code> and{" "}
-                <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_SECRET</code> in the <strong>Secrets</strong> panel, then restart the server.
+                {!(config.hasClientId ?? false) && !(config.hasClientSecret ?? false) && (
+                  <>Missing: <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_ID</code> and <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_SECRET</code></>
+                )}
+                {!(config.hasClientId ?? false) && (config.hasClientSecret ?? false) && (
+                  <>Missing: <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_ID</code></>
+                )}
+                {(config.hasClientId ?? false) && !(config.hasClientSecret ?? false) && (
+                  <>Missing: <code style={{ background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>CTRADER_CLIENT_SECRET</code></>
+                )}
+                {" "}Add the missing secret(s) in the <strong>Secrets</strong> panel, then <strong>restart the server</strong> workflow to pick them up.
               </div>
             )}
           </>

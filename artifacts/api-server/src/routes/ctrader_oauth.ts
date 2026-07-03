@@ -75,8 +75,11 @@ export function createCtraderOAuthRouter(): Router {
   });
 
   router.get("/ctrader/oauth/config", async (req, res) => {
-    const clientId = process.env["CTRADER_CLIENT_ID"];
-    const configured = !!(clientId && process.env["CTRADER_CLIENT_SECRET"]);
+    const clientId     = process.env["CTRADER_CLIENT_ID"];
+    const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+    const hasClientId     = !!clientId;
+    const hasClientSecret = !!clientSecret;
+    const configured      = hasClientId && hasClientSecret;
 
     const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
     const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
@@ -99,10 +102,13 @@ export function createCtraderOAuthRouter(): Router {
         logger.warn({ err }, "ctrader/oauth/config: failed to build auth URL");
       }
     } else {
-      logger.warn("ctrader/oauth/config: CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not set");
+      logger.warn(
+        { hasClientId, hasClientSecret },
+        "ctrader/oauth/config: CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not set",
+      );
     }
 
-    res.json({ configured, redirectUri, authUrl });
+    res.json({ configured, hasClientId, hasClientSecret, redirectUri, authUrl });
   });
 
   router.get("/ctrader/oauth/callback", async (req, res) => {
