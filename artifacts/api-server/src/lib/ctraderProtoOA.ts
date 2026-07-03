@@ -1121,3 +1121,243 @@ export async function fetchSingleSymbolSpec(opts: {
     };
   });
 }
+
+// ── ProtoOAGetTrendbars — historical OHLC bars (PT 2137 / 2138) ───────────────
+// Flow: APP_AUTH → ACCT_AUTH → GET_TRENDBARS_REQ → GET_TRENDBARS_RES
+//
+// ProtoOA encodes prices as sint64 ZigZag (low + deltaX deltas, 1/100000 units).
+// utcTimestampInMinutes is also sint64; multiply by 60 for unix seconds.
+//
+// Supported intervals: 1,3,5,15,30,60,240,D,W  (120 = H2 not in ProtoOA enum).
+
+const PT_TRENDBARS_REQ = 2137;
+const PT_TRENDBARS_RES = 2138;
+
+/** App interval string → ProtoOA TrendbarPeriod enum value */
+const INTERVAL_TO_OA_PERIOD: Partial<Record<string, number>> = {
+  "1":  1,  "3":   3,  "5":   5,  "15":  7,
+  "30": 8,  "60":  9,  "240": 10, "D":  12, "W": 13,
+  // "120" (H2) has no ProtoOA mapping
+};
+
+/** Bar duration in seconds — used to calculate fromTimestamp */
+const INTERVAL_SECS: Partial<Record<string, number>> = {
+  "1": 60, "3": 180, "5": 300, "15": 900, "30": 1800,
+  "60": 3600, "240": 14400, "D": 86400, "W": 604800,
+};
+
+/**
+ * 64-bit-safe varint encoder.
+ * The original varint() uses `n >>>= 7` which truncates values above 2^32.
+ * This version uses integer division and works for any safe JS integer.
+ */
+function varint64(n: number): number[] {
+  const out: number[] = [];
+  while (n > 0x7F) {
+    out.push((n & 0x7F) | 0x80);
+    n = Math.floor(n / 128);
+  }
+  out.push(n & 0x7F);
+  return out;
+}
+
+/** Field encoder using 64-bit-safe varint (for timestamps, large IDs). */
+function u64f(fn: number, v: number): number[] {
+  return [...varint64((fn << 3) | 0), ...varint64(v)];
+}
+
+/**
+ * ZigZag decode for sint64 wire values.
+ * parseMsgFull reads sint64 as a raw unsigned varint; we apply ZigZag after.
+ * encoded = (n << 1) ^ (n >> 63);  decoded = (enc >>> 1) ^ -(enc & 1)
+ * Safe JS version using Math.floor for values above 2^31.
+ */
+function zigzag64(n: number): number {
+  return (n & 1) ? -(Math.floor(n / 2) + 1) : Math.floor(n / 2);
+}
+
+export interface TrendbarResult {
+  time:   number; // unix seconds (UTC)
+  open:   number;
+  high:   number;
+  low:    number;
+  close:  number;
+  volume: number;
+}
+
+/**
+ * Fetch up to `count` historical OHLC bars for a cTrader symbol via ProtoOA.
+ * Opens a short-lived TLS connection (separate from the streaming engine).
+ * Call sites should cache the result to avoid repeated connections (~1–2 s each).
+ */
+export async function fetchTrendbars(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  symbolId:            number;
+  interval:            string;  // "1","5","15","30","60","240","D","W"
+  count?:              number;  // default 500, max 4000
+  timeoutMs?:          number;
+}): Promise<TrendbarResult[]> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, symbolId,
+    interval, count = 500, timeoutMs = 20_000,
+  } = opts;
+
+  const period      = INTERVAL_TO_OA_PERIOD[interval];
+  const intervalSec = INTERVAL_SECS[interval];
+
+  if (period === undefined || intervalSec === undefined) {
+    logger.warn({ interval }, "ProtoOA fetchTrendbars: unsupported interval — no ProtoOA period mapping");
+    return [];
+  }
+
+  const now    = Date.now();
+  const toMs   = now + 60_000;                              // 1 min into future
+  const fromMs = now - intervalSec * (count + 10) * 1000;  // 10-bar safety margin
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0   = Date.now();
+
+  logger.info({
+    ctidTraderAccountId, symbolId, interval, period, count, host,
+    from: new Date(fromMs).toISOString(),
+    to:   new Date(toMs).toISOString(),
+  }, "ProtoOA fetchTrendbars: starting");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(
+      () => finish(null, `fetchTrendbars timeout after ${timeoutMs}ms`),
+      timeoutMs,
+    );
+    let step = "app_auth";
+
+    function finish(bars: TrendbarResult[] | null, err?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      if (err || bars === null) {
+        logger.error({ symbolId, interval, err, durationMs: Date.now() - t0 }, "ProtoOA fetchTrendbars: FAILED");
+        reject(new Error(err ?? "fetchTrendbars: no result"));
+      } else {
+        resolve(bars);
+      }
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish(null, `socket error: ${e.message}`);
+    conn.onClose   = () => { if (!settled) finish(null, "connection closed before trendbars received"); };
+
+    conn.onFrame = (pt, payload) => {
+      // Heartbeat — ignore
+      if (pt === 51) return;
+
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        logger.warn({ errorCode, description, step }, "ProtoOA fetchTrendbars: ERROR_RES");
+        finish(null, `ProtoOA error ${errorCode}: ${description}`);
+        return;
+      }
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        logger.info("ProtoOA fetchTrendbars: ✓ APP_AUTH_RES");
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        logger.info({ ctidTraderAccountId }, "ProtoOA fetchTrendbars: ✓ ACCT_AUTH_RES — sending GetTrendbarsReq");
+        step = "trendbars";
+        // ProtoOA API rule: `count` and `fromTimestamp` are mutually exclusive.
+        // Sending both causes the server to return 0 bars.
+        // When using `count`, omit `fromTimestamp` entirely — the server returns the
+        // most recent `count` completed bars up to `toTimestamp`.
+        // Field numbers: 1=payloadType, 2=ctidTraderAccountId, 4=toTimestamp,
+        //                5=period (enum), 6=symbolId, 7=count
+        const req = buildFrame(PT_TRENDBARS_REQ, [
+          ...u64f(1, PT_TRENDBARS_REQ),      // self-describing payloadType
+          ...u64f(2, ctidTraderAccountId),   // field 2 = ctidTraderAccountId
+          ...u64f(4, toMs),                  // field 4 = toTimestamp (ms, no fromTimestamp!)
+          ...u64f(5, period),                // field 5 = TrendbarPeriod enum
+          ...u64f(6, symbolId),              // field 6 = symbolId
+          ...u64f(7, count),                 // field 7 = count (max 4000)
+        ]);
+        conn.write("GetTrendbarsReq", req);
+        return;
+      }
+
+      if (pt === PT_TRENDBARS_RES && step === "trendbars") {
+        try {
+          const outerFields  = parseMsgFull(payload);
+          // field 4 in GET_TRENDBARS_RES = repeated ProtoOATrendbar
+          const trendbarBufs = fGetAllBytes(outerFields, 4);
+
+          logger.info({
+            symbolId, interval, period,
+            trendbarCount: trendbarBufs.length,
+            durationMs: Date.now() - t0,
+          }, "ProtoOA fetchTrendbars: ✓ TRENDBARS_RES received");
+
+          const bars: TrendbarResult[] = [];
+          for (const tb of trendbarBufs) {
+            const f = parseMsgFull(tb);
+
+            const volume = fGetVar(f, 1);
+            // sint64 fields — raw varint values from parseMsgFull need ZigZag decode:
+            const rawLow        = fGetVar(f, 3);
+            const rawDeltaOpen  = fGetVar(f, 4);
+            const rawDeltaClose = fGetVar(f, 5);
+            const rawDeltaHigh  = fGetVar(f, 6);
+            const rawTsMin      = fGetVar(f, 7);
+
+            const low        = zigzag64(rawLow);
+            const deltaOpen  = zigzag64(rawDeltaOpen);
+            const deltaClose = zigzag64(rawDeltaClose);
+            const deltaHigh  = zigzag64(rawDeltaHigh);
+            const tsMinutes  = zigzag64(rawTsMin);
+
+            // Reconstruct absolute prices from low + deltas (1/100000 units, same as spot events)
+            const lowPrice   = low                 / 100_000;
+            const openPrice  = (low + deltaOpen)   / 100_000;
+            const closePrice = (low + deltaClose)  / 100_000;
+            const highPrice  = (low + deltaHigh)   / 100_000;
+            const timeSec    = tsMinutes * 60; // ProtoOA gives minutes; convert to seconds
+
+            if (timeSec <= 0 || !Number.isFinite(lowPrice) || lowPrice <= 0) continue;
+
+            bars.push({
+              time: timeSec, open: openPrice, high: highPrice,
+              low: lowPrice, close: closePrice, volume,
+            });
+          }
+
+          // Ensure ascending time order (API should return sorted, but enforce it)
+          bars.sort((a, b) => a.time - b.time);
+
+          logger.info({
+            symbolId, interval,
+            bars:  bars.length,
+            first: bars[0]    ? new Date(bars[0].time * 1000).toISOString()    : null,
+            last:  bars.at(-1)? new Date(bars.at(-1)!.time * 1000).toISOString(): null,
+            durationMs: Date.now() - t0,
+          }, "ProtoOA fetchTrendbars: bars decoded ✓");
+
+          finish(bars);
+        } catch (e) {
+          finish(null, `parse error: ${String(e)}`);
+        }
+        return;
+      }
+
+      // Unexpected frame in trendbars step — log and ignore
+      logger.debug({ pt, step, ptName: PT_NAME[pt] ?? "unknown" }, "ProtoOA fetchTrendbars: unexpected frame ignored");
+    };
+  });
+}

@@ -4,8 +4,10 @@
  * Routing strategy:
  *
  *  1. cTrader (non-crypto: forex, indices, metals, commodities)
- *     → returns aggregated bars built from live ProtoOA ticks
- *     → no REST history source; bars accumulate as ticks arrive
+ *     → fetches up to 500 historical bars via ProtoOA GetTrendbars (PT 2137/2138)
+ *     → merges with live CandleAggregator bars (current open bar from live ticks)
+ *     → trendbars cached 5 min to avoid repeated ProtoOA TLS connections (~1–2 s each)
+ *     → fallback to aggregated-only if ProtoOA unavailable
  *
  *  2. Delta Exchange India (crypto — BTCUSD, ETHUSD, etc.)
  *     → fetchDeltaCandles() + CandleAggregator merge
@@ -18,6 +20,9 @@ import { Router, type IRouter } from "express";
 import type { CandleAggregator, OHLCBar, CandleInterval } from "../services/CandleAggregator.js";
 import type { MarketDataService } from "../services/MarketDataService.js";
 import { fetchDeltaCandles } from "../services/deltaHistoryService.js";
+import { fetchTrendbars } from "../lib/ctraderProtoOA.js";
+import { pool } from "@workspace/db";
+import { decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
 
 const VALID_INTERVALS = new Set(["1", "3", "5", "15", "30", "60", "120", "240", "D", "W"]);
@@ -50,6 +55,49 @@ function mergeBars(historical: OHLCBar[], aggregated: OHLCBar[]): OHLCBar[] {
   return combined.slice(-501);
 }
 
+// ── cTrader credential cache (1 min TTL — avoids DB hit per candle request) ───
+interface CtraderCreds {
+  token:     string;
+  accountId: number;
+  isLive:    boolean;
+  cachedAt:  number;
+}
+let credCache: CtraderCreds | null = null;
+const CRED_CACHE_TTL = 60_000;
+
+async function getCtraderCreds(): Promise<CtraderCreds> {
+  if (credCache && Date.now() - credCache.cachedAt < CRED_CACHE_TTL) return credCache;
+
+  const [tokRow, cfgRow] = await Promise.all([
+    pool.query<{ access_token_enc: string }>(
+      "SELECT access_token_enc FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+    ),
+    pool.query<{ account_id: number; is_live: boolean }>(
+      "SELECT account_id, is_live FROM ctrader_spot_config WHERE id=1",
+    ),
+  ]);
+
+  if (!tokRow.rows.length || !cfgRow.rows.length)
+    throw new Error("cTrader credentials not configured in DB");
+
+  const accessToken = decrypt(tokRow.rows[0].access_token_enc);
+  if (!accessToken) throw new Error("cTrader access token decrypt failed");
+
+  const cfg = cfgRow.rows[0];
+  credCache = {
+    token:     accessToken,
+    accountId: cfg.account_id,
+    isLive:    Boolean(cfg.is_live),
+    cachedAt:  Date.now(),
+  };
+  return credCache;
+}
+
+// ── Trendbars result cache (5 min TTL — each ProtoOA connection costs ~1–2 s) ─
+interface TrendbarsEntry { bars: OHLCBar[]; fetchedAt: number; }
+const trendbarsCache = new Map<string, TrendbarsEntry>();
+const TRENDBARS_CACHE_TTL = 5 * 60_000;
+
 export function createCandlesRouter(
   aggregator:  CandleAggregator,
   _marketData: MarketDataService,
@@ -72,12 +120,74 @@ export function createCandlesRouter(
     const iv = interval as CandleInterval;
 
     // ── cTrader symbols (forex, indices, metals, commodities) ─────────────────
-    // Historical REST not available; return tick-aggregated bars only.
+    // Fetch completed historical bars via ProtoOA GetTrendbars and merge with
+    // the live CandleAggregator's current open bar.
     if (CTRADER_SYMBOLS.has(symbol)) {
-      logger.info({ symbol, interval }, "candles: routing to cTrader (live-tick aggregated bars)");
-      const aggBars = aggregator.getBars(symbol, iv);
-      logger.info({ symbol, interval, bars: aggBars.length }, "candles: cTrader aggregated bars served ✓");
-      res.json(aggBars.slice(-501));
+      const cacheKey = `${symbol}:${interval}`;
+      const cached   = trendbarsCache.get(cacheKey);
+      const aggBars  = aggregator.getBars(symbol, iv);
+
+      // Fast path: cached trendbars are fresh — merge with latest live bar
+      if (cached && Date.now() - cached.fetchedAt < TRENDBARS_CACHE_TTL) {
+        const merged = mergeBars(cached.bars, aggBars);
+        logger.info(
+          { symbol, interval, cached: cached.bars.length, agg: aggBars.length, merged: merged.length },
+          "candles: cTrader cache-hit ✓",
+        );
+        res.json(merged);
+        return;
+      }
+
+      // Slow path: fetch historical bars from ProtoOA (~1–2 s)
+      logger.info({ symbol, interval }, "candles: cTrader — fetching ProtoOA trendbars");
+      try {
+        const clientId     = process.env["CTRADER_CLIENT_ID"];
+        const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+        if (!clientId || !clientSecret) throw new Error("CTRADER_CLIENT_ID/SECRET not set in env");
+
+        const creds = await getCtraderCreds();
+
+        // Resolve symbol → symbolId via ctrader_symbols DB table
+        const symRow = await pool.query<{ symbol_id: number }>(
+          "SELECT symbol_id FROM ctrader_symbols WHERE UPPER(symbol_name) = UPPER($1) LIMIT 1",
+          [symbol],
+        );
+        if (!symRow.rows.length) {
+          throw new Error(`Symbol "${symbol}" not found in ctrader_symbols — run auto-setup first`);
+        }
+        const symbolId = Number(symRow.rows[0].symbol_id);
+
+        logger.info({ symbol, symbolId, interval }, "candles: cTrader — symbolId resolved, requesting trendbars");
+
+        const trendbars = await fetchTrendbars({
+          ctidTraderAccountId: creds.accountId,
+          isLive:              creds.isLive,
+          accessToken:         creds.token,
+          clientId,
+          clientSecret,
+          symbolId,
+          interval,
+          count: 500,
+        });
+
+        // Cache the completed historical bars (current open bar comes from aggregator)
+        trendbarsCache.set(cacheKey, { bars: trendbars, fetchedAt: Date.now() });
+
+        const freshAgg = aggregator.getBars(symbol, iv);
+        const merged   = mergeBars(trendbars, freshAgg);
+        logger.info(
+          { symbol, symbolId, interval, historical: trendbars.length, agg: freshAgg.length, merged: merged.length },
+          "candles: cTrader trendbars ✓",
+        );
+        res.json(merged);
+      } catch (err) {
+        // Fallback: serve live aggregated bars only — better than an error
+        logger.warn(
+          { symbol, interval, err: String(err) },
+          "candles: cTrader trendbars FAILED — falling back to aggregated-only",
+        );
+        res.json(aggregator.getBars(symbol, iv).slice(-501));
+      }
       return;
     }
 
@@ -102,7 +212,7 @@ export function createCandlesRouter(
     logger.info({ symbol, interval }, "candles: fetching real Delta Exchange India bars");
 
     const historicalBars = await fetchDeltaCandles(symbol, interval, 500);
-    const aggBars = aggregator.getBars(symbol, iv);
+    const aggBars        = aggregator.getBars(symbol, iv);
 
     if (historicalBars.length === 0) {
       logger.warn(
@@ -116,13 +226,7 @@ export function createCandlesRouter(
     const merged = mergeBars(historicalBars, aggBars);
 
     logger.info(
-      {
-        symbol,
-        interval,
-        historical: historicalBars.length,
-        aggregated: aggBars.length,
-        merged:     merged.length,
-      },
+      { symbol, interval, historical: historicalBars.length, aggregated: aggBars.length, merged: merged.length },
       "candles: serving real Delta Exchange India bars ✓",
     );
 
