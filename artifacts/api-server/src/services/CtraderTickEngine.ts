@@ -391,8 +391,9 @@ export class CtraderTickEngine extends EventEmitter {
   fetchTrendbarsOnSession(
     symbolId: number,
     interval: string,
-    count    = 500,
-    timeoutMs = 15_000,
+    count      = 500,
+    timeoutMs  = 15_000,
+    toTimestampMs?: number,   // optional cursor — omit for "latest 500 bars"
   ): Promise<CtraderOHLCBar[]> {
     if (this._status !== "streaming" || !this.conn) {
       return Promise.reject(
@@ -417,9 +418,9 @@ export class CtraderTickEngine extends EventEmitter {
       this.pendingTrendbarsQueue.push({ symbolId, interval, resolve, reject, timer });
 
       try {
-        this.conn!.write(this._buildTrendbarsReq(symbolId, period, count));
+        this.conn!.write(this._buildTrendbarsReq(symbolId, period, count, toTimestampMs));
         logger.info(
-          { symbolId, interval, period, count, queueLen: this.pendingTrendbarsQueue.length },
+          { symbolId, interval, period, count, toTimestampMs, queueLen: this.pendingTrendbarsQueue.length },
           "CtraderTickEngine: GET_TRENDBARS_REQ sent on live session",
         );
       } catch (e) {
@@ -623,9 +624,9 @@ export class CtraderTickEngine extends EventEmitter {
   // ── Trendbars helpers ────────────────────────────────────────────────────────
 
   /** Build a GET_TRENDBARS_REQ frame using 64-bit-safe varint for the timestamp. */
-  private _buildTrendbarsReq(symbolId: number, period: number, count: number): Buffer {
+  private _buildTrendbarsReq(symbolId: number, period: number, count: number, toTimestampMs?: number): Buffer {
     const { ctidTraderAccountId } = this.opts!;
-    const toMs = Date.now() + 60_000; // 1-min future margin
+    const toMs = toTimestampMs ?? (Date.now() + 60_000); // explicit cursor or 1-min future margin
     return buildFrame(PT.TRENDBARS_REQ, [
       ...u64f(1, PT.TRENDBARS_REQ),    // self-describing payloadType
       ...u64f(2, ctidTraderAccountId), // field 2 = ctidTraderAccountId

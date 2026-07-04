@@ -241,6 +241,49 @@ export function createCandlesRouter(
     // cTrader path — always uses the authenticated streaming session
     // ══════════════════════════════════════════════════════════════════════════
     if (CTRADER_SYMBOLS.has(symbol)) {
+
+      // ── 0. Infinite history page (before= parameter) ──────────────────────
+      // Skip the 5-min cache entirely and request a page of bars ending at
+      // beforeSecOpt. No aggregator merge — these are pure historical bars.
+      if (beforeSecOpt) {
+        const engineStatus = ctraderTickEngine.getStatus();
+        if (engineStatus.status !== "streaming") {
+          res.json([]);
+          return;
+        }
+        const symRow = await lookupSymbolId(symbol).catch(() => null);
+        if (!symRow) {
+          res.json([]);
+          return;
+        }
+        const toMs = beforeSecOpt * 1000; // convert seconds → ms
+        let bars: OHLCBar[] = [];
+        try {
+          bars = await ctraderTickEngine.fetchTrendbarsOnSession(
+            symRow.symbolId, interval, 500, 15_000, toMs,
+          ) as OHLCBar[];
+        } catch (firstErr) {
+          logger.warn({ symbol, interval, beforeSecOpt, err: String(firstErr) },
+            "candles: cTrader history page failed — retrying once");
+          try {
+            bars = await ctraderTickEngine.fetchTrendbarsOnSession(
+              symRow.symbolId, interval, 500, 15_000, toMs,
+            ) as OHLCBar[];
+          } catch (retryErr) {
+            logger.error({ symbol, interval, beforeSecOpt, err: String(retryErr) },
+              "candles: cTrader history page retry also failed — returning []");
+            res.json([]);
+            return;
+          }
+        }
+        // Exclude bars at or after beforeSecOpt (the client already has those)
+        const page = bars.filter(b => b.time < beforeSecOpt);
+        logger.info({ symbol, interval, beforeSecOpt, fetched: bars.length, returned: page.length },
+          "candles: cTrader history page ✓");
+        res.json(page);
+        return;
+      }
+
       const cacheKey = `${symbol}:${interval}`;
       const aggBars  = aggregator.getBars(symbol, iv);
 

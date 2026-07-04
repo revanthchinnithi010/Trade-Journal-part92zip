@@ -286,6 +286,7 @@ const PRICE_SCALE_TOUCH_W = 130; // generous max — covers even sub-micro meme 
 const DEFAULT_VISIBLE_BARS   = 150; // TradingView-style default: show ~150 recent bars on fresh load
 const MIN_FUTURE_BARS        = 50;  // always keep 50 bars of future space on the right
 const HISTORY_PREFETCH_BARS  = 150; // trigger history fetch when within this many bars of the left edge
+const MAX_TOTAL_BARS         = 10_000; // stop loading when we reach this many bars (matches cTrader/TradingView limit)
 
 // ── Price-scale touch/mouse handler — unlimited exponential zoom + kinetic ────
 //
@@ -1215,6 +1216,9 @@ const CustomChart = memo(function CustomChart({
 
       const numAdded = merged.length - existing.length;
       if (numAdded <= 0) { hasMoreHistoryRef.current = false; return; }
+
+      // Stop loading once we hit the 10,000 bar ceiling
+      if (merged.length >= MAX_TOTAL_BARS) hasMoreHistoryRef.current = false;
 
       barsRef.current          = merged;
       oldestBarTimeRef.current = merged[0].time;
