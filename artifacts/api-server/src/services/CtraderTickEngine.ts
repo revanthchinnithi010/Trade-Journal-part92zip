@@ -717,20 +717,6 @@ export class CtraderTickEngine extends EventEmitter {
       }, "CtraderTickEngine: _decodeTrendbars — ZERO trendbar buffers in RES (empty response)");
     }
 
-    // ── Hex-dump first trendbar for encoding diagnosis ──────────────────────
-    if (trendbarBufs.length > 0) {
-      const firstTb = trendbarBufs[0];
-      const parsedFirst = this._parseMsgFull(firstTb);
-      logger.warn({
-        hexDump: firstTb.slice(0, 64).toString('hex'),
-        byteLen: firstTb.length,
-        parsedFields: parsedFirst.map(x => ({
-          fn: x.fn, wt: x.wt,
-          v: Buffer.isBuffer(x.v) ? `<bytes len=${(x.v as Buffer).length}>` : x.v,
-        })),
-      }, "CtraderTickEngine: TRENDBAR FIRST BYTES DUMP");
-    }
-
     const bars: CtraderOHLCBar[] = [];
     let filtered = 0;
     for (let i = 0; i < trendbarBufs.length; i++) {
@@ -739,18 +725,24 @@ export class CtraderTickEngine extends EventEmitter {
       const getRaw  = (fn: number): number =>
         (f.find(x => x.fn === fn && x.wt === 0)?.v as number) ?? 0;
 
-      const volume = getRaw(1);
-      const rawLow       = getRaw(3);
-      const rawDeltaOpen = getRaw(4);
-      const rawDeltaClose= getRaw(5);
-      const rawDeltaHigh = getRaw(6);
-      const rawTsMin     = getRaw(7);
+      const volume = getRaw(3);
+      // ProtoOATrendbar actual wire layout (confirmed via hex dump):
+      //   field 5 = low              (uint64, NO ZigZag — absolute price × 100000)
+      //   field 6 = deltaOpen        (sint64, ZigZag — open relative to low)
+      //   field 7 = deltaClose       (sint64, ZigZag — close relative to low)
+      //   field 8 = deltaHigh        (sint64, ZigZag — high relative to low)
+      //   field 9 = utcTimestampInMinutes (uint64, NO ZigZag — minutes since Unix epoch)
+      const rawLow       = getRaw(5);
+      const rawDeltaOpen = getRaw(6);
+      const rawDeltaClose= getRaw(7);
+      const rawDeltaHigh = getRaw(8);
+      const rawTsMin     = getRaw(9);
 
-      const low          = this._zigzag64(rawLow);
-      const deltaOpen    = this._zigzag64(rawDeltaOpen);
-      const deltaClose   = this._zigzag64(rawDeltaClose);
-      const deltaHigh    = this._zigzag64(rawDeltaHigh);
-      const tsMinutes    = this._zigzag64(rawTsMin);
+      const low          = rawLow;       // uint64, no ZigZag — absolute price × 100000
+      const deltaOpen    = rawDeltaOpen; // uint64, no ZigZag — non-negative offset from low
+      const deltaClose   = rawDeltaClose;// uint64, no ZigZag — non-negative offset from low
+      const deltaHigh    = rawDeltaHigh; // uint64, no ZigZag — non-negative offset from low
+      const tsMinutes    = rawTsMin;     // uint64, no ZigZag — minutes since Unix epoch
 
       const lowPrice   = low                  / 100_000;
       const openPrice  = (low + deltaOpen)    / 100_000;
