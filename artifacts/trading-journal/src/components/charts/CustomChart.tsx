@@ -3367,6 +3367,27 @@ const CustomChart = memo(function CustomChart({
       const cs  = mainRef.current;
       if (!cs) return;
 
+      // ── Open-price guard: use client aggregator's open, never the server's ──
+      // The server's CandleAggregator seeds its open from the first tick it
+      // receives, which may be mid-candle (e.g. after server restart or engine
+      // reconnect). The client aggregator is seeded from the historical REST
+      // fetch, so its open is always the true candle open. We keep all other
+      // fields (high, low, close, volume) from the server bar — it sees every
+      // tick — but override open with the client's tracked value.
+      //
+      // Without this fix the RAF sometimes flushes the candle_update bar
+      // (which arrives before ctrader_tick on the wire) and the chart shows
+      // the server's mid-candle open for one frame, causing visible flicker on
+      // every incoming tick.
+      const agg = tradeAggRef.current;
+      const aggCurrentBar = agg?.getCurrentBar();
+      const liveOpen: number = (aggCurrentBar && aggCurrentBar.time === bar.time)
+        ? aggCurrentBar.open   // always use client-tracked open for current bar
+        : bar.open;            // new bar not yet seen by aggregator — server open is fine
+      const barForChart = liveOpen !== bar.open
+        ? { ...bar, open: liveOpen }
+        : bar;
+
       const stored   = barsRef.current;
       const lastTime = stored.length > 0 ? stored[stored.length - 1].time : 0;
       const isNewBar = bar.time !== emaLastBarTimeRef.current;
@@ -3379,11 +3400,11 @@ const CustomChart = memo(function CustomChart({
         console.warn(`[Chart] candle_update: out-of-order bar skipped in barsRef (bar=${bar.time}, last=${lastTime})`);
         // Still queue a series.update() — LWC may handle it or the try/catch in updateBar will absorb it
       } else {
-        // Update the bars ring buffer (in-place mutation — no allocation)
+        // Update the bars ring buffer with the open-corrected bar
         if (stored.length > 0 && stored[stored.length - 1].time === bar.time) {
-          stored[stored.length - 1] = bar;
+          stored[stored.length - 1] = barForChart;
         } else {
-          stored.push(bar);
+          stored.push(barForChart);
           if (stored.length > 6000) stored.shift();
         }
       }
@@ -3391,7 +3412,7 @@ const CustomChart = memo(function CustomChart({
       // ── Candle / line series update — buffered via scheduleChartUpdate ──────
       // Funnel through the same RAF path as the tick handler so both paths share
       // one series.update() per frame and respect the drag-pause contract.
-      pendingChartBarRef.current = bar;
+      pendingChartBarRef.current = barForChart;
       scheduleChartUpdate();
 
       // ── Auto-follow: slide viewport right when a new bar forms ────────────
@@ -3460,7 +3481,7 @@ const CustomChart = memo(function CustomChart({
       // The LivePriceBox RAF loop reads this every frame without waiting for
       // Zustand setState → React re-render → rc.current to propagate.
       tickDataRef.current.price = bar.close;
-      tickDataRef.current.open  = bar.open;
+      tickDataRef.current.open  = liveOpen; // always client-aggregator open
 
       // ── Throttle Zustand setState to ≤1 per rAF frame (~60 fps) ───────────
       // This keeps the header ticker, watchlist, and other React consumers
