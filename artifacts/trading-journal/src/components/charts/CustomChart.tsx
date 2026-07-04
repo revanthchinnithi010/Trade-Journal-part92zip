@@ -1858,6 +1858,30 @@ const CustomChart = memo(function CustomChart({
         pressCount = 0;
       }
 
+      // ── pressCount sanity reset (touch only) ──────────────────────────────
+      // If ig is null but pressCount is still positive, a previous pointer's
+      // cleanup was missed (missed pointerup, OS interrupt, or the double-count
+      // from onTouchStart + pointerdown firing for the same finger). Reset to 0
+      // so this fresh touch always starts from a clean slate. The window between
+      // onTouchEnd (which nulls ig) and onUp (which decrements pressCount) is
+      // too small for a new pointerdown to arrive, so this reset is safe.
+      if (e.pointerType !== 'mouse' && ig === null && pressCount > 0) {
+        pressCount = 0;
+      }
+
+      // ── onTouchStart PINCH_ZOOM fast-path ────────────────────────────────
+      // onTouchStart already entered PINCH_ZOOM with pointerId=-1 (sentinel for
+      // "no single tracked pointer, using e.touches[]"). When the corresponding
+      // pointerdown for the second finger now arrives we must NOT run the full
+      // PINCH_ZOOM setup again (which would call cancelIg() + pressCount++ and
+      // corrupt the count). Just update the tracking ID and return.
+      if (e.pointerType !== 'mouse' && ig?.mode === 'PINCH_ZOOM' && ig.pointerId === -1) {
+        ig.pointerId     = e.pointerId;
+        ig.pinchPrevSpan = null; // re-seed span on next touchmove
+        try { container.setPointerCapture(e.pointerId); } catch { /* ok */ }
+        return; // pressCount already set to correct value by onTouchStart
+      }
+
       // Do NOT dismiss locked crosshair here — wait to see if this touch
       // is a tap (dismiss) or a drag (keep). Decision made in onUp.
 
@@ -1867,7 +1891,11 @@ const CustomChart = memo(function CustomChart({
       // Cancel our single-finger state immediately. We implement pinch-to-zoom
       // ourselves in the onTouchMove capture listener using e.touches[].
       // Do NOT stopPropagation here — LWC should still see this pointerdown.
-      if (pressCount >= 2) {
+      //
+      // GUARD: require touchCount >= 2 (ground truth from e.touches.length) in
+      // addition to pressCount >= 2. This prevents a drifted pressCount from
+      // falsely entering PINCH_ZOOM when only one finger is actually on screen.
+      if (pressCount >= 2 && touchCount >= 2) {
         // IMPORTANT: release pointer capture on the first finger BEFORE cancelIg()
         // clears ig. The container captured pointer 1 on first touch (line below);
         // if we don't release it, LWC never sees pointer 1 events.
@@ -2551,7 +2579,13 @@ const CustomChart = memo(function CustomChart({
       // Cancel any running single-finger gesture (PENDING, CHART_PAN, etc.)
       const firstPointerId = ig?.pointerId;
       cancelIg();
-      pressCount = e.touches.length; // sync count to actual touch count
+      // Set pressCount to touches.length - 1, NOT touches.length.
+      // The pointerdown for the second finger is about to fire and will do
+      // pressCount++ once more. If we set it to e.touches.length here,
+      // the subsequent pointerdown brings it to touches.length + 1 — causing
+      // a persistent +1 drift that survives every subsequent pinch→lift cycle
+      // and makes single-finger drags falsely enter PINCH_ZOOM mode (freeze).
+      pressCount = e.touches.length - 1;
       if (firstPointerId !== undefined) {
         try { container.releasePointerCapture(firstPointerId); } catch { /* ok */ }
       }
@@ -2623,6 +2657,9 @@ const CustomChart = memo(function CustomChart({
       } else if (ig?.mode === 'PINCH_ZOOM') {
         // Partial cancel (some fingers remain): same logic as onTouchEnd
         ig = null;
+        // Sync pressCount to the remaining touch count so the next gesture
+        // doesn't start with a stale elevated count and falsely enter PINCH_ZOOM.
+        pressCount = e.touches.length;
       }
     };
 
@@ -2673,6 +2710,12 @@ const CustomChart = memo(function CustomChart({
         }
       } else if (ig.mode === 'CROSSHAIR_LOCKED' || ig.mode === 'CROSSHAIR_DRAG') {
         e.stopPropagation(); // prevent LWC from panning the chart
+      } else if (ig.mode === 'PENDING') {
+        // Block LWC from scrolling/panning during the long-press window.
+        // Without this LWC's own touchmove handler can move the chart while
+        // we're still deciding between CHART_PAN and CROSSHAIR_LOCKED,
+        // causing the chart position to jump when we finally take over.
+        e.stopPropagation();
       }
     };
 
