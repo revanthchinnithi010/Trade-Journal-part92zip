@@ -115,24 +115,35 @@ export class AppConfigService {
       const result = await pool.query(
         `SELECT key, value_enc FROM app_config`,
       );
-      let count = 0;
+      let injected = 0;
+      let alreadySet = 0;
+      let decryptFailed = 0;
+      const dbKeys: string[] = [];
       for (const row of result.rows as Array<{ key: string; value_enc: string }>) {
+        dbKeys.push(row.key);
         try {
           const value = decryptValue(row.value_enc);
           if (!process.env[row.key]) {
             process.env[row.key] = value;
+            injected++;
+          } else {
+            alreadySet++;
           }
           this.cache.set(row.key, value);
-          count++;
-        } catch {
-          logger.warn({ key: row.key }, "AppConfigService: decrypt failed during inject");
+        } catch (err) {
+          decryptFailed++;
+          logger.warn(
+            { key: row.key, err: String(err) },
+            "AppConfigService: decrypt failed during inject — BROKER_ENCRYPTION_KEY may have changed",
+          );
         }
       }
-      if (count > 0) {
-        logger.info({ count }, "AppConfigService: injected stored credentials into env");
-      }
-    } catch {
-      logger.debug("AppConfigService: injectToEnv skipped (table may not exist yet)");
+      logger.info(
+        { dbKeys, injected, alreadySet, decryptFailed, total: result.rows.length },
+        "AppConfigService: injectToEnv complete",
+      );
+    } catch (err) {
+      logger.warn({ err: String(err) }, "AppConfigService: injectToEnv failed (table may not exist yet)");
     }
   }
 }

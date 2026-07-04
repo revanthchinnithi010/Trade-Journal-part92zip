@@ -4,6 +4,7 @@ import { pool } from "@workspace/db";
 import { encrypt, decrypt } from "../services/BrokerEncryption.js";
 import { logger } from "../lib/logger.js";
 import { fetchSymbolsViaProtoOA, fetchSymbolsVerbose, probeAppAuth, reconcileAccount, type CtraderSymbol } from "../lib/ctraderProtoOA.js";
+import { AppConfigService } from "../services/AppConfigService.js";
 
 const CTRADER_AUTH_URL  = "https://openapi.ctrader.com/apps/auth";
 const CTRADER_TOKEN_URL = "https://openapi.ctrader.com/apps/token";
@@ -76,21 +77,72 @@ function getRedirectUri(req: Request): string {
 export function createCtraderOAuthRouter(): Router {
   const router = Router();
 
-  router.get("/ctrader/debug-config", (req, res) => {
-    const clientId     = process.env["CTRADER_CLIENT_ID"];
-    const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+  router.get("/ctrader/debug-config", async (req, res) => {
+    // Source 1: process.env (Replit Secrets + startup injectToEnv)
+    const envClientId     = process.env["CTRADER_CLIENT_ID"];
+    const envClientSecret = process.env["CTRADER_CLIENT_SECRET"];
+
+    // Source 2: app_config DB table (credential import UI)
+    const dbClientId     = await AppConfigService.get("CTRADER_CLIENT_ID").catch(() => undefined);
+    const dbClientSecret = await AppConfigService.get("CTRADER_CLIENT_SECRET").catch(() => undefined);
+
+    // Scan all env var KEY names that contain "CTRADER" (catches typos — never reveals values)
+    const ctraderEnvKeys = Object.keys(process.env).filter(k =>
+      k.toUpperCase().includes("CTRADER"),
+    );
+
+    const hasClientId     = !!envClientId || !!dbClientId;
+    const hasClientSecret = !!envClientSecret || !!dbClientSecret;
+
     res.json({
-      hasClientId:     !!clientId,
-      hasClientSecret: !!clientSecret,
-      clientIdLength:  clientId?.length ?? 0,
-      redirectUri:     getRedirectUri(req),
+      hasClientId,
+      hasClientSecret,
+      clientIdLength:    envClientId?.length ?? dbClientId?.length ?? 0,
+      redirectUri:       getRedirectUri(req),
       redirectUriSource: process.env["CTRADER_REDIRECT_URI"] ? "CTRADER_REDIRECT_URI env var" : "x-forwarded headers",
+      sources: {
+        env: {
+          hasClientId:     !!envClientId,
+          hasClientSecret: !!envClientSecret,
+          note:            "process.env — Replit Secrets + startup DB injection",
+        },
+        db: {
+          hasClientId:     !!dbClientId,
+          hasClientSecret: !!dbClientSecret,
+          note:            "app_config table — set via credential import UI",
+        },
+      },
+      ctraderEnvKeys,
+      diagnosis: !hasClientId || !hasClientSecret
+        ? [
+            "Neither Replit Secrets nor the credential import DB has the required values.",
+            "Fix option A: Add CTRADER_CLIENT_ID and CTRADER_CLIENT_SECRET to Replit Secrets (the lock icon in the sidebar), then restart the server.",
+            "Fix option B: Enter credentials via the credential import UI in the app settings.",
+            `Env keys found containing 'CTRADER': [${ctraderEnvKeys.join(", ") || "none"}]`,
+          ]
+        : ["Credentials found — both sources checked."],
     });
   });
 
   router.get("/ctrader/oauth/config", async (req, res) => {
-    const clientId     = process.env["CTRADER_CLIENT_ID"];
-    const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
+    // Read from process.env first (Replit Secrets / startup injection),
+    // then fall back to app_config DB (credential import UI).
+    // This ensures credentials stored via either path are recognized.
+    const clientId = process.env["CTRADER_CLIENT_ID"]
+      || await AppConfigService.get("CTRADER_CLIENT_ID").catch(() => undefined)
+      || undefined;
+    const clientSecret = process.env["CTRADER_CLIENT_SECRET"]
+      || await AppConfigService.get("CTRADER_CLIENT_SECRET").catch(() => undefined)
+      || undefined;
+
+    // If found in DB but not env, inject now so later process.env reads also see it
+    if (clientId && !process.env["CTRADER_CLIENT_ID"]) {
+      process.env["CTRADER_CLIENT_ID"] = clientId;
+    }
+    if (clientSecret && !process.env["CTRADER_CLIENT_SECRET"]) {
+      process.env["CTRADER_CLIENT_SECRET"] = clientSecret;
+    }
+
     const hasClientId     = !!clientId;
     const hasClientSecret = !!clientSecret;
     const configured      = hasClientId && hasClientSecret;
@@ -116,7 +168,7 @@ export function createCtraderOAuthRouter(): Router {
     } else {
       logger.warn(
         { hasClientId, hasClientSecret },
-        "ctrader/oauth/config: CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not set",
+        "ctrader/oauth/config: CTRADER_CLIENT_ID or CTRADER_CLIENT_SECRET not set in env or DB",
       );
     }
 
