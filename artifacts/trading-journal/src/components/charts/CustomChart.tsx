@@ -1876,10 +1876,17 @@ const CustomChart = memo(function CustomChart({
       // PINCH_ZOOM setup again (which would call cancelIg() + pressCount++ and
       // corrupt the count). Just update the tracking ID and return.
       if (e.pointerType !== 'mouse' && ig?.mode === 'PINCH_ZOOM' && ig.pointerId === -1) {
+        // onTouchStart already established PINCH_ZOOM (pointerId=-1 sentinel).
+        // The second finger's pointerdown arrives here. Update the tracking ID,
+        // increment pressCount (pointer events own this counter), and return
+        // without re-running the PINCH_ZOOM setup block. This keeps pressCount
+        // accurate (=2 while both fingers are down, =1 after first lifts) so
+        // autoScale is only restored when the last finger actually leaves.
         ig.pointerId     = e.pointerId;
         ig.pinchPrevSpan = null; // re-seed span on next touchmove
         try { container.setPointerCapture(e.pointerId); } catch { /* ok */ }
-        return; // pressCount already set to correct value by onTouchStart
+        pressCount++;
+        return;
       }
 
       // Do NOT dismiss locked crosshair here — wait to see if this touch
@@ -2579,13 +2586,12 @@ const CustomChart = memo(function CustomChart({
       // Cancel any running single-finger gesture (PENDING, CHART_PAN, etc.)
       const firstPointerId = ig?.pointerId;
       cancelIg();
-      // Set pressCount to touches.length - 1, NOT touches.length.
-      // The pointerdown for the second finger is about to fire and will do
-      // pressCount++ once more. If we set it to e.touches.length here,
-      // the subsequent pointerdown brings it to touches.length + 1 — causing
-      // a persistent +1 drift that survives every subsequent pinch→lift cycle
-      // and makes single-finger drags falsely enter PINCH_ZOOM mode (freeze).
-      pressCount = e.touches.length - 1;
+      // Do NOT modify pressCount here. pressCount is owned exclusively by pointer
+      // events (pointerdown → ++, pointerup/cancel → --). onTouchStart is a touch
+      // event; if we also set pressCount here the subsequent pointerdown for the
+      // second finger increments it again, causing a persistent +1 drift that
+      // makes single-finger drags falsely enter PINCH_ZOOM after every pinch.
+      // The onDown fast-path below handles the second pointerdown correctly.
       if (firstPointerId !== undefined) {
         try { container.releasePointerCapture(firstPointerId); } catch { /* ok */ }
       }
