@@ -1,6 +1,7 @@
 import {
   memo, useCallback, useEffect, useLayoutEffect, useRef, useState, useMemo,
 } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import html2canvas from "html2canvas";
 import {
   ChevronDown, ChevronUp,
@@ -66,6 +67,15 @@ import { OrdersList } from "@/components/broker/OrdersList";
 import { PlaceOrderPanel } from "@/components/broker/PlaceOrderPanel";
 import { BrokerTabs } from "@/components/charts/BrokerTabs";
 import { ConnectionStatus } from "@/components/charts/ConnectionStatus";
+import {
+  PageTransition,
+  AnimatedModal,
+  AnimatedButton,
+  AnimatedIconButton,
+  AnimatedList,
+  AnimatedListItem,
+  FadeIn,
+} from "@/components/animations";
 
 // ── Replay selector — draggable vertical line overlay ─────────────────────────
 const ReplaySelector = memo(function ReplaySelector({
@@ -433,9 +443,7 @@ function AddSymbolModal({ onClose, existing }: { onClose: () => void; existing: 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(0,0,0,0.72)", backdropFilter: "blur(6px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+    <AnimatedModal open onClose={onClose} mode="dialog" zIndex={2000}>
       <div className="w-80 rounded-2xl overflow-hidden shadow-2xl"
         style={{ background: "hsl(var(--background))", border: "1px solid var(--surface-btn-border)" }}>
         <div className="flex items-center justify-between px-4 py-3"
@@ -464,23 +472,27 @@ function AddSymbolModal({ onClose, existing }: { onClose: () => void; existing: 
                 <span className="text-[9px] font-bold uppercase tracking-wider"
                   style={{ color: "rgba(167,184,169,0.45)" }}>{market}</span>
               </div>
-              {syms.map(([key, meta]) => (
-                <button key={key} onClick={() => handleAdd(key)} disabled={!!adding || added.has(key)}
-                  className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.04] transition-colors text-left disabled:opacity-50">
-                  <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[9px] font-black"
-                    style={{ background: "rgba(13,28,22,0.9)", color: "#A7B8A9" }}>{meta.badge.slice(0, 4)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[12px] font-semibold text-white leading-none">{meta.label}</p>
-                    <p className="text-[10px] text-muted-foreground/50 leading-none mt-0.5">{key}</p>
-                  </div>
-                  <div className="shrink-0">
-                    {adding === key ? <div className="w-4 h-4 rounded-full border-2 border-primary/40 border-t-primary animate-spin" />
-                    : errors[key] ? <span className="text-[9px] text-red-400">Failed</span>
-                    : added.has(key) ? <span className="text-[9px] text-foreground/60">✓</span>
-                    : <Plus className="w-3.5 h-3.5" style={{ color: "rgba(167,184,169,0.4)" }} />}
-                  </div>
-                </button>
-              ))}
+              <AnimatedList>
+                {syms.map(([key, meta]) => (
+                  <AnimatedListItem key={key}>
+                    <button onClick={() => handleAdd(key)} disabled={!!adding || added.has(key)}
+                      className="w-full flex items-center gap-3 px-4 py-2 hover:bg-white/[0.04] transition-colors text-left disabled:opacity-50">
+                      <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-[9px] font-black"
+                        style={{ background: "rgba(13,28,22,0.9)", color: "#A7B8A9" }}>{meta.badge.slice(0, 4)}</div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[12px] font-semibold text-white leading-none">{meta.label}</p>
+                        <p className="text-[10px] text-muted-foreground/50 leading-none mt-0.5">{key}</p>
+                      </div>
+                      <div className="shrink-0">
+                        {adding === key ? <div className="w-4 h-4 rounded-full border-2 border-primary/40 border-t-primary animate-spin" />
+                        : errors[key] ? <span className="text-[9px] text-red-400">Failed</span>
+                        : added.has(key) ? <span className="text-[9px] text-foreground/60">✓</span>
+                        : <Plus className="w-3.5 h-3.5" style={{ color: "rgba(167,184,169,0.4)" }} />}
+                      </div>
+                    </button>
+                  </AnimatedListItem>
+                ))}
+              </AnimatedList>
             </div>
           ))}
           {filtered.length === 0 && (
@@ -490,7 +502,7 @@ function AddSymbolModal({ onClose, existing }: { onClose: () => void; existing: 
           )}
         </div>
       </div>
-    </div>
+    </AnimatedModal>
   );
 }
 
@@ -527,14 +539,21 @@ function SymbolPicker({ items, activeKey, onSelect, onClose }: {
     (a, b) => (MARKET_ORDER.indexOf(a) + 99) % 99 - (MARKET_ORDER.indexOf(b) + 99) % 99);
 
   return (
-    <div ref={ref} style={{
-      position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 80,
-      width: 280, maxHeight: 380, overflow: "hidden",
-      background: "rgba(7,11,9,0.98)", backdropFilter: "blur(24px)",
-      border: "1px solid rgba(57,91,67,0.35)", borderRadius: 14,
-      boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
-      display: "flex", flexDirection: "column",
-    }}>
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, scale: 0.96, y: -4 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      exit={{ opacity: 0, scale: 0.96, y: -4 }}
+      transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+      style={{
+        position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 80,
+        width: 280, maxHeight: 380, overflow: "hidden",
+        background: "rgba(7,11,9,0.98)", backdropFilter: "blur(24px)",
+        border: "1px solid rgba(57,91,67,0.35)", borderRadius: 14,
+        boxShadow: "0 16px 48px rgba(0,0,0,0.7)",
+        display: "flex", flexDirection: "column",
+      }}
+    >
       <div style={{ padding: "10px 10px 8px", borderBottom: "1px solid rgba(57,91,67,0.15)" }}>
         <div style={{ position: "relative" }}>
           <Search style={{ position: "absolute", left: 8, top: 7, width: 13, height: 13, color: "rgba(167,184,169,0.4)" }} />
@@ -598,7 +617,7 @@ function SymbolPicker({ items, activeKey, onSelect, onClose }: {
           </div>
         )}
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -864,16 +883,7 @@ function SnapshotPreviewPopup({ url, filename, onClose }: {
   });
 
   return (
-    <div
-      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        display: "flex", alignItems: "center", justifyContent: "center",
-        background: "rgba(0,0,0,0.72)",
-        backdropFilter: "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-      }}
-    >
+    <AnimatedModal open onClose={onClose} mode="dialog" zIndex={9999}>
       <div style={{
         width: 520, maxWidth: "92vw",
         background: "rgba(8,16,12,0.97)",
@@ -953,7 +963,7 @@ function SnapshotPreviewPopup({ url, filename, onClose }: {
           </button>
         </div>
       </div>
-    </div>
+    </AnimatedModal>
   );
 }
 
@@ -1557,13 +1567,14 @@ export default function Charts() {
   );
 
   return (
-    <div className="flex flex-col" style={{
-      height: "100%", background: "#0a0a0a",
-      cursor: isDragging ? "ns-resize" : "default",
-      userSelect: isDragging ? "none" : "auto",
-    }}>
+    <PageTransition>
+      <div className="flex flex-col" style={{
+        height: "100%", background: "#0a0a0a",
+        cursor: isDragging ? "ns-resize" : "default",
+        userSelect: isDragging ? "none" : "auto",
+      }}>
 
-      {/* ── TOP TOOLBAR — TradingView flat style ── */}
+        {/* ── TOP TOOLBAR — TradingView flat style ── */}
       <div ref={toolbarRef} style={{
         height: 52, display: "flex", alignItems: "center",
         background: "#0a0a0a",
@@ -2207,5 +2218,6 @@ export default function Charts() {
         />
       )}
     </div>
+    </PageTransition>
   );
 }

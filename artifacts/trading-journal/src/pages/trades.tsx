@@ -32,6 +32,16 @@ import {
   TV_LINKS
 } from "@/data/sampleData";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  PageTransition,
+  AnimatedList,
+  AnimatedListItem,
+  AnimatedPresenceList,
+  AnimatedButton,
+  AnimatedIconButton,
+  LoadingSpinner,
+  FadeIn
+} from "@/components/animations";
 
 const tradeSchema = z.object({
   symbol: z.string().min(1, "Symbol is required"),
@@ -477,7 +487,7 @@ export default function Trades() {
   const labelCls = "text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider";
 
   return (
-    <div className="space-y-5 pb-12">
+    <PageTransition className="space-y-5 pb-12">
 
       {/* ── Filter Bar ── */}
       {isMobile ? (
@@ -495,9 +505,9 @@ export default function Trades() {
           </div>
 
           {/* Filter icon with active-count badge */}
-          <button
+          <AnimatedIconButton
             onClick={() => setFilterSheetOpen(true)}
-            className="relative flex items-center justify-center w-10 h-10 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] active:scale-95 transition-all shrink-0"
+            className="relative flex items-center justify-center w-10 h-10 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all shrink-0"
           >
             <SlidersHorizontal className="w-4 h-4" />
             {activeFilterCount > 0 && (
@@ -508,18 +518,18 @@ export default function Trades() {
                 {activeFilterCount}
               </span>
             )}
-          </button>
+          </AnimatedIconButton>
 
           {/* Log Trade */}
-          <button
+          <AnimatedButton
             onClick={openModal}
-            className="flex items-center gap-1.5 px-3.5 h-10 rounded-xl border-2 border-white bg-white text-black text-[13px] font-semibold hover:bg-white/90 active:scale-[0.97] transition-all shadow-md shadow-black/10 shrink-0"
+            className="flex items-center gap-1.5 px-3.5 h-10 rounded-xl border-2 border-white bg-white text-black text-[13px] font-semibold hover:bg-white/90 shadow-md shadow-black/10 shrink-0"
           >
             <span className="flex items-center justify-center w-4 h-4 rounded-full bg-black">
               <Plus className="w-2.5 h-2.5 text-white" />
             </span>
             Log
-          </button>
+          </AnimatedButton>
         </div>
       ) : (
         /* ── Desktop: original full filter bar ── */
@@ -577,13 +587,13 @@ export default function Trades() {
               ))}
             </div>
           </div>
-          <button
+          <AnimatedButton
             onClick={openModal}
-            className="flex items-center gap-2 px-4 h-9 rounded-xl border-0 bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-primary/25 shrink-0"
+            className="flex items-center gap-2 px-4 h-9 rounded-xl border-0 bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 shadow-md shadow-primary/25 shrink-0"
           >
             <Plus className="w-4 h-4" />
             Log Trade
-          </button>
+          </AnimatedButton>
         </div>
       )}
 
@@ -626,7 +636,7 @@ export default function Trades() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <AnimatedList as="tbody">
               {!tradesResponse ? (
                 <tr>
                   <td colSpan={10} className="px-5 py-12 text-center">
@@ -644,14 +654,16 @@ export default function Trades() {
                   </td>
                 </tr>
               ) : (
-                filteredTrades.map((trade) => {
+                filteredTrades.map((trade, idx) => {
                   const broker = BROKER_MAP[trade.symbol] || "—";
                   const rr = trade.riskRewardRatio || 0;
                   const setupTags = trade.setupTags ? trade.setupTags.split(",").filter(Boolean) : [];
 
                   return (
-                    <tr
+                    <AnimatedListItem
+                      as="tr"
                       key={trade.id}
+                      index={idx}
                       className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group cursor-pointer"
                       onClick={() => setSelectedTradeId(trade.id)}
                     >
@@ -719,11 +731,11 @@ export default function Trades() {
                           </button>
                         </div>
                       </td>
-                    </tr>
+                    </AnimatedListItem>
                   );
                 })
               )}
-            </tbody>
+            </AnimatedList>
           </table>
         </div>
 
@@ -734,14 +746,14 @@ export default function Trades() {
               {(page - 1) * 20 + 1}–{Math.min(page * 20, tradesResponse.total)} of {tradesResponse.total}
             </p>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+              <AnimatedButton variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
                 className="rounded-xl border-white/[0.08] bg-white/[0.03] h-8 text-xs hover:bg-white/[0.07]">
                 Previous
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page * 20 >= tradesResponse.total}
+              </AnimatedButton>
+              <AnimatedButton variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page * 20 >= tradesResponse.total}
                 className="rounded-xl border-white/[0.08] bg-white/[0.03] h-8 text-xs hover:bg-white/[0.07]">
                 Next
-              </Button>
+              </AnimatedButton>
             </div>
           </div>
         )}
@@ -777,12 +789,12 @@ export default function Trades() {
                   <h2 className="text-lg font-black text-white tracking-tight">Log New Trade</h2>
                   <p className="text-[12px] text-muted-foreground mt-0.5">Record your trade details and analysis</p>
                 </div>
-                <button
+                <AnimatedIconButton
                   onClick={() => setIsModalOpen(false)}
                   className="w-8 h-8 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white hover:bg-white/[0.07] transition-all"
                 >
                   <X className="w-4 h-4" />
-                </button>
+                </AnimatedIconButton>
               </div>
 
               {/* Tabs */}

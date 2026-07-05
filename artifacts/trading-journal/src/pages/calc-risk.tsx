@@ -1,6 +1,14 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ShieldCheck, TrendingDown, Activity } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { 
+  PageTransition, 
+  AnimatedCard, 
+  AnimatedList, 
+  AnimatedListItem, 
+  NumberCounter,
+  AnimatedButton
+} from "@/components/animations";
 
 const RISK_PRESETS = [0.25, 0.5, 1, 1.5, 2, 3];
 const RR_PRESETS   = [1, 1.5, 2, 2.5, 3, 4];

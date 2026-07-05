@@ -2,6 +2,8 @@ import { memo, useRef, useEffect, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, TrendingUp, Trash2, Plus } from "lucide-react";
 import { useIndicatorStore, type IndicatorType } from "@/store/indicatorStore";
+import { motion, AnimatePresence } from "motion/react";
+import { AnimatedModal, AnimatedList, AnimatedListItem } from "@/components/animations";
 
 // ── WaveTrend built-in Pine Script ────────────────────────────────────────────
 
@@ -53,73 +55,59 @@ interface CustomModalProps { onClose: () => void; onAdd: (name: string, pineCode
 const CustomIndicatorModal = memo(function CustomIndicatorModal({ onClose, onAdd }: CustomModalProps) {
   const [name, setName] = useState("");
   const [code, setCode] = useState("");
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { const id = requestAnimationFrame(() => setMounted(true)); return () => cancelAnimationFrame(id); }, []);
 
-  const handleAdd = () => { if (!name.trim()) return; onAdd(name.trim(), code.trim()); onClose(); };
-  const handleBackdrop = (e: React.MouseEvent) => { if (e.target === e.currentTarget) onClose(); };
+  const handleAdd = () => {
+    if (!name.trim()) return;
+    onAdd(name.trim(), code.trim());
+    onClose();
+  };
 
-  return createPortal(
-    <div onClick={handleBackdrop} style={{
-      position: "fixed", inset: 0, zIndex: 9999999,
-      background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "center", justifyContent: "center",
-      opacity: mounted ? 1 : 0, transition: "opacity 0.18s ease",
-    }}>
-      <div style={{
-        background: "#131722", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 14,
-        width: 380, maxWidth: "calc(100vw - 32px)",
-        boxShadow: "0 24px 60px rgba(0,0,0,0.7)", overflow: "hidden",
-        transform: `scale(${mounted ? 1 : 0.95})`, transition: "transform 0.2s cubic-bezier(0.16,1,0.3,1)",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", borderBottom: "1px solid rgba(255,255,255,0.07)" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#d1d4dc" }}>Custom Indicator</span>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", padding: 4, borderRadius: 6, display: "flex" }}
-            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.08)"}
-            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "transparent"}>
-            <X style={{ width: 13, height: 13, color: "rgba(255,255,255,0.4)" }} />
+  return (
+    <AnimatedModal
+      isOpen={true}
+      onClose={onClose}
+      title="Custom Indicator"
+      mode="dialog"
+    >
+      <div style={{ padding: 16 }}>
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6, letterSpacing: "0.04em" }}>
+            Indicator Name
+          </label>
+          <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My EMA, BOS, FVG"
+            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", fontFamily: "inherit" }}
+            onFocus={e => (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(41,98,255,0.6)"}
+            onBlur={e => (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.1)"} />
+        </div>
+        <div style={{ marginBottom: 18 }}>
+          <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6, letterSpacing: "0.04em" }}>
+            Pine Script Code
+          </label>
+          <div style={{ marginBottom: 6, fontSize: 10, color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>
+            Supports: ta.ema, ta.sma, ta.rsi, ta.vwap, BOS/CHoCH, FVG, OB, Liquidity
+          </div>
+          <textarea value={code} onChange={e => setCode(e.target.value)}
+            placeholder={`indicator("My Strategy")\n\n// Detects BOS/CHoCH automatically\n// FVG, Order Blocks, Liquidity\n// or: plot(ta.ema(close, 200))`}
+            rows={8}
+            style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", resize: "vertical", fontFamily: "'JetBrains Mono', 'Fira Mono', 'Consolas', monospace", lineHeight: 1.6, minHeight: 140 }}
+            onFocus={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = "rgba(41,98,255,0.6)"}
+            onBlur={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = "rgba(255,255,255,0.1)"} />
+        </div>
+        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, cursor: "pointer", padding: "8px 16px", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}
+            onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"}
+            onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"}>
+            Cancel
+          </button>
+          <button onClick={handleAdd} disabled={!name.trim()}
+            style={{ background: name.trim() ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${name.trim() ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.08)"}`, borderRadius: 8, cursor: name.trim() ? "pointer" : "default", padding: "8px 18px", fontSize: 12, fontWeight: 600, color: name.trim() ? "#22c55e" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}
+            onMouseEnter={e => { if (name.trim()) (e.currentTarget as HTMLButtonElement).style.background = "rgba(34,197,94,0.25)"; }}
+            onMouseLeave={e => { if (name.trim()) (e.currentTarget as HTMLButtonElement).style.background = "rgba(34,197,94,0.15)"; }}>
+            Add Indicator
           </button>
         </div>
-        <div style={{ padding: 16 }}>
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6, letterSpacing: "0.04em" }}>
-              Indicator Name
-            </label>
-            <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. My EMA, BOS, FVG"
-              style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "9px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", fontFamily: "inherit" }}
-              onFocus={e => (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(41,98,255,0.6)"}
-              onBlur={e => (e.currentTarget as HTMLInputElement).style.borderColor = "rgba(255,255,255,0.1)"} />
-          </div>
-          <div style={{ marginBottom: 18 }}>
-            <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: "rgba(167,184,169,0.7)", marginBottom: 6, letterSpacing: "0.04em" }}>
-              Pine Script Code
-            </label>
-            <div style={{ marginBottom: 6, fontSize: 10, color: "rgba(255,255,255,0.3)", lineHeight: 1.5 }}>
-              Supports: ta.ema, ta.sma, ta.rsi, ta.vwap, BOS/CHoCH, FVG, OB, Liquidity
-            </div>
-            <textarea value={code} onChange={e => setCode(e.target.value)}
-              placeholder={`indicator("My Strategy")\n\n// Detects BOS/CHoCH automatically\n// FVG, Order Blocks, Liquidity\n// or: plot(ta.ema(close, 200))`}
-              rows={8}
-              style={{ width: "100%", boxSizing: "border-box", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "10px 12px", fontSize: 12, color: "#d1d4dc", outline: "none", resize: "vertical", fontFamily: "'JetBrains Mono', 'Fira Mono', 'Consolas', monospace", lineHeight: 1.6, minHeight: 140 }}
-              onFocus={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = "rgba(41,98,255,0.6)"}
-              onBlur={e => (e.currentTarget as HTMLTextAreaElement).style.borderColor = "rgba(255,255,255,0.1)"} />
-          </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, cursor: "pointer", padding: "8px 16px", fontSize: 12, fontWeight: 600, color: "rgba(255,255,255,0.6)" }}
-              onMouseEnter={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.1)"}
-              onMouseLeave={e => (e.currentTarget as HTMLButtonElement).style.background = "rgba(255,255,255,0.06)"}>
-              Cancel
-            </button>
-            <button onClick={handleAdd} disabled={!name.trim()}
-              style={{ background: name.trim() ? "rgba(34,197,94,0.15)" : "rgba(255,255,255,0.04)", border: `1px solid ${name.trim() ? "rgba(34,197,94,0.5)" : "rgba(255,255,255,0.08)"}`, borderRadius: 8, cursor: name.trim() ? "pointer" : "default", padding: "8px 18px", fontSize: 12, fontWeight: 600, color: name.trim() ? "#22c55e" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}
-              onMouseEnter={e => { if (name.trim()) (e.currentTarget as HTMLButtonElement).style.background = "rgba(34,197,94,0.25)"; }}
-              onMouseLeave={e => { if (name.trim()) (e.currentTarget as HTMLButtonElement).style.background = "rgba(34,197,94,0.15)"; }}>
-              Add Indicator
-            </button>
-          </div>
-        </div>
       </div>
-    </div>,
-    document.body
+    </AnimatedModal>
   );
 });
 
@@ -191,15 +179,20 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
   return (
     <>
       {createPortal(
-        <div ref={ref} style={{
-          position: "fixed", top: pos.top, left: pos.left, width: 260,
-          background: "#131722", border: "1px solid rgba(255,255,255,0.06)",
-          borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
-          overflow: "hidden", zIndex: 999999, pointerEvents: "auto",
-          transform: `translateY(${mounted ? 0 : -8}px)`, opacity: mounted ? 1 : 0,
-          transition: "transform 0.2s cubic-bezier(0.16,1,0.3,1), opacity 0.18s ease",
-          maxHeight: "80vh", overflowY: "auto",
-        }}>
+        <motion.div
+          ref={ref}
+          initial={{ opacity: 0, y: -8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -8, scale: 0.98 }}
+          transition={{ duration: 0.15, ease: "easeOut" }}
+          style={{
+            position: "fixed", top: pos.top, left: pos.left, width: 260,
+            background: "#131722", border: "1px solid rgba(255,255,255,0.06)",
+            borderRadius: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
+            overflow: "hidden", zIndex: 999999, pointerEvents: "auto",
+            maxHeight: "80vh", overflowY: "auto",
+          }}
+        >
           {/* Header */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px 8px", borderBottom: "1px solid rgba(255,255,255,0.06)", position: "sticky", top: 0, background: "#131722", zIndex: 1 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -216,68 +209,82 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
           {/* EMA section */}
           <SectionLabel>Moving Averages (EMA)</SectionLabel>
           <div style={{ padding: "4px 0 4px" }}>
-            {EMA_PRESETS.map(({ period, color }) => {
-              const ind = getAppliedEma(period);
-              const isDeleting = ind ? deletingIds.has(ind.id) : false;
-              return (
-                <PresetRow key={period}
-                  color={color} label={`EMA ${period}`}
-                  applied={!!ind} isDeleting={isDeleting}
-                  onAdd={() => { addIndicator("EMA", "EMA", { color, settings: { period, source: "close", offset: 0 }, label: `EMA (${period})` }); onClose(); }}
-                  onDelete={ind ? () => handleDelete(ind.id) : undefined}
-                />
-              );
-            })}
+            <AnimatedList>
+              {EMA_PRESETS.map(({ period, color }) => {
+                const ind = getAppliedEma(period);
+                const isDeleting = ind ? deletingIds.has(ind.id) : false;
+                return (
+                  <AnimatedListItem key={period}>
+                    <PresetRow
+                      color={color} label={`EMA ${period}`}
+                      applied={!!ind} isDeleting={isDeleting}
+                      onAdd={() => { addIndicator("EMA", "EMA", { color, settings: { period, source: "close", offset: 0 }, label: `EMA (${period})` }); onClose(); }}
+                      onDelete={ind ? () => handleDelete(ind.id) : undefined}
+                    />
+                  </AnimatedListItem>
+                );
+              })}
+            </AnimatedList>
           </div>
 
           {/* SMA section */}
           <SectionLabel>Moving Averages (SMA)</SectionLabel>
           <div style={{ padding: "4px 0 4px" }}>
-            {SMA_PRESETS.map(({ period, color }) => {
-              const ind = getAppliedSma(period);
-              const isDeleting = ind ? deletingIds.has(ind.id) : false;
-              return (
-                <PresetRow key={period}
-                  color={color} label={`SMA ${period}`}
-                  applied={!!ind} isDeleting={isDeleting}
-                  onAdd={() => { addIndicator("SMA", "SMA", { color, settings: { period, source: "close", offset: 0 }, label: `SMA (${period})` }); onClose(); }}
-                  onDelete={ind ? () => handleDelete(ind.id) : undefined}
-                />
-              );
-            })}
+            <AnimatedList>
+              {SMA_PRESETS.map(({ period, color }) => {
+                const ind = getAppliedSma(period);
+                const isDeleting = ind ? deletingIds.has(ind.id) : false;
+                return (
+                  <AnimatedListItem key={period}>
+                    <PresetRow
+                      color={color} label={`SMA ${period}`}
+                      applied={!!ind} isDeleting={isDeleting}
+                      onAdd={() => { addIndicator("SMA", "SMA", { color, settings: { period, source: "close", offset: 0 }, label: `SMA (${period})` }); onClose(); }}
+                      onDelete={ind ? () => handleDelete(ind.id) : undefined}
+                    />
+                  </AnimatedListItem>
+                );
+              })}
+            </AnimatedList>
           </div>
 
           {/* Other built-ins */}
           <SectionLabel>Oscillators & Overlays</SectionLabel>
           <div style={{ padding: "4px 0 4px" }}>
-            {OTHER_PRESETS.map(({ type, label, color, settings }) => {
-              const ind = getAppliedOther(type);
-              const isDeleting = ind ? deletingIds.has(ind.id) : false;
-              return (
-                <PresetRow key={type}
-                  color={color} label={label}
-                  applied={!!ind} isDeleting={isDeleting}
-                  onAdd={() => { addIndicator(type, label, { color, settings, label }); onClose(); }}
-                  onDelete={ind ? () => handleDelete(ind.id) : undefined}
-                />
-              );
-            })}
-            {/* WaveTrend built-in */}
-            {(() => {
-              const isDeleting = appliedWT ? deletingIds.has(appliedWT.id) : false;
-              return (
-                <PresetRow
-                  color="#22c55e" label="WaveTrend"
-                  applied={!!appliedWT} isDeleting={isDeleting}
-                  paneBadge
-                  onAdd={() => {
-                    addIndicator("CUSTOM", "WaveTrend", { label: "WaveTrend", color: "#22c55e", settings: {}, pineCode: WAVETREND_CODE });
-                    onClose();
-                  }}
-                  onDelete={appliedWT ? () => handleDelete(appliedWT.id) : undefined}
-                />
-              );
-            })()}
+            <AnimatedList>
+              {OTHER_PRESETS.map(({ type, label, color, settings }) => {
+                const ind = getAppliedOther(type);
+                const isDeleting = ind ? deletingIds.has(ind.id) : false;
+                return (
+                  <AnimatedListItem key={type}>
+                    <PresetRow
+                      color={color} label={label}
+                      applied={!!ind} isDeleting={isDeleting}
+                      onAdd={() => { addIndicator(type, label, { color, settings, label }); onClose(); }}
+                      onDelete={ind ? () => handleDelete(ind.id) : undefined}
+                    />
+                  </AnimatedListItem>
+                );
+              })}
+              {/* WaveTrend built-in */}
+              {(() => {
+                const isDeleting = appliedWT ? deletingIds.has(appliedWT.id) : false;
+                return (
+                  <AnimatedListItem key="WaveTrend">
+                    <PresetRow
+                      color="#22c55e" label="WaveTrend"
+                      applied={!!appliedWT} isDeleting={isDeleting}
+                      paneBadge
+                      onAdd={() => {
+                        addIndicator("CUSTOM", "WaveTrend", { label: "WaveTrend", color: "#22c55e", settings: {}, pineCode: WAVETREND_CODE });
+                        onClose();
+                      }}
+                      onDelete={appliedWT ? () => handleDelete(appliedWT.id) : undefined}
+                    />
+                  </AnimatedListItem>
+                );
+              })()}
+            </AnimatedList>
           </div>
 
           {/* Custom indicators */}
@@ -285,16 +292,20 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
             <>
               <SectionLabel>Custom</SectionLabel>
               <div style={{ padding: "4px 0 4px" }}>
-                {customInds.map(ind => {
-                  const isDeleting = deletingIds.has(ind.id);
-                  return (
-                    <PresetRow key={ind.id}
-                      color={ind.color} label={ind.label}
-                      applied isDeleting={isDeleting}
-                      customBadge onDelete={() => handleDelete(ind.id)}
-                    />
-                  );
-                })}
+                <AnimatedList>
+                  {customInds.map(ind => {
+                    const isDeleting = deletingIds.has(ind.id);
+                    return (
+                      <AnimatedListItem key={ind.id}>
+                        <PresetRow
+                          color={ind.color} label={ind.label}
+                          applied isDeleting={isDeleting}
+                          customBadge onDelete={() => handleDelete(ind.id)}
+                        />
+                      </AnimatedListItem>
+                    );
+                  })}
+                </AnimatedList>
               </div>
             </>
           )}
@@ -309,7 +320,7 @@ const IndicatorsPanel = memo(function IndicatorsPanel({ anchorEl, onClose }: Pro
               <span style={{ fontSize: 12, fontWeight: 600, color: "#22c55e" }}>Add Custom Indicator</span>
             </button>
           </div>
-        </div>,
+        </motion.div>,
         document.body
       )}
 

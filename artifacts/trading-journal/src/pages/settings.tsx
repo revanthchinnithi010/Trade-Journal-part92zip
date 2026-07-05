@@ -10,6 +10,8 @@ import {
   Globe, Copy, CheckCheck,
 } from "lucide-react";
 import { useState, useEffect, useCallback, useRef } from "react";
+import { PageTransition, AnimatedCard, AnimatedList, AnimatedListItem, AnimatedButton, FadeIn } from "@/components/animations";
+import { AnimatePresence, motion } from "framer-motion";
 
 function SectionHeader({ icon: Icon, title, description }: {
   icon: React.ElementType; title: string; description: string;
@@ -211,36 +213,45 @@ function DeltaPanel() {
             </button>
           </div>
 
-          {showOptional && (
-            <div className="space-y-3 pt-1">
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">API Key <span className="normal-case text-muted-foreground/50">(optional)</span></Label>
-                <div className="relative">
-                  <Input type={showKey ? "text" : "password"} placeholder="Delta Exchange API key…"
-                    value={apiKey} onChange={e => setApiKey(e.target.value)}
-                    className="rounded-xl h-10 pr-10 font-mono text-sm"
-                    style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.28)" }} />
-                  <button type="button" onClick={() => setShowKey(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
-                    {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+          <AnimatePresence>
+            {showOptional && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                className="overflow-hidden"
+              >
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">API Key <span className="normal-case text-muted-foreground/50">(optional)</span></Label>
+                    <div className="relative">
+                      <Input type={showKey ? "text" : "password"} placeholder="Delta Exchange API key…"
+                        value={apiKey} onChange={e => setApiKey(e.target.value)}
+                        className="rounded-xl h-10 pr-10 font-mono text-sm"
+                        style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.28)" }} />
+                      <button type="button" onClick={() => setShowKey(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
+                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">API Secret <span className="normal-case text-muted-foreground/50">(optional)</span></Label>
+                    <div className="relative">
+                      <Input type={showSecret ? "text" : "password"} placeholder="Delta Exchange API secret…"
+                        value={apiSecret} onChange={e => setApiSecret(e.target.value)}
+                        className="rounded-xl h-10 pr-10 font-mono text-sm"
+                        style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.28)" }} />
+                      <button type="button" onClick={() => setShowSecret(v => !v)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
+                        {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">API Secret <span className="normal-case text-muted-foreground/50">(optional)</span></Label>
-                <div className="relative">
-                  <Input type={showSecret ? "text" : "password"} placeholder="Delta Exchange API secret…"
-                    value={apiSecret} onChange={e => setApiSecret(e.target.value)}
-                    className="rounded-xl h-10 pr-10 font-mono text-sm"
-                    style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.28)" }} />
-                  <button type="button" onClick={() => setShowSecret(v => !v)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-white transition-colors">
-                    {showSecret ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -789,152 +800,173 @@ function BackupPanel() {
 /* ─── Settings Page ─────────────────────────────────────────────── */
 export default function Settings() {
   return (
-    <div className="space-y-5 max-w-3xl pb-16">
+    <PageTransition className="space-y-5 max-w-3xl pb-16">
       <div>
         <h1 className="text-2xl font-black tracking-tight text-white mb-1">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage connections, preferences, and trading parameters.</p>
       </div>
 
       {/* ── 0. System Health ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={ShieldCheck} title="System Status"
-            description="Real-time health of database, market feeds, and notifications" />
-        </CardHeader>
-        <CardContent>
-          <SystemHealthPanel />
-        </CardContent>
-      </Card>
+      <AnimatedCard index={0}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={ShieldCheck} title="System Status"
+              description="Real-time health of database, market feeds, and notifications" />
+          </CardHeader>
+          <CardContent>
+            <SystemHealthPanel />
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 1. Market Data Providers ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Radio} title="Market Data Providers"
-            description="Manual connect — feeds only start when you click Connect" />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <DeltaPanel />
-        </CardContent>
-      </Card>
+      <AnimatedCard index={1}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Radio} title="Market Data Providers"
+              description="Manual connect — feeds only start when you click Connect" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <DeltaPanel />
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 2. Backend Server IP ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Globe} title="Backend Server IP"
-            description="Detect the Replit server's outbound IP for Delta Exchange India whitelisting" />
-        </CardHeader>
-        <CardContent>
-          <ServerIpPanel />
-        </CardContent>
-      </Card>
+      <AnimatedCard index={2}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Globe} title="Backend Server IP"
+              description="Detect the Replit server's outbound IP for Delta Exchange India whitelisting" />
+          </CardHeader>
+          <CardContent>
+            <ServerIpPanel />
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 3. Telegram Alerts ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Bell} title="Telegram Alerts"
-            description="Get price alerts and daily summaries in your Telegram chat" />
-        </CardHeader>
-        <CardContent>
-          <TelegramPanel />
-          <div className="mt-4 space-y-3">
-            {[
-              { label: "Price alert triggers", sub: "Notify when a price zone is breached", checked: true },
-              { label: "Daily P&L summary", sub: "End-of-day report at market close", checked: true },
-              { label: "Win streak notifications", sub: "Celebrate when you hit 3+ wins in a row", checked: false },
-              { label: "Loss limit warnings", sub: "Alert when you approach daily loss limit", checked: true },
-            ].map(n => (
-              <div key={n.label} className="flex items-center justify-between gap-3 py-1">
-                <div>
-                  <p className="text-sm font-medium text-white">{n.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{n.sub}</p>
-                </div>
-                <Switch defaultChecked={n.checked} />
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+      <AnimatedCard index={3}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Bell} title="Telegram Alerts"
+              description="Get price alerts and daily summaries in your Telegram chat" />
+          </CardHeader>
+          <CardContent>
+            <TelegramPanel />
+            <div className="mt-4">
+              <AnimatedList className="space-y-3">
+                {[
+                  { label: "Price alert triggers", sub: "Notify when a price zone is breached", checked: true },
+                  { label: "Daily P&L summary", sub: "End-of-day report at market close", checked: true },
+                  { label: "Win streak notifications", sub: "Celebrate when you hit 3+ wins in a row", checked: false },
+                  { label: "Loss limit warnings", sub: "Alert when you approach daily loss limit", checked: true },
+                ].map(n => (
+                  <AnimatedListItem key={n.label} className="flex items-center justify-between gap-3 py-1">
+                    <div>
+                      <p className="text-sm font-medium text-white">{n.label}</p>
+                      <p className="text-[11px] text-muted-foreground">{n.sub}</p>
+                    </div>
+                    <Switch defaultChecked={n.checked} />
+                  </AnimatedListItem>
+                ))}
+              </AnimatedList>
+            </div>
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 3. Appearance ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Palette} title="Appearance" description="Display and layout preferences" />
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {[
-            { label: "Dark theme", sub: "Toggle dark / light mode via the sun icon in the header", checked: true, disabled: true },
-            { label: "Compact trade table", sub: "Reduce row height for denser view", checked: false },
-            { label: "Show broker column", sub: "Display broker in the trades table", checked: true },
-            { label: "Animated price tickers", sub: "Flash price cells on tick update", checked: true },
-            { label: "Show change percentage", sub: "Display % change alongside price", checked: true },
-          ].map(n => (
-            <div key={n.label} className="flex items-center justify-between gap-3 py-1">
-              <div>
-                <p className="text-sm font-medium text-white">{n.label}</p>
-                <p className="text-[11px] text-muted-foreground">{n.sub}</p>
-              </div>
-              <Switch defaultChecked={n.checked} disabled={n.disabled} />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+      <AnimatedCard index={4}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Palette} title="Appearance" description="Display and layout preferences" />
+          </CardHeader>
+          <CardContent>
+            <AnimatedList className="space-y-3">
+              {[
+                { label: "Dark theme", sub: "Toggle dark / light mode via the sun icon in the header", checked: true, disabled: true },
+                { label: "Compact trade table", sub: "Reduce row height for denser view", checked: false },
+                { label: "Show broker column", sub: "Display broker in the trades table", checked: true },
+                { label: "Animated price tickers", sub: "Flash price cells on tick update", checked: true },
+                { label: "Show change percentage", sub: "Display % change alongside price", checked: true },
+              ].map(n => (
+                <AnimatedListItem key={n.label} className="flex items-center justify-between gap-3 py-1">
+                  <div>
+                    <p className="text-sm font-medium text-white">{n.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{n.sub}</p>
+                  </div>
+                  <Switch defaultChecked={n.checked} disabled={n.disabled} />
+                </AnimatedListItem>
+              ))}
+            </AnimatedList>
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 4. Trading Preferences ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Zap} title="Trading Preferences" description="Default values for trade entry and risk management" />
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {[
-              { label: "Account Size ($)", defaultValue: "12453", type: "number" },
-              { label: "Max Risk Per Trade (%)", defaultValue: "1", type: "number", step: "0.1" },
-              { label: "Daily Loss Limit ($)", defaultValue: "200", type: "number" },
-            ].map(f => (
-              <div key={f.label} className="space-y-1.5">
-                <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{f.label}</Label>
-                <Input defaultValue={f.defaultValue} type={f.type} step={f.step}
-                  className="rounded-xl h-10"
-                  style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.22)" }} />
-              </div>
-            ))}
-          </div>
-
-          <div className="space-y-3">
-            {[
-              { label: "Default trade direction", sub: "Pre-fill Long or Short on new trade form", checked: false },
-              { label: "Auto-calculate position size", sub: "Use account size + risk % to suggest size", checked: true },
-              { label: "Show R:R calculator", sub: "Display risk-reward ratio on trade entry", checked: true },
-              { label: "Require setup tag", sub: "Enforce setup tagging before saving a trade", checked: false },
-            ].map(n => (
-              <div key={n.label} className="flex items-center justify-between gap-3 py-1">
-                <div>
-                  <p className="text-sm font-medium text-white">{n.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{n.sub}</p>
+      <AnimatedCard index={5}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Zap} title="Trading Preferences" description="Default values for trade entry and risk management" />
+          </CardHeader>
+          <CardContent className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {[
+                { label: "Account Size ($)", defaultValue: "12453", type: "number" },
+                { label: "Max Risk Per Trade (%)", defaultValue: "1", type: "number", step: "0.1" },
+                { label: "Daily Loss Limit ($)", defaultValue: "200", type: "number" },
+              ].map(f => (
+                <div key={f.label} className="space-y-1.5">
+                  <Label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">{f.label}</Label>
+                  <Input defaultValue={f.defaultValue} type={f.type} step={f.step}
+                    className="rounded-xl h-10"
+                    style={{ background: "rgba(16,37,28,0.55)", border: "1px solid rgba(57,91,67,0.22)" }} />
                 </div>
-                <Switch defaultChecked={n.checked} />
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
 
-          <div className="flex justify-end">
-            <Button size="sm" className="rounded-xl h-9 px-6 bg-primary hover:bg-primary/90 text-primary-foreground">
-              Save Preferences
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+            <div>
+              <AnimatedList className="space-y-3">
+                {[
+                  { label: "Default trade direction", sub: "Pre-fill Long or Short on new trade form", checked: false },
+                  { label: "Auto-calculate position size", sub: "Use account size + risk % to suggest size", checked: true },
+                  { label: "Show R:R calculator", sub: "Display risk-reward ratio on trade entry", checked: true },
+                  { label: "Require setup tag", sub: "Enforce setup tagging before saving a trade", checked: false },
+                ].map(n => (
+                  <AnimatedListItem key={n.label} className="flex items-center justify-between gap-3 py-1">
+                    <div>
+                      <p className="text-sm font-medium text-white">{n.label}</p>
+                      <p className="text-[11px] text-muted-foreground">{n.sub}</p>
+                    </div>
+                    <Switch defaultChecked={n.checked} />
+                  </AnimatedListItem>
+                ))}
+              </AnimatedList>
+            </div>
+
+            <div className="flex justify-end">
+              <AnimatedButton className="rounded-xl h-9 px-6 bg-primary hover:bg-primary/90 text-primary-foreground">
+                Save Preferences
+              </AnimatedButton>
+            </div>
+          </CardContent>
+        </Card>
+      </AnimatedCard>
 
       {/* ── 5. Backup & Restore ── */}
-      <Card className="glass-card border-0">
-        <CardHeader className="pb-4">
-          <SectionHeader icon={Database} title="Backup &amp; Restore"
-            description="Export your full config to JSON — import on any device or Replit account" />
-        </CardHeader>
-        <CardContent>
-          <BackupPanel />
-        </CardContent>
-      </Card>
-    </div>
+      <AnimatedCard index={6}>
+        <Card className="glass-card border-0">
+          <CardHeader className="pb-4">
+            <SectionHeader icon={Database} title="Backup &amp; Restore"
+              description="Export your full config to JSON — import on any device or Replit account" />
+          </CardHeader>
+          <CardContent>
+            <BackupPanel />
+          </CardContent>
+        </Card>
+      </AnimatedCard>
+    </PageTransition>
   );
+}
 }

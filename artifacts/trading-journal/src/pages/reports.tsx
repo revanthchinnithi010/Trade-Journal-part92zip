@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useMemo } from "react";
 import { PROVIDER_MAP } from "@/data/sampleData";
+import { PageTransition, AnimatedCard, AnimatedList, AnimatedListItem } from "@/components/animations";
 
 const GREEN  = "hsl(145 58% 52%)";
 const RED    = "hsl(0 68% 58%)";
@@ -51,13 +52,13 @@ function ProviderBadge({ symbol }: { symbol: string }) {
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
 function MetricCard({
-  label, value, sub, icon: Icon, color = "text-white", iconBg = "bg-primary/15", iconColor = "text-primary", bar,
+  label, value, sub, icon: Icon, color = "text-white", iconBg = "bg-primary/15", iconColor = "text-primary", bar, index = 0,
 }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
-  color?: string; iconBg?: string; iconColor?: string; bar?: number;
+  color?: string; iconBg?: string; iconColor?: string; bar?: number; index?: number;
 }) {
   return (
-    <div className="glass-card p-5 h-full relative overflow-hidden group transition-all duration-300">
+    <AnimatedCard index={index} className="glass-card p-5 h-full relative overflow-hidden group transition-all duration-300">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
       <div className="flex items-center justify-between mb-4">
         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>
@@ -75,7 +76,7 @@ function MetricCard({
         </div>
       )}
       {sub && <p className="text-[11px] text-muted-foreground/70">{sub}</p>}
-    </div>
+    </AnimatedCard>
   );
 }
 
@@ -238,7 +239,7 @@ export default function Reports() {
   const worstSymbol = [...(symbolStats ?? [])].sort((a, b) => a.pnl - b.pnl)[0];
 
   return (
-    <div className="space-y-5 pb-12">
+    <PageTransition className="space-y-5 pb-12">
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -257,6 +258,7 @@ export default function Reports() {
       {/* ── Top-level stat cards ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard
+          index={0}
           label="Net PNL" value={fc(stats.netPnl)}
           sub="All-time realized" icon={stats.netPnl >= 0 ? TrendingUp : TrendingDown}
           color={stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
@@ -264,38 +266,45 @@ export default function Reports() {
           iconColor={stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
         />
         <MetricCard
+          index={1}
           label="Win Rate" value={`${stats.winRate.toFixed(1)}%`}
           sub={`${stats.winCount}W · ${stats.lossCount}L · ${stats.breakevenCount}BE`}
           icon={Percent} bar={stats.winRate}
           color={stats.winRate >= 60 ? "text-emerald-400" : stats.winRate >= 50 ? "text-white" : "text-red-400"}
         />
         <MetricCard
+          index={2}
           label="Profit Factor" value={stats.profitFactor.toFixed(2)}
           sub="Gross wins / gross losses" icon={Shield}
           color={stats.profitFactor >= 2 ? "text-emerald-400" : stats.profitFactor >= 1 ? "text-white" : "text-red-400"}
           iconBg="bg-emerald-500/10" iconColor="text-emerald-400"
         />
         <MetricCard
+          index={3}
           label="Avg RR" value={`${stats.averageRR.toFixed(2)}R`}
           sub="Reward / risk ratio" icon={Target}
           color={stats.averageRR >= 2 ? "text-emerald-400" : "text-white"}
         />
         <MetricCard
+          index={4}
           label="Avg Win" value={fc(stats.averageWin)}
           sub="Per winning trade" icon={ArrowUpRight}
           color="text-emerald-400" iconBg="bg-emerald-500/10" iconColor="text-emerald-400"
         />
         <MetricCard
+          index={5}
           label="Avg Loss" value={fc(stats.averageLoss)}
           sub="Per losing trade" icon={ArrowDownRight}
           color="text-red-400" iconBg="bg-red-500/10" iconColor="text-red-400"
         />
         <MetricCard
+          index={6}
           label="Expectancy" value={fc(expectancy)}
           sub="Per trade expected" icon={Zap}
           color={expectancy >= 0 ? "text-emerald-400" : "text-red-400"}
         />
         <MetricCard
+          index={7}
           label="Kelly %" value={`${kellyCrit.toFixed(1)}%`}
           sub="Optimal position size" icon={Award}
           color="text-primary" iconBg="bg-primary/10" iconColor="text-primary"
@@ -305,7 +314,7 @@ export default function Reports() {
       {/* ── Equity Curve + Win/Loss donut ────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <div className="glass-card">
+          <AnimatedCard index={8} className="glass-card">
             <div className="p-5 pb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -343,11 +352,11 @@ export default function Reports() {
                 </AreaChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={9} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Flame className="w-3.5 h-3.5 text-primary" />
@@ -381,14 +390,14 @@ export default function Reports() {
                 <p className="text-[10px] text-muted-foreground">Best</p>
               </div>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
 
       {/* ── Weekly PNL + Symbol Bars ─────────────────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={10} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <BarChart2 className="w-3.5 h-3.5 text-primary" />
@@ -409,11 +418,11 @@ export default function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={11} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Layers className="w-3.5 h-3.5 text-primary" />
@@ -435,14 +444,14 @@ export default function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
 
       {/* ── Performance Radar + RR Dist + Broker Breakdown ──────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={12} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Activity className="w-3.5 h-3.5 text-primary" />
@@ -452,11 +461,11 @@ export default function Reports() {
             <div className="h-[220px]">
               <PerformanceRadar stats={stats} />
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={13} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Target className="w-3.5 h-3.5 text-primary" />
@@ -466,11 +475,11 @@ export default function Reports() {
             <div className="h-[220px] px-1 pb-3">
               <RRHistogram symbolStats={symbolStats} />
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div>
-          <div className="glass-card">
+          <AnimatedCard index={14} className="glass-card">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <BarChart2 className="w-3.5 h-3.5 text-primary" />
@@ -499,7 +508,7 @@ export default function Reports() {
       </div>
 
       {/* ── Trading Session Analysis ─────────────────────────────────────────── */}
-      <div>
+      <AnimatedCard index={15}>
         <div className="glass-card">
           <div className="p-5 pb-3 flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -523,10 +532,10 @@ export default function Reports() {
             ))}
           </div>
         </div>
-      </div>
+      </AnimatedCard>
 
       {/* ── Symbol Details Table ─────────────────────────────────────────────── */}
-      <div>
+      <AnimatedCard index={16}>
         <div className="glass-card">
           <div className="px-5 pt-5 pb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -590,7 +599,7 @@ export default function Reports() {
             </table>
           </div>
         </div>
-      </div>
+      </AnimatedCard>
 
       {/* ── Best/Worst + Advanced Stats ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -601,12 +610,12 @@ export default function Reports() {
             color: stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400", icon: Zap, iconBg: "bg-primary/10", iconColor: "text-primary",
             sub: stats.currentStreak >= 0 ? "Winning streak" : "Losing streak" },
           { label: "Total Volume", value: `${stats.totalTrades}`, color: "text-white", icon: Layers, sub: `${stats.winCount + stats.lossCount} decisive` },
-        ].map(c => (
-          <MetricCard key={c.label} label={c.label} value={c.value} sub={c.sub}
+        ].map((c, i) => (
+          <MetricCard key={c.label} index={17 + i} label={c.label} value={c.value} sub={c.sub}
             icon={c.icon} color={c.color} iconBg={c.iconBg} iconColor={c.iconColor} />
         ))}
       </div>
 
-    </div>
+    </PageTransition>
   );
 }

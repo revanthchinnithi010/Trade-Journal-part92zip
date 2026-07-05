@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useLocation } from "wouter";
 import { useChartStore } from "@/store/chartStore";
 import { SharedMarketSelector } from "@/components/SharedMarketSelector";
+import { PageTransition } from "@/components/animations";
 
 export default function Markets() {
   const [, navigate] = useLocation();
@@ -14,10 +15,12 @@ export default function Markets() {
   }, [navigate]);
 
   return (
-    <SharedMarketSelector
-      mode="page"
-      activeSymbol={chartSymbol}
-      onSelect={handleSymbolTap}
-    />
+    <PageTransition>
+      <SharedMarketSelector
+        mode="page"
+        activeSymbol={chartSymbol}
+        onSelect={handleSymbolTap}
+      />
+    </PageTransition>
   );
 }

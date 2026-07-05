@@ -8,6 +8,8 @@ import {
 } from "lucide-react";
 import { useDrawingStore } from "@/store/drawingStore";
 import type { ToolType } from "@/types/drawing";
+import { motion, AnimatePresence } from "motion/react";
+import { AnimatedList, AnimatedListItem } from "@/components/animations";
 
 import trendlineSvgUrl      from "@assets/trendline1_1780242299048.svg";
 import raySvgUrl             from "@assets/ray1_1780242299093.svg";
@@ -569,17 +571,21 @@ function StyleFlyout({ anchorRect, onClose }: { anchorRect: DOMRect; onClose: ()
   const top = Math.min(Math.max(anchorRect.top, 8), window.innerHeight - POPUP_H - 8);
 
   return createPortal(
-    <div ref={ref} data-drawing-popup
+    <motion.div
+      ref={ref}
+      data-drawing-popup
       onClick={e => e.stopPropagation()}
       onPointerDown={e => e.stopPropagation()}
+      initial={{ opacity: 0, x: -5 }}
+      animate={{ opacity: 1, x: 0 }}
+      exit={{ opacity: 0, x: -5 }}
+      transition={{ duration: 0.12, ease: "easeOut" }}
       style={{
         position:"fixed", left, top, zIndex:9999,
         width:224, background:"rgba(10,10,10,0.98)", backdropFilter:"blur(28px)",
         border:"1px solid rgba(60,60,60,0.45)", borderRadius:12,
         boxShadow:"12px 8px 48px rgba(0,0,0,0.9)",
-        animation:"popIn .12s ease-out",
       }}>
-      <style>{`@keyframes popIn{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}`}</style>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 13px 7px" }}>
         <span style={{ fontSize:10, fontWeight:800, color:"rgba(200,200,200,0.4)", textTransform:"uppercase", letterSpacing:".1em" }}>Style</span>
         <button onClick={onClose} style={{ cursor:"pointer", display:"flex", opacity:0.4, background:"none", border:"none" }}>
@@ -647,7 +653,7 @@ function StyleFlyout({ anchorRect, onClose }: { anchorRect: DOMRect; onClose: ()
           })}
         </div>
       </div>
-    </div>,
+    </motion.div>,
     document.body
   );
 }
@@ -696,30 +702,39 @@ function ToolPopup({ group, activeToolKey, favorites, anchorRect, onSelect, onTo
   const top = Math.min(Math.max(anchorRect.top, 8), maxTop);
 
   const content = (
-    <div ref={ref} data-drawing-popup
+    <motion.div
+      ref={ref}
+      data-drawing-popup
       onClick={e => e.stopPropagation()}
       onPointerDown={e => e.stopPropagation()}
+      initial={{ opacity: 0, x: -6, scale: 0.97 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: -6, scale: 0.97 }}
+      transition={{ duration: 0.11, ease: [0.16, 1, 0.3, 1] }}
       style={{
         position:"fixed", left, top, zIndex:9999, width:230,
         background:"rgba(7,17,13,0.97)",
         backdropFilter:"blur(28px)", WebkitBackdropFilter:"blur(28px)",
         border:"1px solid rgba(183,255,90,0.13)", borderRadius:10,
         boxShadow:"0 12px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(183,255,90,0.05)",
-        overflow:"hidden", animation:"tvPopIn .11s cubic-bezier(0.16,1,0.3,1) both",
+        overflow:"hidden",
       }}>
-      <style>{`@keyframes tvPopIn{from{opacity:0;transform:translateX(-6px) scale(0.97)}to{opacity:1;transform:translateX(0) scale(1)}}`}</style>
       <div style={{ overflowY:"auto", maxHeight:"68vh", scrollbarWidth:"none", padding:"4px 0 6px" }}>
-        {group.sections.map((sec, si) => (
-          <div key={sec.title}>
-            {si>0 && <div style={{ height:1, background:"rgba(183,255,90,0.07)", margin:"3px 0" }} />}
-            <div style={{ padding:"6px 12px 2px" }}>
-              <span style={{ fontSize:9, fontWeight:800, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.09em" }}>{sec.title}</span>
-            </div>
-            {sec.tools.map(tool => <ToolRow key={tool.key} tool={tool} activeToolKey={activeToolKey} favorites={favorites} onSelect={onSelect} onToggleFav={onToggleFav} />)}
-          </div>
-        ))}
+        <AnimatedList>
+          {group.sections.map((sec, si) => (
+            <AnimatedListItem key={sec.title}>
+              <div key={sec.title}>
+                {si>0 && <div style={{ height:1, background:"rgba(183,255,90,0.07)", margin:"3px 0" }} />}
+                <div style={{ padding:"6px 12px 2px" }}>
+                  <span style={{ fontSize:9, fontWeight:800, color:"rgba(167,184,169,0.38)", textTransform:"uppercase", letterSpacing:"0.09em" }}>{sec.title}</span>
+                </div>
+                {sec.tools.map(tool => <ToolRow key={tool.key} tool={tool} activeToolKey={activeToolKey} favorites={favorites} onSelect={onSelect} onToggleFav={onToggleFav} />)}
+              </div>
+            </AnimatedListItem>
+          ))}
+        </AnimatedList>
       </div>
-    </div>
+    </motion.div>
   );
   return createPortal(content, document.body);
 }
@@ -823,9 +838,13 @@ function FavoritesBar({ tools, activeToolKey, onSelect, onToggleFav }: {
   }, []);
 
   return createPortal(
-    <div
+    <motion.div
       ref={barRef}
       data-drawing-popup
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 20 }}
+      transition={{ duration: 0.2, ease: "easeOut" }}
       style={{
         position:"fixed", top:0, left:0,
         transform:"translate3d(0px,0px,0)",
@@ -868,7 +887,7 @@ function FavoritesBar({ tools, activeToolKey, onSelect, onToggleFav }: {
       {tools.map(tool => (
         <FavBtn key={tool.key} tool={tool} active={activeToolKey===tool.key} onSelect={onSelect} onToggleFav={onToggleFav} />
       ))}
-    </div>,
+    </motion.div>,
     document.body
   );
 }

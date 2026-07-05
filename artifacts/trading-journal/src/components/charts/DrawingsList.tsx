@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { useDrawingStore } from "@/store/drawingStore";
 import type { Drawing } from "@/types/drawing";
+import { AnimatedList, AnimatedListItem } from "@/components/animations";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -188,7 +189,13 @@ export const DrawingsList = memo(function DrawingsList({ symbol, timeframe }: Pr
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0" style={{ scrollbarWidth: "none" }}>
-        {filtered.map((d) => <DrawingRow key={d.id} drawing={d} />)}
+        <AnimatedList>
+          {filtered.map((d) => (
+            <AnimatedListItem key={d.id}>
+              <DrawingRow drawing={d} />
+            </AnimatedListItem>
+          ))}
+        </AnimatedList>
       </div>
     </div>
   );

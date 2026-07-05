@@ -20,6 +20,15 @@ import {
 import { Link } from "wouter";
 import { BROKER_MAP, BROKER_INFO } from "@/data/sampleData";
 import { useTickStore } from "@/store/tickStore";
+import {
+  PageTransition,
+  AnimatedCard,
+  NumberCounter,
+  LoadingSpinner,
+  FadeIn
+} from "@/components/animations";
+
+const DASHBOARD_TIMEOUT_MS = 2_000;
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
 
@@ -78,13 +87,13 @@ const CustomPnlTooltip = memo(function CustomPnlTooltip({
 });
 
 const StatCard = memo(function StatCard({
-  label, value, sub, icon: Icon, positive, accent, bar, trend,
+  label, value, sub, icon: Icon, positive, accent, bar, trend, index,
 }: {
   label: string; value: string; sub?: React.ReactNode; icon: React.ElementType;
-  positive?: boolean; accent?: boolean; bar?: number; trend?: string;
+  positive?: boolean; accent?: boolean; bar?: number; trend?: string; index?: number;
 }) {
   return (
-    <div className="glass-card stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
+    <AnimatedCard index={index} className="stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-primary/[0.04] pointer-events-none" />
 
@@ -122,7 +131,7 @@ const StatCard = memo(function StatCard({
 
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
       {trend && <p className="text-[11px] text-foreground/60 font-medium mt-0.5">{trend}</p>}
-    </div>
+    </AnimatedCard>
   );
 });
 
@@ -333,7 +342,7 @@ export default function Dashboard() {
   const apiOffline = statsError && equityError && weeklyError && tradesError;
 
   return (
-    <div className="space-y-4 pb-12">
+    <PageTransition className="space-y-4 pb-12">
 
       {apiOffline && (
         <div className="glass-card px-5 py-3 flex items-center gap-3 border-amber-500/20 bg-amber-500/[0.04]">
@@ -355,6 +364,7 @@ export default function Dashboard() {
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
+          index={0}
           label="Net PNL"
           value={fc(resolvedStats.netPnl)}
           icon={resolvedStats.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
@@ -362,6 +372,7 @@ export default function Dashboard() {
           sub={<span className="flex items-center gap-1"><span className={resolvedStats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{resolvedStats.netPnl >= 0 ? "▲" : "▼"}</span>All time</span>}
         />
         <StatCard
+          index={1}
           label="Win Rate"
           value={`${resolvedStats.winRate.toFixed(1)}%`}
           icon={Percent}
@@ -370,6 +381,7 @@ export default function Dashboard() {
           sub={`${resolvedStats.winCount}W · ${resolvedStats.lossCount}L · ${resolvedStats.breakevenCount}BE`}
         />
         <StatCard
+          index={2}
           label="Profit Factor"
           value={resolvedStats.profitFactor.toFixed(2)}
           icon={TrendingUp}
@@ -378,6 +390,7 @@ export default function Dashboard() {
           sub="Gross Win / Gross Loss"
         />
         <StatCard
+          index={3}
           label="Avg RR"
           value={`${resolvedStats.averageRR.toFixed(2)}R`}
           icon={Target}
@@ -386,6 +399,7 @@ export default function Dashboard() {
           sub="Reward / Risk ratio"
         />
         <StatCard
+          index={4}
           label="Total Trades"
           value={`${resolvedStats.totalTrades}`}
           icon={Layers}
@@ -397,7 +411,7 @@ export default function Dashboard() {
       {/* ── Equity Curve + Weekly PNL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <div className="glass-card h-full">
+          <AnimatedCard index={5} className="h-full">
             <div className="p-5 pb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -437,11 +451,11 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               )}
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div>
-          <div className="glass-card h-full">
+          <AnimatedCard index={6} className="h-full">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <BarChart2 className="w-3.5 h-3.5 text-primary" />
@@ -467,14 +481,14 @@ export default function Dashboard() {
                 </ResponsiveContainer>
               )}
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
 
       {/* ── Win/Loss Pie + Calendar ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div>
-          <div className="glass-card h-full">
+          <AnimatedCard index={7} className="h-full">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Flame className="w-3.5 h-3.5 text-primary" />
@@ -522,11 +536,11 @@ export default function Dashboard() {
                 <p className="text-[10px] text-muted-foreground font-medium">Even</p>
               </div>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
 
         <div className="lg:col-span-2">
-          <div className="glass-card h-full">
+          <AnimatedCard index={8} className="h-full">
             <div className="p-5 pb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -550,12 +564,12 @@ export default function Dashboard() {
                 <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
               )}
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
 
       {/* ── Recent Trades ── */}
-      <div className="glass-card">
+      <AnimatedCard index={9}>
         <div className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -648,7 +662,7 @@ export default function Dashboard() {
             </table>
           </div>
         )}
-      </div>
-    </div>
+      </AnimatedCard>
+    </PageTransition>
   );
 }

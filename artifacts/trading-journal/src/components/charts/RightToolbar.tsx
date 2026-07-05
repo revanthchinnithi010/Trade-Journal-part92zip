@@ -21,6 +21,8 @@ import icoBellUrl         from "@assets/bell1_1780282162732.svg";
 import icoObjectTreeUrl   from "@assets/objecttree1_1780282162698.svg";
 import icoSettingsUrl     from "@assets/setting1_1780282162661.svg";
 import icoCalculatorUrl   from "@assets/calculator1_1780282162626.svg";
+import { motion, AnimatePresence } from "motion/react";
+import { AnimatedList, AnimatedListItem } from "@/components/animations";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -206,21 +208,27 @@ function SlidePanel({ open, width = 300, children }: {
   open: boolean; width?: number; children: React.ReactNode;
 }) {
   return (
-    <div
-      data-right-panel="true"
-      style={{
-        position: "absolute", top: 0, right: TOOLBAR_W, bottom: 0,
-        width, zIndex: 60,
-        pointerEvents: open ? "all" : "none",
-        transform: open ? "translateX(0)" : `translateX(${width + TOOLBAR_W}px)`,
-        transition: "transform 0.24s cubic-bezier(0.22,1,0.36,1)",
-        background: "rgba(6,10,8,0.98)", backdropFilter: "blur(28px)",
-        borderLeft: "1px solid rgba(57,91,67,0.28)",
-        boxShadow: open ? "-20px 0 60px rgba(0,0,0,0.6)" : "none",
-        display: "flex", flexDirection: "column", overflow: "hidden",
-      }}>
-      {children}
-    </div>
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          key="right-panel"
+          data-right-panel="true"
+          initial={{ x: width + TOOLBAR_W, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          exit={{ x: width + TOOLBAR_W, opacity: 0 }}
+          transition={{ type: "spring", damping: 25, stiffness: 200 }}
+          style={{
+            position: "absolute", top: 0, right: TOOLBAR_W, bottom: 0,
+            width, zIndex: 60,
+            background: "rgba(6,10,8,0.98)", backdropFilter: "blur(28px)",
+            borderLeft: "1px solid rgba(57,91,67,0.28)",
+            boxShadow: "-20px 0 60px rgba(0,0,0,0.6)",
+            display: "flex", flexDirection: "column", overflow: "hidden",
+          }}>
+          {children}
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -314,50 +322,56 @@ const WatchlistSlide = memo(function WatchlistSlide({
             <div style={{ width: 18, height: 18, borderRadius: "50%", border: "2px solid rgba(183,255,90,0.25)", borderTopColor: "#B7FF5A", animation: "spin 0.7s linear infinite" }} />
           </div>
         )}
-        {!loading && sorted.map(entry => {
-          const tick = ticks[entry.symbol];
-          const active = entry.symbol === activeSymbol;
-          const isPos = (tick?.changePct ?? 0) >= 0;
-          return (
-            <button key={entry.symbol} onClick={() => onSelect(entry.symbol)}
-              style={{
-                width: "100%", display: "flex", alignItems: "center",
-                padding: "7px 12px", border: "none", cursor: "pointer",
-                background: active ? "rgba(183,255,90,0.06)" : "transparent",
-                borderLeft: `2.5px solid ${active ? "#B7FF5A" : "transparent"}`,
-                transition: "all 0.1s",
-              }}
-              onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.1)"; }}
-              onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
-            >
-              <div style={{
-                width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginRight: 9,
-                background: active ? "rgba(183,255,90,0.12)" : "rgba(13,22,17,0.9)",
-                boxShadow: active ? "0 0 0 1px rgba(183,255,90,0.3)" : "0 0 0 1px rgba(57,91,67,0.2)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 7.5, fontWeight: 900, color: active ? "#B7FF5A" : "rgba(167,184,169,0.7)",
-              }}>{entry.badge.slice(0, 4)}</div>
+        {!loading && (
+          <AnimatedList>
+            {sorted.map(entry => {
+              const tick = ticks[entry.symbol];
+              const active = entry.symbol === activeSymbol;
+              const isPos = (tick?.changePct ?? 0) >= 0;
+              return (
+                <AnimatedListItem key={entry.symbol}>
+                  <button onClick={() => onSelect(entry.symbol)}
+                    style={{
+                      width: "100%", display: "flex", alignItems: "center",
+                      padding: "7px 12px", border: "none", cursor: "pointer",
+                      background: active ? "rgba(183,255,90,0.06)" : "transparent",
+                      borderLeft: `2.5px solid ${active ? "#B7FF5A" : "transparent"}`,
+                      transition: "all 0.1s",
+                    }}
+                    onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "rgba(57,91,67,0.1)"; }}
+                    onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.background = "transparent"; }}
+                  >
+                    <div style={{
+                      width: 28, height: 28, borderRadius: 8, flexShrink: 0, marginRight: 9,
+                      background: active ? "rgba(183,255,90,0.12)" : "rgba(13,22,17,0.9)",
+                      boxShadow: active ? "0 0 0 1px rgba(183,255,90,0.3)" : "0 0 0 1px rgba(57,91,67,0.2)",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: 7.5, fontWeight: 900, color: active ? "#B7FF5A" : "rgba(167,184,169,0.7)",
+                    }}>{entry.badge.slice(0, 4)}</div>
 
-              <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-                <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: active ? "#B7FF5A" : "#F3FFF3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {entry.badge}
-                </p>
-                <p style={{ margin: 0, fontSize: 9, color: "rgba(167,184,169,0.38)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {entry.market}
-                </p>
-              </div>
+                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <p style={{ margin: 0, fontSize: 11.5, fontWeight: 700, color: active ? "#B7FF5A" : "#F3FFF3", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {entry.badge}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 9, color: "rgba(167,184,169,0.38)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {entry.market}
+                      </p>
+                    </div>
 
-              <div style={{ textAlign: "right", flexShrink: 0 }}>
-                <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: "#F3FFF3", fontFamily: "monospace" }}>
-                  {tick && tick.price > 0 ? fmtPrice(tick.price, entry.symbol) : "—"}
-                </p>
-                <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: isPos ? "#B7FF5A" : "#ef4444" }}>
-                  {tick ? `${isPos ? "+" : ""}${tick.changePct.toFixed(2)}%` : ""}
-                </p>
-              </div>
-            </button>
-          );
-        })}
+                    <div style={{ textAlign: "right", flexShrink: 0 }}>
+                      <p style={{ margin: 0, fontSize: 10.5, fontWeight: 800, color: "#F3FFF3", fontFamily: "monospace" }}>
+                        {tick && tick.price > 0 ? fmtPrice(tick.price, entry.symbol) : "—"}
+                      </p>
+                      <p style={{ margin: 0, fontSize: 9, fontWeight: 700, color: isPos ? "#B7FF5A" : "#ef4444" }}>
+                        {tick ? `${isPos ? "+" : ""}${tick.changePct.toFixed(2)}%` : ""}
+                      </p>
+                    </div>
+                  </button>
+                </AnimatedListItem>
+              );
+            })}
+          </AnimatedList>
+        )}
         {!loading && sorted.length === 0 && (
           <div style={{ padding: 24, textAlign: "center", fontSize: 11, color: "rgba(167,184,169,0.35)" }}>
             {query ? "No symbols found" : "Watchlist is empty"}

@@ -4,6 +4,7 @@ import {
 import { X, ChevronDown } from "lucide-react";
 import icoSettingsUrl from "@assets/setting1_1780282162661.svg";
 import { ColorPickerGlass } from "@/components/ColorPickerGlass";
+import { AnimatedModal, AnimatedList, AnimatedListItem } from "@/components/animations";
 
 import type { ChartSettings } from "@/components/charts/chartSettingsTypes";
 import { DEFAULT_CHART_SETTINGS } from "@/components/charts/chartSettingsTypes";
@@ -412,255 +413,219 @@ interface Props {
 }
 
 const SettingsPanel = memo(function SettingsPanel({ settings, onChange, onSaveAsDefault, onClose }: Props) {
-  const ref = useRef<HTMLDivElement>(null);
   const [section, setSection] = useState<SidebarSection>("Symbol");
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (ref.current && !ref.current.contains(target)) {
-        const pickers = document.querySelectorAll("[data-drawing-popup]");
-        for (const p of pickers) { if (p.contains(target)) return; }
-        onClose();
-      }
-    };
-    const id = setTimeout(() => document.addEventListener("mousedown", h), 80);
-    return () => { clearTimeout(id); document.removeEventListener("mousedown", h); };
-  }, [onClose]);
 
   const p = useCallback((patch: Partial<ChartSettings>) => onChange({ ...settings, ...patch }), [settings, onChange]);
 
   const symbolContent = (
-    <div>
-      <Section title="Candles">
-        <ColorPair label="Body" bull={settings.upColor} bear={settings.downColor} onBull={v => p({ upColor: v })} onBear={v => p({ downColor: v })} />
-        <ColorPair label="Borders" bull={settings.upBorderColor} bear={settings.downBorderColor} onBull={v => p({ upBorderColor: v })} onBear={v => p({ downBorderColor: v })} />
-        <ColorPair label="Wick" bull={settings.upWickColor} bear={settings.downWickColor} onBull={v => p({ upWickColor: v })} onBear={v => p({ downWickColor: v })} last />
-      </Section>
-      <Section title="Price Label">
-        <ColorPair label="Background" bull={settings.priceLabelBullColor ?? "#22c55e"} bear={settings.priceLabelBearColor ?? "#ef4444"} onBull={v => p({ priceLabelBullColor: v })} onBear={v => p({ priceLabelBearColor: v })} />
-        <Row label="Text Color"><ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor: v })} label="Price Label Text" fallback="#ffffff" /></Row>
-        <Row label="Line Color" last><ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor: v })} label="Price Line" fallback="rgba(255,255,255,0.4)" /></Row>
-      </Section>
-      <Section title="Timezone">
-        <Row label="Display Timezone" last>
-          <StyledSelect value={settings.timezone} onChange={v => p({ timezone: v as ChartSettings["timezone"] })}
-            options={[{ value: "UTC", label: "UTC" }, { value: "IST", label: "IST (India)" }, { value: "Exchange", label: "Exchange" }, { value: "Local", label: "Local Time" }]}
-          />
-        </Row>
-      </Section>
-      <Section title="Price Precision">
-        <Row label="Decimal Places" last>
-          <StyledSelect value={settings.precision} onChange={v => p({ precision: v as ChartSettings["precision"] })}
-            options={[{ value: "2", label: "2 decimals" }, { value: "4", label: "4 decimals" }, { value: "5", label: "5 decimals" }, { value: "8", label: "8 decimals" }]}
-          />
-        </Row>
-      </Section>
-    </div>
+    <AnimatedList>
+      <AnimatedListItem>
+        <Section title="Candles">
+          <ColorPair label="Body" bull={settings.upColor} bear={settings.downColor} onBull={v => p({ upColor: v })} onBear={v => p({ downColor: v })} />
+          <ColorPair label="Borders" bull={settings.upBorderColor} bear={settings.downBorderColor} onBull={v => p({ upBorderColor: v })} onBear={v => p({ downBorderColor: v })} />
+          <ColorPair label="Wick" bull={settings.upWickColor} bear={settings.downWickColor} onBull={v => p({ upWickColor: v })} onBear={v => p({ downWickColor: v })} last />
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Price Label">
+          <ColorPair label="Background" bull={settings.priceLabelBullColor ?? "#22c55e"} bear={settings.priceLabelBearColor ?? "#ef4444"} onBull={v => p({ priceLabelBullColor: v })} onBear={v => p({ priceLabelBearColor: v })} />
+          <Row label="Text Color"><ColorBox value={settings.priceLabelTextColor ?? "#ffffff"} onChange={v => p({ priceLabelTextColor: v })} label="Price Label Text" fallback="#ffffff" /></Row>
+          <Row label="Line Color" last><ColorBox value={settings.priceLabelLineColor ?? "rgba(255,255,255,0.4)"} onChange={v => p({ priceLabelLineColor: v })} label="Price Line" fallback="rgba(255,255,255,0.4)" /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Timezone">
+          <Row label="Display Timezone" last>
+            <StyledSelect value={settings.timezone} onChange={v => p({ timezone: v as ChartSettings["timezone"] })}
+              options={[{ value: "UTC", label: "UTC" }, { value: "IST", label: "IST (India)" }, { value: "Exchange", label: "Exchange" }, { value: "Local", label: "Local Time" }]}
+            />
+          </Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Price Precision">
+          <Row label="Decimal Places" last>
+            <StyledSelect value={settings.precision} onChange={v => p({ precision: v as ChartSettings["precision"] })}
+              options={[{ value: "2", label: "2 decimals" }, { value: "4", label: "4 decimals" }, { value: "5", label: "5 decimals" }, { value: "8", label: "8 decimals" }]}
+            />
+          </Row>
+        </Section>
+      </AnimatedListItem>
+    </AnimatedList>
   );
 
   const canvasContent = (
-    <div>
-      <Section title="Background">
-        <Row label="Type">
-          <StyledSelect value={settings.bgType} onChange={v => p({ bgType: v as ChartSettings["bgType"] })}
-            options={[{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }]}
-          />
-        </Row>
-        <Row label="Color" last><ColorBox value={settings.bgColor} onChange={v => p({ bgColor: v })} label="Background Color" /></Row>
-      </Section>
-      <Section title="Grid Lines">
-        <Row label="Display">
-          <StyledSelect value={settings.gridStyle} onChange={v => p({ gridStyle: v as ChartSettings["gridStyle"], gridVisible: v !== "none" })}
-            options={[{ value: "both", label: "Vertical + Horizontal" }, { value: "vertical", label: "Vertical Only" }, { value: "horizontal", label: "Horizontal Only" }, { value: "none", label: "None" }]}
-          />
-        </Row>
-        <Row label="Color" last><ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor: v })} label="Grid Color" /></Row>
-      </Section>
-      <Section title="Axis Borders">
-        <Row label="Visible"><Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible: v })} /></Row>
-        <Row label="Color" last><ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor: v })} label="Axis Border Color" /></Row>
-      </Section>
-      <Section title="Chart Panel Border">
-        <Row label="Visible"><Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible: v })} /></Row>
-        <Row label="Color"><ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor: v })} label="Panel Border Color" /></Row>
-        <Row label="Thickness" last><ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={v => p({ panelBorderThickness: v })} /></Row>
-      </Section>
-      <Section title="Crosshair">
-        <Row label="Color"><ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor: v })} label="Crosshair Color" /></Row>
-        <Row label="Mode">
-          <StyledSelect value={settings.crosshair} onChange={v => p({ crosshair: v as ChartSettings["crosshair"] })}
-            options={[{ value: "normal", label: "Normal" }, { value: "magnet", label: "Magnet" }]}
-          />
-        </Row>
-        <Row label="Line Style">
-          <StyledSelect value={settings.crosshairStyle} onChange={v => p({ crosshairStyle: v as ChartSettings["crosshairStyle"] })}
-            options={[{ value: "solid", label: "Solid" }, { value: "dashed", label: "Dashed" }, { value: "dotted", label: "Dotted" }]}
-          />
-        </Row>
-        <Row label="Thickness" last><ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={v => p({ crosshairWidth: v })} /></Row>
-      </Section>
-      <Section title="Text">
-        <Row label="Color"><ColorBox value={settings.textColor} onChange={v => p({ textColor: v })} label="Text Color" /></Row>
-        <Row label="Font Size" last>
-          <StyledSelect value={String(settings.fontSize)} onChange={v => p({ fontSize: Number(v) })}
-            options={[{ value: "9", label: "9px" }, { value: "10", label: "10px" }, { value: "11", label: "11px (default)" }, { value: "12", label: "12px" }, { value: "13", label: "13px" }, { value: "14", label: "14px" }]}
-          />
-        </Row>
-      </Section>
-      <Section title="Scale Labels">
-        <Row label="Label Color" last><ColorBox value={settings.linesColor} onChange={v => p({ linesColor: v })} label="Scale Label Color" /></Row>
-      </Section>
-    </div>
+    <AnimatedList>
+      <AnimatedListItem>
+        <Section title="Background">
+          <Row label="Type">
+            <StyledSelect value={settings.bgType} onChange={v => p({ bgType: v as ChartSettings["bgType"] })}
+              options={[{ value: "solid", label: "Solid" }, { value: "gradient", label: "Gradient" }]}
+            />
+          </Row>
+          <Row label="Color" last><ColorBox value={settings.bgColor} onChange={v => p({ bgColor: v })} label="Background Color" /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Grid Lines">
+          <Row label="Display">
+            <StyledSelect value={settings.gridStyle} onChange={v => p({ gridStyle: v as ChartSettings["gridStyle"], gridVisible: v !== "none" })}
+              options={[{ value: "both", label: "Vertical + Horizontal" }, { value: "vertical", label: "Vertical Only" }, { value: "horizontal", label: "Horizontal Only" }, { value: "none", label: "None" }]}
+            />
+          </Row>
+          <Row label="Color" last><ColorBox value={settings.gridColor ?? settings.linesColor} onChange={v => p({ gridColor: v })} label="Grid Color" /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Axis Borders">
+          <Row label="Visible"><Toggle checked={settings.bordersVisible ?? true} onChange={v => p({ bordersVisible: v })} /></Row>
+          <Row label="Color" last><ColorBox value={settings.borderColor ?? settings.linesColor} onChange={v => p({ borderColor: v })} label="Axis Border Color" /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Chart Panel Border">
+          <Row label="Visible"><Toggle checked={settings.panelBorderVisible ?? true} onChange={v => p({ panelBorderVisible: v })} /></Row>
+          <Row label="Color"><ColorBox value={settings.panelBorderColor ?? "rgba(255,255,255,0.22)"} onChange={v => p({ panelBorderColor: v })} label="Panel Border Color" /></Row>
+          <Row label="Thickness" last><ThicknessButtons value={settings.panelBorderThickness ?? 1} onChange={v => p({ panelBorderThickness: v })} /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Crosshair">
+          <Row label="Color"><ColorBox value={settings.crosshairColor} onChange={v => p({ crosshairColor: v })} label="Crosshair Color" /></Row>
+          <Row label="Mode">
+            <StyledSelect value={settings.crosshair} onChange={v => p({ crosshair: v as ChartSettings["crosshair"] })}
+              options={[{ value: "normal", label: "Normal" }, { value: "magnet", label: "Magnet" }]}
+            />
+          </Row>
+          <Row label="Line Style">
+            <StyledSelect value={settings.crosshairStyle} onChange={v => p({ crosshairStyle: v as ChartSettings["crosshairStyle"] })}
+              options={[{ value: "solid", label: "Solid" }, { value: "dashed", label: "Dashed" }, { value: "dotted", label: "Dotted" }]}
+            />
+          </Row>
+          <Row label="Thickness" last><ThicknessButtons value={settings.crosshairWidth ?? 1} onChange={v => p({ crosshairWidth: v })} /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Text">
+          <Row label="Color"><ColorBox value={settings.textColor} onChange={v => p({ textColor: v })} label="Text Color" /></Row>
+          <Row label="Font Size" last>
+            <StyledSelect value={String(settings.fontSize)} onChange={v => p({ fontSize: Number(v) })}
+              options={[{ value: "9", label: "9px" }, { value: "10", label: "10px" }, { value: "11", label: "11px (default)" }, { value: "12", label: "12px" }, { value: "13", label: "13px" }, { value: "14", label: "14px" }]}
+            />
+          </Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Scale Labels">
+          <Row label="Label Color" last><ColorBox value={settings.linesColor} onChange={v => p({ linesColor: v })} label="Scale Label Color" /></Row>
+        </Section>
+      </AnimatedListItem>
+    </AnimatedList>
   );
 
   const scaleContent = (
-    <div>
-      <Section title="Price Scale Mode">
-        <Row label="Scale Type">
-          <StyledSelect value={settings.scaleMode} onChange={v => p({ scaleMode: v as ChartSettings["scaleMode"] })}
-            options={[{ value: "normal", label: "Normal" }, { value: "log", label: "Logarithmic" }, { value: "percent", label: "Percentage" }, { value: "indexed", label: "Indexed to 100" }]}
-          />
-        </Row>
-        <Row label="Auto Scale" last><Toggle checked={settings.priceScaleAutoScale} onChange={v => p({ priceScaleAutoScale: v })} /></Row>
-      </Section>
-      <Section title="Interaction">
-        <Row label="Drag Price Scale" last>
-          <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Drag the right axis up/down</div>
-        </Row>
-      </Section>
-      <Section title="Reset">
-        <Row label="Double-click Axis" last>
-          <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Double-click price axis to reset</div>
-        </Row>
-      </Section>
-    </div>
+    <AnimatedList>
+      <AnimatedListItem>
+        <Section title="Price Scale Mode">
+          <Row label="Scale Type">
+            <StyledSelect value={settings.scaleMode} onChange={v => p({ scaleMode: v as ChartSettings["scaleMode"] })}
+              options={[{ value: "normal", label: "Normal" }, { value: "log", label: "Logarithmic" }, { value: "percent", label: "Percentage" }, { value: "indexed", label: "Indexed to 100" }]}
+            />
+          </Row>
+          <Row label="Auto Scale" last><Toggle checked={settings.priceScaleAutoScale} onChange={v => p({ priceScaleAutoScale: v })} /></Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Interaction">
+          <Row label="Drag Price Scale" last>
+            <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Drag the right axis up/down</div>
+          </Row>
+        </Section>
+      </AnimatedListItem>
+      <AnimatedListItem>
+        <Section title="Reset">
+          <Row label="Double-click Axis" last>
+            <div style={{ fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Double-click price axis to reset</div>
+          </Row>
+        </Section>
+      </AnimatedListItem>
+    </AnimatedList>
   );
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 1000,
-      background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
-      display: "flex", alignItems: "center", justifyContent: "center",
-    }}>
-      <div ref={ref} style={{
-        width: 640, maxHeight: "84vh",
-        background: T.modalBg, backdropFilter: "blur(32px)",
-        border: `1px solid ${T.divider}`, borderRadius: 18,
-        boxShadow: "0 32px 80px rgba(0,0,0,0.8), 0 0 0 1px rgba(96,165,250,0.04)",
-        display: "flex", flexDirection: "column",
-        overflow: "visible",
-      }}>
+    <AnimatedModal
+      isOpen={true}
+      onClose={onClose}
+      title="Chart Settings"
+      mode="dialog"
+    >
+      <div style={{ display: "flex", flex: 1, overflow: "hidden", borderRadius: "0 0 18px 18px" }}>
 
-        {/* Header */}
+        {/* Sidebar */}
         <div style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "16px 20px",
-          borderBottom: `1px solid ${T.divider}`,
-          flexShrink: 0,
-          borderRadius: "18px 18px 0 0",
+          width: 152, borderRight: `1px solid ${T.divider}`,
+          flexShrink: 0, paddingTop: 10, paddingBottom: 10,
           background: "rgba(255,255,255,0.02)",
+          borderRadius: "0 0 0 18px",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div style={{
-              width: 30, height: 30, borderRadius: 9,
-              background: T.accentBg, border: `1px solid ${T.accentBorder}`,
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <img src={icoSettingsUrl} alt="" draggable={false} style={{
-                width: 14, height: 14, display: "block",
-                filter: "brightness(0) invert(1)",
-                userSelect: "none", pointerEvents: "none",
-              }} />
-            </div>
-            <div>
-              <p style={{ margin: 0, fontSize: 14, fontWeight: 800, color: T.textHi }}>Chart Settings</p>
-              <p style={{ margin: 0, fontSize: 10, color: T.textDim }}>Customize appearance & scale</p>
-            </div>
-          </div>
-          <button onClick={onClose}
-            style={{
-              width: 30, height: 30, borderRadius: 8,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: T.btnBg, border: `1px solid ${T.btnBorder}`,
-              cursor: "pointer", transition: "background 0.12s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(239,68,68,0.15)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(239,68,68,0.3)"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.btnBg; (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; }}
-          >
-            <X style={{ width: 13, height: 13, color: T.textMed }} />
-          </button>
+          <p style={{
+            margin: "4px 14px 10px", fontSize: 9, fontWeight: 700,
+            color: T.textXDim,
+            textTransform: "uppercase", letterSpacing: "0.12em",
+          }}>Sections</p>
+          {(["Symbol", "Canvas", "Scale"] as SidebarSection[]).map(s => (
+            <NavItem key={s} label={s} active={section === s} onClick={() => setSection(s)} />
+          ))}
         </div>
 
-        {/* Body: sidebar + content */}
-        <div style={{ display: "flex", flex: 1, overflow: "hidden", borderRadius: "0 0 18px 18px" }}>
-
-          {/* Sidebar */}
-          <div style={{
-            width: 152, borderRight: `1px solid ${T.divider}`,
-            flexShrink: 0, paddingTop: 10, paddingBottom: 10,
-            background: "rgba(255,255,255,0.02)",
-            borderRadius: "0 0 0 18px",
-          }}>
-            <p style={{
-              margin: "4px 14px 10px", fontSize: 9, fontWeight: 700,
-              color: T.textXDim,
-              textTransform: "uppercase", letterSpacing: "0.12em",
-            }}>Sections</p>
-            {(["Symbol", "Canvas", "Scale"] as SidebarSection[]).map(s => (
-              <NavItem key={s} label={s} active={section === s} onClick={() => setSection(s)} />
-            ))}
-          </div>
-
-          {/* Content */}
-          <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", scrollbarWidth: "none" }}>
-            {section === "Symbol" && symbolContent}
-            {section === "Canvas" && canvasContent}
-            {section === "Scale"  && scaleContent}
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div style={{
-          padding: "12px 20px",
-          borderTop: `1px solid ${T.divider}`,
-          display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
-          flexShrink: 0,
-          borderRadius: "0 0 18px 18px",
-          background: "rgba(255,255,255,0.02)",
-        }}>
-          <button onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
-            style={{
-              padding: "7px 16px", borderRadius: 9,
-              background: "transparent", border: `1px solid ${T.btnBorder}`,
-              color: T.textDim, fontSize: 11, fontWeight: 600, cursor: "pointer",
-              transition: "all 0.12s",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.22)"; (e.currentTarget as HTMLButtonElement).style.color = T.textMed; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; (e.currentTarget as HTMLButtonElement).style.color = T.textDim; }}
-          >
-            Reset Defaults
-          </button>
-          <div style={{ display: "flex", gap: 8 }}>
-            {onSaveAsDefault && (
-              <SaveAsDefaultButton settings={settings} onSaveAsDefault={onSaveAsDefault} />
-            )}
-            <button onClick={onClose}
-              style={{
-                padding: "7px 20px", borderRadius: 9,
-                background: T.accentBg, border: `1px solid ${T.accentBorder}`,
-                color: T.accent, fontSize: 11, fontWeight: 800, cursor: "pointer",
-                transition: "all 0.12s",
-              }}
-              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(96,165,250,0.18)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 14px ${T.accentGlow}`; }}
-              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.accentBg; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
-            >
-              Done
-            </button>
-          </div>
+        {/* Content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "18px 20px", scrollbarWidth: "none" }}>
+          {section === "Symbol" && symbolContent}
+          {section === "Canvas" && canvasContent}
+          {section === "Scale"  && scaleContent}
         </div>
       </div>
-    </div>
+
+      {/* Footer */}
+      <div style={{
+        padding: "12px 20px",
+        borderTop: `1px solid ${T.divider}`,
+        display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8,
+        flexShrink: 0,
+        borderRadius: "0 0 18px 18px",
+        background: "rgba(255,255,255,0.02)",
+      }}>
+        <button onClick={() => onChange(DEFAULT_CHART_SETTINGS)}
+          style={{
+            padding: "7px 16px", borderRadius: 9,
+            background: "transparent", border: `1px solid ${T.btnBorder}`,
+            color: T.textDim, fontSize: 11, fontWeight: 600, cursor: "pointer",
+            transition: "all 0.12s",
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.22)"; (e.currentTarget as HTMLButtonElement).style.color = T.textMed; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.borderColor = T.btnBorder; (e.currentTarget as HTMLButtonElement).style.color = T.textDim; }}
+        >
+          Reset Defaults
+        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          {onSaveAsDefault && (
+            <SaveAsDefaultButton settings={settings} onSaveAsDefault={onSaveAsDefault} />
+          )}
+          <button onClick={onClose}
+            style={{
+              padding: "7px 20px", borderRadius: 9,
+              background: T.accentBg, border: `1px solid ${T.accentBorder}`,
+              color: T.accent, fontSize: 11, fontWeight: 800, cursor: "pointer",
+              transition: "all 0.12s",
+            }}
+            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.background = "rgba(96,165,250,0.18)"; (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 0 14px ${T.accentGlow}`; }}
+            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = T.accentBg; (e.currentTarget as HTMLButtonElement).style.boxShadow = "none"; }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    </AnimatedModal>
   );
 });
 

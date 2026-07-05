@@ -6,7 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash, Search } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  PageTransition, 
+  AnimatedPresenceList, 
+  AnimatedListItem, 
+  AnimatedButton, 
+  AnimatedCard,
+  AnimatedIconButton
+} from "@/components/animations";
 
 export default function Notebook() {
   const queryClient = useQueryClient();
@@ -84,14 +92,14 @@ export default function Notebook() {
   }, [title, content, selectedNoteId, queryClient]);
 
   return (
-    <div className="h-[calc(100vh-8rem)] flex gap-6">
+    <PageTransition className="h-[calc(100vh-8rem)] flex gap-6">
       {/* Sidebar */}
       <Card className="glass-card w-80 flex flex-col border-none overflow-hidden shrink-0">
         <div className="p-4 border-b border-white/10 flex flex-col gap-4">
-          <Button onClick={handleCreate} className="w-full bg-primary hover:bg-primary/90">
+          <AnimatedButton onClick={handleCreate} className="w-full bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
             New Note
-          </Button>
+          </AnimatedButton>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input 
@@ -102,64 +110,82 @@ export default function Notebook() {
             />
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {filteredNotes?.map(note => (
-            <button
-              key={note.id}
-              onClick={() => setSelectedNoteId(note.id)}
-              className={`w-full text-left p-3 rounded-lg transition-colors ${
-                selectedNoteId === note.id 
-                  ? "bg-primary/20 text-white" 
-                  : "hover:bg-white/5 text-muted-foreground hover:text-white"
-              }`}
-            >
-              <div className="font-medium truncate">{note.title || "Untitled"}</div>
-              <div className="text-xs opacity-70 truncate mt-1">
-                {new Date(note.updatedAt).toLocaleDateString()}
-              </div>
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-2">
+          <AnimatedPresenceList className="space-y-1">
+            {(filteredNotes || []).map(note => (
+              <AnimatedListItem key={note.id}>
+                <button
+                  onClick={() => setSelectedNoteId(note.id)}
+                  className={`w-full text-left p-3 rounded-lg transition-colors ${
+                    selectedNoteId === note.id 
+                      ? "bg-primary/20 text-white" 
+                      : "hover:bg-white/5 text-muted-foreground hover:text-white"
+                  }`}
+                >
+                  <div className="font-medium truncate">{note.title || "Untitled"}</div>
+                  <div className="text-xs opacity-70 truncate mt-1">
+                    {new Date(note.updatedAt).toLocaleDateString()}
+                  </div>
+                </button>
+              </AnimatedListItem>
+            ))}
+          </AnimatedPresenceList>
         </div>
       </Card>
 
       {/* Editor */}
       <Card className="glass-card flex-1 border-none flex flex-col overflow-hidden">
-        {selectedNote ? (
-          <>
-            <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0">
-              <Input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                className="text-xl font-bold bg-transparent border-none px-0 focus-visible:ring-0 shadow-none h-auto"
-                placeholder="Note Title"
-              />
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
-                onClick={() => deleteNote.mutate({ id: selectedNote.id })}
-              >
-                <Trash className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="flex-1 p-4 overflow-hidden flex flex-col">
-              <Textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="Start typing your journal entry..."
-                className="flex-1 resize-none bg-transparent border-none p-0 focus-visible:ring-0 shadow-none text-base leading-relaxed"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground">
-            <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
-              <Plus className="w-8 h-8 opacity-50" />
-            </div>
-            <p>Select a note or create a new one</p>
-          </div>
-        )}
+        <AnimatePresence mode="wait">
+          {selectedNote ? (
+            <motion.div
+              key={selectedNote.id}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -10 }}
+              transition={{ duration: 0.2 }}
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <div className="p-4 border-b border-white/10 flex items-center justify-between shrink-0">
+                <Input
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  className="text-xl font-bold bg-transparent border-none px-0 focus-visible:ring-0 shadow-none h-auto"
+                  placeholder="Note Title"
+                />
+                <AnimatedIconButton
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive shrink-0"
+                  onClick={() => deleteNote.mutate({ id: selectedNote.id })}
+                >
+                  <Trash className="w-4 h-4" />
+                </AnimatedIconButton>
+              </div>
+              <div className="flex-1 p-4 overflow-hidden flex flex-col">
+                <Textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="Start typing your journal entry..."
+                  className="flex-1 resize-none bg-transparent border-none p-0 focus-visible:ring-0 shadow-none text-base leading-relaxed"
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="flex-1 flex flex-col items-center justify-center text-muted-foreground"
+            >
+              <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
+                <Plus className="w-8 h-8 opacity-50" />
+              </div>
+              <p>Select a note or create a new one</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Card>
-    </div>
+    </PageTransition>
   );
 }

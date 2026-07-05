@@ -1,6 +1,8 @@
+import { PageTransition } from "@/components/animations";
+
 export default function Trade() {
   return (
-    <div style={{
+    <PageTransition style={{
       flex:           1,
       display:        "flex",
       flexDirection:  "column",
@@ -16,6 +18,6 @@ export default function Trade() {
       </svg>
       <span style={{ fontSize: 15, fontWeight: 500 }}>Trade Panel</span>
       <span style={{ fontSize: 12, opacity: 0.6 }}>Coming soon</span>
-    </div>
+    </PageTransition>
   );
 }

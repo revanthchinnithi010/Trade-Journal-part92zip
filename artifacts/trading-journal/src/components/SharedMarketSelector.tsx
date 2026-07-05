@@ -38,6 +38,13 @@ import { useWatchlist } from "@/contexts/WatchlistContext";
 import { useSymbolTick } from "@/store/tickStore";
 import { useCtraderSpot, useCtraderConnStatus } from "@/store/ctraderSpotStore";
 import { tapStart, recordUi } from "@/lib/starDiag";
+import {
+  AnimatedList,
+  AnimatedListItem,
+  AnimatedPresenceList,
+  AnimatedCard,
+  FadeIn
+} from "@/components/animations";
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -1319,32 +1326,36 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           <>
             {/* ── Watchlist tab ── */}
             {activeTab === "Watchlist" && (
-              <>
-                {filteredWatchlist.length === 0 && (
-                  <EmptyState
-                    icon={TrendingUp}
-                    title={searchActive ? "No results" : "Watchlist is empty"}
-                    subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
-                  />
-                )}
-                {filteredWatchlist.map(row => {
-                  const wItem = watchMap.get(row.symbol);
-                  return (
-                    <SymbolRow
-                      key={row.symbol}
-                      symbol={row.symbol}
-                      name={row.name}
-                      category={row.category}
-                      broker={row.broker}
-                      inWatchlist={!!wItem}
-                      isFavorite={wItem?.isFavorite ?? false}
-                      isActive={activeSymbol === row.symbol}
-                      onStarPress={getStarCb(row.symbol)}
-                      onTap={getTapCb(row.symbol)}
+              <AnimatedPresenceList>
+                {filteredWatchlist.length === 0 ? (
+                  <div key="empty-wl">
+                    <EmptyState
+                      icon={TrendingUp}
+                      title={searchActive ? "No results" : "Watchlist is empty"}
+                      subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
                     />
-                  );
-                })}
-              </>
+                  </div>
+                ) : (
+                  filteredWatchlist.map(row => {
+                    const wItem = watchMap.get(row.symbol);
+                    return (
+                      <div key={row.symbol}>
+                        <SymbolRow
+                          symbol={row.symbol}
+                          name={row.name}
+                          category={row.category}
+                          broker={row.broker}
+                          inWatchlist={!!wItem}
+                          isFavorite={wItem?.isFavorite ?? false}
+                          isActive={activeSymbol === row.symbol}
+                          onStarPress={getStarCb(row.symbol)}
+                          onTap={getTapCb(row.symbol)}
+                        />
+                      </div>
+                    );
+                  })
+                )}
+              </AnimatedPresenceList>
             )}
 
             {/* ── Markets tab ── */}

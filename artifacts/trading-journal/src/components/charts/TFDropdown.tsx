@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, Star, Plus, X, Check } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
+import { AnimatedList, AnimatedListItem } from "@/components/animations";
 
 // ── Label helpers ─────────────────────────────────────────────────────────────
 export function tfLabel(value: string): string {
@@ -208,128 +210,142 @@ export function TFDropdown({
   }, [customVal, favorites, onFavoritesChange, selectAndClose]);
 
   const panel = open && panelPos ? createPortal(
-    <div
-      ref={panelRef}
-      style={{
-        position:     "fixed",
-        top:          panelPos.top,
-        left:         panelPos.left,
-        width:        224,
-        background:   "#0C1512",
-        border:       "1px solid rgba(183,255,90,0.10)",
-        borderRadius: 12,
-        boxShadow:    "0 8px 30px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.3)",
-        zIndex:       999999,
-        overflow:     "hidden",
-        pointerEvents: "auto",
-      }}
-    >
-      {/* Custom interval row */}
-      <div style={{ padding: "10px 12px 9px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-        {customMode ? (
-          <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-            <input
-              ref={inputRef}
-              value={customVal}
-              onChange={e => { setCustomVal(e.target.value); setCustomErr(false); }}
-              onKeyDown={e => {
-                if (e.key === "Enter") submitCustom();
-                if (e.key === "Escape") { setCustomMode(false); setCustomVal(""); setCustomErr(false); }
-              }}
-              placeholder="2m, 4h, 1D…"
-              style={{
-                flex: 1, height: 26, borderRadius: 5, fontSize: 11,
-                background: "rgba(255,255,255,0.06)",
-                border: `1px solid ${customErr ? "rgba(239,68,68,0.6)" : "rgba(183,255,90,0.25)"}`,
-                color: customErr ? "#f87171" : "#E8F0E8",
-                padding: "0 8px", outline: "none",
-                fontFamily: "monospace", letterSpacing: "0.02em",
-              }}
-            />
+    <AnimatePresence>
+      <motion.div
+        ref={panelRef}
+        initial={{ opacity: 0, y: -8, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+        transition={{ duration: 0.15, ease: "easeOut" }}
+        style={{
+          position:     "fixed",
+          top:          panelPos.top,
+          left:         panelPos.left,
+          width:        224,
+          background:   "#0C1512",
+          border:       "1px solid rgba(183,255,90,0.10)",
+          borderRadius: 12,
+          boxShadow:    "0 8px 30px rgba(0,0,0,0.55), 0 0 0 1px rgba(0,0,0,0.3)",
+          zIndex:       999999,
+          overflow:     "hidden",
+          pointerEvents: "auto",
+        }}
+      >
+        {/* Custom interval row */}
+        <div style={{ padding: "10px 12px 9px", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+          {customMode ? (
+            <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+              <input
+                ref={inputRef}
+                value={customVal}
+                onChange={e => { setCustomVal(e.target.value); setCustomErr(false); }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") submitCustom();
+                  if (e.key === "Escape") { setCustomMode(false); setCustomVal(""); setCustomErr(false); }
+                }}
+                placeholder="2m, 4h, 1D…"
+                style={{
+                  flex: 1, height: 26, borderRadius: 5, fontSize: 11,
+                  background: "rgba(255,255,255,0.06)",
+                  border: `1px solid ${customErr ? "rgba(239,68,68,0.6)" : "rgba(183,255,90,0.25)"}`,
+                  color: customErr ? "#f87171" : "#E8F0E8",
+                  padding: "0 8px", outline: "none",
+                  fontFamily: "monospace", letterSpacing: "0.02em",
+                }}
+              />
+              <button
+                onClick={submitCustom}
+                style={{
+                  height: 26, padding: "0 9px", borderRadius: 5, fontSize: 11, fontWeight: 700,
+                  background: "#B7FF5A", color: "#0F1618", border: "none", cursor: "pointer", flexShrink: 0,
+                  touchAction: "manipulation",
+                }}
+              >
+                <Check style={{ width: 11, height: 11 }} />
+              </button>
+              <SmallBtn onClick={() => { setCustomMode(false); setCustomVal(""); setCustomErr(false); }}>
+                <X style={{ width: 11, height: 11 }} />
+              </SmallBtn>
+            </div>
+          ) : (
             <button
-              onClick={submitCustom}
+              onClick={() => setCustomMode(true)}
               style={{
-                height: 26, padding: "0 9px", borderRadius: 5, fontSize: 11, fontWeight: 700,
-                background: "#B7FF5A", color: "#0F1618", border: "none", cursor: "pointer", flexShrink: 0,
+                display: "flex", alignItems: "center", gap: 6,
+                width: "100%", padding: "3px 2px",
+                background: "transparent", border: "none",
+                color: "rgba(183,255,90,0.65)", fontSize: 11, fontWeight: 600,
+                cursor: "pointer", letterSpacing: "0.01em", transition: "color 0.15s",
                 touchAction: "manipulation",
               }}
+              onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#B7FF5A"; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(183,255,90,0.65)"; }}
             >
-              <Check style={{ width: 11, height: 11 }} />
+              <Plus style={{ width: 11, height: 11 }} />
+              Add custom interval…
             </button>
-            <SmallBtn onClick={() => { setCustomMode(false); setCustomVal(""); setCustomErr(false); }}>
-              <X style={{ width: 11, height: 11 }} />
-            </SmallBtn>
-          </div>
-        ) : (
-          <button
-            onClick={() => setCustomMode(true)}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              width: "100%", padding: "3px 2px",
-              background: "transparent", border: "none",
-              color: "rgba(183,255,90,0.65)", fontSize: 11, fontWeight: 600,
-              cursor: "pointer", letterSpacing: "0.01em", transition: "color 0.15s",
-              touchAction: "manipulation",
-            }}
-            onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = "#B7FF5A"; }}
-            onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = "rgba(183,255,90,0.65)"; }}
-          >
-            <Plus style={{ width: 11, height: 11 }} />
-            Add custom interval…
-          </button>
-        )}
-      </div>
+          )}
+        </div>
 
-      {/* Scrollable sections */}
-      <div style={{
-        maxHeight: 360, overflowY: "auto", paddingBottom: 6,
-        scrollbarWidth: "thin", scrollbarColor: "rgba(183,255,90,0.15) transparent",
-      }}>
-        {ALL_SECTIONS.map(section => (
-          <div key={section.title}>
-            <div style={{
-              padding: "9px 12px 3px", fontSize: 9, fontWeight: 700,
-              letterSpacing: "0.1em", color: "rgba(167,184,169,0.38)", userSelect: "none",
-            }}>
-              {section.title}
-            </div>
-            {section.items.map(item => (
-              <TFRow
-                key={item.value}
-                item={item}
-                isActive={item.value === interval}
-                isFav={favorites.includes(item.value)}
-                onSelect={selectAndClose}
-                onToggleFav={toggleFav}
-              />
+        {/* Scrollable sections */}
+        <div style={{
+          maxHeight: 360, overflowY: "auto", paddingBottom: 6,
+          scrollbarWidth: "thin", scrollbarColor: "rgba(183,255,90,0.15) transparent",
+        }}>
+          <AnimatedList>
+            {ALL_SECTIONS.map(section => (
+              <AnimatedListItem key={section.title}>
+                <div key={section.title}>
+                  <div style={{
+                    padding: "9px 12px 3px", fontSize: 9, fontWeight: 700,
+                    letterSpacing: "0.1em", color: "rgba(167,184,169,0.38)", userSelect: "none",
+                  }}>
+                    {section.title}
+                  </div>
+                  {section.items.map(item => (
+                    <TFRow
+                      key={item.value}
+                      item={item}
+                      isActive={item.value === interval}
+                      isFav={favorites.includes(item.value)}
+                      onSelect={selectAndClose}
+                      onToggleFav={toggleFav}
+                    />
+                  ))}
+                </div>
+              </AnimatedListItem>
             ))}
-          </div>
-        ))}
+          </AnimatedList>
 
-        {favorites.filter(f => !ALL_VALUES.has(f)).length > 0 && (
-          <div>
-            <div style={{
-              padding: "9px 12px 3px", fontSize: 9, fontWeight: 700,
-              letterSpacing: "0.1em", color: "rgba(167,184,169,0.38)", userSelect: "none",
-            }}>
-              CUSTOM
+          {favorites.filter(f => !ALL_VALUES.has(f)).length > 0 && (
+            <div>
+              <div style={{
+                padding: "9px 12px 3px", fontSize: 9, fontWeight: 700,
+                letterSpacing: "0.1em", color: "rgba(167,184,169,0.38)", userSelect: "none",
+              }}>
+                CUSTOM
+              </div>
+              <AnimatedList>
+                {favorites
+                  .filter(f => !ALL_VALUES.has(f))
+                  .map(f => (
+                    <AnimatedListItem key={f}>
+                      <TFRow
+                        key={f}
+                        item={{ label: tfLabel(f), value: f }}
+                        isActive={f === interval}
+                        isFav={true}
+                        onSelect={selectAndClose}
+                        onToggleFav={toggleFav}
+                      />
+                    </AnimatedListItem>
+                  ))}
+              </AnimatedList>
             </div>
-            {favorites
-              .filter(f => !ALL_VALUES.has(f))
-              .map(f => (
-                <TFRow
-                  key={f}
-                  item={{ label: tfLabel(f), value: f }}
-                  isActive={f === interval}
-                  isFav={true}
-                  onSelect={selectAndClose}
-                  onToggleFav={toggleFav}
-                />
-              ))}
-          </div>
-        )}
-      </div>
-    </div>,
+          )}
+        </div>
+      </motion.div>
+    </AnimatePresence>,
     document.body
   ) : null;
 

@@ -20,6 +20,16 @@ import {
   type SyncedTrade,
   type BrokerName,
 } from "@/data/brokerData";
+import {
+  PageTransition,
+  AnimatedCard,
+  AnimatedButton,
+  AnimatedIconButton,
+  AnimatedList,
+  AnimatedListItem,
+  LoadingSpinner,
+  NumberCounter,
+} from "@/components/animations";
 
 type ActiveTab = "delta" | "fusion" | "groww" | "ctrader";
 
@@ -55,9 +65,9 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 
 function SyncSpinner() {
   return (
-    <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
-      <RefreshCw className="w-3.5 h-3.5" />
-    </motion.div>
+    <div className="w-3.5 h-3.5">
+      <LoadingSpinner />
+    </div>
   );
 }
 
@@ -87,10 +97,11 @@ interface BrokerCardProps {
 
 function BrokerCard({ name, tag, active, connected, lastSync, tradesCount, accentColor, icon, onSelect, onToggleConnect }: BrokerCardProps) {
   return (
-    <div
+    <AnimatedCard
       onClick={onSelect}
-      className={`glass-card cursor-pointer relative overflow-hidden transition-all duration-300 ${
-        active ? "border-primary/40 shadow-lg shadow-primary/10" : "hover:border-white/[0.12]"
+      hoverable
+      className={`relative overflow-hidden transition-all duration-300 ${
+        active ? "glass-card border-primary/40 shadow-lg shadow-primary/10" : "glass-card hover:border-white/[0.12]"
       }`}
     >
       {active && (
@@ -122,7 +133,7 @@ function BrokerCard({ name, tag, active, connected, lastSync, tradesCount, accen
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Synced Trades</p>
-            <p className="text-[16px] font-black text-white mt-0.5">{connected ? tradesCount : "—"}</p>
+            <p className="text-[16px] font-black text-white mt-0.5">{connected ? <NumberCounter value={tradesCount} /> : "—"}</p>
           </div>
           <div className="bg-white/[0.03] border border-white/[0.06] rounded-xl p-2.5">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Last Sync</p>
@@ -131,7 +142,7 @@ function BrokerCard({ name, tag, active, connected, lastSync, tradesCount, accen
         </div>
 
         <div className="flex gap-2">
-          <button
+          <AnimatedButton
             onClick={(e) => { e.stopPropagation(); onToggleConnect(); }}
             className={`flex-1 h-8 rounded-xl text-[12px] font-bold transition-all duration-200 ${
               connected
@@ -140,20 +151,21 @@ function BrokerCard({ name, tag, active, connected, lastSync, tradesCount, accen
             }`}
           >
             {connected ? "Disconnect" : "Connect"}
-          </button>
-          <button
+          </AnimatedButton>
+          <AnimatedButton
             onClick={onSelect}
+            variant="ghost"
             className="h-8 px-3 rounded-xl text-[12px] font-semibold border border-white/[0.08] text-muted-foreground hover:text-white hover:bg-white/[0.05] transition-all"
           >
             Manage
-          </button>
+          </AnimatedButton>
         </div>
       </div>
 
       {active && (
         <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />
       )}
-    </div>
+    </AnimatedCard>
   );
 }
 
@@ -216,105 +228,106 @@ function DeltaPanel({
         </div>
       </div>
 
-      {/* API Credentials */}
-      <div className="glass-card p-5 space-y-4">
-        <div className="flex items-center gap-2 mb-1">
-          <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-            <Database className="w-3.5 h-3.5 text-primary" />
+        {/* API Credentials */}
+        <AnimatedCard className="p-5 space-y-4">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
+              <Database className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="text-[13px] font-bold text-white">API Credentials</span>
           </div>
-          <span className="text-[13px] font-bold text-white">API Credentials</span>
-        </div>
 
-        <div className="space-y-3">
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider block mb-1.5">API Key</label>
-            <Input
-              type="text"
-              placeholder="Enter your Delta Exchange API Key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              disabled={connected}
-              className="bg-white/[0.04] border-white/[0.09] rounded-xl h-10 text-[13px] focus:border-primary/50 focus:ring-0 placeholder:text-muted-foreground/40 transition-colors font-mono"
-            />
-          </div>
-          <div>
-            <label className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider block mb-1.5">API Secret</label>
-            <div className="relative">
+          <div className="space-y-3">
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider block mb-1.5">API Key</label>
               <Input
-                type={showSecret ? "text" : "password"}
-                placeholder="Enter your Delta Exchange API Secret"
-                value={apiSecret}
-                onChange={(e) => setApiSecret(e.target.value)}
+                type="text"
+                placeholder="Enter your Delta Exchange API Key"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
                 disabled={connected}
-                className="bg-white/[0.04] border-white/[0.09] rounded-xl h-10 text-[13px] focus:border-primary/50 focus:ring-0 placeholder:text-muted-foreground/40 transition-colors pr-10 font-mono"
+                className="bg-white/[0.04] border-white/[0.09] rounded-xl h-10 text-[13px] focus:border-primary/50 focus:ring-0 placeholder:text-muted-foreground/40 transition-colors font-mono"
               />
-              <button
-                type="button"
-                onClick={() => setShowSecret(s => !s)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-white transition-colors"
-              >
-                {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              </button>
+            </div>
+            <div>
+              <label className="text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider block mb-1.5">API Secret</label>
+              <div className="relative">
+                <Input
+                  type={showSecret ? "text" : "password"}
+                  placeholder="Enter your Delta Exchange API Secret"
+                  value={apiSecret}
+                  onChange={(e) => setApiSecret(e.target.value)}
+                  disabled={connected}
+                  className="bg-white/[0.04] border-white/[0.09] rounded-xl h-10 text-[13px] focus:border-primary/50 focus:ring-0 placeholder:text-muted-foreground/40 transition-colors pr-10 font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowSecret(s => !s)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/60 hover:text-white transition-colors"
+                >
+                  {showSecret ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
 
-        {/* Progress bar */}
-        <AnimatePresence>
-          {syncStatus === "syncing" && (
-            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-1.5 overflow-hidden">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">Connecting to Delta Exchange...</span>
-                <span className="text-[11px] font-semibold text-primary">{syncProgress}%</span>
-              </div>
-              <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-                <motion.div
-                  className="h-full rounded-full bg-gradient-to-r from-primary to-lime-300"
-                  animate={{ width: `${syncProgress}%` }}
-                  transition={{ duration: 0.1 }}
-                />
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          {/* Progress bar */}
+          <AnimatePresence>
+            {syncStatus === "syncing" && (
+              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="space-y-1.5 overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-muted-foreground">Connecting to Delta Exchange...</span>
+                  <span className="text-[11px] font-semibold text-primary">{syncProgress}%</span>
+                </div>
+                <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
+                  <motion.div
+                    className="h-full rounded-full bg-gradient-to-r from-primary to-lime-300"
+                    animate={{ width: `${syncProgress}%` }}
+                    transition={{ duration: 0.1 }}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-        {/* Actions */}
-        <div className="flex items-center gap-3">
-          {!connected ? (
-            <button
-              onClick={handleConnect}
-              disabled={syncStatus === "syncing" || !apiKey || !apiSecret}
-              className="flex items-center gap-2 h-9 px-5 rounded-xl bg-primary text-white text-[13px] font-bold hover:bg-primary/85 active:scale-[0.97] transition-all shadow-md shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
-              {syncStatus === "syncing" ? "Connecting..." : syncStatus === "success" ? "Connected!" : "Connect Broker"}
-            </button>
-          ) : (
-            <button
-              onClick={onDisconnect}
-              className="flex items-center gap-2 h-9 px-5 rounded-xl bg-red-500/10 text-red-400 text-[13px] font-bold border border-red-500/20 hover:bg-red-500/20 transition-all"
-            >
-              <WifiOff className="w-3.5 h-3.5" />
-              Disconnect
-            </button>
-          )}
+          {/* Actions */}
+          <div className="flex items-center gap-3">
+            {!connected ? (
+              <AnimatedButton
+                onClick={handleConnect}
+                disabled={syncStatus === "syncing" || !apiKey || !apiSecret}
+                className="flex items-center gap-2 h-9 px-5 rounded-xl bg-primary text-white text-[13px] font-bold hover:bg-primary/85 shadow-md shadow-primary/25 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Zap className="w-3.5 h-3.5" />}
+                {syncStatus === "syncing" ? "Connecting..." : syncStatus === "success" ? "Connected!" : "Connect Broker"}
+              </AnimatedButton>
+            ) : (
+              <AnimatedButton
+                onClick={onDisconnect}
+                className="flex items-center gap-2 h-9 px-5 rounded-xl bg-red-500/10 text-red-400 text-[13px] font-bold border border-red-500/20 hover:bg-red-500/20 transition-all"
+              >
+                <WifiOff className="w-3.5 h-3.5" />
+                Disconnect
+              </AnimatedButton>
+            )}
 
-          {connected && (
-            <button
-              onClick={handleManualSync}
-              disabled={syncStatus === "syncing"}
-              className="flex items-center gap-2 h-9 px-4 rounded-xl border border-white/[0.08] text-muted-foreground text-[13px] font-semibold hover:text-white hover:bg-white/[0.05] transition-all disabled:opacity-50"
-            >
-              {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
-              {syncStatus === "syncing" ? "Syncing..." : syncStatus === "success" ? "Synced!" : "Manual Sync"}
-            </button>
-          )}
-        </div>
-      </div>
+            {connected && (
+              <AnimatedButton
+                onClick={handleManualSync}
+                disabled={syncStatus === "syncing"}
+                variant="ghost"
+                className="flex items-center gap-2 h-9 px-4 rounded-xl border border-white/[0.08] text-muted-foreground text-[13px] font-semibold hover:text-white hover:bg-white/[0.05] transition-all disabled:opacity-50"
+              >
+                {syncStatus === "syncing" ? <SyncSpinner /> : syncStatus === "success" ? <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                {syncStatus === "syncing" ? "Syncing..." : syncStatus === "success" ? "Synced!" : "Manual Sync"}
+              </AnimatedButton>
+            )}
+          </div>
+        </AnimatedCard>
 
       {/* Auto Sync + Settings */}
       {connected && (
-        <div className="glass-card p-5 space-y-4">
+        <AnimatedCard className="p-5 space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
               <Activity className="w-3.5 h-3.5 text-primary" />
@@ -349,12 +362,12 @@ function DeltaPanel({
               <span className="text-[10px] text-muted-foreground/50 font-medium">Encrypted</span>
             </div>
           </div>
-        </div>
+        </AnimatedCard>
       )}
 
       {/* Sync History */}
       {connected && (
-        <div className="glass-card overflow-hidden">
+        <AnimatedCard className="overflow-hidden">
           <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/[0.05]">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -362,17 +375,15 @@ function DeltaPanel({
               </div>
               <span className="text-[13px] font-bold text-white">Sync History</span>
               <span className="text-[10px] text-muted-foreground bg-white/[0.04] rounded-full px-2 py-0.5 border border-white/[0.06]">
-                {DELTA_SYNC_HISTORY.filter(e => e.status === "success").reduce((a, e) => a + e.tradesImported, 0)} total trades
+                <NumberCounter value={DELTA_SYNC_HISTORY.filter(e => e.status === "success").reduce((a, e) => a + e.tradesImported, 0)} /> total trades
               </span>
             </div>
           </div>
-          <div className="divide-y divide-white/[0.04]">
+          <AnimatedList className="divide-y divide-white/[0.04]">
             {DELTA_SYNC_HISTORY.map((entry, i) => (
-              <motion.div
+              <AnimatedListItem
                 key={entry.id}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
+                index={i}
                 className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors"
               >
                 <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${entry.status === "success" ? "bg-blue-500/10" : "bg-red-500/10"}`}>
@@ -387,10 +398,10 @@ function DeltaPanel({
                 {entry.status === "success" && entry.tradesImported > 0 && (
                   <span className="text-[11px] font-bold text-foreground/60 shrink-0">+{entry.tradesImported}</span>
                 )}
-              </motion.div>
+              </AnimatedListItem>
             ))}
-          </div>
-        </div>
+          </AnimatedList>
+        </AnimatedCard>
       )}
     </motion.div>
   );
@@ -402,7 +413,7 @@ function DeltaPanel({
 function FusionPanel({ connected: _connected, onConnect: _onConnect, onDisconnect: _onDisconnect }: { connected: boolean; onConnect: () => void; onDisconnect: () => void }) {
   return (
     <motion.div key="fusion" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="space-y-4">
-      <div className="glass-card p-6 space-y-4 text-center">
+      <AnimatedCard className="p-6 space-y-4 text-center">
         <div className="w-12 h-12 rounded-2xl bg-blue-500/10 flex items-center justify-center mx-auto">
           <Server className="w-6 h-6 text-blue-400" />
         </div>
@@ -413,13 +424,13 @@ function FusionPanel({ connected: _connected, onConnect: _onConnect, onDisconnec
           </p>
         </div>
         <div className="flex flex-col items-center gap-3 pt-2">
-          <button className="px-5 py-2.5 rounded-xl text-[13px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/25 hover:bg-blue-500/18 transition-colors">
+          <AnimatedButton className="px-5 py-2.5 rounded-xl text-[13px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/25 hover:bg-blue-500/18 transition-colors">
             <Download className="w-3.5 h-3.5 inline mr-1.5" />
             Import CSV
-          </button>
+          </AnimatedButton>
           <p className="text-[10px] text-muted-foreground/50">Supports FusionMarkets MT4/MT5 trade history exports</p>
         </div>
-      </div>
+      </AnimatedCard>
     </motion.div>
   );
 }
@@ -463,21 +474,21 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
       {/* Investment Tracking Card */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {[
-          { label: "Invested Value", value: "₹1,24,500", change: "+8.4%", positive: true },
-          { label: "Current Value", value: "₹1,35,028", change: "+₹10,528", positive: true },
-          { label: "Total Returns", value: "₹10,528", change: "8.45% XIRR", positive: true },
+          { label: "Invested Value", value: 124500, prefix: "₹", change: "+8.4%", positive: true },
+          { label: "Current Value", value: 135028, prefix: "₹", change: "+₹10,528", positive: true },
+          { label: "Total Returns", value: 10528, prefix: "₹", change: "8.45% XIRR", positive: true },
         ].map((card, i) => (
-          <motion.div key={card.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
+          <AnimatedCard key={card.label} index={i}
             className="glass-card p-4 space-y-2">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">{card.label}</p>
-            <p className="text-[18px] font-black text-white">{card.value}</p>
+            <p className="text-[18px] font-black text-white">{card.prefix}<NumberCounter value={card.value} /></p>
             <p className={`text-[11px] font-semibold ${card.positive ? "text-emerald-400" : "text-red-400"}`}>{card.change}</p>
-          </motion.div>
+          </AnimatedCard>
         ))}
       </div>
 
       {/* Manual Import */}
-      <div className="glass-card p-5 space-y-4">
+      <AnimatedCard className="p-5 space-y-4">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-6 h-6 rounded-md bg-teal-500/15 flex items-center justify-center">
             <Upload className="w-3.5 h-3.5 text-teal-400" />
@@ -497,9 +508,7 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
           <AnimatePresence mode="wait">
             {importStatus === "importing" ? (
               <motion.div key="imp" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center gap-3">
-                <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.2, repeat: Infinity, ease: "linear" }}>
-                  <RefreshCw className="w-8 h-8 text-teal-400" />
-                </motion.div>
+                <LoadingSpinner />
                 <div className="w-48 space-y-1.5">
                   <div className="flex justify-between">
                     <span className="text-[11px] text-muted-foreground">Processing...</span>
@@ -532,10 +541,10 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
             )}
           </AnimatePresence>
         </motion.div>
-      </div>
+      </AnimatedCard>
 
       {/* Import History */}
-      <div className="glass-card overflow-hidden">
+      <AnimatedCard className="overflow-hidden">
         <div className="px-5 pt-4 pb-3 flex items-center justify-between border-b border-white/[0.05]">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-teal-500/15 flex items-center justify-center">
@@ -544,9 +553,9 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
             <span className="text-[13px] font-bold text-white">Import History</span>
           </div>
         </div>
-        <div className="divide-y divide-white/[0.04]">
+        <AnimatedList className="divide-y divide-white/[0.04]">
           {GROWW_IMPORT_HISTORY.map((entry, i) => (
-            <motion.div key={entry.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05 }}
+            <AnimatedListItem key={entry.id} index={i}
               className="flex items-center gap-4 px-5 py-3 hover:bg-white/[0.02] transition-colors">
               <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-blue-500/10">
                 <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
@@ -559,10 +568,10 @@ function GrowwPanel({ connected, onConnect, onDisconnect }: { connected: boolean
                 </p>
               </div>
               <span className="text-[11px] font-bold text-foreground/60 shrink-0">+{entry.tradesImported}</span>
-            </motion.div>
+            </AnimatedListItem>
           ))}
-        </div>
-      </div>
+        </AnimatedList>
+      </AnimatedCard>
     </motion.div>
   );
 }
@@ -598,7 +607,7 @@ function CTraderPanel() {
   return (
     <motion.div key="ctrader" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }} className="space-y-5">
       {/* OAuth Config Card */}
-      <div className="glass-card p-5 space-y-4">
+      <AnimatedCard className="p-5 space-y-4">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-6 h-6 rounded-md bg-violet-500/15 flex items-center justify-center">
             <Link2 className="w-3.5 h-3.5 text-violet-400" />
@@ -613,7 +622,7 @@ function CTraderPanel() {
             </label>
             {uriStatus === "loading" && (
               <span className="flex items-center gap-1.5 text-[10px] font-bold text-muted-foreground px-2.5 py-1 rounded-full bg-white/[0.04] border border-white/[0.08]">
-                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-pulse" />
+                <LoadingSpinner />
                 Detecting…
               </span>
             )}
@@ -643,16 +652,15 @@ function CTraderPanel() {
               className="flex-1 h-10 px-3 rounded-xl text-[12px] bg-white/[0.04] border border-white/[0.09] text-muted-foreground/80 outline-none font-mono cursor-default select-all"
               style={{ caretColor: "transparent" }}
             />
-            <button
+            <AnimatedButton
               onClick={handleCopy}
               disabled={!redirectUri}
-              title="Copy redirect URL"
               className="h-10 px-3 rounded-xl border border-white/[0.09] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all flex items-center gap-1.5 text-[12px] font-semibold disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
             >
               {copied
                 ? <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Copied!</>
                 : <><Copy className="w-3.5 h-3.5" /> Copy</>}
-            </button>
+            </AnimatedButton>
           </div>
 
           <p className="text-[11px] text-muted-foreground/60 leading-relaxed">
@@ -660,10 +668,10 @@ function CTraderPanel() {
             <span className="text-violet-400/80 font-medium">Redirect URIs</span> — no manual entry required.
           </p>
         </div>
-      </div>
+      </AnimatedCard>
 
       {/* Setup Instructions */}
-      <div className="glass-card p-5 space-y-3">
+      <AnimatedCard className="p-5 space-y-3">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-6 h-6 rounded-md bg-white/[0.05] flex items-center justify-center">
             <FileText className="w-3.5 h-3.5 text-muted-foreground/60" />
@@ -683,7 +691,7 @@ function CTraderPanel() {
             <p className="text-[12px] text-muted-foreground leading-relaxed">{text}</p>
           </div>
         ))}
-      </div>
+      </AnimatedCard>
     </motion.div>
   );
 }
@@ -714,23 +722,24 @@ export default function Brokers() {
   const growwCount = SAMPLE_SYNCED_TRADES.filter(t => t.broker === "Groww").length;
 
   return (
-    <div className="space-y-6 pb-12">
-      {/* Page Header */}
-      <div className="flex items-start justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-[22px] font-black text-white tracking-tight">Broker Connections</h1>
-          <p className="text-[13px] text-muted-foreground mt-1">Connect your brokers to automatically sync trades and build your journal.</p>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
-            <Shield className="w-3.5 h-3.5 text-muted-foreground/60" />
-            <span className="text-[11px] font-semibold text-muted-foreground/60">Bank-Grade Security</span>
-            <div className="w-px h-3.5 bg-white/[0.08]" />
-            <Lock className="w-3 h-3 text-muted-foreground/60" />
-            <span className="text-[10px] text-muted-foreground/60">AES-256 · TLS 1.3</span>
+    <PageTransition>
+      <div className="space-y-6 pb-12">
+        {/* Page Header */}
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <h1 className="text-[22px] font-black text-white tracking-tight">Broker Connections</h1>
+            <p className="text-[13px] text-muted-foreground mt-1">Connect your brokers to automatically sync trades and build your journal.</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.07]">
+              <Shield className="w-3.5 h-3.5 text-muted-foreground/60" />
+              <span className="text-[11px] font-semibold text-muted-foreground/60">Bank-Grade Security</span>
+              <div className="w-px h-3.5 bg-white/[0.08]" />
+              <Lock className="w-3 h-3 text-muted-foreground/60" />
+              <span className="text-[10px] text-muted-foreground/60">AES-256 · TLS 1.3</span>
+            </div>
           </div>
         </div>
-      </div>
 
       {/* Broker Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -825,7 +834,7 @@ export default function Brokers() {
 
       {/* Auto Imported Trades */}
       <div>
-        <div className="glass-card overflow-hidden">
+        <AnimatedCard className="overflow-hidden">
           <div className="px-5 pt-4 pb-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/[0.05]">
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -833,7 +842,7 @@ export default function Brokers() {
               </div>
               <span className="text-[13px] font-bold text-white">Auto Imported Trades</span>
               <span className="text-[10px] text-muted-foreground bg-white/[0.04] rounded-full px-2 py-0.5 border border-white/[0.06]">
-                {filteredTrades.length} trades
+                <NumberCounter value={filteredTrades.length} /> trades
               </span>
             </div>
             {/* Broker Filter */}
@@ -863,9 +872,9 @@ export default function Brokers() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <AnimatedPresenceList as="tbody">
                 {filteredTrades.map((trade, i) => (
-                  <motion.tr key={trade.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.025, duration: 0.25 }}
+                  <AnimatedListItem as="tr" key={trade.id} index={i}
                     className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
@@ -901,9 +910,9 @@ export default function Brokers() {
                     <td className="px-4 py-3 text-[11px] text-muted-foreground whitespace-nowrap">
                       {new Date(trade.time).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                     </td>
-                  </motion.tr>
+                  </AnimatedListItem>
                 ))}
-              </tbody>
+              </AnimatedPresenceList>
             </table>
           </div>
           <div className="px-5 py-3 border-t border-white/[0.05] bg-white/[0.01] flex items-center gap-4">
@@ -919,12 +928,12 @@ export default function Brokers() {
               </span>
             </div>
           </div>
-        </div>
+        </AnimatedCard>
       </div>
 
       {/* Privacy Section */}
       <div>
-        <div className="glass-card p-5">
+        <AnimatedCard className="p-5">
           <div className="flex items-center gap-2 mb-4">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
               <Lock className="w-3.5 h-3.5 text-primary" />
@@ -948,8 +957,8 @@ export default function Brokers() {
               </div>
             ))}
           </div>
-        </div>
+        </AnimatedCard>
       </div>
-    </div>
+    </PageTransition>
   );
 }

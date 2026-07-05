@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { ThemeMode } from "@/contexts/ThemeContext";
+import { AnimatedModal, AnimatedButton } from "@/components/animations";
+import { motion, AnimatePresence } from "framer-motion";
 
 export interface ProfileData {
   name: string;
@@ -215,10 +217,14 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
   const initials = getInitials(profile.name);
 
   return (
-    <>
-      <div
+    <AnimatePresence>
+      <motion.div
         ref={dropRef}
-        className="dropdown-in absolute top-[calc(100%+10px)] right-0 w-[276px] rounded-2xl z-50"
+        initial={{ opacity: 0, scale: 0.95, y: -10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: -10 }}
+        transition={{ duration: 0.15, ease: "easeOut" }}
+        className="absolute top-[calc(100%+10px)] right-0 w-[276px] rounded-2xl z-50"
         style={{
           background:          "var(--surface-header)",
           backdropFilter:      "blur(24px)",
@@ -230,78 +236,98 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
           overflowX:           "hidden",
         }}
       >
-        {panel === "appearance" ? (
-          <AppearancePanel onBack={() => setPanel("menu")} />
-        ) : (
-          <>
-            <div
-              className="flex items-center gap-3 p-3.5"
-              style={{ borderBottom: "1px solid var(--surface-divider)" }}
+        <AnimatePresence mode="wait">
+          {panel === "appearance" ? (
+            <motion.div
+              key="appearance"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              transition={{ duration: 0.2 }}
+            >
+              <AppearancePanel onBack={() => setPanel("menu")} />
+            </motion.div>
+          ) : (
+            <motion.div
+              key="menu"
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -20 }}
+              transition={{ duration: 0.2 }}
             >
               <div
-                className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
-                style={{
-                  background:  "var(--surface-avatar-bg)",
-                  border:      "1.5px solid var(--surface-avatar-border)",
-                  boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
-                }}
+                className="flex items-center gap-3 p-3.5"
+                style={{ borderBottom: "1px solid var(--surface-divider)" }}
               >
-                {profile.avatarDataUrl
-                  ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
-                  : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
-                }
-              </div>
-              <div className="min-w-0">
-                <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
-                <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
-              </div>
-            </div>
-
-            <div className="p-1.5 space-y-0.5">
-              {MENU_ITEMS.map((item, i) => (
-                <div key={item.action}>
-                  {i === MENU_ITEMS.length - 1 && (
-                    <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
-                  )}
-                  <button
-                    onClick={() => handleAction(item.action)}
-                    className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-100 group"
-                    style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
-                      e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = "transparent";
-                      e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
-                    }}
-                  >
-                    <item.icon className="w-3.5 h-3.5 shrink-0" />
-                    <span>{item.label}</span>
-                    {!item.danger && (
-                      <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
-                    )}
-                  </button>
+                <div
+                  className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
+                  style={{
+                    background:  "var(--surface-avatar-bg)",
+                    border:      "1.5px solid var(--surface-avatar-border)",
+                    boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
+                  }}
+                >
+                  {profile.avatarDataUrl
+                    ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
+                    : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
+                  }
                 </div>
-              ))}
-            </div>
+                <div className="min-w-0">
+                  <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
+                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
+                </div>
+              </div>
 
-            {/* ── System Status, Backend Info, Backup & Restore ── */}
-            <div className="px-1.5 pb-2">
-              <SidebarSystemSections open={true} />
-            </div>
-          </>
-        )}
-      </div>
+              <div className="p-1.5 space-y-0.5">
+                {MENU_ITEMS.map((item, i) => (
+                  <div key={item.action}>
+                    {i === MENU_ITEMS.length - 1 && (
+                      <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
+                    )}
+                    <button
+                      onClick={() => handleAction(item.action)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-100 group"
+                      style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
+                        e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = "transparent";
+                        e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
+                      }}
+                    >
+                      <item.icon className="w-3.5 h-3.5 shrink-0" />
+                      <span>{item.label}</span>
+                      {!item.danger && (
+                        <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
 
-      {showModal && (
+              {/* ── System Status, Backend Info, Backup & Restore ── */}
+              <div className="px-1.5 pb-2">
+                <SidebarSystemSections open={true} />
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
+
+      <AnimatedModal
+        open={showModal}
+        onClose={() => { setShowModal(false); onClose(); }}
+        title="Edit Profile"
+      >
         <ProfileModal
           profile={profile}
           onUpdate={onUpdate}
           onClose={() => { setShowModal(false); onClose(); }}
         />
-      )}
-    </>
+      </AnimatedModal>
+    </AnimatePresence>
   );
 }
 

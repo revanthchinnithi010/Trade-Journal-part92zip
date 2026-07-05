@@ -3,6 +3,7 @@ import { useGetCalendarHeatmap } from "@workspace/api-client-react";
 import { useCurrencyFormatter } from "@/store/currencyStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Calendar, BarChart2 } from "lucide-react";
+import { PageTransition, AnimatedCard, FadeIn } from "@/components/animations";
 
 const DAYS_OF_WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -90,12 +91,7 @@ export default function CalendarPage() {
   const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
-    <motion.div
-      className="space-y-5 pb-12"
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-    >
+    <PageTransition className="space-y-5 pb-12">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -152,8 +148,8 @@ export default function CalendarPage() {
             icon: BarChart2,
             color: "text-foreground",
           },
-        ].map((s) => (
-          <div key={s.label} className="glass-card p-4 flex items-center gap-3">
+        ].map((s, idx) => (
+          <AnimatedCard key={s.label} index={idx} className="glass-card p-4 flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-white/[0.04] border border-white/[0.07] flex items-center justify-center flex-shrink-0">
               <s.icon className="w-4 h-4 text-muted-foreground" />
             </div>
@@ -161,12 +157,12 @@ export default function CalendarPage() {
               <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-0.5">{s.label}</p>
               <p className={`text-[15px] font-black leading-none ${s.color}`}>{s.value}</p>
             </div>
-          </div>
+          </AnimatedCard>
         ))}
       </div>
 
       {/* Calendar Grid */}
-      <div className="glass-card p-5">
+      <AnimatedCard index={4} className="glass-card p-5">
         {/* Day headers */}
         <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 mb-2">
           {DAYS_OF_WEEK.map((day) => (
@@ -237,17 +233,24 @@ export default function CalendarPage() {
                         )}
 
                         {/* Tooltip */}
-                        {isHovered && hasData && (
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 pointer-events-none">
-                            <div className="glass-modal px-3 py-2 text-[11px] whitespace-nowrap rounded-xl">
-                              <p className="text-muted-foreground mb-1">{new Date(cell.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</p>
-                              <p className={`font-bold text-[13px] ${cell.data.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                                {cell.data.pnl >= 0 ? "+" : ""}{fc(cell.data.pnl)}
-                              </p>
-                              <p className="text-muted-foreground">{cell.data.trades} trade{cell.data.trades !== 1 ? "s" : ""}</p>
-                            </div>
-                          </div>
-                        )}
+                        <AnimatePresence>
+                          {isHovered && hasData && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9, y: 5 }}
+                              animate={{ opacity: 1, scale: 1, y: 0 }}
+                              exit={{ opacity: 0, scale: 0.9, y: 5 }}
+                              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 pointer-events-none"
+                            >
+                              <div className="glass-modal px-3 py-2 text-[11px] whitespace-nowrap rounded-xl">
+                                <p className="text-muted-foreground mb-1">{new Date(cell.date + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}</p>
+                                <p className={`font-bold text-[13px] ${cell.data.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                                  {cell.data.pnl >= 0 ? "+" : ""}{fc(cell.data.pnl)}
+                                </p>
+                                <p className="text-muted-foreground">{cell.data.trades} trade{cell.data.trades !== 1 ? "s" : ""}</p>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     );
                   })}
@@ -287,7 +290,7 @@ export default function CalendarPage() {
             <span className="text-[10px] text-muted-foreground ml-1">Loss</span>
           </div>
         </div>
-      </div>
-    </motion.div>
+      </AnimatedCard>
+    </PageTransition>
   );
 }

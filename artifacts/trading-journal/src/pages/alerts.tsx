@@ -21,6 +21,15 @@ import {
 import { useAlertStore } from "@/store/alertStore";
 import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useLocation } from "wouter";
+import {
+  PageTransition,
+  AnimatedCard,
+  AnimatedPresenceList,
+  AnimatedListItem,
+  AnimatedButton,
+  AnimatedIconButton,
+  AnimatedModal,
+} from "@/components/animations";
 
 // ─── Small helpers ─────────────────────────────────────────────────────────────
 function StatusBadge({ status }: { status: AlertStatus }) {
@@ -253,15 +262,19 @@ const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onS
   };
 
   return (
-    <ModalWrapper title="Create Price Alert" icon={<Target className="w-4 h-4 text-blue-400" />} onClose={onClose}>
+    <AnimatedModal open={true} onClose={onClose} title="Create Price Alert">
       <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <Target className="w-4 h-4 text-blue-400" />
+          <h3 className="text-sm font-semibold text-white">Create Price Alert</h3>
+        </div>
         <FieldRow label="Symbol">
           <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
         </FieldRow>
         <FieldRow label="Condition">
           <div className="flex gap-2">
             {(["above", "below", "touch"] as const).map(c => (
-              <button key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
+              <AnimatedButton key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-xs font-semibold capitalize border transition-all",
                   form.condition === c
@@ -269,7 +282,7 @@ const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onS
                     : "border-white/[0.08] text-muted-foreground hover:border-white/20 hover:text-white"
                 )}>
                 {c}
-              </button>
+              </AnimatedButton>
             ))}
           </div>
         </FieldRow>
@@ -289,11 +302,11 @@ const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onS
             className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50" />
         </FieldRow>
         <div className="flex gap-2 pt-1">
-          <Button variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</Button>
-          <Button className="flex-1 h-9 bg-primary hover:bg-primary/90 text-white text-xs font-semibold" onClick={handleSave}>Create Alert</Button>
+          <AnimatedButton variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</AnimatedButton>
+          <AnimatedButton className="flex-1 h-9 bg-primary hover:bg-primary/90 text-white text-xs font-semibold" onClick={handleSave}>Create Alert</AnimatedButton>
         </div>
       </div>
-    </ModalWrapper>
+    </AnimatedModal>
   );
 });
 
@@ -324,8 +337,12 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
   ] as const;
 
   return (
-    <ModalWrapper title="Create Zone Alert" icon={<Layers className="w-4 h-4 text-orange-400" />} onClose={onClose}>
+    <AnimatedModal open={true} onClose={onClose} title="Create Zone Alert">
       <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <Layers className="w-4 h-4 text-orange-400" />
+          <h3 className="text-sm font-semibold text-white">Create Zone Alert</h3>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <FieldRow label="Symbol">
             <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
@@ -337,7 +354,7 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
         <FieldRow label="Zone Type">
           <div className="grid grid-cols-2 gap-2">
             {zoneTypes.map(z => (
-              <button key={z.value} onClick={() => setForm(f => ({ ...f, zoneType: z.value }))}
+              <AnimatedButton key={z.value} onClick={() => setForm(f => ({ ...f, zoneType: z.value }))}
                 className={cn(
                   "py-2 rounded-lg text-xs font-semibold border transition-all",
                   form.zoneType === z.value
@@ -345,7 +362,7 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
                     : "border-white/[0.08] text-muted-foreground hover:border-white/20 hover:text-white"
                 )}>
                 {z.label}
-              </button>
+              </AnimatedButton>
             ))}
           </div>
         </FieldRow>
@@ -364,7 +381,7 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
         <FieldRow label="Alert Condition">
           <div className="flex gap-2">
             {(["touch", "break", "retest"] as const).map(c => (
-              <button key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
+              <AnimatedButton key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-xs font-semibold capitalize border transition-all",
                   form.condition === c
@@ -372,7 +389,7 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
                     : "border-white/[0.08] text-muted-foreground hover:border-white/20 hover:text-white"
                 )}>
                 {c}
-              </button>
+              </AnimatedButton>
             ))}
           </div>
         </FieldRow>
@@ -382,11 +399,11 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
             className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50" />
         </FieldRow>
         <div className="flex gap-2 pt-1">
-          <Button variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</Button>
-          <Button className="flex-1 h-9 bg-orange-500 hover:bg-orange-500/90 text-white text-xs font-semibold" onClick={handleSave}>Create Zone</Button>
+          <AnimatedButton variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</AnimatedButton>
+          <AnimatedButton className="flex-1 h-9 bg-orange-500 hover:bg-orange-500/90 text-white text-xs font-semibold" onClick={handleSave}>Create Zone</AnimatedButton>
         </div>
       </div>
-    </ModalWrapper>
+    </AnimatedModal>
   );
 });
 
@@ -419,8 +436,12 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
     : null;
 
   return (
-    <ModalWrapper title="Create Trendline Alert" icon={<GitBranch className="w-4 h-4 text-primary" />} onClose={onClose}>
+    <AnimatedModal open={true} onClose={onClose} title="Create Trendline Alert">
       <div className="space-y-4">
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <GitBranch className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-white">Create Trendline Alert</h3>
+        </div>
         <div className="grid grid-cols-2 gap-3">
           <FieldRow label="Symbol">
             <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
@@ -492,7 +513,7 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
         <FieldRow label="Alert Condition">
           <div className="flex gap-2">
             {(["touch", "break", "retest"] as const).map(c => (
-              <button key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
+              <AnimatedButton key={c} onClick={() => setForm(f => ({ ...f, condition: c }))}
                 className={cn(
                   "flex-1 py-2 rounded-lg text-xs font-semibold capitalize border transition-all",
                   form.condition === c
@@ -500,7 +521,7 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
                     : "border-white/[0.08] text-muted-foreground hover:border-white/20 hover:text-white"
                 )}>
                 {c}
-              </button>
+              </AnimatedButton>
             ))}
           </div>
         </FieldRow>
@@ -510,16 +531,16 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
             className="w-full px-3 py-2 rounded-lg bg-white/[0.04] border border-white/[0.08] text-xs text-white placeholder:text-muted-foreground/50 resize-none focus:outline-none focus:ring-1 focus:ring-primary/50" />
         </FieldRow>
         <div className="flex gap-2 pt-1">
-          <Button variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</Button>
-          <Button
+          <AnimatedButton variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</AnimatedButton>
+          <AnimatedButton
             disabled={!canSave}
             className="flex-1 h-9 bg-primary hover:bg-primary/90 text-primary-foreground text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
             onClick={handleSave}>
             Create Trendline
-          </Button>
+          </AnimatedButton>
         </div>
       </div>
-    </ModalWrapper>
+    </AnimatedModal>
   );
 });
 
@@ -735,7 +756,7 @@ function PriceAlertCard({ alert, onTogglePause, onDelete }: {
     : null;
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+    <AnimatedListItem
       className={cn(
         "p-4 transition-all group",
         alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
@@ -748,14 +769,14 @@ function PriceAlertCard({ alert, onTogglePause, onDelete }: {
           <StatusBadge status={alert.status} />
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => onTogglePause(alert.id)}
+          <AnimatedIconButton onClick={() => onTogglePause(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/[0.08] text-muted-foreground hover:text-white transition-colors">
             {alert.status === "paused" ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-          </button>
-          <button onClick={() => onDelete(alert.id)}
+          </AnimatedIconButton>
+          <AnimatedIconButton onClick={() => onDelete(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </AnimatedIconButton>
         </div>
       </div>
       <div className="flex items-center gap-2 mb-3">
@@ -771,7 +792,7 @@ function PriceAlertCard({ alert, onTogglePause, onDelete }: {
           Expires {new Date(alert.expiry).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
         </div>
       )}
-    </motion.div>
+    </AnimatedListItem>
   );
 }
 
@@ -789,7 +810,7 @@ function ZoneAlertCard({ alert, onTogglePause, onDelete }: {
   };
 
   return (
-    <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+    <AnimatedListItem
       className={cn(
         "p-4 transition-all group",
         alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
@@ -803,14 +824,14 @@ function ZoneAlertCard({ alert, onTogglePause, onDelete }: {
           <StatusBadge status={alert.status} />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button onClick={() => onTogglePause(alert.id)}
+          <AnimatedIconButton onClick={() => onTogglePause(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/[0.08] text-muted-foreground hover:text-white transition-colors">
             {alert.status === "paused" ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-          </button>
-          <button onClick={() => onDelete(alert.id)}
+          </AnimatedIconButton>
+          <AnimatedIconButton onClick={() => onDelete(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </AnimatedIconButton>
         </div>
       </div>
       <div className="relative h-10 rounded-lg bg-white/[0.03] border border-white/[0.05] mb-3 flex items-center overflow-hidden">
@@ -832,7 +853,7 @@ function ZoneAlertCard({ alert, onTogglePause, onDelete }: {
         <span>{alert.timeframe}</span>
       </div>
       {alert.notes && <p className="text-[11px] text-muted-foreground/60 border-t border-white/[0.05] pt-2.5 mt-2.5 leading-relaxed">{alert.notes}</p>}
-    </motion.div>
+    </AnimatedListItem>
   );
 }
 
@@ -842,7 +863,7 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
 }) {
   const isAscending = alert.point2Price > alert.point1Price;
   return (
-    <motion.div layout initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.96 }}
+    <AnimatedListItem
       className={cn(
         "p-4 transition-all group",
         alert.status === "triggered" ? "glass-card border-primary/30 !bg-primary/[0.06] shadow-primary/10"
@@ -856,14 +877,14 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
           <StatusBadge status={alert.status} />
         </div>
         <div className="flex items-center gap-1">
-          <button onClick={() => onTogglePause(alert.id)}
+          <AnimatedIconButton onClick={() => onTogglePause(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/[0.08] text-muted-foreground hover:text-white transition-colors">
             {alert.status === "paused" ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
-          </button>
-          <button onClick={() => onDelete(alert.id)}
+          </AnimatedIconButton>
+          <AnimatedIconButton onClick={() => onDelete(alert.id)}
             className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-colors">
             <Trash2 className="w-3.5 h-3.5" />
-          </button>
+          </AnimatedIconButton>
         </div>
       </div>
       <div className="relative h-12 rounded-lg bg-white/[0.02] border border-white/[0.04] mb-3 overflow-hidden">
@@ -892,7 +913,7 @@ function TrendlineAlertCard({ alert, onTogglePause, onDelete }: {
         <span className={isAscending ? "text-foreground/50" : "text-red-400/70"}>{isAscending ? "Ascending" : "Descending"}</span>
       </div>
       {alert.notes && <p className="text-[11px] text-muted-foreground/60 border-t border-white/[0.05] pt-2.5 mt-2.5 leading-relaxed">{alert.notes}</p>}
-    </motion.div>
+    </AnimatedListItem>
   );
 }
 
@@ -1160,15 +1181,16 @@ export default function Alerts() {
     : null;
 
   return (
-    <div className="space-y-5">
-      {/* ── Header ──────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <PageTransition>
+      <div className="space-y-5">
+        {/* ── Header ──────────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-xl font-bold text-white tracking-tight">Alerts Center</h1>
           <p className="text-sm text-muted-foreground/60 mt-0.5">Monitor price levels, zones, and trendlines across all assets</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
+          <AnimatedIconButton
             onClick={() => setShowNotifications(v => !v)}
             className="relative h-9 w-9 flex items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06] text-muted-foreground hover:text-white transition-all"
           >
@@ -1178,9 +1200,9 @@ export default function Alerts() {
                 {unreadCount}
               </span>
             )}
-          </button>
+          </AnimatedIconButton>
           {createBtnLabel && (
-            <Button
+            <AnimatedButton
               onClick={() => setCreateModal(tab as "price" | "zone" | "trendline")}
               className={
                 isMobile && (tab === "trendline" || tab === "zone")
@@ -1190,7 +1212,7 @@ export default function Alerts() {
             >
               <Plus className="w-3.5 h-3.5" />
               New {createBtnLabel}
-            </Button>
+            </AnimatedButton>
           )}
         </div>
       </div>
@@ -1206,15 +1228,15 @@ export default function Alerts() {
           { label: "Triggered Today", value: totalTriggered, icon: Zap,      color: "text-primary",     bg: "bg-primary/10",     dot: "bg-primary",     animated: false },
           { label: "Paused Alerts",   value: totalPaused,    icon: Pause,    color: "text-yellow-400",  bg: "bg-yellow-400/10",  dot: "bg-yellow-400",  animated: false },
           { label: "Total Alerts",    value: allAlerts.length, icon: Bell,   color: "text-blue-400",    bg: "bg-blue-400/10",    dot: "bg-blue-400",    animated: false },
-        ].map(w => (
-          <div key={w.label} className="glass-card p-4 flex items-center gap-3">
+        ].map((w, idx) => (
+          <AnimatedCard key={w.label} index={idx} className="glass-card p-4 flex items-center gap-3">
             <div className={`w-9 h-9 rounded-xl ${w.bg} flex items-center justify-center flex-shrink-0`}>
               <w.icon className={`w-4 h-4 ${w.color}`} />
             </div>
             <div className="min-w-0">
               <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wider font-semibold truncate">{w.label}</p>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-lg font-bold text-white">{w.value}</span>
+                <span className="text-lg font-bold text-white"><NumberCounter value={w.value} /></span>
                 {w.animated && (
                   <span className="relative flex h-2 w-2">
                     <span className={`animate-ping absolute inline-flex h-full w-full rounded-full ${w.dot} opacity-60`} />
@@ -1223,7 +1245,7 @@ export default function Alerts() {
                 )}
               </div>
             </div>
-          </div>
+          </AnimatedCard>
         ))}
       </div>
 
@@ -1253,48 +1275,42 @@ export default function Alerts() {
             {/* Price Alerts */}
             {tab === "price" && (
               <motion.div key="price" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  <AnimatePresence>
-                    {priceAlerts.map(a => <PriceAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  </AnimatePresence>
+                <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {priceAlerts.map(a => <PriceAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <button onClick={() => setCreateModal("price")}
                     className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
                     <Plus className="w-5 h-5" />
                     <span className="text-xs font-medium">Add Price Alert</span>
                   </button>
-                </div>
+                </AnimatedPresenceList>
               </motion.div>
             )}
 
             {/* Zone Alerts */}
             {tab === "zone" && (
               <motion.div key="zone" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <AnimatePresence>
-                    {zoneAlerts.map(a => <ZoneAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  </AnimatePresence>
+                <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {zoneAlerts.map(a => <ZoneAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <button onClick={() => setCreateModal("zone")}
                     className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
                     <Plus className="w-5 h-5" />
                     <span className="text-xs font-medium">Add Zone Alert</span>
                   </button>
-                </div>
+                </AnimatedPresenceList>
               </motion.div>
             )}
 
             {/* Trendline Alerts */}
             {tab === "trendline" && (
               <motion.div key="trendline" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <AnimatePresence>
-                    {trendlineAlerts.map(a => <TrendlineAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  </AnimatePresence>
+                <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {trendlineAlerts.map(a => <TrendlineAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <button onClick={() => setCreateModal("trendline")}
                     className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
                     <Plus className="w-5 h-5" />
                     <span className="text-xs font-medium">Add Trendline Alert</span>
                   </button>
-                </div>
+                </AnimatedPresenceList>
               </motion.div>
             )}
 
@@ -1420,5 +1436,6 @@ export default function Alerts() {
         <CreateTrendlineAlertModal onClose={handleCloseModal} onSave={handleSaveTrendlineAlert} />
       )}
     </div>
+    </PageTransition>
   );
 }
