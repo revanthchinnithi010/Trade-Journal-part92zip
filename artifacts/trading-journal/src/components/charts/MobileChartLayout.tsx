@@ -4679,21 +4679,15 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           )}
 
-          {/* Leverage — drag slider (Delta) or margin info (cTrader) */}
+          {/* Leverage — symbol-specific leverage info (cTrader) or drag slider (Delta) */}
           <div style={{ padding:"10px 14px 0" }}>
-            {/* Header row: label left, diagnostics right */}
+            {/* Header row */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
-              <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>Leverage</span>
-              {activeBroker === "ctrader" ? (
-                <span style={{ fontSize:11, color:TEXT_DIM }}>
-                  Account&nbsp;
-                  <span style={{ color:"#38bdf8", fontWeight:700 }}>
-                    {contractSpec && contractSpec.maxLeverageNum > 0 ? `${contractSpec.maxLeverageNum}x` : "—"}
-                  </span>
-                  &nbsp;&nbsp;
-                  <span style={{ fontSize:10, color:"rgba(56,189,248,0.6)" }}>Set by broker</span>
-                </span>
-              ) : (
+              <span style={{ fontSize:12, color:TEXT_DIM, fontWeight:500 }}>
+                {activeBroker === "ctrader" ? "Symbol Leverage" : "Leverage"}
+              </span>
+              {/* Delta only: show max symbol leverage + selected value */}
+              {activeBroker !== "ctrader" && (
                 <span style={{ fontSize:11, color:TEXT_DIM }}>
                   Max&nbsp;
                   <span style={{ color:ORG_COLOR, fontWeight:700 }}>
@@ -4704,21 +4698,96 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 </span>
               )}
             </div>
-            {activeBroker === "ctrader" && (
-              <div style={{
-                padding:"10px 12px",
-                borderRadius:8,
-                background:"rgba(56,189,248,0.05)",
-                border:"1px solid rgba(56,189,248,0.12)",
-                marginBottom:4,
-                display:"flex", alignItems:"center", gap:8,
-              }}>
-                <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)", lineHeight:1.4 }}>
-                  Leverage is set by your cTrader account and instrument margin requirements.
-                  {contractSpec?.maxLeverageNum ? ` Max: ${contractSpec.maxLeverageNum}x` : ""}
-                </span>
-              </div>
-            )}
+
+            {/* cTrader: real per-symbol leverage from ProtoOA PT2177/2178.
+                Never shows account leverage — that is a different, unrelated value. */}
+            {activeBroker === "ctrader" && (() => {
+              const dynField = contractSpec?.fields.find(f => f.label === "Dynamic Leverage");
+
+              // Loading skeleton
+              if (!contractSpec) {
+                return (
+                  <div style={{
+                    padding:"10px 12px", borderRadius:8, marginBottom:4,
+                    background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <span style={{
+                      display:"inline-block", width:160, height:10, borderRadius:3,
+                      background:"rgba(255,255,255,0.09)", animation:"pulse 1.4s ease-in-out infinite",
+                    }} />
+                  </div>
+                );
+              }
+
+              // No leverage data from broker (leverageId absent in ProtoOASymbol field 35)
+              if (!dynField || dynField.value.startsWith("No dynamic") || dynField.value.startsWith("Unavailable")) {
+                return (
+                  <div style={{
+                    padding:"9px 12px", borderRadius:8, marginBottom:4,
+                    background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <span style={{ fontSize:12, color:"rgba(255,255,255,0.38)", fontStyle:"italic" }}>
+                      Not provided by broker
+                    </span>
+                  </div>
+                );
+              }
+
+              const lines = dynField.value.split("\n");
+
+              // Reformat a single backend tier line into user-friendly text.
+              // Backend examples:
+              //   "0–$100K USD: 1:500"      → "$0–100K: 1:500"
+              //   ">$100K–$500K USD: 1:200"  → "$100K–500K: 1:200"
+              //   ">$500K USD: 1:100"        → "Above $500K: 1:100"
+              //   "All positions: 1:500"     → unchanged
+              const fmt = (line: string): string => {
+                // Remove " USD" suffix first
+                let s = line.replace(" USD", "");
+                if (s.startsWith(">")) {
+                  const inner = s.slice(1); // strip leading ">"
+                  // ">$100K–$500K: 1:200" → "$100K–500K: 1:200"  (has range "–")
+                  // ">$500K: 1:100"       → "Above $500K: 1:100"  (no range)
+                  s = inner.includes("–") ? inner : "Above " + inner;
+                } else if (/^\d/.test(s)) {
+                  // "0–$100K: 1:500" → "$0–100K: 1:500"  (prefix leading digit with $)
+                  // Function form avoids "$1" string ambiguity ($=literal $, then 1≠capture group).
+                  s = s.replace(/^(\d)/, (_m, d: string) => "$" + d);
+                }
+                // Strip any second "$" that appears after a "–" in a range
+                // e.g. "$0–$100K" → "$0–100K", "$100K–$500K" → "$100K–500K"
+                s = s.replace(/–\$/g, "–");
+                return s;
+              };
+
+              if (lines.length === 1) {
+                // Flat single-tier leverage
+                return (
+                  <div style={{
+                    padding:"9px 12px", borderRadius:8, marginBottom:4,
+                    background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)",
+                  }}>
+                    <span style={{ fontSize:13, color:TEXT_HI, fontWeight:600 }}>{fmt(lines[0]!)}</span>
+                  </div>
+                );
+              }
+
+              // Multi-tier: bullet list
+              return (
+                <div style={{
+                  padding:"9px 12px", borderRadius:8, marginBottom:4,
+                  background:"rgba(255,255,255,0.03)", border:"1px solid rgba(255,255,255,0.07)",
+                  display:"flex", flexDirection:"column", gap:5,
+                }}>
+                  {lines.map((line, i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"baseline", gap:7 }}>
+                      <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", flexShrink:0, lineHeight:1 }}>•</span>
+                      <span style={{ fontSize:12, color:TEXT_HI, fontWeight:500, lineHeight:1.3 }}>{fmt(line)}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Leverage slider — only for Delta (cTrader shows margin note above) */}
             {activeBroker !== "ctrader" && <>
