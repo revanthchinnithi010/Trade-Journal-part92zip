@@ -15,6 +15,55 @@ import {
 
 const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+/**
+ * Safe JSON helper — reads the response body as text first so we never
+ * call .json() on an empty body ("Unexpected end of JSON input").
+ *
+ * Logs full diagnostics (URL, HTTP status, body length, preview) before
+ * throwing, making it clear whether the failure is:
+ *   - empty body       → server crashed before writing response
+ *   - non-JSON body    → server returned HTML error page
+ *   - non-200 status   → structured API error (returned, not thrown)
+ *   - network/timeout  → caught by the outer fetch() try/catch
+ */
+async function safeJson<T>(
+  res: Response,
+  url: string,
+  context?: Record<string, unknown>,
+): Promise<T> {
+  const text = await res.text();
+  const diag = {
+    url:        url.replace(/[?&](oauth_token|token|access_token)=[^&]+/g, "$1=***"),
+    status:     res.status,
+    bodyLength: text.length,
+    ...context,
+  };
+
+  if (!text.trim()) {
+    const msg = `[cTrader] Empty response body — HTTP ${res.status} from ${url.split("?")[0]}`;
+    console.error("[cTrader] Empty body", diag);
+    throw new Error(msg);
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    const preview = text.slice(0, 400);
+    console.error("[cTrader] Non-JSON body", { ...diag, preview });
+    throw new Error(
+      `[cTrader] Non-JSON response — HTTP ${res.status} from ${url.split("?")[0]}: ${preview}`,
+    );
+  }
+
+  if (!res.ok) {
+    // Non-200 but valid JSON — log for diagnostics; caller inspects {ok, error}
+    console.warn("[cTrader] HTTP error (JSON body)", { ...diag, preview: text.slice(0, 300) });
+  }
+
+  return parsed as T;
+}
+
 type LogLevel = "info" | "success" | "error" | "warn" | "step";
 interface LogEntry { ts: number; level: LogLevel; msg: string; }
 
