@@ -26,6 +26,7 @@ import IndicatorsPanel from "./IndicatorsPanel";
 import SettingsPanel, {
   ColorBox, ColorSwatch, Section, Row, ColorPair, StyledSelect, Toggle, ThicknessButtons, SaveAsDefaultButton, ToggleRow,
 } from "./SettingsPanel";
+import { DeltaQuantitySection } from "./DeltaQuantitySection";
 import { AlertSheetContent } from "./AlertCenterModal";
 import { DrawingAlertModal } from "./DrawingAlertModal";
 import { tfLabel } from "./TFDropdown";
@@ -4825,89 +4826,27 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
           {/* Quantity — Delta (contracts/coin) and cTrader (lots) are fully independent branches */}
           <div style={{ padding:"10px 14px 0" }}>
-            {/* Header */}
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
-              <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
-              <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:500 }}>
-                {isDeltaQty ? (deltaQtySpec ? deltaUnitLabel(deltaQtySpec) : "Contracts") : "Lot"}
-              </span>
-            </div>
-
-            {/* [−] input [+] stepper */}
-            {isDeltaQty ? (() => {
-              const dq = deltaQtySpec;
-              const minDisplay = dq ? contractsToDisplayQty(dq.minOrderSizeContracts, dq) : 0;
-              const maxDisplay = dq ? contractsToDisplayQty(dq.maxOrderSizeContracts, dq) : Infinity;
-              const stepDisplay = dq ? contractsToDisplayQty(dq.stepSizeContracts, dq) : 1;
-              const decrement = () => {
-                if (!dq) return;
-                const contracts = snapContracts(displayQtyToContracts(lotQty, dq) - dq.stepSizeContracts, dq);
-                setLotQty(contractsToDisplayQty(contracts, dq));
-              };
-              const increment = () => {
-                if (!dq) return;
-                const contracts = snapContracts(displayQtyToContracts(lotQty, dq) + dq.stepSizeContracts, dq);
-                setLotQty(contractsToDisplayQty(contracts, dq));
-              };
-              const handleChange = (v: string) => {
-                const n = parseFloat(v);
-                if (!isNaN(n) && n > 0) setLotQty(n);
-              };
-              const handleBlur = (v: string) => {
-                if (!dq) return;
-                const raw = parseFloat(v);
-                if (isNaN(raw) || raw <= 0) { setLotQty(minDisplay); return; }
-                const contracts = snapContracts(displayQtyToContracts(raw, dq), dq);
-                setLotQty(contractsToDisplayQty(contracts, dq));
-              };
-              return (
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  <button
-                    type="button"
-                    onClick={decrement}
-                    disabled={!dq || lotQty <= minDisplay}
-                    style={{
-                      width:40, height:40, borderRadius:8, flexShrink:0,
-                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      cursor: (!dq || lotQty <= minDisplay) ? "not-allowed" : "pointer",
-                      opacity: (!dq || lotQty <= minDisplay) ? 0.35 : 1,
-                    }}
-                  >
-                    <Minus style={{ width:14, height:14, color:TEXT_HI }} />
-                  </button>
-                  <input
-                    type="number" inputMode="decimal"
-                    value={lotQty}
-                    onChange={e => handleChange(e.target.value)}
-                    onBlur={e => handleBlur(e.target.value)}
-                    step={stepDisplay}
-                    min={minDisplay}
-                    max={dq ? maxDisplay : undefined}
-                    style={{
-                      flex:1, height:40, borderRadius:8,
-                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
-                      outline:"none", color:TEXT_HI, fontSize:16, fontWeight:700,
-                      textAlign:"center",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={increment}
-                    disabled={!dq || lotQty >= maxDisplay}
-                    style={{
-                      width:40, height:40, borderRadius:8, flexShrink:0,
-                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
-                      display:"flex", alignItems:"center", justifyContent:"center",
-                      cursor: (!dq || lotQty >= maxDisplay) ? "not-allowed" : "pointer",
-                      opacity: (!dq || lotQty >= maxDisplay) ? 0.35 : 1,
-                    }}
-                  >
-                    <Plus style={{ width:14, height:14, color:TEXT_HI }} />
-                  </button>
+            {isDeltaQty ? (
+              <>
+                {/* Delta Exchange — compact quantity input styled after the official Delta app */}
+                <div style={{ marginBottom:5 }}>
+                  <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
                 </div>
-              );
-            })() : (() => {
+                <DeltaQuantitySection
+                  dq={deltaQtySpec}
+                  lotQty={lotQty}
+                  setLotQty={setLotQty}
+                  livePrice={livePrice}
+                />
+              </>
+            ) : (
+              <>
+                {/* Header (cTrader) — unchanged from before */}
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
+                  <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
+                  <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:500 }}>Lot</span>
+                </div>
+                {(() => {
               const lotMin  = contractSpec?.minVolumeLots  ?? 0.01;
               const lotMax  = contractSpec?.maxVolumeLots  ?? 500;
               const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
@@ -4987,40 +4926,38 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
               );
-            })()}
+                })()}
+              </>
+            )}
 
-            {/* Live Lot Equivalent — always derived from the broker's own spec, never hardcoded */}
-            <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
-              <span style={{ fontSize:10, color:TEXT_DIM, fontWeight:600 }}>
-                {isDeltaQty
-                  ? (deltaQtySpec ? formatDeltaLotEquivalent(deltaQtySpec) : "Loading spec…")
-                  : (contractLotSize != null ? formatLotEquivalent(contractLotSize) : "Loading spec…")}
-              </span>
-              {isDeltaQty
-                ? (deltaQtySpec && livePrice && leverage > 0 && (
-                    <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
-                      {`Margin ≈ ${formatDeltaCurrency(calcDeltaMargin(displayQtyToContracts(lotQty, deltaQtySpec), livePrice, leverage, deltaQtySpec))}`}
-                    </span>
-                  ))
-                : (contractLotSize && livePrice && leverage > 0 && (
+            {/* Live Lot Equivalent + Range hint — Delta's own equivalents are already
+                rendered inside DeltaQuantitySection above; only render this block for cTrader. */}
+            {!isDeltaQty && (
+              <>
+                <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+                  <span style={{ fontSize:10, color:TEXT_DIM, fontWeight:600 }}>
+                    {contractLotSize != null ? formatLotEquivalent(contractLotSize) : "Loading spec…"}
+                  </span>
+                  {contractLotSize && livePrice && leverage > 0 && (
                     <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
                       {`Margin ≈ ${((lotQty * contractLotSize * livePrice) / leverage).toFixed(2)}`}
                     </span>
-                  ))}
-            </div>
-
-            {/* Range hint */}
-            {isDeltaQty
-              ? deltaQtySpec && (
-                  <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
-                    {`Min ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.minOrderSizeContracts, deltaQtySpec), deltaQtySpec)} · Max ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.maxOrderSizeContracts, deltaQtySpec), deltaQtySpec)} · Step ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.stepSizeContracts, deltaQtySpec), deltaQtySpec)} ${deltaUnitLabel(deltaQtySpec)}`}
-                  </div>
-                )
-              : contractSpec?.minVolumeLots != null && (
+                  )}
+                </div>
+                {contractSpec?.minVolumeLots != null && (
                   <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
                     {`Min ${contractSpec.minVolumeLots} · Max ${contractSpec.maxVolumeLots} · Step ${contractSpec.stepVolumeLots} lot`}
                   </div>
                 )}
+              </>
+            )}
+            {isDeltaQty && deltaQtySpec && livePrice && leverage > 0 && (
+              <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
+                <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
+                  {`Margin ≈ ${formatDeltaCurrency(calcDeltaMargin(displayQtyToContracts(lotQty, deltaQtySpec), livePrice, leverage, deltaQtySpec))}`}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* TP / SL */}
