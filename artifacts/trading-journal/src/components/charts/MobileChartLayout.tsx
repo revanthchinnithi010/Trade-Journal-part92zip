@@ -4362,12 +4362,39 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 const f = contractSpec!.fields.find(f => f.label === label);
                 return <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{f?.value ?? "—"}</span>;
               };
-              const leverageField = contractSpec?.fields.find(f => f.label === "Max Leverage");
+              // "Dynamic Leverage" is the label sent by the backend for cTrader symbols (PT2177/2178).
+              // Multi-tier values are newline-joined: "0–$100K USD: 1:500\n>$100K–$500K USD: 1:200\n..."
+              // For the compact stat, show "Up to 1:NNN ↓" when truly tiered so it's clear the user
+              // should expand to see all tiers. Never fall back to account-level maxLeverageNum —
+              // that would violate "never assume account leverage = symbol leverage".
+              const dynLevField   = contractSpec?.fields.find(f => f.label === "Dynamic Leverage");
+              const leverageField = dynLevField ?? contractSpec?.fields.find(f => f.label === "Max Leverage");
+              const leverageQuickVal = (() => {
+                if (!contractSpec) return "—";
+                if (!leverageField) {
+                  // Only use symbol-specific max leverage — never account-level maxLeverageNum
+                  return contractSpec.maxSymbolLeverageNum ? `1:${contractSpec.maxSymbolLeverageNum}` : "—";
+                }
+                const v = leverageField.value;
+                // "No dynamic leverage profile..." → broker has no per-symbol leverage
+                if (v.startsWith("No dynamic")) return "—";
+                // "Unavailable —..." → fetch error
+                if (v.startsWith("Unavailable")) return "—";
+                const lines = v.split("\n");
+                if (lines.length > 1) {
+                  // Truly tiered: extract max leverage from the first line's "1:NNN" pattern
+                  // and add ↓ to signal "expand for full tiers"
+                  const m = lines[0]!.match(/1:(\d+)/);
+                  return m ? `Up to 1:${m[1]} ↓` : "Tiered ↓";
+                }
+                // Single flat-leverage value or short message — show as-is
+                return v;
+              })();
               const sizeField     = contractSpec?.fields.find(f => f.label.toLowerCase().includes("min volume") || f.label.toLowerCase().includes("lot size") || f.label.toLowerCase().includes("contract size"));
               const execField     = contractSpec?.fields.find(f => f.label.toLowerCase().includes("trade mode") || f.label.toLowerCase().includes("execution"));
 
               const row1ct = [
-                { label:"Leverage",   node: specLoading ? ph(40) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{leverageField?.value ?? (contractSpec?.maxLeverageNum ? `${contractSpec.maxLeverageNum}x` : "—")}</span> },
+                { label:"Leverage",   node: specLoading ? ph(40) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{leverageQuickVal}</span> },
                 { label:"Min Volume", node: specLoading ? ph(40) : <span style={{ fontSize:11, color:TEXT_HI, fontWeight:500, lineHeight:1 }}>{sizeField?.value ?? "—"}</span> },
                 { label:"Execution",  node: specLoading ? ph(44) : <span style={{ fontSize:11, color: execField?.highlight ? BUY_COLOR : TEXT_HI, fontWeight:500, lineHeight:1 }}>{execField?.value ?? "Market"}</span> },
               ];
@@ -4507,14 +4534,36 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             <div style={{ maxHeight: contractExpanded ? 700 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
               {contractSpec ? (
                 <div style={{ padding:"4px 0" }}>
-                  {contractSpec.fields.map(({ label, value, highlight }) => (
-                    <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 12px" }}>
-                      <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
-                      <span style={{ fontSize:13, fontWeight:500, color: highlight ? BUY_COLOR : TEXT_HI }}>
-                        {value}
-                      </span>
-                    </div>
-                  ))}
+                  {contractSpec.fields.map(({ label, value, highlight }) => {
+                    // Multi-line values (e.g. dynamic leverage tiers joined with \n) need a
+                    // stacked layout — side-by-side doesn't work when the value has multiple lines.
+                    const isMultiLine = value.includes("\n");
+                    if (isMultiLine) {
+                      const lines = value.split("\n");
+                      return (
+                        <div key={label} style={{ padding:"6px 12px" }}>
+                          <span style={{ fontSize:11, color:TEXT_DIM, display:"block", marginBottom:3 }}>{label}</span>
+                          {lines.map((line, i) => (
+                            <span key={i} style={{
+                              display:"block",
+                              fontSize:12, fontWeight:500,
+                              color: highlight ? BUY_COLOR : TEXT_HI,
+                              lineHeight:1.6,
+                              paddingLeft:4,
+                            }}>{line}</span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div key={label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"5px 12px" }}>
+                        <span style={{ fontSize:12, color:TEXT_DIM }}>{label}</span>
+                        <span style={{ fontSize:13, fontWeight:500, color: highlight ? BUY_COLOR : TEXT_HI }}>
+                          {value}
+                        </span>
+                      </div>
+                    );
+                  })}
                   {contractSpec.partial && (
                     <div style={{ padding:"4px 12px 6px" }}>
                       <span style={{ fontSize:10.5, color:TEXT_DIM, fontStyle:"italic" }}>
