@@ -29,6 +29,7 @@ import { createFeedDiagnosticsRouter } from "./feed_diagnostics.js";
 import { createCtraderOAuthRouter } from "./ctrader_oauth.js";
 import { createCtraderSpotsRouter } from "./ctrader_spots.js";
 import { createContractInfoRouter } from "./contract_info.js";
+import ctraderStatsRouter from "./ctrader_stats.js";
 import { createOrderbookRouter } from "./orderbook.js";
 import { createTickerRouter } from "./ticker.js";
 import type { AlertEngine } from "../services/AlertEngine.js";
@@ -84,6 +85,7 @@ export function createRouter(deps: {
   router.use(createCtraderOAuthRouter());
   router.use(createCtraderSpotsRouter());
   router.use(createContractInfoRouter());
+  router.use(ctraderStatsRouter);
   router.use(createOrderbookRouter());
   router.use(createTickerRouter());
 

@@ -1017,6 +1017,7 @@ export interface CtraderSymbolSpec {
   distanceSetIn:       number | null;   // field 20
   measurementUnits:    string | null;   // field 40
   swapPeriod:          number | null;   // field 36 (hours)
+  schedule:            Array<{ startSecond: number; endSecond: number }>; // field 13, repeated ProtoOAInterval
   durationMs:          number;
 }
 
@@ -1106,6 +1107,13 @@ export async function fetchSingleSymbolSpec(opts: {
           // 29 swapCalculationType, 30 lotSize(cents), 32 preciseMinCommission(/1e8),
           // 34 pnlConversionFeeRate (currency conversion fee, 1=0.01%), 36 swapPeriod(hrs), 40 measurementUnits.
           const preciseMinCommission = getVar(32);
+          const scheduleBufs = sf.filter(x => x.fn === 13 && x.wt === 2).map(x => x.v as Buffer);
+          const schedule = scheduleBufs.map(b => {
+            const intf = parseMsg(b);
+            const startSecond = intf.find(x => x.fn === 3 && x.wt === 0)?.v as number | undefined;
+            const endSecond   = intf.find(x => x.fn === 4 && x.wt === 0)?.v as number | undefined;
+            return { startSecond: startSecond ?? 0, endSecond: endSecond ?? 0 };
+          }).filter(s => s.endSecond > 0);
           const spec: CtraderSymbolSpec = {
             symbolId:             getVar(1) ?? symbolId,
             digits:               getVar(2) ?? 5,
@@ -1129,6 +1137,7 @@ export async function fetchSingleSymbolSpec(opts: {
             distanceSetIn:        getVar(20),
             measurementUnits:     getStr(40),
             swapPeriod:           getVar(36),
+            schedule,
             durationMs:           Date.now() - t0,
           };
 
@@ -1500,6 +1509,277 @@ export async function fetchTrendbars(opts: {
 
       // Unexpected frame in trendbars step — log and ignore
       logger.debug({ pt, step, ptName: PT_NAME[pt] ?? "unknown" }, "ProtoOA fetchTrendbars: unexpected frame ignored");
+    };
+  });
+}
+
+// ── ProtoOAAssetListReq — resolves asset display names (PT 2112 / 2113) ───────
+// Flow: APP_AUTH → ACCT_AUTH → ASSET_LIST_REQ → ASSET_LIST_RES { field3: repeated ProtoOAAsset }
+// ProtoOAAsset: 1 assetId, 2 name, 3 displayName, 4 digits.
+
+const PT_ASSET_LIST_REQ = 2112;
+const PT_ASSET_LIST_RES = 2113;
+
+export interface CtraderAsset {
+  assetId:     number;
+  name:        string | null;
+  displayName: string | null;
+  digits:      number | null;
+}
+
+function mkAssetListReq(ctidTraderAccountId: number): Buffer {
+  return buildFrame(PT_ASSET_LIST_REQ, [
+    ...u32f(1, PT_ASSET_LIST_REQ),
+    ...u32f(2, ctidTraderAccountId),
+  ]);
+}
+
+/**
+ * Fetch the full asset list for the account (all assets, e.g. EUR, USD, BTC).
+ * Callers should cache this — the list is stable and rarely changes.
+ */
+export async function fetchAssetList(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  timeoutMs?:          number;
+}): Promise<CtraderAsset[]> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, timeoutMs = 10_000,
+  } = opts;
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish(null, `timeout after ${timeoutMs}ms`), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(assets: CtraderAsset[] | null, err?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      if (err || !assets) reject(new Error(err ?? "fetchAssetList: no result"));
+      else resolve(assets);
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish(null, `socket error: ${e.message}`);
+    conn.onClose   = () => { if (!settled) finish(null, "connection closed"); };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        finish(null, `ProtoOA error ${errorCode}: ${description}`);
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "asset_list";
+        conn.write("AssetListReq", mkAssetListReq(ctidTraderAccountId));
+        return;
+      }
+
+      if (pt === PT_ASSET_LIST_RES && step === "asset_list") {
+        try {
+          const outer     = parseMsgFull(payload);
+          const assetBufs = fGetAllBytes(outer, 3);
+          const assets: CtraderAsset[] = assetBufs.map(b => {
+            const f = parseMsgFull(b);
+            return {
+              assetId:     fGetVar(f, 1),
+              name:        fGetBytes(f, 2)?.toString("utf8") ?? null,
+              displayName: fGetBytes(f, 3)?.toString("utf8") ?? null,
+              digits:      f.find(x => x.fn === 4 && x.wt === 0)?.v as number ?? null,
+            };
+          });
+          logger.info({ ctidTraderAccountId, count: assets.length }, "ProtoOA fetchAssetList: ✓");
+          finish(assets);
+        } catch (e) {
+          finish(null, `parse error: ${String(e)}`);
+        }
+        return;
+      }
+    };
+  });
+}
+
+// ── ProtoOADealListReq — closed-deal history for real Trade Statistics ───────
+// (PT 2133 / 2134). Flow: APP_AUTH → ACCT_AUTH → DEAL_LIST_REQ → DEAL_LIST_RES
+// ProtoOADeal: 1 dealId, 2 orderId, 3 positionId, 4 volume(cents), 5 filledVolume(cents),
+//   6 symbolId, 7 createTimestamp(ms), 8 executionTimestamp(ms), 9 utcLastUpdateTimestamp(ms),
+//   10 executionPrice(double), 11 tradeSide(enum 1=BUY,2=SELL), 12 dealStatus(enum),
+//   13 marginRate(double), 14 commission, 15 baseToUsdConversionRate(double),
+//   16 closePositionDetail (ProtoOAClosePositionDetail), 17 moneyDigits.
+// ProtoOAClosePositionDetail: 1 entryPrice(double), 2 grossProfit, 3 swap, 4 commission,
+//   5 balance, 6 quoteToDepositConversionRate(double), 7 closedVolume(cents), 9 moneyDigits.
+// Money fields (grossProfit/swap/commission/balance) are integers scaled by 10^moneyDigits.
+
+const PT_DEAL_LIST_REQ = 2133;
+const PT_DEAL_LIST_RES = 2134;
+
+export interface CtraderDeal {
+  dealId:              number;
+  orderId:             number;
+  positionId:          number;
+  volume:              number; // lots (already /100 from cents)
+  symbolId:             number;
+  executionTimestamp:  number; // ms
+  executionPrice:      number;
+  tradeSide:            "BUY" | "SELL";
+  dealStatus:           number; // 2 = FILLED (see ProtoOADealStatus)
+  commission:           number; // scaled by moneyDigits
+  isClose:              boolean;
+  closeGrossProfit:     number | null; // real currency units (scaled)
+  closeSwap:             number | null;
+  closeCommission:       number | null;
+  closedVolume:          number | null; // lots
+  moneyDigits:          number;
+}
+
+export interface DealListResult {
+  ok:         boolean;
+  error?:     string;
+  deals:      CtraderDeal[];
+  hasMore:    boolean;
+  durationMs: number;
+}
+
+function mkDealListReq(ctidTraderAccountId: number, fromMs: number, toMs: number, maxRows: number): Buffer {
+  return buildFrame(PT_DEAL_LIST_REQ, [
+    ...u64f(1, PT_DEAL_LIST_REQ),
+    ...u64f(2, ctidTraderAccountId),
+    ...u64f(3, fromMs),
+    ...u64f(4, toMs),
+    ...u64f(5, maxRows),
+  ]);
+}
+
+/**
+ * Fetch closed-deal history for the account (optionally further filtered by symbolId
+ * by the caller, since ProtoOA does not support server-side symbol filtering).
+ * Used to compute real Trade Statistics — never fabricate stats when this fails.
+ */
+export async function fetchDealHistory(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  fromMs:              number;
+  toMs:                number;
+  maxRows?:            number;
+  timeoutMs?:          number;
+}): Promise<DealListResult> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, fromMs, toMs, maxRows = 1000, timeoutMs = 20_000,
+  } = opts;
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0   = Date.now();
+
+  return new Promise(resolve => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish({ ok: false, error: `timeout after ${timeoutMs}ms` }), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(partial: Partial<DealListResult>) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      resolve({ ok: false, deals: [], hasMore: false, durationMs: Date.now() - t0, ...partial });
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish({ ok: false, error: `socket error: ${e.message}` });
+    conn.onClose   = () => { if (!settled) finish({ ok: false, error: "connection closed" }); };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        finish({ ok: false, error: `ProtoOA error ${errorCode}: ${description}` });
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "deal_list";
+        conn.write("DealListReq", mkDealListReq(ctidTraderAccountId, fromMs, toMs, maxRows));
+        return;
+      }
+
+      if (pt === PT_DEAL_LIST_RES && step === "deal_list") {
+        try {
+          const outer    = parseMsgFull(payload);
+          const dealBufs = fGetAllBytes(outer, 3);
+          const hasMore  = Boolean(outer.find(f => f.fn === 4 && f.wt === 0)?.v);
+
+          const deals: CtraderDeal[] = dealBufs.map(b => {
+            const f = parseMsgFull(b);
+            const moneyDigits = fGetVar(f, 17) || 2;
+            const cpdBuf      = fGetBytes(f, 16);
+            let closeGrossProfit: number | null = null;
+            let closeSwap:         number | null = null;
+            let closeCommission:   number | null = null;
+            let closedVolume:      number | null = null;
+            if (cpdBuf) {
+              const cf = parseMsgFull(cpdBuf);
+              const cpdMoneyDigits = fGetVar(cf, 9) || moneyDigits;
+              const scale = Math.pow(10, cpdMoneyDigits);
+              closeGrossProfit = fGetVar(cf, 2) / scale;
+              closeSwap         = fGetVar(cf, 3) / scale;
+              closeCommission   = fGetVar(cf, 4) / scale;
+              const cv = cf.find(x => x.fn === 7 && x.wt === 0)?.v as number | undefined;
+              closedVolume = cv !== undefined ? cv / 100 : null;
+            }
+            return {
+              dealId:             fGetVar(f, 1),
+              orderId:            fGetVar(f, 2),
+              positionId:         fGetVar(f, 3),
+              volume:             fGetVar(f, 4) / 100,
+              symbolId:           fGetVar(f, 6),
+              executionTimestamp: fGetVar(f, 8),
+              executionPrice:     fGetDbl(f, 10),
+              tradeSide:          fGetVar(f, 11) === 2 ? "SELL" : "BUY",
+              dealStatus:         fGetVar(f, 12),
+              commission:         fGetVar(f, 14) / Math.pow(10, moneyDigits),
+              isClose:            cpdBuf !== undefined,
+              closeGrossProfit,
+              closeSwap,
+              closeCommission,
+              closedVolume,
+              moneyDigits,
+            };
+          });
+
+          logger.info({ ctidTraderAccountId, count: deals.length, hasMore }, "ProtoOA fetchDealHistory: ✓");
+          finish({ ok: true, deals, hasMore });
+        } catch (e) {
+          finish({ ok: false, error: `parse error: ${String(e)}` });
+        }
+        return;
+      }
     };
   });
 }

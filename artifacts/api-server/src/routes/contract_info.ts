@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
-import { fetchSingleSymbolSpec, fetchTraderInfo } from "../lib/ctraderProtoOA.js";
+import { fetchSingleSymbolSpec, fetchTraderInfo, fetchAssetList, type CtraderAsset } from "../lib/ctraderProtoOA.js";
 
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
 const CACHE_TTL_MS     = 5  * 60 * 1_000;
@@ -146,6 +146,78 @@ function formatProduct(p: RawDeltaProduct): ContractInfo {
 
 const cache     = new Map<string, { data: ContractInfo;       fetchedAt: number }>();
 const specCache = new Map<string, { data: BrokerContractSpec; fetchedAt: number }>();
+
+// ── Asset list cache (base/quote name resolution) ─────────────────────────────
+// Asset list is stable per account — cache for a long time and key by accountId.
+const assetListCache = new Map<number, { data: CtraderAsset[]; fetchedAt: number }>();
+const ASSET_LIST_TTL = 60 * 60 * 1_000; // 1h
+
+async function getAssetList(opts: {
+  ctidTraderAccountId: number; isLive: boolean; accessToken: string;
+  clientId: string; clientSecret: string;
+}): Promise<CtraderAsset[]> {
+  const hit = assetListCache.get(opts.ctidTraderAccountId);
+  if (hit && Date.now() - hit.fetchedAt < ASSET_LIST_TTL) return hit.data;
+  const data = await fetchAssetList(opts);
+  assetListCache.set(opts.ctidTraderAccountId, { data, fetchedAt: Date.now() });
+  return data;
+}
+
+/** Resolve a symbol name (e.g. "EURUSD", "XAUUSD") into { base, quote } ISO-style codes.
+ *  Purely derived from the symbol's own name — no fabricated data — since FX/metal pairs
+ *  are always base+quote concatenated 3-letter codes. Returns null when not applicable
+ *  (indices/commodities like NAS100, US30 aren't asset pairs). */
+function splitSymbolIntoAssets(symbolName: string): { base: string; quote: string } | null {
+  const s = symbolName.toUpperCase();
+  if (/^[A-Z]{6}$/.test(s)) return { base: s.slice(0, 3), quote: s.slice(3, 6) };
+  return null;
+}
+
+/** Compute open/closed status + time of next change from a real ProtoOA weekly schedule.
+ *  schedule: seconds-from-Sunday-00:00 intervals, expressed in `tz` (symbol's own timezone).
+ *  Returns null (never fabricated) if the schedule is empty or the timezone can't be resolved. */
+function computeMarketStatus(
+  schedule: Array<{ startSecond: number; endSecond: number }>,
+  tz: string | null,
+  nowMs = Date.now(),
+): { isOpen: boolean; nextChangeAt: number; reason: string } | null {
+  if (!schedule || schedule.length === 0 || !tz) return null;
+
+  let weekdayIdx: number, hh: number, mm: number, ss: number;
+  try {
+    const fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz, weekday: "short", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+    });
+    const parts = fmt.formatToParts(new Date(nowMs));
+    const get   = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+    const WD: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    weekdayIdx = WD[get("weekday")];
+    hh = parseInt(get("hour"), 10) % 24;
+    mm = parseInt(get("minute"), 10);
+    ss = parseInt(get("second"), 10);
+    if (weekdayIdx === undefined || Number.isNaN(hh) || Number.isNaN(mm)) return null;
+  } catch {
+    return null; // unrecognized timezone string — do not guess
+  }
+
+  const nowSec = weekdayIdx * 86400 + hh * 3600 + mm * 60 + ss;
+  const WEEK   = 7 * 86400;
+  const sorted = [...schedule].sort((a, b) => a.startSecond - b.startSecond);
+
+  for (const { startSecond, endSecond } of sorted) {
+    if (nowSec >= startSecond && nowSec < endSecond) {
+      return { isOpen: true, nextChangeAt: nowMs + (endSecond - nowSec) * 1000, reason: "Market open" };
+    }
+  }
+
+  let best: number | null = null;
+  for (const { startSecond } of sorted) {
+    const delta = startSecond >= nowSec ? startSecond - nowSec : startSecond + WEEK - nowSec;
+    if (best === null || delta < best) best = delta;
+  }
+  if (best === null) return { isOpen: false, nextChangeAt: nowMs, reason: "No sessions scheduled" };
+  return { isOpen: false, nextChangeAt: nowMs + best * 1000, reason: "Market closed" };
+}
 
 // ── Helpers shared by Delta spec builder ──────────────────────────────────────
 
@@ -407,6 +479,40 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     }
     if (spec.measurementUnits) {
       extFields.push({ label: "Measurement Units", value: spec.measurementUnits });
+    }
+
+    // ── Market hours / open-closed status (real ProtoOA schedule, never fabricated) ──
+    const marketStatus = computeMarketStatus(spec.schedule, spec.scheduleTimeZone);
+    if (marketStatus) {
+      extFields.push({
+        label: "Market Status",
+        value: marketStatus.isOpen ? "Open" : "Closed",
+        highlight: marketStatus.isOpen,
+      });
+      const secsLeft = Math.max(0, Math.round((marketStatus.nextChangeAt - Date.now()) / 1000));
+      const h = Math.floor(secsLeft / 3600), m = Math.floor((secsLeft % 3600) / 60);
+      extFields.push({
+        label: marketStatus.isOpen ? "Closes In" : "Opens In",
+        value: h > 0 ? `${h}h ${m}m` : `${m}m`,
+      });
+    } else if (spec.schedule.length === 0) {
+      extFields.push({ label: "Market Status", value: "Unavailable (no schedule from broker)" });
+    }
+
+    // ── Base/quote asset name resolution (from real account asset list) ──
+    const pair = splitSymbolIntoAssets(db.symbol_name);
+    if (pair) {
+      try {
+        const assets = await getAssetList({ ctidTraderAccountId: cfg.account_id, isLive: Boolean(cfg.is_live), accessToken, clientId, clientSecret });
+        const baseAsset  = assets.find(a => a.name?.toUpperCase() === pair.base);
+        const quoteAsset = assets.find(a => a.name?.toUpperCase() === pair.quote);
+        extFields.push({ label: "Base Asset",  value: baseAsset?.displayName  ?? baseAsset?.name  ?? pair.base });
+        extFields.push({ label: "Quote Asset", value: quoteAsset?.displayName ?? quoteAsset?.name ?? pair.quote });
+      } catch (e) {
+        logger.warn({ symbol, err: String(e) }, "contract-spec/ctrader: asset list resolution skipped");
+        extFields.push({ label: "Base Asset",  value: pair.base });
+        extFields.push({ label: "Quote Asset", value: pair.quote });
+      }
     }
 
     logger.info({ symbol, lotSizeNum, extCount: extFields.length }, "contract-spec/ctrader: ProtoOA ✓");
