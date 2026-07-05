@@ -140,6 +140,14 @@ export function formatUnits(units: number): string {
   return units.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
+/**
+ * Live lot-equivalent reference line for cTrader, e.g. "1 Lot = 100,000 Units".
+ * Always derived from the broker's actual lotSize — never hardcoded.
+ */
+export function formatLotEquivalent(lotSize: number): string {
+  return `1 Lot = ${formatUnits(lotSize)} Units`;
+}
+
 /** Format a currency amount, e.g. "$1,234.56 USD" */
 export function formatCurrency(amount: number, currency = "USD"): string {
   if (!isFinite(amount)) return `0.00 ${currency}`;

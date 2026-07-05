@@ -16,6 +16,7 @@ import {
   formatLots,
   formatUnits,
   formatCurrency,
+  formatLotEquivalent,
   validateVolumeSanity,
 } from "@/lib/lotMath";
 import {
@@ -24,6 +25,7 @@ import {
   displayQtyToContracts,
   formatDeltaQty,
   deltaUnitLabel,
+  formatDeltaLotEquivalent,
   snapContracts,
   incrementContracts,
   decrementContracts,
@@ -577,19 +579,15 @@ export function PlaceOrderPanel({ symbol }: Props) {
             <p style={{ fontSize: 10, color: "#f87171", marginTop: 3 }}>{qtyError}</p>
           )}
 
-          {/* Units display */}
+          {/* Live Lot Equivalent — always derived from the broker's own spec, never hardcoded */}
           {isDelta && deltaSpec && (
-            <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3 }}>
-              {formatDeltaQty(currentQty, deltaSpec)} {deltaUnitLabel(deltaSpec)}
-              {" = "}
-              {displayQtyToContracts(currentQty, deltaSpec)} Contract{displayQtyToContracts(currentQty, deltaSpec) === 1 ? "" : "s"}
+            <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3, fontWeight: 600 }}>
+              {formatDeltaLotEquivalent(deltaSpec)}
             </p>
           )}
           {!isDelta && lotSpec && (
-            <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3 }}>
-              {formatLots(currentQty, prec)} Lot
-              {" ≈ "}
-              {formatUnits(calcUnits(currentQty, lotSpec.lotSize))} Units
+            <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3, fontWeight: 600 }}>
+              {formatLotEquivalent(lotSpec.lotSize)}
             </p>
           )}
 

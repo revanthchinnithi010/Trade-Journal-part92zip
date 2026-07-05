@@ -45,11 +45,12 @@ import { BrokerSelectModal, BrokerListContent } from "@/components/broker/Broker
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import { BrokerIntegrationModal } from "@/components/charts/BrokerIntegrationModal";
-import { computeLotPrecision, snapToStep, type LotSpec } from "@/lib/lotMath";
+import { computeLotPrecision, snapToStep, formatLotEquivalent, type LotSpec } from "@/lib/lotMath";
 import {
   type DeltaQtySpec,
   contractsToDisplayQty,
   displayQtyToContracts,
+  formatDeltaLotEquivalent,
   formatDeltaQty,
   deltaUnitLabel,
   snapContracts,
@@ -4988,21 +4989,12 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               );
             })()}
 
-            {/* Units + margin info */}
+            {/* Live Lot Equivalent — always derived from the broker's own spec, never hardcoded */}
             <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
-              <span style={{ fontSize:10, color:TEXT_DIM }}>
+              <span style={{ fontSize:10, color:TEXT_DIM, fontWeight:600 }}>
                 {isDeltaQty
-                  ? (deltaQtySpec
-                      ? `${formatDeltaQty(lotQty, deltaQtySpec)} ${deltaUnitLabel(deltaQtySpec)} = ${displayQtyToContracts(lotQty, deltaQtySpec)} Contract${displayQtyToContracts(lotQty, deltaQtySpec) === 1 ? "" : "s"}`
-                      : "Loading spec…")
-                  : (contractLotSize != null
-                      ? (() => {
-                          const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
-                          const prec    = lotStep < 0.001 ? 3 : 2;
-                          const units   = lotQty * contractLotSize;
-                          return `${lotQty.toFixed(prec)} Lot ≈ ${units.toLocaleString("en-US", { maximumFractionDigits: 0 })} Units`;
-                        })()
-                      : "Loading spec…")}
+                  ? (deltaQtySpec ? formatDeltaLotEquivalent(deltaQtySpec) : "Loading spec…")
+                  : (contractLotSize != null ? formatLotEquivalent(contractLotSize) : "Loading spec…")}
               </span>
               {isDeltaQty
                 ? (deltaQtySpec && livePrice && leverage > 0 && (
@@ -5260,10 +5252,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                       : "—")
                   : `${lotQty} lot${lotQty !== 1 ? "s" : ""}`],
                 ...(isDeltaQty
-                  ? [["Contract Value", deltaQtySpec ? `${deltaQtySpec.contractValue} ${deltaQtySpec.contractUnit}` : "—"]]
-                  : [["Lot Size", contractLotSize != null
-                      ? `${contractLotSize} ${contractSpec?.settlementCurrency ?? ""}`.trim()
-                      : "—"]]),
+                  ? [["Lot Equivalent", deltaQtySpec ? formatDeltaLotEquivalent(deltaQtySpec) : "—"]]
+                  : [["Lot Equivalent", contractLotSize != null ? formatLotEquivalent(contractLotSize) : "—"]]),
                 ["Leverage",    `${leverage}x`],
                 ["Entry Price", orderType === "Market" ? "Market (best available)" : (limitPrice || "—")],
                 ...(needsStopPrice ? [["Stop Trigger", stopPrice || "—"]] : []),

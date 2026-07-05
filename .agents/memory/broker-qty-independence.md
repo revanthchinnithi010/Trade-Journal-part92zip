@@ -5,9 +5,15 @@ description: Delta Exchange (contracts/coin) and cTrader (lots) order-quantity s
 
 Delta Exchange and cTrader use fundamentally different quantity models:
 - cTrader: lots, with `minVolumeLots`/`maxVolumeLots`/`stepVolumeLots`/`lotSizeNum` from ProtoOA.
-- Delta: whole integer contracts, displayed either as a coin amount (contractValue < 1, e.g. "0.001 BTC")
-  or a raw contract count (contractValue >= 1, e.g. "100 Contracts"), from Delta REST metadata
-  (`contract_value`, `tick_size`, `position_size_limit`).
+  Live reference line: "1 Lot = {lotSizeNum} Units" (e.g. "1 Lot = 100,000 Units" for EURUSD).
+- Delta: whole integer contracts, displayed as a coin amount UNLESS `contract_value === 1`
+  (i.e. 1 contract == 1 coin unit exactly), in which case it displays as a raw contract count
+  instead (e.g. FARTCOINUSD, contractValue=1 → "1 Contract"; DOGEUSD, contractValue=100 →
+  "100 DOGE"; BTCUSD, contractValue=0.001 → "0.001 BTC"). The `contractValue < 1` threshold is
+  WRONG — verified against real Delta app behavior, the only special case is `=== 1`.
+  Always from Delta REST metadata (`contract_value`, `contract_unit_currency`, `tick_size`,
+  `position_size_limit`) — never hardcoded. Live reference line: "1 Lot = {contractValue}
+  {contractUnit}" always shown in coin terms regardless of the active display mode.
 
 **Why:** The original bug was UI code that hardcoded `?? 0.01`, `?? 500`, `?? 0.01` fallbacks
 for lot fields. Since Delta's lot fields are always null, every Delta symbol silently rendered

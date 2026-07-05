@@ -325,7 +325,12 @@ function computeDeltaQty(p: RawDeltaProduct): DeltaQtySpec | null {
     ? p.position_size_limit
     : 1_000_000;
 
-  const quantityMode: "coin" | "contracts" = contractValue < 1 ? "coin" : "contracts";
+  // Matches the official Delta Exchange app: quantity is expressed in the
+  // underlying coin UNLESS one contract exactly equals one coin unit (contractValue
+  // === 1), in which case "Contracts" and coin quantity are identical and Delta
+  // labels it "Contracts" instead (e.g. FARTCOINUSD: 1 contract = 1 FARTCOIN → "1 Contract").
+  const quantityMode: "coin" | "contracts" =
+    Math.abs(contractValue - 1) < 1e-9 ? "contracts" : "coin";
   const quantityPrecision = quantityMode === "coin"
     ? Math.max(0, (String(contractValue).split(".")[1] ?? "").length)
     : 0;

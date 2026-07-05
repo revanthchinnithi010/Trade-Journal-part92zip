@@ -48,6 +48,16 @@ export function deltaUnitLabel(spec: DeltaQtySpec): string {
   return spec.quantityMode === "coin" ? spec.contractUnit : "Contracts";
 }
 
+/**
+ * Live "1 Lot = X" reference line, always derived from the Delta contract spec —
+ * never hardcoded. Always expressed in the underlying coin unit, regardless of
+ * the active quantityMode, e.g. "1 Lot = 0.001 BTC", "1 Lot = 1 FARTCOIN".
+ */
+export function formatDeltaLotEquivalent(spec: DeltaQtySpec): string {
+  const precision = Math.max(0, (String(spec.contractValue).split(".")[1] ?? "").length);
+  return `1 Lot = ${spec.contractValue.toFixed(precision)} ${spec.contractUnit}`;
+}
+
 // ── Validation & snapping (operate on whole contracts) ────────────────────────
 
 /** Snap a raw contract count to the nearest valid integer step, clamped to [min, max]. */
