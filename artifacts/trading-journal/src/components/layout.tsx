@@ -7,6 +7,9 @@ import {
   Sun, Moon, FlaskConical,
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { sidebarVariants, sidebarBackdropVariants } from "@/animations/motion";
+import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
 import { useBrokerStore } from "@/store/brokerStore";
 import { cn } from "@/lib/utils";
@@ -141,6 +144,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
   const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
   const [location]    = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const reducedMotion = useReducedMotion();
   const [notifOpen,   setNotifOpen]   = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [bellShake,   setBellShake]   = useState(false);
@@ -217,39 +221,68 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       style={{ background: "var(--body-bg)" }}
     >
 
-      {/* ── Backdrop — click-to-close; no blur/dim on charts page ── */}
-      <div
-        onClick={closeSidebar}
+      {/* ── Backdrop — Motion.dev fade (or instant for reduced-motion) ── */}
+      {reducedMotion ? (
+        /* Instant show/hide — no animation */
+        sidebarOpen && (
+          <div
+            onClick={closeSidebar}
+            style={{
+              position:             "fixed",
+              inset:                0,
+              zIndex:               49,
+              background:           location === "/charts" ? "transparent" : "var(--surface-backdrop)",
+              backdropFilter:       location === "/charts" ? "none" : "blur(2px)",
+              WebkitBackdropFilter: location === "/charts" ? "none" : "blur(2px)",
+            }}
+          />
+        )
+      ) : (
+        <AnimatePresence>
+          {sidebarOpen && (
+            <motion.div
+              key="sidebar-backdrop"
+              variants={sidebarBackdropVariants}
+              initial="closed"
+              animate="open"
+              exit="closed"
+              onClick={closeSidebar}
+              style={{
+                position:             "fixed",
+                inset:                0,
+                zIndex:               49,
+                background:           location === "/charts" ? "transparent" : "var(--surface-backdrop)",
+                backdropFilter:       location === "/charts" ? "none" : "blur(2px)",
+                WebkitBackdropFilter: location === "/charts" ? "none" : "blur(2px)",
+              }}
+            />
+          )}
+        </AnimatePresence>
+      )}
+
+      {/* ── Sidebar — Motion.dev spring slide (instant for reduced-motion) ── */}
+      <motion.aside
+        variants={reducedMotion ? undefined : sidebarVariants}
+        initial={reducedMotion ? false : "closed"}
+        animate={
+          reducedMotion
+            ? { x: sidebarOpen ? 0 : -264 }
+            : sidebarOpen ? "open" : "closed"
+        }
+        transition={reducedMotion ? { duration: 0 } : undefined}
         style={{
           position:      "fixed",
-          inset:         0,
-          zIndex:        49,
-          background:    location === "/charts" ? "transparent" : "var(--surface-backdrop)",
-          backdropFilter:       location === "/charts" ? "none" : "blur(2px)",
-          WebkitBackdropFilter: location === "/charts" ? "none" : "blur(2px)",
-          opacity:       sidebarOpen ? 1 : 0,
-          pointerEvents: sidebarOpen ? "all" : "none",
-          transition:    "opacity 180ms ease",
-        }}
-      />
-
-      {/* ── Sidebar — GPU-accelerated fixed overlay drawer ── */}
-      <aside
-        style={{
-          position:   "fixed",
-          top:        0,
-          left:       0,
-          bottom:     0,
-          width:      264,
-          zIndex:     50,
-          display:    "flex",
+          top:           0,
+          left:          0,
+          bottom:        0,
+          width:         264,
+          zIndex:        50,
+          display:       "flex",
           flexDirection: "column",
-          transform:  sidebarOpen ? "translate3d(0,0,0)" : "translate3d(-100%,0,0)",
-          willChange: "transform",
-          transition: "transform 185ms cubic-bezier(0.4, 0, 0.2, 1)",
-          background: "var(--surface-sidebar-bg)",
-          borderRight: "1px solid var(--surface-sidebar-border)",
-          boxShadow:  sidebarOpen ? "4px 0 32px rgba(0,0,0,0.5)" : "none",
+          willChange:    "transform",
+          background:    "var(--surface-sidebar-bg)",
+          borderRight:   "1px solid var(--surface-sidebar-border)",
+          boxShadow:     "4px 0 32px rgba(0,0,0,0.5)",
         }}
       >
         {/* Logo + close */}
@@ -345,7 +378,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
             </div>
           </div>
         </div>
-      </aside>
+      </motion.aside>
 
       {/* ── Main Content — always full width ── */}
       <main className="absolute inset-0 flex flex-col overflow-hidden">

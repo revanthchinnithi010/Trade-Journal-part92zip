@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { popupManager } from "@/lib/popupManager";
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -9,6 +9,9 @@ import { Layout } from "@/components/layout";
 import { LiveMarketProvider } from "@/contexts/LiveMarketContext";
 import { WatchlistProvider } from "@/contexts/WatchlistContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
+import { AnimatePresence } from "motion/react";
+import { PageTransition } from "@/components/animations/PageTransition";
+import { SplashScreen } from "@/components/animations/SplashScreen";
 
 const Dashboard   = lazy(() => import("@/pages/dashboard"));
 const Markets     = lazy(() => import("@/pages/markets"));
@@ -86,6 +89,8 @@ const CHARTS_NODE = (
 );
 
 function Router() {
+  const [location] = useLocation();
+
   useEffect(() => {
     // Eagerly trigger the Charts lazy-import after the initial render so the
     // module is in the browser cache before the user taps the Charts tab.
@@ -98,30 +103,41 @@ function Router() {
     // chartsNode is always rendered (inside Layout) but hidden off-route.
     // children (the Switch) only gets rendered for non-charts pages.
     <Layout chartsNode={CHARTS_NODE}>
+      {/*
+        AnimatePresence handles page exit before the next page enters.
+        The `key` on PageTransition changes with each route, triggering the
+        exit animation on the old page and enter on the new one.
+        `initial={false}` skips the animation on the very first render.
+        Charts is excluded because it's a keep-alive node — it never
+        unmounts and doesn't need a transition.
+      */}
       <Suspense fallback={<PageLoader />}>
-        <Switch>
-          <Route path="/">{() => <Dashboard />}</Route>
-          <Route path="/markets">{() => <Markets />}</Route>
-          <Route path="/trades">{() => <Trades />}</Route>
-          <Route path="/brokers">{() => <Brokers />}</Route>
-          <Route path="/alerts">{() => <Alerts />}</Route>
-          <Route path="/reports">{() => <Reports />}</Route>
-          <Route path="/calendar">{() => <Calendar />}</Route>
-          <Route path="/notebook">{() => <Notebook />}</Route>
-          <Route path="/settings">{() => <Settings />}</Route>
-          <Route path="/calc/crypto">{() => <CalcCrypto />}</Route>
-          <Route path="/calc/forex">{() => <CalcForex />}</Route>
-          <Route path="/calc/position">{() => <CalcPosition />}</Route>
-          <Route path="/calc/margin">{() => <CalcMargin />}</Route>
-          <Route path="/calc/risk">{() => <CalcRisk />}</Route>
-          {/* /charts is handled by chartsNode above — this empty route prevents
-              the NotFound catchall from matching when path === /charts */}
-          <Route path="/charts">{() => null}</Route>
-          <Route path="/portfolio">{() => <Portfolio />}</Route>
-          <Route path="/trade">{() => <Trade />}</Route>
-          <Route path="/ctrader-test">{() => <CtraderTest />}</Route>
-          <Route>{() => <NotFound />}</Route>
-        </Switch>
+        <AnimatePresence mode="popLayout" initial={false}>
+          {location !== "/charts" && (
+            <PageTransition key={location} style={{ height: "100%" }}>
+              <Switch>
+                <Route path="/">{() => <Dashboard />}</Route>
+                <Route path="/markets">{() => <Markets />}</Route>
+                <Route path="/trades">{() => <Trades />}</Route>
+                <Route path="/brokers">{() => <Brokers />}</Route>
+                <Route path="/alerts">{() => <Alerts />}</Route>
+                <Route path="/reports">{() => <Reports />}</Route>
+                <Route path="/calendar">{() => <Calendar />}</Route>
+                <Route path="/notebook">{() => <Notebook />}</Route>
+                <Route path="/settings">{() => <Settings />}</Route>
+                <Route path="/calc/crypto">{() => <CalcCrypto />}</Route>
+                <Route path="/calc/forex">{() => <CalcForex />}</Route>
+                <Route path="/calc/position">{() => <CalcPosition />}</Route>
+                <Route path="/calc/margin">{() => <CalcMargin />}</Route>
+                <Route path="/calc/risk">{() => <CalcRisk />}</Route>
+                <Route path="/portfolio">{() => <Portfolio />}</Route>
+                <Route path="/trade">{() => <Trade />}</Route>
+                <Route path="/ctrader-test">{() => <CtraderTest />}</Route>
+                <Route>{() => <NotFound />}</Route>
+              </Switch>
+            </PageTransition>
+          )}
+        </AnimatePresence>
       </Suspense>
     </Layout>
   );
@@ -137,6 +153,8 @@ function App() {
           <WatchlistProvider>
             <TooltipProvider>
               <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+                {/* Splash screen: shows once per session, dismissed after ~1.6 s */}
+                <SplashScreen />
                 <Router />
               </WouterRouter>
               <Toaster />
