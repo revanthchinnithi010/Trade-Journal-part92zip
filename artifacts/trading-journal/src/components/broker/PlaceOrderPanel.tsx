@@ -18,6 +18,20 @@ import {
   formatCurrency,
   validateVolumeSanity,
 } from "@/lib/lotMath";
+import {
+  type DeltaQtySpec,
+  contractsToDisplayQty,
+  displayQtyToContracts,
+  formatDeltaQty,
+  deltaUnitLabel,
+  snapContracts,
+  incrementContracts,
+  decrementContracts,
+  isValidContracts,
+  calcDeltaMargin,
+  calcDeltaPositionValue,
+  formatDeltaCurrency,
+} from "@/lib/deltaMath";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -37,6 +51,7 @@ interface BrokerContractSpec {
   leverage:          number | null;
   pipPosition:       number | null;
   digits:            number | null;
+  deltaQty:          DeltaQtySpec | null;
 }
 
 interface Props {
@@ -116,6 +131,21 @@ function calcAll(lots: number, price: number | null, spec: LotSpec) {
   };
 }
 
+/** Read ONLY Delta metadata — never cTrader lot fields. Returns null if Delta hasn't
+ *  provided a valid contract spec yet (never fall back to cTrader lot defaults). */
+function deriveDeltaSpec(spec: BrokerContractSpec | null): DeltaQtySpec | null {
+  if (!spec || !spec.deltaQty) return null;
+  return spec.deltaQty;
+}
+
+function calcDeltaAll(contracts: number, price: number | null, leverage: number, spec: DeltaQtySpec) {
+  if (!price || price <= 0) return { margin: null, posValue: null };
+  return {
+    margin:   calcDeltaMargin(contracts, price, leverage, spec),
+    posValue: calcDeltaPositionValue(contracts, price, spec),
+  };
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function PlaceOrderPanel({ symbol }: Props) {
@@ -176,84 +206,157 @@ export function PlaceOrderPanel({ symbol }: Props) {
     if (spec) fetchSpec(symbol); // Only refresh if we already had one
   }, [connectionKey, spec, symbol, fetchSpec]);
 
-  // ── Derive LotSpec ──────────────────────────────────────────────────────────
-  const lotSpec = useMemo(() => deriveLotSpec(spec), [spec]);
-  const prec    = useMemo(() => lotSpec ? computeLotPrecision(lotSpec.stepLots) : 2, [lotSpec]);
+  // ── Broker-specific spec — completely independent, never mixed ─────────────
+  const isDelta  = broker !== "ctrader"; // any non-cTrader account routes through Delta
+  const lotSpec   = useMemo(() => !isDelta ? deriveLotSpec(spec)   : null, [spec, isDelta]);
+  const deltaSpec = useMemo(() => isDelta  ? deriveDeltaSpec(spec) : null, [spec, isDelta]);
+  const prec = useMemo(() => {
+    if (isDelta)  return deltaSpec ? deltaSpec.quantityPrecision : 0;
+    return lotSpec ? computeLotPrecision(lotSpec.stepLots) : 2;
+  }, [isDelta, deltaSpec, lotSpec]);
+  const unitLabel = isDelta
+    ? (deltaSpec ? deltaUnitLabel(deltaSpec) : "Contracts")
+    : "Lot";
 
   // ── Quantity state ──────────────────────────────────────────────────────────
   // String state for the input so the user can type freely; we snap on blur/submit.
+  // For Delta this represents the DISPLAYED quantity (coin amount or contract count),
+  // never lots. Whole contracts are derived from it only when submitting.
   const [qtyStr,   setQtyStr]   = useState("");
   const [qtyError, setQtyError] = useState<string | null>(null);
 
-  // When spec first loads (or changes), reset qty to the broker's minimum
-  const prevSpecRef = useRef<LotSpec | null>(null);
+  // When spec first loads (or changes), reset qty to the broker's own minimum.
+  // Clears any previous broker's cached quantity/precision/step entirely.
+  const prevSpecKeyRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!lotSpec) return;
-    if (prevSpecRef.current?.minLots === lotSpec.minLots && qtyStr !== "") return;
-    prevSpecRef.current = lotSpec;
-    setQtyStr(formatLots(lotSpec.minLots, prec));
-    setQtyError(null);
-    console.info("[PlaceOrderPanel] qty reset to broker minimum:", {
-      minLots: lotSpec.minLots, precision: prec,
-      stepLots: lotSpec.stepLots, maxLots: lotSpec.maxLots,
-      lotSize: lotSpec.lotSize, leverage: lotSpec.leverage,
-    });
-  }, [lotSpec, prec, qtyStr]);
+    if (isDelta) {
+      if (!deltaSpec) return;
+      const key = `delta:${deltaSpec.minOrderSizeContracts}:${deltaSpec.contractValue}`;
+      if (prevSpecKeyRef.current === key && qtyStr !== "") return;
+      prevSpecKeyRef.current = key;
+      const minDisplay = contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec);
+      setQtyStr(formatDeltaQty(minDisplay, deltaSpec));
+      setQtyError(null);
+    } else {
+      if (!lotSpec) return;
+      const key = `ctrader:${lotSpec.minLots}`;
+      if (prevSpecKeyRef.current === key && qtyStr !== "") return;
+      prevSpecKeyRef.current = key;
+      setQtyStr(formatLots(lotSpec.minLots, prec));
+      setQtyError(null);
+    }
+  }, [isDelta, deltaSpec, lotSpec, prec, qtyStr]);
 
-  // Parsed lot quantity (number) — used for all calculations
-  const currentLots = useMemo(() => {
+  // Parsed displayed quantity (number) — used for all calculations
+  const currentQty = useMemo(() => {
     const v = parseFloat(qtyStr);
+    if (isDelta) {
+      const minDisplay = deltaSpec ? contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec) : 1;
+      return isNaN(v) || v <= 0 ? minDisplay : v;
+    }
     return isNaN(v) || v <= 0 ? (lotSpec?.minLots ?? 0.01) : v;
-  }, [qtyStr, lotSpec]);
+  }, [qtyStr, isDelta, deltaSpec, lotSpec]);
 
-  // Snap and validate the current qty
-  const validateQty = useCallback((lots: number): string | null => {
+  // Snap and validate the current qty using ONLY the active broker's own rules
+  const validateQty = useCallback((qty: number): string | null => {
+    if (isDelta) {
+      if (!deltaSpec) return null;
+      const contracts = displayQtyToContracts(qty, deltaSpec);
+      const minDisplay = contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec);
+      const maxDisplay = contractsToDisplayQty(deltaSpec.maxOrderSizeContracts, deltaSpec);
+      if (contracts < deltaSpec.minOrderSizeContracts) {
+        return `Minimum is ${formatDeltaQty(minDisplay, deltaSpec)} ${deltaUnitLabel(deltaSpec)}`;
+      }
+      if (contracts > deltaSpec.maxOrderSizeContracts) {
+        return `Maximum is ${formatDeltaQty(maxDisplay, deltaSpec)} ${deltaUnitLabel(deltaSpec)}`;
+      }
+      if (!isValidContracts(contracts, deltaSpec)) {
+        return `Must be a whole number of contracts`;
+      }
+      return null;
+    }
     if (!lotSpec) return null;
-    if (lots < lotSpec.minLots) {
+    if (qty < lotSpec.minLots) {
       return `Minimum is ${formatLots(lotSpec.minLots, prec)} lots`;
     }
-    if (lots > lotSpec.maxLots) {
+    if (qty > lotSpec.maxLots) {
       return `Maximum is ${formatLots(lotSpec.maxLots, prec)} lots`;
     }
-    if (!isValidLots(lots, lotSpec)) {
-      const snapped = snapToStep(lots, lotSpec);
+    if (!isValidLots(qty, lotSpec)) {
+      const snapped = snapToStep(qty, lotSpec);
       return `Must be a multiple of ${formatLots(lotSpec.stepLots, prec)} — nearest valid: ${formatLots(snapped, prec)}`;
     }
     return null;
-  }, [lotSpec, prec]);
+  }, [isDelta, deltaSpec, lotSpec, prec]);
+
+  const snapCurrentQty = useCallback((raw: number): number => {
+    if (isDelta) {
+      if (!deltaSpec) return raw;
+      const contracts = snapContracts(displayQtyToContracts(raw, deltaSpec), deltaSpec);
+      return contractsToDisplayQty(contracts, deltaSpec);
+    }
+    return lotSpec ? snapToStep(raw, lotSpec) : raw;
+  }, [isDelta, deltaSpec, lotSpec]);
 
   const handleQtyBlur = useCallback(() => {
-    if (!lotSpec) return;
+    if (isDelta ? !deltaSpec : !lotSpec) return;
     const raw = parseFloat(qtyStr);
     if (isNaN(raw) || raw <= 0) {
-      setQtyStr(formatLots(lotSpec.minLots, prec));
+      const fallback = isDelta && deltaSpec
+        ? formatDeltaQty(contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec), deltaSpec)
+        : lotSpec ? formatLots(lotSpec.minLots, prec) : "";
+      setQtyStr(fallback);
       setQtyError(null);
       return;
     }
-    const snapped = snapToStep(raw, lotSpec);
-    setQtyStr(formatLots(snapped, prec));
+    const snapped = snapCurrentQty(raw);
+    const formatted = isDelta && deltaSpec ? formatDeltaQty(snapped, deltaSpec) : formatLots(snapped, prec);
+    setQtyStr(formatted);
     setQtyError(validateQty(snapped));
-  }, [qtyStr, lotSpec, prec, validateQty]);
+  }, [qtyStr, isDelta, deltaSpec, lotSpec, prec, snapCurrentQty, validateQty]);
 
   const handleDecrement = useCallback(() => {
+    if (isDelta) {
+      if (!deltaSpec) return;
+      const contracts = displayQtyToContracts(currentQty, deltaSpec);
+      const next = decrementContracts(contracts, deltaSpec);
+      setQtyStr(formatDeltaQty(contractsToDisplayQty(next, deltaSpec), deltaSpec));
+      setQtyError(null);
+      return;
+    }
     if (!lotSpec) return;
-    const next = decrementLots(currentLots, lotSpec);
+    const next = decrementLots(currentQty, lotSpec);
     setQtyStr(formatLots(next, prec));
     setQtyError(null);
-  }, [currentLots, lotSpec, prec]);
+  }, [currentQty, isDelta, deltaSpec, lotSpec, prec]);
 
   const handleIncrement = useCallback(() => {
+    if (isDelta) {
+      if (!deltaSpec) return;
+      const contracts = displayQtyToContracts(currentQty, deltaSpec);
+      const next = incrementContracts(contracts, deltaSpec);
+      setQtyStr(formatDeltaQty(contractsToDisplayQty(next, deltaSpec), deltaSpec));
+      setQtyError(null);
+      return;
+    }
     if (!lotSpec) return;
-    const next = incrementLots(currentLots, lotSpec);
+    const next = incrementLots(currentQty, lotSpec);
     setQtyStr(formatLots(next, prec));
     setQtyError(null);
-  }, [currentLots, lotSpec, prec]);
+  }, [currentQty, isDelta, deltaSpec, lotSpec, prec]);
 
   // ── Derived financial values ───────────────────────────────────────────────
+  const accountLeverage = spec?.leverage ?? (spec?.maxLeverageNum && spec.maxLeverageNum > 0 ? spec.maxLeverageNum : 1);
   const calcs = useMemo(() => {
+    if (isDelta) {
+      if (!deltaSpec) return null;
+      const contracts = displayQtyToContracts(currentQty, deltaSpec);
+      const r = calcDeltaAll(contracts, livePrice, accountLeverage, deltaSpec);
+      return { margin: r.margin, posValue: r.posValue, pipVal: null, units: contracts };
+    }
     if (!lotSpec) return null;
-    return calcAll(currentLots, livePrice, lotSpec);
-  }, [currentLots, livePrice, lotSpec]);
+    return calcAll(currentQty, livePrice, lotSpec);
+  }, [isDelta, deltaSpec, lotSpec, currentQty, livePrice, accountLeverage]);
 
   // ── Order form state ──────────────────────────────────────────────────────
   const [side,        setSide]       = useState<"Buy" | "Sell">("Buy");
@@ -267,10 +370,16 @@ export function PlaceOrderPanel({ symbol }: Props) {
   // ── Submit ────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!lotSpec) return;
-    const lots = snapToStep(currentLots, lotSpec);
-    const err  = validateQty(lots);
+    const activeSpecOk = isDelta ? !!deltaSpec : !!lotSpec;
+    if (!activeSpecOk) return;
+    const snapped = snapCurrentQty(currentQty);
+    const err = validateQty(snapped);
     if (err) { setQtyError(err); return; }
+
+    // Delta orders are submitted as an integer contract count; cTrader as lots.
+    const qtyForOrder = isDelta && deltaSpec
+      ? String(displayQtyToContracts(snapped, deltaSpec))
+      : formatLots(snapped, prec);
 
     setStatus("loading");
     setMsg("");
@@ -278,7 +387,7 @@ export function PlaceOrderPanel({ symbol }: Props) {
       symbol,
       side,
       orderType,
-      qty:        formatLots(lots, prec),
+      qty:        qtyForOrder,
       price:      orderType === "Limit" && price ? price : undefined,
       stopLoss:   stopLoss    || undefined,
       takeProfit: takeProfit  || undefined,
@@ -287,7 +396,10 @@ export function PlaceOrderPanel({ symbol }: Props) {
     if (result.ok) {
       setStatus("success");
       setMsg("Order placed successfully!");
-      setQtyStr(formatLots(lotSpec.minLots, prec));
+      const resetQty = isDelta && deltaSpec
+        ? formatDeltaQty(contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec), deltaSpec)
+        : lotSpec ? formatLots(lotSpec.minLots, prec) : "";
+      setQtyStr(resetQty);
       setPrice(""); setStopLoss(""); setTakeProfit("");
       setTimeout(() => setStatus("idle"), 2500);
     } else {
@@ -397,7 +509,7 @@ export function PlaceOrderPanel({ symbol }: Props) {
         {/* ── Quantity ──────────────────────────────────────────────────────── */}
         <div>
           <div className="flex items-center justify-between mb-1">
-            <span style={LABEL_CLS}>Quantity (Lots)</span>
+            <span style={LABEL_CLS}>Quantity ({unitLabel})</span>
             {specLoading && (
               <span style={{ fontSize: 10, color: TEXT_DIM, display: "flex", alignItems: "center", gap: 3 }}>
                 <Loader2 style={{ width: 10, height: 10, animation: "spin 1s linear infinite" }} />
@@ -414,13 +526,13 @@ export function PlaceOrderPanel({ symbol }: Props) {
             <button
               type="button"
               onClick={handleDecrement}
-              disabled={!lotSpec || currentLots <= (lotSpec?.minLots ?? 0)}
+              disabled={isDelta ? !deltaSpec : !lotSpec}
               style={{
                 width: 34, height: 34, borderRadius: 8, flexShrink: 0,
                 background: BG, border: `1px solid ${BORDER_CLR}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: TEXT_HI, cursor: "pointer",
-                opacity: !lotSpec || currentLots <= (lotSpec?.minLots ?? 0) ? 0.35 : 1,
+                opacity: (isDelta ? !deltaSpec : !lotSpec) ? 0.35 : 1,
               }}
             >
               <Minus style={{ width: 14, height: 14 }} />
@@ -432,9 +544,9 @@ export function PlaceOrderPanel({ symbol }: Props) {
               value={qtyStr}
               onChange={e => { setQtyStr(e.target.value); setQtyError(null); }}
               onBlur={handleQtyBlur}
-              step={lotSpec ? String(lotSpec.stepLots) : "0.01"}
-              min={lotSpec ? String(lotSpec.minLots) : "0.01"}
-              max={lotSpec ? String(lotSpec.maxLots) : undefined}
+              step={isDelta ? (deltaSpec ? String(contractsToDisplayQty(deltaSpec.stepSizeContracts, deltaSpec)) : "1") : (lotSpec ? String(lotSpec.stepLots) : "0.01")}
+              min={isDelta ? (deltaSpec ? String(contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec)) : "1") : (lotSpec ? String(lotSpec.minLots) : "0.01")}
+              max={isDelta ? (deltaSpec ? String(contractsToDisplayQty(deltaSpec.maxOrderSizeContracts, deltaSpec)) : undefined) : (lotSpec ? String(lotSpec.maxLots) : undefined)}
               required
               style={{
                 ...INPUT_CLS,
@@ -447,13 +559,13 @@ export function PlaceOrderPanel({ symbol }: Props) {
             <button
               type="button"
               onClick={handleIncrement}
-              disabled={!lotSpec || currentLots >= (lotSpec?.maxLots ?? Infinity)}
+              disabled={isDelta ? !deltaSpec : !lotSpec}
               style={{
                 width: 34, height: 34, borderRadius: 8, flexShrink: 0,
                 background: BG, border: `1px solid ${BORDER_CLR}`,
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: TEXT_HI, cursor: "pointer",
-                opacity: !lotSpec || currentLots >= (lotSpec?.maxLots ?? Infinity) ? 0.35 : 1,
+                opacity: (isDelta ? !deltaSpec : !lotSpec) ? 0.35 : 1,
               }}
             >
               <Plus style={{ width: 14, height: 14 }} />
@@ -466,16 +578,28 @@ export function PlaceOrderPanel({ symbol }: Props) {
           )}
 
           {/* Units display */}
-          {lotSpec && (
+          {isDelta && deltaSpec && (
             <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3 }}>
-              {formatLots(currentLots, prec)} Lot
+              {formatDeltaQty(currentQty, deltaSpec)} {deltaUnitLabel(deltaSpec)}
+              {" = "}
+              {displayQtyToContracts(currentQty, deltaSpec)} Contract{displayQtyToContracts(currentQty, deltaSpec) === 1 ? "" : "s"}
+            </p>
+          )}
+          {!isDelta && lotSpec && (
+            <p style={{ fontSize: 10, color: TEXT_DIM, marginTop: 3 }}>
+              {formatLots(currentQty, prec)} Lot
               {" ≈ "}
-              {formatUnits(calcUnits(currentLots, lotSpec.lotSize))} Units
+              {formatUnits(calcUnits(currentQty, lotSpec.lotSize))} Units
             </p>
           )}
 
           {/* Spec hints */}
-          {lotSpec && (
+          {isDelta && deltaSpec && (
+            <p style={{ fontSize: 9, color: "rgba(167,184,169,0.35)", marginTop: 2 }}>
+              Min {formatDeltaQty(contractsToDisplayQty(deltaSpec.minOrderSizeContracts, deltaSpec), deltaSpec)} · Max {formatDeltaQty(contractsToDisplayQty(deltaSpec.maxOrderSizeContracts, deltaSpec), deltaSpec)} · Step {formatDeltaQty(contractsToDisplayQty(deltaSpec.stepSizeContracts, deltaSpec), deltaSpec)}
+            </p>
+          )}
+          {!isDelta && lotSpec && (
             <p style={{ fontSize: 9, color: "rgba(167,184,169,0.35)", marginTop: 2 }}>
               Min {formatLots(lotSpec.minLots, prec)} · Max {lotSpec.maxLots} · Step {formatLots(lotSpec.stepLots, prec)}
             </p>
@@ -483,7 +607,30 @@ export function PlaceOrderPanel({ symbol }: Props) {
         </div>
 
         {/* ── Margin / Position calculations ────────────────────────────────── */}
-        {lotSpec && calcs && (
+        {isDelta && deltaSpec && calcs && (
+          <div style={{
+            borderRadius: 8,
+            background: "rgba(255,255,255,0.025)",
+            border: "1px solid rgba(255,255,255,0.06)",
+            padding: "8px 10px",
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: "5px 10px",
+          }}>
+            {calcs.margin !== null && (
+              <CalcRow label="Req. Margin"
+                value={formatDeltaCurrency(calcs.margin)}
+                note={`@ 1:${accountLeverage}`} />
+            )}
+            {calcs.posValue !== null && (
+              <CalcRow label="Position Value"
+                value={formatDeltaCurrency(calcs.posValue)} />
+            )}
+            <CalcRow label="Contracts"
+              value={String(calcs.units)} />
+          </div>
+        )}
+        {!isDelta && lotSpec && calcs && (
           <div style={{
             borderRadius: 8,
             background: "rgba(255,255,255,0.025)",
@@ -513,7 +660,7 @@ export function PlaceOrderPanel({ symbol }: Props) {
             )}
           </div>
         )}
-        {specLoading && !lotSpec && (
+        {specLoading && !lotSpec && !deltaSpec && (
           <div style={{
             borderRadius: 8, background: "rgba(255,255,255,0.025)",
             border: "1px solid rgba(255,255,255,0.06)", padding: "8px 10px",
@@ -566,14 +713,14 @@ export function PlaceOrderPanel({ symbol }: Props) {
         {/* Submit */}
         <button
           type="submit"
-          disabled={status === "loading" || !lotSpec || !!qtyError}
+          disabled={status === "loading" || (isDelta ? !deltaSpec : !lotSpec) || !!qtyError}
           className="h-9 rounded-xl text-[12px] font-bold transition-all flex items-center justify-center gap-2"
           style={{
             background: side === "Buy" ? "rgba(74,222,128,0.20)" : "rgba(248,113,113,0.20)",
             color: sideColor,
             border: `1px solid ${side === "Buy" ? "rgba(74,222,128,0.30)" : "rgba(248,113,113,0.30)"}`,
-            opacity: (!lotSpec || !!qtyError) ? 0.45 : 1,
-            cursor: (!lotSpec || !!qtyError) ? "not-allowed" : "pointer",
+            opacity: ((isDelta ? !deltaSpec : !lotSpec) || !!qtyError) ? 0.45 : 1,
+            cursor: ((isDelta ? !deltaSpec : !lotSpec) || !!qtyError) ? "not-allowed" : "pointer",
           }}
         >
           {status === "loading"

@@ -46,6 +46,16 @@ import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import { BrokerIntegrationModal } from "@/components/charts/BrokerIntegrationModal";
 import { computeLotPrecision, snapToStep, type LotSpec } from "@/lib/lotMath";
+import {
+  type DeltaQtySpec,
+  contractsToDisplayQty,
+  displayQtyToContracts,
+  formatDeltaQty,
+  deltaUnitLabel,
+  snapContracts,
+  calcDeltaMargin,
+  formatDeltaCurrency,
+} from "@/lib/deltaMath";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -3853,6 +3863,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     leverage:       number | null;  // actual account leverage
     pipPosition:    number | null;
     digits:         number | null;
+    // Delta-only quantity spec (contracts/coin), null for cTrader — never mix with lot fields above
+    deltaQty:       DeltaQtySpec | null;
   };
   const [contractSpec, setContractSpec] = useState<BrokerContractSpec | null>(null);
 
@@ -3877,28 +3889,49 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     return () => { cancelled = true; };
   }, [symbol, activeBroker]);
 
-  // When spec loads, initialize qty to the broker's real minimum and set account leverage.
-  // Never hardcode 1 — use what the broker actually requires.
+  // Delta-only quantity spec — read ONLY from contractSpec.deltaQty, never from ProtoOA lot fields.
+  const isDeltaQty  = activeBroker !== "ctrader";
+  const deltaQtySpec = useMemo(
+    () => (isDeltaQty ? (contractSpec?.deltaQty ?? null) : null),
+    [isDeltaQty, contractSpec]
+  );
+
+  // When spec loads, initialize qty to the broker's own real minimum and set account leverage.
+  // Delta and cTrader never share defaults, precision, or step size.
   useEffect(() => {
     if (!contractSpec) return;
-    // Quantity: default to broker's minVolumeLots (e.g. 0.01 for EURUSD)
-    const minLots = contractSpec.minVolumeLots;
-    if (minLots !== null && minLots > 0) {
-      setLotQty(minLots);
-      console.info("[MobileChartLayout] qty defaulted to broker min:", {
-        symbol: contractSpec.symbol,
-        minVolumeLots: minLots,
-        maxVolumeLots: contractSpec.maxVolumeLots,
-        stepVolumeLots: contractSpec.stepVolumeLots,
-        lotSize: contractSpec.lotSizeNum,
-        leverage: contractSpec.leverage,
-        pipPosition: contractSpec.pipPosition,
-      });
+    if (isDeltaQty) {
+      const dq = contractSpec.deltaQty;
+      if (dq) {
+        const minDisplay = contractsToDisplayQty(dq.minOrderSizeContracts, dq);
+        setLotQty(minDisplay);
+        console.info("[MobileChartLayout] Delta qty defaulted to broker min:", {
+          symbol: contractSpec.symbol,
+          minOrderSizeContracts: dq.minOrderSizeContracts,
+          contractValue: dq.contractValue,
+          quantityMode: dq.quantityMode,
+        });
+      }
+    } else {
+      // Quantity: default to broker's minVolumeLots (e.g. 0.01 for EURUSD)
+      const minLots = contractSpec.minVolumeLots;
+      if (minLots !== null && minLots > 0) {
+        setLotQty(minLots);
+        console.info("[MobileChartLayout] qty defaulted to broker min:", {
+          symbol: contractSpec.symbol,
+          minVolumeLots: minLots,
+          maxVolumeLots: contractSpec.maxVolumeLots,
+          stepVolumeLots: contractSpec.stepVolumeLots,
+          lotSize: contractSpec.lotSizeNum,
+          leverage: contractSpec.leverage,
+          pipPosition: contractSpec.pipPosition,
+        });
+      }
     }
     // Leverage: use actual account leverage, fall back to max leverage
     const lev = contractSpec.leverage ?? contractSpec.maxLeverageNum;
     if (lev > 0) setLeverage(lev);
-  }, [contractSpec]);
+  }, [contractSpec, isDeltaQty]);
 
   // Fetch live ticker stats (24h vol, OI, funding, mark/index price) — Delta only.
   // cTrader symbols use contract spec fields instead; skip this fetch entirely.
@@ -4036,16 +4069,22 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const denseLabels = leveragePresets.length > 1 &&
     (leverageTrackW / (leveragePresets.length - 1)) < 32;
 
-  // Actual contract lot size from metadata (never hardcoded)
+  // Actual contract lot size from metadata (never hardcoded) — cTrader only
   const contractLotSize = contractSpec?.lotSizeNum ?? null;
 
-  // order cost estimate: price × lotSize × qty / leverage
+  // order cost estimate: Delta reads ONLY deltaQtySpec; cTrader reads ONLY lotSizeNum — never mixed
   const orderCostUSD = useMemo(() => {
-    const p  = livePrice ?? 0;
+    const p = livePrice ?? 0;
+    if (!p) return "—";
+    if (isDeltaQty) {
+      if (!deltaQtySpec) return "—";
+      const contracts = displayQtyToContracts(lotQty, deltaQtySpec);
+      return calcDeltaMargin(contracts, p, leverage, deltaQtySpec).toFixed(2);
+    }
     const ls = contractLotSize ?? 0;
-    if (!p || !ls) return "—";
+    if (!ls) return "—";
     return ((p * ls * lotQty) / leverage).toFixed(2);
-  }, [livePrice, lotQty, leverage, contractLotSize]);
+  }, [livePrice, lotQty, leverage, contractLotSize, isDeltaQty, deltaQtySpec]);
 
   // ── Trading safety: confirm-before-order setting ─────────────────────────
   const SAFETY_LS_KEY = "tj_require_confirm_v1";
@@ -4783,16 +4822,91 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </>}
           </div>
 
-          {/* Quantity */}
+          {/* Quantity — Delta (contracts/coin) and cTrader (lots) are fully independent branches */}
           <div style={{ padding:"10px 14px 0" }}>
             {/* Header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
               <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
-              <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:500 }}>Lot</span>
+              <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:500 }}>
+                {isDeltaQty ? (deltaQtySpec ? deltaUnitLabel(deltaQtySpec) : "Contracts") : "Lot"}
+              </span>
             </div>
 
             {/* [−] input [+] stepper */}
-            {(() => {
+            {isDeltaQty ? (() => {
+              const dq = deltaQtySpec;
+              const minDisplay = dq ? contractsToDisplayQty(dq.minOrderSizeContracts, dq) : 0;
+              const maxDisplay = dq ? contractsToDisplayQty(dq.maxOrderSizeContracts, dq) : Infinity;
+              const stepDisplay = dq ? contractsToDisplayQty(dq.stepSizeContracts, dq) : 1;
+              const decrement = () => {
+                if (!dq) return;
+                const contracts = snapContracts(displayQtyToContracts(lotQty, dq) - dq.stepSizeContracts, dq);
+                setLotQty(contractsToDisplayQty(contracts, dq));
+              };
+              const increment = () => {
+                if (!dq) return;
+                const contracts = snapContracts(displayQtyToContracts(lotQty, dq) + dq.stepSizeContracts, dq);
+                setLotQty(contractsToDisplayQty(contracts, dq));
+              };
+              const handleChange = (v: string) => {
+                const n = parseFloat(v);
+                if (!isNaN(n) && n > 0) setLotQty(n);
+              };
+              const handleBlur = (v: string) => {
+                if (!dq) return;
+                const raw = parseFloat(v);
+                if (isNaN(raw) || raw <= 0) { setLotQty(minDisplay); return; }
+                const contracts = snapContracts(displayQtyToContracts(raw, dq), dq);
+                setLotQty(contractsToDisplayQty(contracts, dq));
+              };
+              return (
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <button
+                    type="button"
+                    onClick={decrement}
+                    disabled={!dq || lotQty <= minDisplay}
+                    style={{
+                      width:40, height:40, borderRadius:8, flexShrink:0,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      cursor: (!dq || lotQty <= minDisplay) ? "not-allowed" : "pointer",
+                      opacity: (!dq || lotQty <= minDisplay) ? 0.35 : 1,
+                    }}
+                  >
+                    <Minus style={{ width:14, height:14, color:TEXT_HI }} />
+                  </button>
+                  <input
+                    type="number" inputMode="decimal"
+                    value={lotQty}
+                    onChange={e => handleChange(e.target.value)}
+                    onBlur={e => handleBlur(e.target.value)}
+                    step={stepDisplay}
+                    min={minDisplay}
+                    max={dq ? maxDisplay : undefined}
+                    style={{
+                      flex:1, height:40, borderRadius:8,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
+                      outline:"none", color:TEXT_HI, fontSize:16, fontWeight:700,
+                      textAlign:"center",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={increment}
+                    disabled={!dq || lotQty >= maxDisplay}
+                    style={{
+                      width:40, height:40, borderRadius:8, flexShrink:0,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      cursor: (!dq || lotQty >= maxDisplay) ? "not-allowed" : "pointer",
+                      opacity: (!dq || lotQty >= maxDisplay) ? 0.35 : 1,
+                    }}
+                  >
+                    <Plus style={{ width:14, height:14, color:TEXT_HI }} />
+                  </button>
+                </div>
+              );
+            })() : (() => {
               const lotMin  = contractSpec?.minVolumeLots  ?? 0.01;
               const lotMax  = contractSpec?.maxVolumeLots  ?? 500;
               const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
@@ -4877,28 +4991,44 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             {/* Units + margin info */}
             <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
               <span style={{ fontSize:10, color:TEXT_DIM }}>
-                {contractLotSize != null
-                  ? (() => {
-                      const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
-                      const prec    = lotStep < 0.001 ? 3 : 2;
-                      const units   = lotQty * contractLotSize;
-                      return `${lotQty.toFixed(prec)} Lot ≈ ${units.toLocaleString("en-US", { maximumFractionDigits: 0 })} Units`;
-                    })()
-                  : "Loading spec…"}
+                {isDeltaQty
+                  ? (deltaQtySpec
+                      ? `${formatDeltaQty(lotQty, deltaQtySpec)} ${deltaUnitLabel(deltaQtySpec)} = ${displayQtyToContracts(lotQty, deltaQtySpec)} Contract${displayQtyToContracts(lotQty, deltaQtySpec) === 1 ? "" : "s"}`
+                      : "Loading spec…")
+                  : (contractLotSize != null
+                      ? (() => {
+                          const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
+                          const prec    = lotStep < 0.001 ? 3 : 2;
+                          const units   = lotQty * contractLotSize;
+                          return `${lotQty.toFixed(prec)} Lot ≈ ${units.toLocaleString("en-US", { maximumFractionDigits: 0 })} Units`;
+                        })()
+                      : "Loading spec…")}
               </span>
-              {contractLotSize && livePrice && leverage > 0 && (
-                <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
-                  {`Margin ≈ ${((lotQty * contractLotSize * livePrice) / leverage).toFixed(2)}`}
-                </span>
-              )}
+              {isDeltaQty
+                ? (deltaQtySpec && livePrice && leverage > 0 && (
+                    <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
+                      {`Margin ≈ ${formatDeltaCurrency(calcDeltaMargin(displayQtyToContracts(lotQty, deltaQtySpec), livePrice, leverage, deltaQtySpec))}`}
+                    </span>
+                  ))
+                : (contractLotSize && livePrice && leverage > 0 && (
+                    <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
+                      {`Margin ≈ ${((lotQty * contractLotSize * livePrice) / leverage).toFixed(2)}`}
+                    </span>
+                  ))}
             </div>
 
             {/* Range hint */}
-            {contractSpec?.minVolumeLots != null && (
-              <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
-                {`Min ${contractSpec.minVolumeLots} · Max ${contractSpec.maxVolumeLots} · Step ${contractSpec.stepVolumeLots} lot`}
-              </div>
-            )}
+            {isDeltaQty
+              ? deltaQtySpec && (
+                  <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
+                    {`Min ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.minOrderSizeContracts, deltaQtySpec), deltaQtySpec)} · Max ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.maxOrderSizeContracts, deltaQtySpec), deltaQtySpec)} · Step ${formatDeltaQty(contractsToDisplayQty(deltaQtySpec.stepSizeContracts, deltaQtySpec), deltaQtySpec)} ${deltaUnitLabel(deltaQtySpec)}`}
+                  </div>
+                )
+              : contractSpec?.minVolumeLots != null && (
+                  <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
+                    {`Min ${contractSpec.minVolumeLots} · Max ${contractSpec.maxVolumeLots} · Step ${contractSpec.stepVolumeLots} lot`}
+                  </div>
+                )}
           </div>
 
           {/* TP / SL */}
@@ -5124,10 +5254,16 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               {(([
                 ["Symbol",      symbol],
                 ["Order Type",  orderType],
-                ["Quantity",    `${lotQty} lot${lotQty !== 1 ? "s" : ""}`],
-                ["Lot Size",    contractLotSize != null
-                  ? `${contractLotSize} ${contractSpec?.settlementCurrency ?? ""}`.trim()
-                  : "—"],
+                ["Quantity",    isDeltaQty
+                  ? (deltaQtySpec
+                      ? `${formatDeltaQty(lotQty, deltaQtySpec)} ${deltaUnitLabel(deltaQtySpec)} (${displayQtyToContracts(lotQty, deltaQtySpec)} contract${displayQtyToContracts(lotQty, deltaQtySpec) === 1 ? "" : "s"})`
+                      : "—")
+                  : `${lotQty} lot${lotQty !== 1 ? "s" : ""}`],
+                ...(isDeltaQty
+                  ? [["Contract Value", deltaQtySpec ? `${deltaQtySpec.contractValue} ${deltaQtySpec.contractUnit}` : "—"]]
+                  : [["Lot Size", contractLotSize != null
+                      ? `${contractLotSize} ${contractSpec?.settlementCurrency ?? ""}`.trim()
+                      : "—"]]),
                 ["Leverage",    `${leverage}x`],
                 ["Entry Price", orderType === "Market" ? "Market (best available)" : (limitPrice || "—")],
                 ...(needsStopPrice ? [["Stop Trigger", stopPrice || "—"]] : []),

@@ -59,6 +59,40 @@ export interface ContractField {
   highlight?: boolean;
 }
 
+/**
+ * Delta Exchange quantity specification — completely independent from cTrader's
+ * lot-based system. Delta orders are always placed as a whole number of contracts;
+ * each contract represents `contractValue` units of the underlying (e.g. 0.001 BTC).
+ *
+ * Display rule (matches the official Delta Exchange app):
+ *  - contractValue < 1  → quantityMode "coin": show quantity in the underlying coin
+ *    (contracts × contractValue), e.g. "0.001 BTC", "0.01 ETH".
+ *  - contractValue >= 1 → quantityMode "contracts": show raw integer contracts,
+ *    e.g. "100 Contracts".
+ * Orders themselves are always submitted as an integer contract count — the coin
+ * display is a derived label only.
+ */
+export interface DeltaQtySpec {
+  /** Underlying asset / contract unit symbol, e.g. "BTC", "ETH", "FARTCOIN". */
+  contractUnit:          string;
+  /** Coin (or unit) amount represented by exactly 1 contract, e.g. 0.001. */
+  contractValue:         number;
+  /** Minimum order size in whole contracts (Delta requires integer contracts). */
+  minOrderSizeContracts: number;
+  /** Maximum order size in whole contracts (from position_size_limit). */
+  maxOrderSizeContracts: number;
+  /** Contract increment step — always 1 whole contract on Delta. */
+  stepSizeContracts:     number;
+  /** Minimum price increment. */
+  tickSize:              number;
+  /** Decimal places for price display, derived from tickSize. */
+  pricePrecision:        number;
+  /** "coin" when contractValue < 1 (show coin qty), "contracts" otherwise. */
+  quantityMode:          "coin" | "contracts";
+  /** Decimal places needed to represent quantity in the active quantityMode. */
+  quantityPrecision:     number;
+}
+
 export interface BrokerContractSpec {
   broker:            "delta" | "ctrader";
   symbol:            string;
@@ -69,7 +103,7 @@ export interface BrokerContractSpec {
   settlementCurrency: string;
   partial?:          boolean;
   fields:            ContractField[];
-  // ── Quantity spec (null = not available / non-cTrader broker) ──────────────
+  // ── cTrader quantity spec (null for Delta — cTrader lots must NEVER be used for Delta) ──
   /**
    * Minimum tradeable quantity in lots, e.g. 0.01.
    * Conversion: rawMinVolume / (100 × lotSizeUnits).
@@ -87,6 +121,8 @@ export interface BrokerContractSpec {
   pipPosition:    number | null;
   /** Price decimal precision shown by broker (e.g. 5 for EURUSD). */
   digits:         number | null;
+  /** Delta Exchange contract spec (null for cTrader — never mix broker specifications). */
+  deltaQty:       DeltaQtySpec | null;
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -268,6 +304,45 @@ function nextFundingCountdown(): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+// ── Delta quantity spec builder ───────────────────────────────────────────────
+// Delta Exchange has no independent min/max/step order-size fields in the public
+// product schema — orders are always placed in whole contracts (integer step=1,
+// min=1 contract). Read ONLY Delta metadata here; never fall back to cTrader lots.
+function computeDeltaQty(p: RawDeltaProduct): DeltaQtySpec | null {
+  const contractValue = parseFloat(String(p.contract_value ?? "0"));
+  if (isNaN(contractValue) || contractValue <= 0) return null;
+
+  const tickSize = parseFloat(String(p.tick_size ?? "0"));
+  const pricePrecision = (!isNaN(tickSize) && tickSize > 0)
+    ? Math.max(0, (String(tickSize).split(".")[1] ?? "").length)
+    : 2;
+
+  const contractUnit = p.contract_unit_currency
+    ?? p.underlying_asset?.symbol
+    ?? p.symbol.replace(/USD.*$/, "");
+
+  const maxOrderSizeContracts = (p.position_size_limit && p.position_size_limit > 0)
+    ? p.position_size_limit
+    : 1_000_000;
+
+  const quantityMode: "coin" | "contracts" = contractValue < 1 ? "coin" : "contracts";
+  const quantityPrecision = quantityMode === "coin"
+    ? Math.max(0, (String(contractValue).split(".")[1] ?? "").length)
+    : 0;
+
+  return {
+    contractUnit,
+    contractValue,
+    minOrderSizeContracts: 1,
+    maxOrderSizeContracts,
+    stepSizeContracts: 1,
+    tickSize: !isNaN(tickSize) && tickSize > 0 ? tickSize : 0,
+    pricePrecision,
+    quantityMode,
+    quantityPrecision,
+  };
+}
+
 // ── Delta spec builder ────────────────────────────────────────────────────────
 
 async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
@@ -328,6 +403,13 @@ async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
     ...liveFields,
   ].filter(f => f.value && f.value !== "—");
 
+  const deltaQty = computeDeltaQty(product);
+  if (deltaQty) {
+    logger.info({ symbol, deltaQty }, "contract-spec/delta: quantity spec parsed (contracts, NOT lots)");
+  } else {
+    logger.warn({ symbol }, "contract-spec/delta: unable to derive deltaQty — contract_value missing/invalid");
+  }
+
   return {
     broker:             "delta",
     symbol,
@@ -337,13 +419,14 @@ async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
     lotSizeNum:         info.lotSizeNum,
     settlementCurrency: info.settlementCurrency,
     fields,
-    // Delta uses contract-based sizing; quantity spec comes from the exchange, not ProtoOA
+    // Delta uses contract-based sizing; cTrader lot fields must stay null — never mix specs
     minVolumeLots:  null,
     maxVolumeLots:  null,
     stepVolumeLots: null,
     leverage:       null,
     pipPosition:    null,
     digits:         null,
+    deltaQty,
   };
 }
 
@@ -385,6 +468,7 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
       leverage:       null,
       pipPosition:    null,
       digits:         null,
+      deltaQty:       null,
     };
   }
 
@@ -640,6 +724,8 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     leverage:       leverageNum,
     pipPosition:    pipPositionNum,
     digits:         digitsNum,
+    // cTrader never uses Delta contract specs — always null here
+    deltaQty:       null,
   };
 }
 
