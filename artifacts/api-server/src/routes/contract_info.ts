@@ -69,6 +69,24 @@ export interface BrokerContractSpec {
   settlementCurrency: string;
   partial?:          boolean;
   fields:            ContractField[];
+  // ── Quantity spec (null = not available / non-cTrader broker) ──────────────
+  /**
+   * Minimum tradeable quantity in lots, e.g. 0.01.
+   * Conversion: rawMinVolume / (100 × lotSizeUnits).
+   * ProtoOA volumes are in 1/100-units (same unit as lotSize field 30),
+   * NOT centilots. Divide by (100 × lotSizeUnits) — not just 100 — to get lots.
+   */
+  minVolumeLots:  number | null;
+  /** Maximum tradeable quantity in lots, e.g. 500. Same conversion as minVolumeLots. */
+  maxVolumeLots:  number | null;
+  /** Volume increment in lots, e.g. 0.01. Same conversion as minVolumeLots. */
+  stepVolumeLots: number | null;
+  /** Actual account leverage (e.g. 100 for 1:100), read from ProtoOATrader field 10 ÷ 100. */
+  leverage:       number | null;
+  /** Pip decimal position (e.g. 4 for EURUSD means 1 pip = 0.0001). */
+  pipPosition:    number | null;
+  /** Price decimal precision shown by broker (e.g. 5 for EURUSD). */
+  digits:         number | null;
 }
 
 const CONTRACT_TYPE_LABELS: Record<string, string> = {
@@ -319,6 +337,13 @@ async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
     lotSizeNum:         info.lotSizeNum,
     settlementCurrency: info.settlementCurrency,
     fields,
+    // Delta uses contract-based sizing; quantity spec comes from the exchange, not ProtoOA
+    minVolumeLots:  null,
+    maxVolumeLots:  null,
+    stepVolumeLots: null,
+    leverage:       null,
+    pipPosition:    null,
+    digits:         null,
   };
 }
 
@@ -354,6 +379,12 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
         { label: "Symbol", value: symbol },
         { label: "Status", value: "Connect a cTrader account to load contract details" },
       ],
+      minVolumeLots:  null,
+      maxVolumeLots:  null,
+      stepVolumeLots: null,
+      leverage:       null,
+      pipPosition:    null,
+      digits:         null,
     };
   }
 
@@ -368,8 +399,14 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
   ];
 
   const extFields: ContractField[] = [];
-  let maxLeverageNum = 0;
-  let lotSizeNum     = 0.01;
+  let maxLeverageNum  = 0;
+  let lotSizeNum      = 0.01;
+  let minVolumeLots:  number | null = null;
+  let maxVolumeLots:  number | null = null;
+  let stepVolumeLots: number | null = null;
+  let leverageNum:    number | null = null;
+  let pipPositionNum: number | null = db.pip_position ?? null;
+  let digitsNum:      number | null = db.digits ?? null;
 
   try {
     const [tokRow, cfgRow] = await Promise.all([
@@ -415,6 +452,7 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     const spec = specResult.value;
 
     if (traderResult.status === "fulfilled" && traderResult.value.leverage !== null) {
+      leverageNum    = traderResult.value.leverage;
       maxLeverageNum = traderResult.value.maxLeverage ?? traderResult.value.leverage;
       extFields.push({ label: "Account Leverage", value: `1:${traderResult.value.leverage}` });
       if (traderResult.value.maxLeverage !== null && traderResult.value.maxLeverage !== traderResult.value.leverage) {
@@ -434,16 +472,82 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
 
     if (tickSize > 0) extFields.push({ label: "Tick Size", value: tickSize.toPrecision(1) });
 
+    // Update pip/digit precision from live spec (overrides DB values if available)
+    if (spec.pipPosition !== null) pipPositionNum = spec.pipPosition;
+    if (spec.digits      !== null) digitsNum      = spec.digits;
+
     if (spec.lotSize !== null && spec.lotSize > 0) {
       lotSizeNum = spec.lotSize;
       extFields.push({ label: "Lot Size", value: `${spec.lotSize.toLocaleString()} units` });
     }
-    if (spec.minVolume !== null) {
-      const minLots = spec.minVolume / 100;
-      extFields.push({ label: "Min Volume",  value: `${minLots} lot${minLots !== 1 ? "s" : ""}` });
+
+    // ── Volume fields: ProtoOA stores volumes in 1/100 UNITS (same as lotSize field 30) ──────────
+    // field 10 = minVolume, field 9 = maxVolume, field 11 = stepVolume — all in 1/100 units.
+    // Correct conversion: rawVolume / (100 × lotSizeUnits) → lots
+    //   where lotSizeUnits = spec.lotSize (already ÷100 from raw field 30).
+    // Do NOT divide by just 100 — that gives units, not lots.
+    // Example (EURUSD): rawMin=100,000 / (100 × 100,000) = 0.01 lots ✓
+    const rawMin  = spec.minVolume;
+    const rawMax  = spec.maxVolume;
+    const rawStep = spec.stepVolume;
+    // lotSizeUnits: spec.lotSize is already in units (raw field 30 ÷ 100)
+    const lotSizeUnits = spec.lotSize && spec.lotSize > 0 ? spec.lotSize : null;
+
+    const toLotsFromRaw = (rawVol: number | null): number | null => {
+      if (rawVol === null || rawVol <= 0 || !lotSizeUnits) return null;
+      // rawVol is in 1/100 units; ÷100 → units; ÷lotSizeUnits → lots
+      return rawVol / (100 * lotSizeUnits);
+    };
+
+    const minLotsCandidate  = toLotsFromRaw(rawMin);
+    const maxLotsCandidate  = toLotsFromRaw(rawMax);
+    const stepLotsCandidate = toLotsFromRaw(rawStep);
+
+    // Sanity: reject if min > 100 lots (any legitimate broker minimum ≤ 100 lots)
+    if (minLotsCandidate !== null) {
+      if (minLotsCandidate > 0 && minLotsCandidate <= 100) {
+        minVolumeLots = minLotsCandidate;
+      } else {
+        logger.warn({
+          symbol, rawMinVolume: rawMin, lotSizeUnits,
+          computedMinLots: minLotsCandidate,
+          formula: "rawMin / (100 × lotSizeUnits)",
+        }, "contract-spec/ctrader: minVolume SANITY CHECK FAILED — result outside expected range (0, 100]");
+      }
     }
-    if (spec.maxVolume  !== null) extFields.push({ label: "Max Volume",  value: `${spec.maxVolume  / 100} lots` });
-    if (spec.stepVolume !== null) extFields.push({ label: "Volume Step", value: `${spec.stepVolume / 100} lots` });
+    if (maxLotsCandidate !== null && maxLotsCandidate > 0) {
+      maxVolumeLots = maxLotsCandidate;
+    } else if (rawMax !== null) {
+      logger.warn({ symbol, rawMaxVolume: rawMax, lotSizeUnits, computedMaxLots: maxLotsCandidate }, "contract-spec/ctrader: maxVolume invalid");
+    }
+    if (stepLotsCandidate !== null && stepLotsCandidate > 0) {
+      stepVolumeLots = stepLotsCandidate;
+    } else if (rawStep !== null) {
+      logger.warn({ symbol, rawStepVolume: rawStep, lotSizeUnits, computedStepLots: stepLotsCandidate }, "contract-spec/ctrader: stepVolume invalid");
+    }
+
+    // ── Detailed diagnostic log ───────────────────────────────────────────────
+    logger.info({
+      symbol,
+      // Raw ProtoOA values (in 1/100 units)
+      raw: { minVolume: rawMin, maxVolume: rawMax, stepVolume: rawStep },
+      // Conversion factor
+      lotSizeUnits, conversionDivisor: lotSizeUnits ? 100 * lotSizeUnits : null,
+      // Converted lot values
+      lots: { minVolumeLots, maxVolumeLots, stepVolumeLots },
+      // Account params
+      leverage: leverageNum, pipPosition: pipPositionNum, digits: digitsNum,
+      sanityOk: minVolumeLots !== null,
+    }, "contract-spec/ctrader: quantity spec parsed");
+
+    const fmtLot = (v: number) => {
+      // Round to reasonable precision; avoid e.g. "0.010000000001 lots"
+      const prec = v < 0.01 ? 4 : v < 0.1 ? 3 : v < 1 ? 2 : 0;
+      return v.toFixed(prec);
+    };
+    if (minVolumeLots  !== null) extFields.push({ label: "Min Volume",  value: `${fmtLot(minVolumeLots)} lots` });
+    if (maxVolumeLots  !== null) extFields.push({ label: "Max Volume",  value: `${fmtLot(maxVolumeLots)} lots` });
+    if (stepVolumeLots !== null) extFields.push({ label: "Volume Step", value: `${fmtLot(stepVolumeLots)} lots` });
 
     if (spec.tradeMode !== null) {
       extFields.push({
@@ -530,6 +634,12 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     settlementCurrency: "USD",
     partial:            extFields.length === 0,
     fields:             [...baseFields, ...extFields].filter(f => f.value && f.value !== "—"),
+    minVolumeLots,
+    maxVolumeLots,
+    stepVolumeLots,
+    leverage:       leverageNum,
+    pipPosition:    pipPositionNum,
+    digits:         digitsNum,
   };
 }
 

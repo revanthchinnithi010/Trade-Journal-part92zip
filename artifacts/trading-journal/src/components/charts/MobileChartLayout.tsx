@@ -45,6 +45,7 @@ import { BrokerSelectModal, BrokerListContent } from "@/components/broker/Broker
 import { BrokerAuthModal } from "@/components/broker/BrokerAuthModal";
 import { type NamedLayout } from "@/hooks/useNamedLayouts";
 import { BrokerIntegrationModal } from "@/components/charts/BrokerIntegrationModal";
+import { computeLotPrecision, snapToStep, type LotSpec } from "@/lib/lotMath";
 
 // ── Drawing toolbar icon assets ────────────────────────────────────────────
 import icoAlertUrl    from "@assets/alert1_1780335285769.svg";
@@ -3828,7 +3829,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [orderType,      setOrderType]      = useState<"Market" | "Limit" | "Stop-Market" | "Stop-Limit">("Market");
   const [accountMode,    setAccountMode]    = useState<"main" | "isolated">("isolated");
   const [leverage,       setLeverage]       = useState(1);
-  const [lotQty,         setLotQty]         = useState(1);
+  const [lotQty,         setLotQty]         = useState(0.01);
   const [limitPrice,     setLimitPrice]     = useState("");
   const [stopPrice,      setStopPrice]      = useState("");
   const [bracketEnabled, setBracketEnabled] = useState(false);
@@ -3845,6 +3846,13 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     description: string; maxLeverageNum: number; lotSizeNum: number;
     settlementCurrency: string; partial?: boolean;
     fields: Array<{ label: string; value: string; highlight?: boolean }>;
+    // Quantity spec (ProtoOA-derived, null for Delta)
+    minVolumeLots:  number | null;
+    maxVolumeLots:  number | null;
+    stepVolumeLots: number | null;
+    leverage:       number | null;  // actual account leverage
+    pipPosition:    number | null;
+    digits:         number | null;
   };
   const [contractSpec, setContractSpec] = useState<BrokerContractSpec | null>(null);
 
@@ -3859,6 +3867,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     if (!symbol) return;
     setContractSpec(null);
     setLeverage(1);
+    setLotQty(0.01); // will be overridden by spec init effect below
     const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
     let cancelled = false;
     fetch(`${BASE}/api/contract-spec/${encodeURIComponent(symbol)}?broker=${activeBroker}`)
@@ -3867,6 +3876,29 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
       .catch(() => {});
     return () => { cancelled = true; };
   }, [symbol, activeBroker]);
+
+  // When spec loads, initialize qty to the broker's real minimum and set account leverage.
+  // Never hardcode 1 — use what the broker actually requires.
+  useEffect(() => {
+    if (!contractSpec) return;
+    // Quantity: default to broker's minVolumeLots (e.g. 0.01 for EURUSD)
+    const minLots = contractSpec.minVolumeLots;
+    if (minLots !== null && minLots > 0) {
+      setLotQty(minLots);
+      console.info("[MobileChartLayout] qty defaulted to broker min:", {
+        symbol: contractSpec.symbol,
+        minVolumeLots: minLots,
+        maxVolumeLots: contractSpec.maxVolumeLots,
+        stepVolumeLots: contractSpec.stepVolumeLots,
+        lotSize: contractSpec.lotSizeNum,
+        leverage: contractSpec.leverage,
+        pipPosition: contractSpec.pipPosition,
+      });
+    }
+    // Leverage: use actual account leverage, fall back to max leverage
+    const lev = contractSpec.leverage ?? contractSpec.maxLeverageNum;
+    if (lev > 0) setLeverage(lev);
+  }, [contractSpec]);
 
   // Fetch live ticker stats (24h vol, OI, funding, mark/index price) — Delta only.
   // cTrader symbols use contract spec fields instead; skip this fetch entirely.
@@ -4753,53 +4785,120 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
 
           {/* Quantity */}
           <div style={{ padding:"10px 14px 0" }}>
+            {/* Header */}
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:5 }}>
               <span style={{ fontSize:12, color:TEXT_DIM }}>Quantity</span>
-              <div style={{
-                display:"flex", alignItems:"center", gap:3, cursor:"pointer",
-                padding:"2px 8px", borderRadius:5, background:"rgba(255,255,255,0.04)",
-              }}>
-                <span style={{ fontSize:11, color:TEXT_HI, fontWeight:600 }}>Lot</span>
-                <ChevronDown style={{ width:10, height:10, color:TEXT_DIM }} />
-              </div>
+              <span style={{ fontSize:10, color:"rgba(255,255,255,0.28)", fontWeight:500 }}>Lot</span>
             </div>
-            <div style={{
-              display:"flex", alignItems:"center",
-              height:40, borderRadius:8, background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
-              padding:"0 10px",
-            }}>
-              <input
-                type="number" inputMode="decimal"
-                value={lotQty}
-                onChange={e => setLotQty(Math.max(1, Number(e.target.value) || 1))}
-                style={{
-                  flex:1, background:"none", border:"none", outline:"none",
-                  color:TEXT_HI, fontSize:14, fontWeight:600,
-                }}
-              />
-              <span style={{ fontSize:11, color:TEXT_DIM, flexShrink:0 }}>
+
+            {/* [−] input [+] stepper */}
+            {(() => {
+              const lotMin  = contractSpec?.minVolumeLots  ?? 0.01;
+              const lotMax  = contractSpec?.maxVolumeLots  ?? 500;
+              const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
+              // Use shared precision utility so exotic steps (e.g. 0.0001) are handled correctly
+              const lotPrec = computeLotPrecision(lotStep);
+              // Build a minimal LotSpec for snapToStep compatibility
+              const mobileSpec: LotSpec = {
+                minLots: lotMin, maxLots: lotMax, stepLots: lotStep,
+                lotSize: contractSpec?.lotSizeNum ?? 100000,
+                leverage: leverage > 0 ? leverage : 1,
+                pipPosition: contractSpec?.pipPosition ?? 4,
+                digits: contractSpec?.digits ?? 5,
+              };
+              const decrement = () => {
+                const snapped = snapToStep(Math.max(lotMin, lotQty - lotStep), mobileSpec);
+                setLotQty(parseFloat(snapped.toFixed(lotPrec)));
+              };
+              const increment = () => {
+                const snapped = snapToStep(Math.min(lotMax, lotQty + lotStep), mobileSpec);
+                setLotQty(parseFloat(snapped.toFixed(lotPrec)));
+              };
+              const handleChange = (v: string) => {
+                const n = parseFloat(v);
+                if (!isNaN(n) && n > 0) setLotQty(n);
+              };
+              const handleBlur = (v: string) => {
+                const raw = parseFloat(v);
+                if (isNaN(raw) || raw <= 0) { setLotQty(lotMin); return; }
+                // Use shared snapToStep for correct multi-decimal grid alignment
+                const snapped = snapToStep(Math.max(lotMin, Math.min(lotMax, raw)), mobileSpec);
+                setLotQty(parseFloat(snapped.toFixed(lotPrec)));
+              };
+              return (
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  <button
+                    type="button"
+                    onClick={decrement}
+                    disabled={lotQty <= lotMin}
+                    style={{
+                      width:40, height:40, borderRadius:8, flexShrink:0,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      cursor: lotQty <= lotMin ? "not-allowed" : "pointer",
+                      opacity: lotQty <= lotMin ? 0.35 : 1,
+                    }}
+                  >
+                    <Minus style={{ width:14, height:14, color:TEXT_HI }} />
+                  </button>
+                  <input
+                    type="number" inputMode="decimal"
+                    value={lotQty}
+                    onChange={e => handleChange(e.target.value)}
+                    onBlur={e => handleBlur(e.target.value)}
+                    step={lotStep}
+                    min={lotMin}
+                    max={lotMax}
+                    style={{
+                      flex:1, height:40, borderRadius:8,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
+                      outline:"none", color:TEXT_HI, fontSize:16, fontWeight:700,
+                      textAlign:"center",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={increment}
+                    disabled={lotQty >= lotMax}
+                    style={{
+                      width:40, height:40, borderRadius:8, flexShrink:0,
+                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.09)`,
+                      display:"flex", alignItems:"center", justifyContent:"center",
+                      cursor: lotQty >= lotMax ? "not-allowed" : "pointer",
+                      opacity: lotQty >= lotMax ? 0.35 : 1,
+                    }}
+                  >
+                    <Plus style={{ width:14, height:14, color:TEXT_HI }} />
+                  </button>
+                </div>
+              );
+            })()}
+
+            {/* Units + margin info */}
+            <div style={{ display:"flex", justifyContent:"space-between", marginTop:5 }}>
+              <span style={{ fontSize:10, color:TEXT_DIM }}>
                 {contractLotSize != null
-                  ? `≈ ${(lotQty * contractLotSize).toFixed(contractLotSize < 0.01 ? 4 : contractLotSize < 1 ? 3 : 2)} ${contractSpec?.settlementCurrency ?? symbol.slice(0,3)}`
-                  : "loading…"}
+                  ? (() => {
+                      const lotStep = contractSpec?.stepVolumeLots ?? 0.01;
+                      const prec    = lotStep < 0.001 ? 3 : 2;
+                      const units   = lotQty * contractLotSize;
+                      return `${lotQty.toFixed(prec)} Lot ≈ ${units.toLocaleString("en-US", { maximumFractionDigits: 0 })} Units`;
+                    })()
+                  : "Loading spec…"}
               </span>
+              {contractLotSize && livePrice && leverage > 0 && (
+                <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
+                  {`Margin ≈ ${((lotQty * contractLotSize * livePrice) / leverage).toFixed(2)}`}
+                </span>
+              )}
             </div>
-            {/* % quick select */}
-            <div style={{ display:"flex", gap:4, marginTop:6 }}>
-              {[10,25,50,75,100].map(pct => (
-                <button
-                  key={pct}
-                  style={{
-                    flex:1, height:25, borderRadius:5, fontSize:11, fontWeight:600,
-                    cursor:"pointer",
-                    background:"rgba(255,255,255,0.05)", border:`1px solid rgba(255,255,255,0.07)`,
-                    color:TEXT_DIM,
-                    display:"flex", alignItems:"center", justifyContent:"center", gap:1,
-                  }}
-                >
-                  {pct}<Percent style={{ width:8, height:8 }} />
-                </button>
-              ))}
-            </div>
+
+            {/* Range hint */}
+            {contractSpec?.minVolumeLots != null && (
+              <div style={{ fontSize:9, color:"rgba(255,255,255,0.20)", marginTop:2 }}>
+                {`Min ${contractSpec.minVolumeLots} · Max ${contractSpec.maxVolumeLots} · Step ${contractSpec.stepVolumeLots} lot`}
+              </div>
+            )}
           </div>
 
           {/* TP / SL */}
