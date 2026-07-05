@@ -61,17 +61,41 @@ async function getStoredToken(): Promise<{ token: string; expiresAt: number } | 
 
 /**
  * Resolve the OAuth redirect URI.
+ *
+ * The Replit dev preview domain can rotate (new workspace, repl reload, etc.),
+ * which silently stales out a hardcoded CTRADER_REDIRECT_URI env var — the
+ * server keeps building auth URLs that point at a dead domain, and the OAuth
+ * popup lands on Replit's generic "Run this app" placeholder instead of our
+ * callback route. To avoid that, we always derive the URI from the *current*
+ * request's host first (trustworthy behind Replit's proxy since
+ * `trust proxy` is enabled), and only fall back to the env var when the
+ * request doesn't carry proxy headers (e.g. server-to-server calls).
+ *
  * Priority:
- *   1. CTRADER_REDIRECT_URI env var (explicit, always correct for deployed app)
- *   2. x-forwarded-proto / x-forwarded-host request headers (Replit proxy)
- *   3. req.protocol / req.hostname fallback
+ *   1. x-forwarded-proto / x-forwarded-host request headers (always reflects
+ *      the domain actually being used right now — dev preview or deployment)
+ *   2. req.protocol / req.hostname (same-process fallback)
+ *   3. CTRADER_REDIRECT_URI env var (last resort — can go stale on domain
+ *      rotation, kept only for non-request contexts)
+ *
+ * NOTE: whichever domain is used here MUST exactly match the redirect URI
+ * registered in the cTrader Open API developer portal, or cTrader will
+ * reject the callback with redirect_uri_mismatch.
  */
 function getRedirectUri(req: Request): string {
+  const forwardedProto = req.headers["x-forwarded-proto"] as string | undefined;
+  const forwardedHost  = req.headers["x-forwarded-host"]  as string | undefined;
+
+  if (forwardedHost) {
+    const proto = forwardedProto ?? req.protocol;
+    return `${proto}://${forwardedHost}/api/ctrader/oauth/callback`;
+  }
+  if (req.hostname && req.hostname !== "localhost" && req.hostname !== "127.0.0.1") {
+    return `${req.protocol}://${req.hostname}/api/ctrader/oauth/callback`;
+  }
   const envUri = process.env["CTRADER_REDIRECT_URI"];
   if (envUri) return envUri;
-  const proto = (req.headers["x-forwarded-proto"] as string | undefined) ?? req.protocol;
-  const host  = (req.headers["x-forwarded-host"]  as string | undefined) ?? req.hostname;
-  return `${proto}://${host}/api/ctrader/oauth/callback`;
+  return `${req.protocol}://${req.hostname}/api/ctrader/oauth/callback`;
 }
 
 export function createCtraderOAuthRouter(): Router {
@@ -99,7 +123,11 @@ export function createCtraderOAuthRouter(): Router {
       hasClientSecret,
       clientIdLength:    envClientId?.length ?? dbClientId?.length ?? 0,
       redirectUri:       getRedirectUri(req),
-      redirectUriSource: process.env["CTRADER_REDIRECT_URI"] ? "CTRADER_REDIRECT_URI env var" : "x-forwarded headers",
+      redirectUriSource: req.headers["x-forwarded-host"]
+        ? "x-forwarded headers (current request host)"
+        : process.env["CTRADER_REDIRECT_URI"]
+          ? "CTRADER_REDIRECT_URI env var (fallback — no proxy headers on this request)"
+          : "req.hostname fallback",
       sources: {
         env: {
           hasClientId:     !!envClientId,

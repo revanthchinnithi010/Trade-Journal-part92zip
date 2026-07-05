@@ -53,6 +53,6 @@ externalPort = 3001
 [userenv]
 
 [userenv.shared]
-CTRADER_REDIRECT_URI = "https://82f9850c-f432-4cd1-b748-b9d096572efc-00-2zi1eb8efnbzl.sisko.replit.dev/api/ctrader/oauth/callback"
+CTRADER_REDIRECT_URI = "https://fc296569-9095-4ef3-a84a-92eb91bdfc42-00-27ghd37ci70et.pike.replit.dev/api/ctrader/oauth/callback"
 
 [userenv.production]
