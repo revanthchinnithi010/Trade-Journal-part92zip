@@ -34,6 +34,9 @@ interface Props {
   lotQty:    number;
   setLotQty: (v: number) => void;
   livePrice: number | null;
+  /** Called on every keystroke with the live lotQty (in display units), or null when
+   *  the user finishes editing (blur / +/- button). Parent uses this for live margin. */
+  onTypingQtyChange?: (lotQty: number | null) => void;
 }
 
 function unitLabel(unit: DeltaUnit, dq: DeltaQtySpec | null): string {
@@ -72,7 +75,7 @@ function smartFixed(v: number, maxDecimals: number): string {
   return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(maxDecimals);
 }
 
-export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props) {
+export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice, onTypingQtyChange }: Props) {
   const [unit, setUnit]           = useState<DeltaUnit>("lot");
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [displayStr, setDisplayStr]     = useState("");
@@ -142,6 +145,8 @@ export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props
   }
 
   const commit = (rawContracts: number | null) => {
+    // Typing is done — clear the live preview before committing
+    onTypingQtyChange?.(null);
     if (rawContracts == null || isNaN(rawContracts)) {
       setLotQty(minDisplay);
       return;
@@ -151,6 +156,8 @@ export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props
   };
 
   const step = (dir: 1 | -1) => {
+    // +/- commits immediately; clear any in-progress typed preview first
+    onTypingQtyChange?.(null);
     const snapped = snapContracts(contracts + dir * dq.stepSizeContracts, dq);
     setLotQty(contractsToDisplayQty(snapped, dq));
   };
@@ -190,7 +197,22 @@ export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props
             inputMode="decimal"
             value={displayStr}
             onFocus={() => setEditing(true)}
-            onChange={e => setDisplayStr(e.target.value)}
+            onChange={e => {
+              setDisplayStr(e.target.value);
+              // Fire live margin update on every keystroke (local math — no debounce needed)
+              const n = parseFloat(e.target.value);
+              if (!isNaN(n) && n > 0) {
+                const rawContracts = unitToContracts(n, unit, dq, livePrice);
+                if (rawContracts !== null && rawContracts > 0) {
+                  // Pass as lotQty display units (not snapped — shows intent, blur will snap)
+                  onTypingQtyChange?.(contractsToDisplayQty(Math.round(rawContracts), dq));
+                } else {
+                  onTypingQtyChange?.(null);
+                }
+              } else {
+                onTypingQtyChange?.(null);
+              }
+            }}
             onBlur={e => {
               setEditing(false);
               const n = parseFloat(e.target.value);

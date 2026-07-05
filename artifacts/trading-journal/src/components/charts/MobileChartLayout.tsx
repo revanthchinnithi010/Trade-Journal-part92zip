@@ -11,7 +11,7 @@ import {
   Star, Search, TrendingUp, RefreshCw,
   LayoutTemplate, Link2, Unlink2,
   Plus, Minus, SlidersHorizontal, Percent, Calculator,
-  CheckSquare, Square,
+  CheckSquare, Square, Loader2,
 } from "lucide-react";
 import { useBrokerWatchlistStore } from "@/store/brokerWatchlistStore";
 import { SharedMarketSelector } from "@/components/SharedMarketSelector";
@@ -3854,6 +3854,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   // lotRawInput: stores the user's in-progress typed string while the qty field is focused.
   // null = input is at rest; non-null = user is actively editing (commit+clear on blur).
   const [lotRawInput,       setLotRawInput]       = useState<string | null>(null);
+  // deltaTypedQty: live lotQty (display units) bubbled up from DeltaQuantitySection
+  // while the user is typing. null = not typing (committed or +/- used).
+  const [deltaTypedQty,     setDeltaTypedQty]     = useState<number | null>(null);
   type BrokerContractSpec = {
     broker: "delta" | "ctrader"; symbol: string; fetchedAt: number;
     description: string; maxLeverageNum: number; lotSizeNum: number;
@@ -3884,6 +3887,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     setContractSpec(null);
     setLeverage(1);
     setLotQty(0.01); // will be overridden by spec init effect below
+    // Clear any in-progress typed quantity so margin doesn't show stale value for new symbol
+    setDeltaTypedQty(null);
+    setLotRawInput(null);
     const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
     let cancelled = false;
     fetch(`${BASE}/api/contract-spec/${encodeURIComponent(symbol)}?broker=${activeBroker}`)
@@ -4076,19 +4082,43 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   // Actual contract lot size from metadata (never hardcoded) — cTrader only
   const contractLotSize = contractSpec?.lotSizeNum ?? null;
 
-  // order cost estimate: Delta reads ONLY deltaQtySpec; cTrader reads ONLY lotSizeNum — never mixed
+  // Live effective qty for margin: reads from in-progress keyboard input so margin
+  // stays in sync without waiting for blur/commit.
+  // — cTrader: lotRawInput is a string in scope; parse it when valid.
+  // — Delta:   deltaTypedQty is set by DeltaQuantitySection.onTypingQtyChange.
+  // Both fall back to the committed lotQty when the user is not actively typing.
+  const effectiveLotQtyForMargin = useMemo(() => {
+    if (isDeltaQty) {
+      return deltaTypedQty !== null ? deltaTypedQty : lotQty;
+    }
+    if (lotRawInput !== null) {
+      const v = parseFloat(lotRawInput);
+      if (!isNaN(v) && v > 0) return v;
+    }
+    return lotQty;
+  }, [isDeltaQty, deltaTypedQty, lotQty, lotRawInput]);
+
+  // True while the user is actively typing a quantity (before blur commits it).
+  // Used to show a subtle recalculating indicator next to "Margin Required".
+  const isMarginTyping = isDeltaQty
+    ? deltaTypedQty !== null
+    : lotRawInput !== null && (() => { const v = parseFloat(lotRawInput ?? ""); return !isNaN(v) && v > 0; })();
+
+  // order cost estimate: Delta reads ONLY deltaQtySpec; cTrader reads ONLY lotSizeNum — never mixed.
+  // Uses effectiveLotQtyForMargin so the display updates live as the user types.
   const orderCostUSD = useMemo(() => {
     const p = livePrice ?? 0;
     if (!p) return "—";
     if (isDeltaQty) {
       if (!deltaQtySpec) return "—";
-      const contracts = displayQtyToContracts(lotQty, deltaQtySpec);
+      const contracts = displayQtyToContracts(effectiveLotQtyForMargin, deltaQtySpec);
+      if (contracts <= 0) return "—";
       return calcDeltaMargin(contracts, p, leverage, deltaQtySpec).toFixed(2);
     }
     const ls = contractLotSize ?? 0;
     if (!ls) return "—";
-    return ((p * ls * lotQty) / leverage).toFixed(2);
-  }, [livePrice, lotQty, leverage, contractLotSize, isDeltaQty, deltaQtySpec]);
+    return ((p * ls * effectiveLotQtyForMargin) / leverage).toFixed(2);
+  }, [livePrice, effectiveLotQtyForMargin, leverage, contractLotSize, isDeltaQty, deltaQtySpec]);
 
   // ── Trading safety: confirm-before-order setting ─────────────────────────
   const SAFETY_LS_KEY = "tj_require_confirm_v1";
@@ -4941,6 +4971,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   lotQty={lotQty}
                   setLotQty={setLotQty}
                   livePrice={livePrice}
+                  onTypingQtyChange={setDeltaTypedQty}
                 />
               </>
             ) : (
@@ -5060,7 +5091,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   </span>
                   {contractLotSize && livePrice && leverage > 0 && (
                     <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
-                      {`Margin ≈ ${((lotQty * contractLotSize * livePrice) / leverage).toFixed(2)}`}
+                      {`Margin ≈ ${((effectiveLotQtyForMargin * contractLotSize * livePrice) / leverage).toFixed(2)}`}
                     </span>
                   )}
                 </div>
@@ -5074,7 +5105,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             {isDeltaQty && deltaQtySpec && livePrice && leverage > 0 && (
               <div style={{ display:"flex", justifyContent:"flex-end", marginTop:4 }}>
                 <span style={{ fontSize:10, color:"rgba(248,197,90,0.75)", fontWeight:600 }}>
-                  {`Margin ≈ ${formatDeltaCurrency(calcDeltaMargin(displayQtyToContracts(lotQty, deltaQtySpec), livePrice, leverage, deltaQtySpec))}`}
+                  {`Margin ≈ ${formatDeltaCurrency(calcDeltaMargin(displayQtyToContracts(effectiveLotQtyForMargin, deltaQtySpec), livePrice, leverage, deltaQtySpec))}`}
                 </span>
               </div>
             )}
@@ -5185,8 +5216,14 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             marginBottom:8,
           }}>
             <div>
-              <p style={{ fontSize:11, color:TEXT_DIM, lineHeight:1, margin:0 }}>Margin Required</p>
-              <p style={{ fontSize:12, fontWeight:600, color:TEXT_HI, marginTop:4, lineHeight:1 }}>
+              <p style={{ fontSize:11, color:TEXT_DIM, lineHeight:1, margin:0, display:"flex", alignItems:"center", gap:4 }}>
+                Margin Required
+                {/* Subtle spinner while the user is mid-keystroke (local recalc in progress) */}
+                {isMarginTyping && (
+                  <Loader2 style={{ width:9, height:9, color:TEXT_DIM, animation:"spin 0.8s linear infinite", flexShrink:0 }} />
+                )}
+              </p>
+              <p style={{ fontSize:12, fontWeight:600, color:TEXT_HI, marginTop:4, lineHeight:1, transition:"opacity 0.1s", opacity: isMarginTyping ? 0.7 : 1 }}>
                 {orderCostUSD} USD
               </p>
             </div>
