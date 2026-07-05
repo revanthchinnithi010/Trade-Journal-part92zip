@@ -22,19 +22,24 @@ import { logger } from "../lib/logger.js";
 
 // ── ProtoOA payload type IDs (from OpenApiModelMessages.proto) ───────────────
 const PT = {
-  APP_AUTH_REQ:          2100,
-  APP_AUTH_RES:          2101,
-  ACCT_AUTH_REQ:         2102,
-  ACCT_AUTH_RES:         2103,
-  SUBSCRIBE_SPOTS_REQ:   2127,
-  SUBSCRIBE_SPOTS_RES:   2128,
-  UNSUBSCRIBE_SPOTS_REQ: 2129,
-  UNSUBSCRIBE_SPOTS_RES: 2130,
-  SPOT_EVENT:            2131,
-  ERROR_RES:             2142,
-  HEARTBEAT_EVENT:       51,
-  TRENDBARS_REQ:         2137,
-  TRENDBARS_RES:         2138,
+  APP_AUTH_REQ:                 2100,
+  APP_AUTH_RES:                 2101,
+  ACCT_AUTH_REQ:                2102,
+  ACCT_AUTH_RES:                2103,
+  SUBSCRIBE_SPOTS_REQ:          2127,
+  SUBSCRIBE_SPOTS_RES:          2128,
+  UNSUBSCRIBE_SPOTS_REQ:        2129,
+  UNSUBSCRIBE_SPOTS_RES:        2130,
+  SPOT_EVENT:                   2131,
+  ERROR_RES:                    2142,
+  HEARTBEAT_EVENT:              51,
+  TRENDBARS_REQ:                2137,
+  TRENDBARS_RES:                2138,
+  DEPTH_EVENT:                  2155,
+  SUBSCRIBE_DEPTH_QUOTES_REQ:   2156,
+  SUBSCRIBE_DEPTH_QUOTES_RES:   2157,
+  UNSUBSCRIBE_DEPTH_QUOTES_REQ: 2158,
+  UNSUBSCRIBE_DEPTH_QUOTES_RES: 2159,
 } as const;
 
 const PT_NAME: Record<number, string> = {
@@ -44,7 +49,13 @@ const PT_NAME: Record<number, string> = {
   2129: "UNSUBSCRIBE_SPOTS_REQ", 2130: "UNSUBSCRIBE_SPOTS_RES",
   2131: "SPOT_EVENT", 2142: "ERROR_RES", 51: "HEARTBEAT_EVENT",
   2137: "TRENDBARS_REQ", 2138: "TRENDBARS_RES",
+  2155: "DEPTH_EVENT",
+  2156: "SUBSCRIBE_DEPTH_QUOTES_REQ", 2157: "SUBSCRIBE_DEPTH_QUOTES_RES",
+  2158: "UNSUBSCRIBE_DEPTH_QUOTES_REQ", 2159: "UNSUBSCRIBE_DEPTH_QUOTES_RES",
 };
+
+// ProtoOA error code: sent when trying to sub depth for a symbol not spot-subscribed
+const OA_ERR_NOT_SUBSCRIBED_TO_SPOTS = 112;
 
 // ── OHLC bar type (returned by fetchTrendbarsOnSession) ──────────────────────
 export interface CtraderOHLCBar {
@@ -198,6 +209,17 @@ function makeTlsConn(host: string, port: number): Conn {
   return conn;
 }
 
+// ── DOM (Depth of Market) types ───────────────────────────────────────────────
+export interface DomQuote { price: number; size: number; }
+
+export interface DomBook {
+  bids:       DomQuote[];  // sorted descending by price
+  asks:       DomQuote[];  // sorted ascending  by price
+  available:  boolean;     // false = broker confirmed DOM unavailable for this symbol
+  pending:    boolean;     // true = subscribed but no data received yet
+  updatedAt:  number | null;
+}
+
 // ── Public types ──────────────────────────────────────────────────────────────
 export type EngineStatus =
   | "idle" | "connecting" | "app_auth" | "acct_auth"
@@ -271,6 +293,20 @@ export class CtraderTickEngine extends EventEmitter {
 
   /** FIFO queue for outstanding GET_TRENDBARS requests on the live session. */
   private pendingTrendbarsQueue: PendingTrendbars[] = [];
+
+  // ── DOM (Depth of Market) state ────────────────────────────────────────────
+  /** In-memory bid books keyed by symbolId → (quoteId → quote). */
+  private domBids = new Map<number, Map<number, DomQuote>>();
+  /** In-memory ask books keyed by symbolId → (quoteId → quote). */
+  private domAsks = new Map<number, Map<number, DomQuote>>();
+  /** symbolIds for which we've sent SUBSCRIBE_DEPTH_QUOTES_REQ. */
+  private domSubscribedIds = new Set<number>();
+  /** symbolIds where broker confirmed DOM is not available (never show as pending again). */
+  private domUnavailableIds = new Set<number>();
+  /** symbolId → timestamp of last DEPTH_EVENT received. */
+  private domLastUpdateAt = new Map<number, number>();
+  /** symbolId → timestamp when DOM subscription was sent (to detect stale pending). */
+  private domSubSentAt    = new Map<number, number>();
 
   configure(opts: EngineOptions): void { this.opts = opts; }
 
@@ -355,6 +391,70 @@ export class CtraderTickEngine extends EventEmitter {
 
   getLastTick(symbolId: number): CtraderTick | null { return this.lastTickMap.get(symbolId) ?? null; }
   getAllLastTicks(): CtraderTick[]                   { return [...this.lastTickMap.values()]; }
+
+  // ── DOM public API ─────────────────────────────────────────────────────────
+
+  /**
+   * Subscribe to DOM for a symbol. Idempotent.
+   * Requires: the symbol must already be spot-subscribed (in subscribedIds).
+   * Sends SUBSCRIBE_DEPTH_QUOTES_REQ immediately if streaming, else queues for next connect.
+   */
+  subscribeDom(symbolId: number): void {
+    if (this.domUnavailableIds.has(symbolId)) return; // don't retry confirmed-unavailable
+    if (this.domSubscribedIds.has(symbolId)) return;  // idempotent
+    if (!this.subscribedIds.has(symbolId)) {
+      logger.warn({ symbolId }, "CtraderTickEngine.subscribeDom: spot sub required first — symbol not in subscribedIds");
+      return;
+    }
+    this.domSubscribedIds.add(symbolId);
+    if (this._status === "streaming" && this.conn) {
+      this.domSubSentAt.set(symbolId, Date.now());
+      this.conn.write(this._buildSubscribeDepthQuotesReq([symbolId]));
+      logger.info({ symbolId }, "CtraderTickEngine.subscribeDom: SUBSCRIBE_DEPTH_QUOTES_REQ sent");
+    }
+  }
+
+  /** Unsubscribe from DOM for a symbol. */
+  unsubscribeDom(symbolId: number): void {
+    if (!this.domSubscribedIds.has(symbolId)) return;
+    this.domSubscribedIds.delete(symbolId);
+    this.domBids.delete(symbolId);
+    this.domAsks.delete(symbolId);
+    this.domLastUpdateAt.delete(symbolId);
+    this.domSubSentAt.delete(symbolId);
+    if (this._status === "streaming" && this.conn) {
+      this.conn.write(this._buildUnsubscribeDepthQuotesReq([symbolId]));
+    }
+  }
+
+  /**
+   * Return the current DOM snapshot for a symbol.
+   * bids/asks are sorted (bids desc, asks asc), limited to `depth` levels.
+   */
+  getDomBook(symbolId: number, depth = 20): DomBook {
+    if (this.domUnavailableIds.has(symbolId)) {
+      return { bids: [], asks: [], available: false, pending: false, updatedAt: null };
+    }
+    const bidsMap = this.domBids.get(symbolId);
+    const asksMap = this.domAsks.get(symbolId);
+    const updatedAt = this.domLastUpdateAt.get(symbolId) ?? null;
+    const sentAt    = this.domSubSentAt.get(symbolId);
+    // pending = subscribed but no data within 20s
+    const pending   = this.domSubscribedIds.has(symbolId) && updatedAt === null
+      && (sentAt === undefined || Date.now() - sentAt < 20_000);
+
+    const bids: DomQuote[] = bidsMap
+      ? [...bidsMap.values()].sort((a, b) => b.price - a.price).slice(0, depth)
+      : [];
+    const asks: DomQuote[] = asksMap
+      ? [...asksMap.values()].sort((a, b) => a.price - b.price).slice(0, depth)
+      : [];
+
+    return { bids, asks, available: true, pending, updatedAt };
+  }
+
+  isDomSubscribed(symbolId: number): boolean { return this.domSubscribedIds.has(symbolId); }
+  isDomUnavailable(symbolId: number): boolean { return this.domUnavailableIds.has(symbolId); }
 
   /**
    * Expose the engine's stored credentials so callers can open a standalone
@@ -512,7 +612,19 @@ export class CtraderTickEngine extends EventEmitter {
 
     if (pt === PT.ERROR_RES) {
       const { errorCode, description } = this._parseErrorRes(payload);
-      logger.error({ errorCode, description, step: this.step }, "CtraderTickEngine: ERROR_RES");
+      logger.warn({ errorCode, description, step: this.step }, "CtraderTickEngine: ERROR_RES");
+
+      // Code 112 = NOT_SUBSCRIBED_TO_SPOTS — the depth subscribe request was rejected because
+      // the symbol does not have an active spot subscription yet. This is a transient, per-request
+      // error, NOT a broker-level ban. Clear the pending DOM set so callers can retry via
+      // subscribeDom() once spots are confirmed; do NOT mark any symbol permanently unavailable.
+      if (errorCode === OA_ERR_NOT_SUBSCRIBED_TO_SPOTS && this.step === "streaming") {
+        logger.warn({ domPending: [...this.domSubscribedIds] },
+          "CtraderTickEngine: DOM error 112 — clearing DOM subs (transient: spot sub not confirmed yet)");
+        this.domSubscribedIds.clear();
+        // Do not add to domUnavailableIds — caller may retry once spots are active
+        return;
+      }
       this._setStatus("error", { error: `ProtoOA ${errorCode}: ${description}` });
       this._scheduleReconnect(`error_res: ${errorCode}`);
       return;
@@ -546,6 +658,12 @@ export class CtraderTickEngine extends EventEmitter {
           this.step = "streaming";
           this._setStatus("streaming");
         }
+        // Clear DOM books on reconnect; re-subscribe after reconnect
+        this.domBids.clear();
+        this.domAsks.clear();
+        this.domLastUpdateAt.clear();
+        this.domSubSentAt.clear();
+        // Don't clear domSubscribedIds or domUnavailableIds — those persist across reconnects
         break;
       }
       case "subscribing": {
@@ -553,10 +671,12 @@ export class CtraderTickEngine extends EventEmitter {
           logger.info("CtraderTickEngine: ✓ SUBSCRIBE_SPOTS_RES — streaming");
           this.step = "streaming";
           this._setStatus("streaming");
+          this._resubscribeDomAfterConnect();
         } else if (pt === PT.SPOT_EVENT) {
-          // First spot can arrive before the RES
+          // First spot can arrive before SUBSCRIBE_SPOTS_RES — transition immediately
           this.step = "streaming";
           this._setStatus("streaming");
+          this._resubscribeDomAfterConnect(); // must happen even on this path
           this._handleSpotEvent(payload);
         } else {
           logger.debug({ got: name }, "CtraderTickEngine: unexpected frame in subscribing");
@@ -568,10 +688,16 @@ export class CtraderTickEngine extends EventEmitter {
           this._handleSpotEvent(payload);
         } else if (pt === PT.TRENDBARS_RES) {
           this._handleTrendbarsRes(payload);
+        } else if (pt === PT.DEPTH_EVENT) {
+          this._handleDepthEvent(payload);
         } else if (pt === PT.SUBSCRIBE_SPOTS_RES) {
           logger.debug("CtraderTickEngine: SUBSCRIBE_SPOTS_RES ack (dynamic add)");
         } else if (pt === PT.UNSUBSCRIBE_SPOTS_RES) {
           logger.debug("CtraderTickEngine: UNSUBSCRIBE_SPOTS_RES ack");
+        } else if (pt === PT.SUBSCRIBE_DEPTH_QUOTES_RES) {
+          logger.debug("CtraderTickEngine: SUBSCRIBE_DEPTH_QUOTES_RES ack");
+        } else if (pt === PT.UNSUBSCRIBE_DEPTH_QUOTES_RES) {
+          logger.debug("CtraderTickEngine: UNSUBSCRIBE_DEPTH_QUOTES_RES ack");
         } else {
           logger.debug({ got: name }, "CtraderTickEngine: unhandled frame in streaming");
         }
@@ -819,6 +945,96 @@ export class CtraderTickEngine extends EventEmitter {
         "CtraderTickEngine: fetchTrendbarsOnSession decode error");
       pending.reject(new Error(`fetchTrendbarsOnSession decode error: ${String(e)}`));
     }
+  }
+
+  // ── DOM reconnect helper ──────────────────────────────────────────────────
+  /**
+   * Re-subscribe all active DOM symbols after a spot subscription is confirmed.
+   * Must be called from BOTH the SUBSCRIBE_SPOTS_RES path and the early-SPOT_EVENT
+   * path to guarantee DOM re-sub regardless of frame arrival order.
+   * Idempotent: guarded by domSubSentAt timestamp check.
+   */
+  private _resubscribeDomAfterConnect(): void {
+    const domIds = [...this.domSubscribedIds].filter(id => !this.domUnavailableIds.has(id));
+    if (domIds.length === 0 || !this.conn) return;
+    for (const id of domIds) this.domSubSentAt.set(id, Date.now());
+    this.conn.write(this._buildSubscribeDepthQuotesReq(domIds));
+    logger.info({ count: domIds.length }, "CtraderTickEngine: re-subscribed DOM after spots confirmed");
+  }
+
+  // ── DOM event handler ─────────────────────────────────────────────────────
+  private _handleDepthEvent(payload: Buffer): void {
+    const fields   = parseMsg(payload);
+    // field 3 = symbolId (uint64)
+    const symField = fields.find(f => f.fn === 3 && f.wt === 0);
+    if (!symField) return;
+    const symbolId = symField.v as number;
+
+    if (!this.domBids.has(symbolId)) this.domBids.set(symbolId, new Map());
+    if (!this.domAsks.has(symbolId)) this.domAsks.set(symbolId, new Map());
+    const bids = this.domBids.get(symbolId)!;
+    const asks = this.domAsks.get(symbolId)!;
+
+    // field 4 = repeated ProtoOADepthQuote (newQuotes)
+    // ProtoOADepthQuote: field1=id(uint64), field3=size(uint64), field4=bid(uint64), field5=ask(uint64)
+    for (const f of fields.filter(x => x.fn === 4 && x.wt === 2)) {
+      const qf   = parseMsg(f.v as Buffer);
+      const id   = (qf.find(x => x.fn === 1 && x.wt === 0)?.v as number) ?? 0;
+      const size = (qf.find(x => x.fn === 3 && x.wt === 0)?.v as number) ?? 0;
+      const bid  =  qf.find(x => x.fn === 4 && x.wt === 0)?.v as number | undefined;
+      const ask  =  qf.find(x => x.fn === 5 && x.wt === 0)?.v as number | undefined;
+      if (bid !== undefined) {
+        bids.set(id, { price: bid / 100_000, size: size / 100 });
+      } else if (ask !== undefined) {
+        asks.set(id, { price: ask / 100_000, size: size / 100 });
+      }
+    }
+
+    // field 5 = repeated/packed deletedQuote ids (uint64)
+    for (const f of fields.filter(x => x.fn === 5)) {
+      if (f.wt === 0) {
+        // non-packed varint
+        const id = f.v as number;
+        bids.delete(id);
+        asks.delete(id);
+      } else if (f.wt === 2) {
+        // packed varints
+        const buf = f.v as Buffer;
+        let o = 0;
+        while (o < buf.length) {
+          let id = 0, mul = 1;
+          while (o < buf.length) {
+            const b = buf[o++];
+            id += (b & 0x7F) * mul;
+            mul *= 128;
+            if (!(b & 0x80)) break;
+          }
+          bids.delete(id);
+          asks.delete(id);
+        }
+      }
+    }
+
+    this.domLastUpdateAt.set(symbolId, Date.now());
+  }
+
+  // ── DOM message builders ───────────────────────────────────────────────────
+  private _buildSubscribeDepthQuotesReq(symbolIds: number[]): Buffer {
+    const { ctidTraderAccountId } = this.opts!;
+    return buildFrame(PT.SUBSCRIBE_DEPTH_QUOTES_REQ, [
+      ...u32f(1, PT.SUBSCRIBE_DEPTH_QUOTES_REQ),
+      ...u32f(2, ctidTraderAccountId),
+      ...symbolIds.flatMap(id => u32f(3, id)),
+    ]);
+  }
+
+  private _buildUnsubscribeDepthQuotesReq(symbolIds: number[]): Buffer {
+    const { ctidTraderAccountId } = this.opts!;
+    return buildFrame(PT.UNSUBSCRIBE_DEPTH_QUOTES_REQ, [
+      ...u32f(1, PT.UNSUBSCRIBE_DEPTH_QUOTES_REQ),
+      ...u32f(2, ctidTraderAccountId),
+      ...symbolIds.flatMap(id => u32f(3, id)),
+    ]);
   }
 
   // ── Message builders ─────────────────────────────────────────────────────────

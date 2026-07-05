@@ -2902,6 +2902,458 @@ function useOrderBook(symbol: string) {
   return { bidsRef, asksRef, status, lastUpdateMs, bidCount, askCount, setOnUpdate, diag, pollCountRef };
 }
 
+// ── useCtDom — cTrader live Depth of Market via ProtoOA DEPTH_EVENT ──────────
+interface CtDomBook {
+  available:  boolean;
+  pending:    boolean;
+  reason?:    string;
+  bids:       { price: number; size: number }[];
+  asks:       { price: number; size: number }[];
+  updatedAt:  number | null;
+  symbol?:    string;
+  engineStatus?: string;
+}
+
+function useCtDom(symbol: string, active: boolean): CtDomBook | null {
+  const [book, setBook] = useState<CtDomBook | null>(null);
+  useEffect(() => {
+    if (!active || !symbol) { setBook(null); return; }
+    let destroyed = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    setBook(null);
+    const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    const poll = async () => {
+      if (destroyed) return;
+      try {
+        const r = await fetch(`${BASE}/api/ctrader/dom/${encodeURIComponent(symbol)}?depth=20`, {
+          signal: AbortSignal.timeout(4000),
+        });
+        if (destroyed) return;
+        if (r.ok) { const d = await r.json() as CtDomBook; if (!destroyed) setBook(d); }
+      } catch { /* ignore */ }
+      if (!destroyed) timer = setTimeout(poll, 500);
+    };
+    poll();
+    return () => { destroyed = true; if (timer) clearTimeout(timer); };
+  }, [symbol, active]);
+  return book;
+}
+
+// ── useTradeStats — real closed-deal statistics from cTrader ProtoOA ─────────
+interface TradeStats {
+  available:        boolean;
+  reason?:          string;
+  symbol?:          string;
+  periodDays?:      number;
+  netProfit?:       number;
+  profitFactor?:    number | null;
+  totalTrades?:     number;
+  winTrades?:       number;
+  lossTrades?:      number;
+  winRate?:         number;
+  avgTrade?:        number;
+  avgDurationMs?:   number | null;
+  totalPips?:       number | null;
+  tradedVolumeLots?: number;
+  note?:            string;
+}
+
+function useTradeStats(symbol: string, active: boolean): TradeStats | null {
+  const [stats, setStats] = useState<TradeStats | null>(null);
+  useEffect(() => {
+    if (!active || !symbol) { setStats(null); return; }
+    setStats(null);
+    let cancelled = false;
+    const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/ctrader/stats/${encodeURIComponent(symbol)}?days=90`, { signal: AbortSignal.timeout(20_000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !cancelled) setStats(d as TradeStats); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [symbol, active]);
+  return stats;
+}
+
+// ── useMarketCalendar — economic events filtered to the active symbol ────────
+interface CalEvent {
+  id:       string;
+  title:    string;
+  currency: string;
+  date:     string;
+  time:     string;
+  impact:   "High" | "Medium" | "Low" | "Holiday";
+  forecast: string;
+  previous: string;
+}
+interface CalendarResult {
+  available:  boolean;
+  reason?:    string;
+  symbol?:    string;
+  currencies?: string[];
+  events?:    CalEvent[];
+  source?:    string;
+  fetchedAt?: number;
+}
+
+function useMarketCalendar(symbol: string): CalendarResult | null {
+  const [cal, setCal] = useState<CalendarResult | null>(null);
+  useEffect(() => {
+    if (!symbol) { setCal(null); return; }
+    setCal(null);
+    let cancelled = false;
+    const BASE = (import.meta as unknown as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
+    fetch(`${BASE}/api/market-calendar/${encodeURIComponent(symbol)}`, { signal: AbortSignal.timeout(12_000) })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d && !cancelled) setCal(d as CalendarResult); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [symbol]);
+  return cal;
+}
+
+// ── CtraderOrderBook — live DOM via ProtoOA DEPTH_EVENT ──────────────────────
+function CtraderOrderBook({ symbol, expanded, onToggle }: {
+  symbol: string; expanded: boolean; onToggle: () => void;
+}) {
+  const book = useCtDom(symbol, expanded); // only poll when expanded
+  const CT_BID = "#00E08A";
+  const CT_ASK = "#FF5B5B";
+  const CT_DIM = "rgba(255,255,255,0.30)";
+
+  const fmtPrice = (p: number) => {
+    if (!isFinite(p)) return "—";
+    if (p >= 10000) return p.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (p >= 1000)  return p.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    if (p >= 1)     return p.toFixed(2);
+    return p.toPrecision(4);
+  };
+
+  const fmtSize = (s: number) => {
+    if (!isFinite(s)) return "—";
+    if (s >= 1000) return `${(s / 1000).toFixed(1)}K`;
+    if (s >= 100)  return s.toFixed(1);
+    return s.toFixed(s < 0.01 ? 4 : s < 1 ? 3 : 2);
+  };
+
+  const hasData     = (book?.bids?.length ?? 0) > 0 || (book?.asks?.length ?? 0) > 0;
+  const isPending   = book?.pending ?? true;
+  const unavailable = book !== null && !book.available;
+
+  const bestBid = book?.bids?.[0]?.price ?? NaN;
+  const bestAsk = book?.asks?.[0]?.price ?? NaN;
+  const spread  = isFinite(bestBid) && isFinite(bestAsk) ? bestAsk - bestBid : NaN;
+  const mid     = isFinite(bestBid) && isFinite(bestAsk) ? (bestBid + bestAsk) / 2 : NaN;
+
+  const liveStatus = hasData ? "Live" : isPending ? "···" : unavailable ? "N/A" : "···";
+  const dotColor   = hasData ? CT_BID  : unavailable ? CT_ASK : "#555";
+
+  // Sort: bids desc (best = index 0), asks asc (best = index 0 = closest to spread)
+  const bids        = [...(book?.bids ?? [])].sort((a, b) => b.price - a.price).slice(0, 15);
+  const asks        = [...(book?.asks ?? [])].sort((a, b) => a.price - b.price).slice(0, 15);
+  const askDisplay  = [...asks].reverse(); // render furthest-from-spread first (top)
+
+  const maxSize = Math.max(...[...bids, ...asks].map(l => l.size), 1);
+
+  const renderRow = (level: { price: number; size: number } | null, isBid: boolean, i: number, isBest: boolean) => (
+    <div key={`${isBid ? "b" : "a"}-${i}`} style={{
+      position: "relative", display: "flex", alignItems: "center",
+      height: 21, padding: "0 10px", overflow: "hidden",
+    }}>
+      {level && (
+        <div style={{
+          position: "absolute", right: 0, top: 0, height: "100%",
+          width: `${Math.min((level.size / maxSize) * 100, 100)}%`,
+          background: isBid
+            ? `rgba(0,224,138,${isBest ? 0.42 : 0.07 + (level.size / maxSize) * 0.18})`
+            : `rgba(255,91,91,${isBest ? 0.42 : 0.07 + (level.size / maxSize) * 0.18})`,
+          pointerEvents: "none",
+        }} />
+      )}
+      <span style={{
+        flex: 1, fontSize: isBest ? 12 : 11, fontWeight: isBest ? 700 : 500,
+        fontVariantNumeric: "tabular-nums", position: "relative", zIndex: 1,
+        color: level
+          ? (isBest ? (isBid ? CT_BID : CT_ASK) : (isBid ? "rgba(0,224,138,0.60)" : "rgba(255,91,91,0.65)"))
+          : CT_DIM,
+        opacity: level ? 1 : 0.15,
+      }}>{level ? fmtPrice(level.price) : "—"}</span>
+      <span style={{
+        fontSize: 10, fontVariantNumeric: "tabular-nums", minWidth: 46, textAlign: "right",
+        color: isBest ? "rgba(255,255,255,0.92)" : CT_DIM,
+        opacity: level ? 1 : 0.12, position: "relative", zIndex: 1,
+      }}>{level ? fmtSize(level.size) : "—"}</span>
+    </div>
+  );
+
+  return (
+    <div style={{ borderRadius: 10, overflow: "hidden", border: "1px solid rgba(255,255,255,0.05)", background: "#0B1012" }}>
+      <button onClick={onToggle} style={{
+        width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "none",
+        cursor: "pointer", touchAction: "manipulation",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.60)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Order Book
+          </span>
+          <span style={{
+            fontSize: 9.5, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
+            padding: "1px 6px", borderRadius: 4,
+            background: "rgba(56,189,248,0.12)", color: "#38bdf8",
+          }}>cTRADER</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "1px 6px", borderRadius: 4, background: hasData ? "rgba(0,224,138,0.09)" : "rgba(255,255,255,0.05)" }}>
+            <div style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor, boxShadow: hasData ? `0 0 5px ${CT_BID}99` : "none" }} />
+            <span style={{ fontSize: 9, fontWeight: 600, color: hasData ? CT_BID : "rgba(255,255,255,0.30)" }}>{liveStatus}</span>
+          </div>
+        </div>
+        <ChevronDown style={{ width: 13, height: 13, color: "rgba(255,255,255,0.30)", flexShrink: 0, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.22s ease" }} />
+      </button>
+
+      <div style={{ maxHeight: expanded ? 600 : 0, overflow: "hidden", transition: "max-height 0.28s ease" }}>
+        {!expanded ? null : unavailable ? (
+          <div style={{ padding: "14px 12px", display: "flex", flexDirection: "column", gap: 6, alignItems: "center" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.40)", textAlign: "center", lineHeight: 1.5 }}>
+              Depth of Market not available from the connected cTrader broker.
+            </span>
+            {book?.reason && (
+              <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.22)", textAlign: "center" }}>{book.reason}</span>
+            )}
+          </div>
+        ) : isPending && !hasData ? (
+          <div style={{ padding: "14px 12px", textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Subscribing to order book…</span>
+          </div>
+        ) : hasData ? (
+          <>
+            {/* Column header */}
+            <div style={{ display: "flex", alignItems: "center", padding: "0 10px", height: 18, background: "rgba(255,255,255,0.03)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <span style={{ flex: 1, fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em" }}>PRICE</span>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", letterSpacing: "0.05em", minWidth: 46, textAlign: "right" }}>SIZE (lots)</span>
+            </div>
+            {/* Ask rows (furthest first, best at bottom) */}
+            <div>{askDisplay.map((l, i) => renderRow(l, false, i, i === askDisplay.length - 1))}</div>
+            {/* Spread / Mid */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 10px", height: 24, background: "#141A1C", borderTop: "1px solid rgba(255,255,255,0.05)", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", letterSpacing: "0.04em" }}>SPREAD</span>
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.58)", fontVariantNumeric: "tabular-nums" }}>{isFinite(spread) ? fmtPrice(spread) : "—"}</span>
+              </div>
+              <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)", letterSpacing: "0.04em" }}>MID</span>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.78)", fontVariantNumeric: "tabular-nums" }}>{isFinite(mid) ? fmtPrice(mid) : "—"}</span>
+              </div>
+            </div>
+            {/* Bid rows (best at top) */}
+            <div>{bids.map((l, i) => renderRow(l, true, i, i === 0))}</div>
+            {book?.updatedAt && (
+              <div style={{ padding: "3px 10px", background: "rgba(0,0,0,0.2)" }}>
+                <span style={{ fontSize: 8.5, color: "rgba(255,255,255,0.20)" }}>Updated {new Date(book.updatedAt).toLocaleTimeString()}</span>
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: "14px 12px", textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>Connecting…</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── TradeStatisticsSection — real cTrader closed-deal stats ──────────────────
+function TradeStatisticsSection({ symbol, expanded, onToggle }: {
+  symbol: string; expanded: boolean; onToggle: () => void;
+}) {
+  const stats = useTradeStats(symbol, true);
+
+  const fmtDuration = (ms: number | null | undefined) => {
+    if (!ms) return "—";
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+    if (h > 0)   return `${h}h ${m}m`;
+    return `${m}m`;
+  };
+
+  const pnlColor = (v: number | undefined | null) => {
+    if (v === undefined || v === null) return TEXT_HI;
+    return v > 0 ? BUY_COLOR : v < 0 ? SELL_COLOR : TEXT_HI;
+  };
+
+  return (
+    <div style={{ margin: "8px 12px 0", border: `1px solid ${TRADE_BORDER}`, borderRadius: 10, overflow: "hidden", background: "#111111" }}>
+      <button onClick={onToggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer", touchAction: "manipulation" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Trade Statistics</span>
+          <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 4, background: "rgba(56,189,248,0.12)", color: "#38bdf8", letterSpacing: "0.06em", textTransform: "uppercase" }}>90d</span>
+          {stats?.available && stats.totalTrades !== undefined && stats.totalTrades > 0 && (
+            <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.30)" }}>{stats.totalTrades} trades</span>
+          )}
+        </div>
+        <ChevronDown style={{ width: 13, height: 13, color: TEXT_DIM, flexShrink: 0, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.22s ease" }} />
+      </button>
+
+      <div style={{ maxHeight: expanded ? 500 : 0, overflow: "hidden", transition: "max-height 0.3s ease" }}>
+        {!stats ? (
+          <div style={{ padding: "12px", textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM }}>Loading statistics…</span>
+          </div>
+        ) : !stats.available ? (
+          <div style={{ padding: "12px 14px" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM, lineHeight: 1.5 }}>{stats.reason ?? "Trade statistics unavailable."}</span>
+          </div>
+        ) : stats.totalTrades === 0 ? (
+          <div style={{ padding: "12px 14px" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM, lineHeight: 1.5 }}>{stats.note ?? `No closed ${symbol} trades in the last 90 days.`}</span>
+          </div>
+        ) : (
+          <div style={{ padding: "4px 0" }}>
+            {[
+              { label: "Net Profit",     value: stats.netProfit !== undefined ? `${stats.netProfit >= 0 ? "+" : ""}${stats.netProfit.toFixed(2)}` : "—", color: pnlColor(stats.netProfit) },
+              { label: "Profit Factor",  value: stats.profitFactor !== null && stats.profitFactor !== undefined ? stats.profitFactor.toFixed(2) : "—", color: stats.profitFactor !== null && stats.profitFactor !== undefined && stats.profitFactor >= 1 ? BUY_COLOR : SELL_COLOR },
+              { label: "Total Trades",   value: String(stats.totalTrades ?? "—"), color: TEXT_HI },
+              { label: "Win / Loss",     value: stats.winTrades !== undefined ? `${stats.winTrades} / ${stats.lossTrades ?? 0}` : "—", color: TEXT_HI },
+              { label: "Win Rate",       value: stats.winRate !== undefined ? `${stats.winRate.toFixed(1)}%` : "—", color: (stats.winRate ?? 0) >= 50 ? BUY_COLOR : SELL_COLOR },
+              { label: "Avg Trade",      value: stats.avgTrade !== undefined ? `${stats.avgTrade >= 0 ? "+" : ""}${stats.avgTrade.toFixed(2)}` : "—", color: pnlColor(stats.avgTrade) },
+              { label: "Avg Duration",   value: fmtDuration(stats.avgDurationMs), color: TEXT_HI },
+              { label: "Total Pips",     value: stats.totalPips !== null && stats.totalPips !== undefined ? `${stats.totalPips >= 0 ? "+" : ""}${stats.totalPips.toFixed(1)}` : "—", color: pnlColor(stats.totalPips) },
+              { label: "Traded Volume",  value: stats.tradedVolumeLots !== undefined ? `${stats.tradedVolumeLots.toFixed(2)} lots` : "—", color: TEXT_HI },
+            ].map(({ label, value, color }) => (
+              <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "5px 12px" }}>
+                <span style={{ fontSize: 12, color: TEXT_DIM }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 500, color }}>{value}</span>
+              </div>
+            ))}
+            {stats.note && (
+              <div style={{ padding: "4px 12px 6px" }}>
+                <span style={{ fontSize: 10.5, color: TEXT_DIM, fontStyle: "italic" }}>{stats.note}</span>
+              </div>
+            )}
+            <div style={{ margin: "6px 10px 6px", padding: "5px 10px", borderRadius: 7, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 9.5, color: "#38bdf8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>cTrader ProtoOA</span>
+              <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.35)" }}>Last 90 days</span>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── MarketCalendarSection — economic events for the active symbol ─────────────
+const IMPACT_COLOR: Record<string, string> = {
+  High: "#EF4444", Medium: "#F59E0B", Low: "rgba(255,255,255,0.40)", Holiday: "rgba(255,255,255,0.25)",
+};
+
+function MarketCalendarSection({ symbol, expanded, onToggle }: {
+  symbol: string; expanded: boolean; onToggle: () => void;
+}) {
+  const cal = useMarketCalendar(symbol);
+
+  const today   = new Date();
+  const todayIso = today.toISOString().slice(0, 10);
+
+  const fmtDate = (iso: string) => {
+    const [y, m, d] = iso.split("-");
+    const dt = new Date(Number(y), Number(m) - 1, Number(d));
+    if (iso === todayIso) return "Today";
+    const diff = Math.round((dt.getTime() - today.setHours(0,0,0,0)) / 86400000);
+    if (diff === 1) return "Tomorrow";
+    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  };
+
+  const events = cal?.events ?? [];
+  const upcomingEvents = events.filter(e => e.date >= todayIso);
+
+  const impactDot = (impact: string) => (
+    <div style={{ width: 6, height: 6, borderRadius: "50%", flexShrink: 0, background: IMPACT_COLOR[impact] ?? "rgba(255,255,255,0.30)" }} />
+  );
+
+  return (
+    <div style={{ margin: "8px 12px 0", border: `1px solid ${TRADE_BORDER}`, borderRadius: 10, overflow: "hidden", background: "#111111" }}>
+      <button onClick={onToggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "rgba(255,255,255,0.04)", border: "none", cursor: "pointer", touchAction: "manipulation" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,0.55)", letterSpacing: "0.06em", textTransform: "uppercase" }}>Economic Calendar</span>
+          {cal?.currencies && (
+            <span style={{ fontSize: 9.5, color: "rgba(255,255,255,0.30)" }}>{cal.currencies.join(" · ")}</span>
+          )}
+          {cal?.available && upcomingEvents.filter(e => e.impact === "High").length > 0 && (
+            <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "rgba(239,68,68,0.15)", color: "#EF4444" }}>
+              {upcomingEvents.filter(e => e.impact === "High").length} High
+            </span>
+          )}
+        </div>
+        <ChevronDown style={{ width: 13, height: 13, color: TEXT_DIM, flexShrink: 0, transform: expanded ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 0.22s ease" }} />
+      </button>
+
+      <div style={{ maxHeight: expanded ? 600 : 0, overflow: "hidden", transition: "max-height 0.3s ease" }}>
+        {!cal ? (
+          <div style={{ padding: "12px", textAlign: "center" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM }}>Loading calendar…</span>
+          </div>
+        ) : !cal.available ? (
+          <div style={{ padding: "12px 14px" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM, lineHeight: 1.5 }}>{cal.reason ?? "Calendar unavailable."}</span>
+          </div>
+        ) : upcomingEvents.length === 0 ? (
+          <div style={{ padding: "12px 14px" }}>
+            <span style={{ fontSize: 12, color: TEXT_DIM }}>No events this week or next for {cal.currencies?.join(", ")}.</span>
+          </div>
+        ) : (
+          <>
+            {/* Group by date */}
+            {(() => {
+              const byDate = new Map<string, CalEvent[]>();
+              for (const e of upcomingEvents) {
+                const arr = byDate.get(e.date) ?? [];
+                arr.push(e);
+                byDate.set(e.date, arr);
+              }
+              return [...byDate.entries()].map(([date, evts]) => (
+                <div key={date}>
+                  <div style={{ padding: "5px 12px 3px", background: "rgba(255,255,255,0.025)" }}>
+                    <span style={{ fontSize: 10, fontWeight: 600, color: date === todayIso ? "#F59E0B" : "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      {fmtDate(date)}
+                    </span>
+                  </div>
+                  {evts.map(evt => (
+                    <div key={evt.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "6px 12px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, paddingTop: 2, flexShrink: 0 }}>
+                        {impactDot(evt.impact)}
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: "rgba(255,255,255,0.40)", minWidth: 26 }}>{evt.currency}</span>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 11.5, fontWeight: 500, color: TEXT_HI, lineHeight: 1.3, wordBreak: "break-word" }}>{evt.title}</div>
+                        <div style={{ display: "flex", gap: 8, marginTop: 3 }}>
+                          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{evt.time}</span>
+                          {evt.forecast && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>F: {evt.forecast}</span>}
+                          {evt.previous && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>P: {evt.previous}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ));
+            })()}
+            <div style={{ padding: "4px 12px 6px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", gap: 10 }}>
+                {["High","Medium","Low"].map(imp => (
+                  <div key={imp} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {impactDot(imp)}
+                    <span style={{ fontSize: 9, color: "rgba(255,255,255,0.30)" }}>{imp}</span>
+                  </div>
+                ))}
+              </div>
+              <span style={{ fontSize: 9, color: "rgba(255,255,255,0.20)" }}>ForexFactory</span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── OrderBook component ───────────────────────────────────────────────────────
 const OB_BID_COLOR  = "#00E08A";
 const OB_ASK_COLOR  = "#FF5B5B";
@@ -2929,51 +3381,9 @@ function makeOBRows(n: number): OBRowRef[] {
 function OrderBook({ symbol, expanded, onToggle, broker }: {
   symbol: string; expanded: boolean; onToggle: () => void; broker?: ResolvedBroker;
 }) {
-  // cTrader order book not available via ProtoOA REST — show informational placeholder
+  // cTrader: use real live DOM from ProtoOA DEPTH_EVENT
   if (broker === "ctrader") {
-    return (
-      <div style={{
-        border:"1px solid rgba(255,255,255,0.07)", borderRadius:10, overflow:"hidden",
-        background:"#111111",
-      }}>
-        <button
-          onClick={onToggle}
-          style={{
-            width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
-            padding:"8px 12px", background:"rgba(255,255,255,0.04)", border:"none",
-            cursor:"pointer", touchAction:"manipulation",
-          }}
-        >
-          <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-            <span style={{ fontSize:11, fontWeight:600, color:"rgba(255,255,255,0.55)", letterSpacing:"0.06em", textTransform:"uppercase" }}>
-              Order Book
-            </span>
-            <span style={{
-              fontSize:9.5, fontWeight:700, letterSpacing:"0.06em", textTransform:"uppercase",
-              padding:"1px 6px", borderRadius:4,
-              background:"rgba(56,189,248,0.12)", color:"#38bdf8",
-            }}>cTRADER</span>
-          </div>
-          <ChevronDown style={{
-            width:13, height:13, color:"rgba(255,255,255,0.35)", flexShrink:0,
-            transform: expanded ? "rotate(180deg)" : "rotate(0deg)",
-            transition:"transform 0.22s ease",
-          }} />
-        </button>
-        <div style={{ maxHeight: expanded ? 120 : 0, overflow:"hidden", transition:"max-height 0.3s ease" }}>
-          <div style={{
-            padding:"14px 16px", display:"flex", flexDirection:"column", gap:6, alignItems:"center",
-          }}>
-            <span style={{ fontSize:12, color:"rgba(255,255,255,0.40)", textAlign:"center", lineHeight:1.5 }}>
-              Order Book not available for this broker/account.
-            </span>
-            <span style={{ fontSize:11, color:"rgba(255,255,255,0.25)", textAlign:"center" }}>
-              DOM data requires a cTrader Pro account with Level II access.
-            </span>
-          </div>
-        </div>
-      </div>
-    );
+    return <CtraderOrderBook symbol={symbol} expanded={expanded} onToggle={onToggle} />;
   }
 
   const { bidsRef, asksRef, status, bidCount, askCount, setOnUpdate, diag, pollCountRef } =
@@ -3428,6 +3838,8 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [submitted,      setSubmitted]      = useState(false);
   const [contractExpanded, setContractExpanded] = useState(false);
   const [obExpanded,        setObExpanded]        = useState(false);
+  const [statsExpanded,     setStatsExpanded]     = useState(false);
+  const [calExpanded,       setCalExpanded]       = useState(false);
   type BrokerContractSpec = {
     broker: "delta" | "ctrader"; symbol: string; fetchedAt: number;
     description: string; maxLeverageNum: number; lotSizeNum: number;
@@ -4059,6 +4471,22 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </div>
+
+          {/* Trade Statistics — cTrader only, real closed-deal history */}
+          {activeBroker === "ctrader" && (
+            <TradeStatisticsSection
+              symbol={symbol}
+              expanded={statsExpanded}
+              onToggle={() => setStatsExpanded(v => !v)}
+            />
+          )}
+
+          {/* Economic Calendar — events relevant to this symbol's currencies */}
+          <MarketCalendarSection
+            symbol={symbol}
+            expanded={calExpanded}
+            onToggle={() => setCalExpanded(v => !v)}
+          />
 
           {/* Buy / Sell toggle */}
           <div style={{ display:"flex", gap:7, padding:"12px 14px 0" }}>
