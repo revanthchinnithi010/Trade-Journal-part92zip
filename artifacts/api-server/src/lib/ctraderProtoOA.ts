@@ -1203,8 +1203,11 @@ export async function fetchSingleSymbolSpec(opts: {
 //   Tiers sorted ascending by volume. Last tier's leverage applies above its volume too.
 
 export interface DynamicLeverageTier {
-  volumeUsdCents: number;  // max USD notional in cents at which this tier applies
-  leverage:       number;  // leverage ratio, e.g. 500 = 1:500
+  volumeUsdCents: number;  // max USD notional in cents at which this tier applies.
+                           // A very large sentinel value (≥1e12) means "no upper limit" / flat leverage.
+  leverage:       number;  // leverage ratio AFTER dividing raw proto value by 100.
+                           // e.g. raw=50000 → stored here as 500 → displayed as 1:500.
+                           // (ProtoOADynamicLeverageTier.leverage is in "cents", same as ProtoOATrader.leverageInCents)
 }
 
 function mkDynamicLeverageReq(ctidTraderAccountId: number, leverageId: number): Buffer {
@@ -1274,32 +1277,77 @@ export async function fetchDynamicLeverage(opts: {
 
       if (pt === PT_DYN_LEV_RES && step === "dyn_lev") {
         try {
-          // ProtoOAGetDynamicLeverageByIDRes: field3 = ProtoOADynamicLeverage
+          // ── Full raw payload dump for diagnostic verification ────────────────
+          const rawPayloadHex = payload.toString("hex").replace(/(.{2})/g, "$1 ").trim();
+          logger.info({
+            leverageId,
+            payloadBytes: payload.length,
+            payloadHex:   rawPayloadHex,
+          }, "ProtoOA fetchDynamicLeverage: PT2178 raw payload");
+
+          // ProtoOAGetDynamicLeverageByIDRes: field2=ctidTraderAccountId, field3=ProtoOADynamicLeverage
           const outer     = parseMsgFull(payload);
+          logger.info({
+            leverageId,
+            outerFields: outer.map(f => ({
+              fn: f.fn, wt: f.wt,
+              v: f.wt === 0 ? f.v : `<bytes:${(f.v as Buffer).length}>`,
+            })),
+          }, "ProtoOA fetchDynamicLeverage: outer fields");
+
           const dynLevBuf = fGetBytes(outer, 3);
           if (!dynLevBuf) {
-            logger.warn({ leverageId }, "ProtoOA fetchDynamicLeverage: no sub-message in RES — returning empty");
+            logger.warn({
+              leverageId,
+              outerFieldNumbers: outer.map(f => f.fn),
+              note: "Expected field3 (ProtoOADynamicLeverage) in GET_DYNAMIC_LEVERAGE_RES — not found",
+            }, "ProtoOA fetchDynamicLeverage: no ProtoOADynamicLeverage sub-message — returning empty");
             finish([]);
             return;
           }
 
-          // ProtoOADynamicLeverage: field2 = repeated ProtoOADynamicLeverageTier
-          const dynLev  = parseMsgFull(dynLevBuf);
+          // ProtoOADynamicLeverage: field1=leverageId, field2=repeated ProtoOADynamicLeverageTier
+          const dynLev   = parseMsgFull(dynLevBuf);
           const tierBufs = fGetAllBytes(dynLev, 2);
 
-          const tiers: DynamicLeverageTier[] = tierBufs
-            .map(b => {
-              const tf = parseMsgFull(b);
-              return {
-                volumeUsdCents: fGetVar(tf, 1),
-                leverage:       fGetVar(tf, 2),
-              };
-            })
-            .filter(t => t.leverage > 0);
+          logger.info({
+            leverageId,
+            dynLevEntityId:   fGetVar(dynLev, 1),
+            tierCount:        tierBufs.length,
+            dynLevHex:        dynLevBuf.toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+          }, "ProtoOA fetchDynamicLeverage: ProtoOADynamicLeverage parsed");
 
-          logger.info({ leverageId, tiers }, "ProtoOA fetchDynamicLeverage: ✓");
+          const rawTiers = tierBufs.map((b, i) => {
+            const tf     = parseMsgFull(b);
+            const vol    = fGetVar(tf, 1);   // int64 max USD notional cents for this tier
+            const rawLev = fGetVar(tf, 2);   // int32 leverage stored in "cents" (×100), same as ProtoOATrader.leverageInCents
+            return {
+              tierIndex:        i,
+              rawVolumeField:   vol,
+              rawLeverage:      rawLev,
+              leverage:         Math.round(rawLev / 100),  // divide by 100 to get actual ratio, e.g. 50000 → 500 = 1:500
+              sentinelVolume:   vol >= 1e12,                // $10B+ means "no upper limit" / flat leverage
+              tierHex:          b.toString("hex").replace(/(.{2})/g, "$1 ").trim(),
+              allFields:        tf.map(f => ({ fn: f.fn, wt: f.wt, v: f.wt === 0 ? f.v : `<bytes:${(f.v as Buffer).length}>` })),
+            };
+          });
+
+          logger.info({ leverageId, rawTiers }, "ProtoOA fetchDynamicLeverage: raw tier data (rawLeverage÷100=leverage)");
+
+          const tiers: DynamicLeverageTier[] = rawTiers
+            .filter(t => t.rawLeverage > 0)
+            .map(t => ({
+              volumeUsdCents: t.rawVolumeField,
+              leverage:       t.leverage,  // already divided by 100
+            }))
+            // Defensive sort: ascending by volume cap so tier[0] always has smallest cap
+            // (and typically highest leverage), regardless of broker ordering.
+            .sort((a, b) => a.volumeUsdCents - b.volumeUsdCents);
+
+          logger.info({ leverageId, tiers }, "ProtoOA fetchDynamicLeverage: ✓ final tiers (sorted by volume asc)");
           finish(tiers);
         } catch (e) {
+          logger.error({ leverageId, err: String(e) }, "ProtoOA fetchDynamicLeverage: parse error");
           finish(null, `parse error: ${String(e)}`);
         }
         return;

@@ -4,7 +4,7 @@ import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
 import {
   fetchSingleSymbolSpec, fetchTraderInfo, fetchDynamicLeverage, fetchAssetList,
-  type CtraderAsset, type DynamicLeverageTier,
+  type CtraderAsset, type DynamicLeverageTier, type CtraderSymbolSpec,
 } from "../lib/ctraderProtoOA.js";
 
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
@@ -123,9 +123,10 @@ export interface BrokerContractSpec {
   /**
    * Symbol-specific maximum leverage — DISTINCT from account leverage. For Delta this is
    * read directly from the product's own max_leverage / initial_margin (always real,
-   * per-contract). For cTrader this is null (no verified per-symbol margin/leverage field
-   * is currently exposed by ProtoOASymbol) — the UI must show "Broker Managed" and must
-   * NEVER fall back to the account leverage value.
+   * per-contract). For cTrader this is read from ProtoOADynamicLeverage (PT 2177/2178)
+   * via the leverageId in ProtoOASymbol field 35 — the first (highest-leverage) tier's
+   * ratio after dividing by 100 (stored in "cents" like ProtoOATrader.leverageInCents).
+   * Null only when leverageId is absent in the symbol spec.
    */
   maxSymbolLeverageNum: number | null;
   /** Pip decimal position (e.g. 4 for EURUSD means 1 pip = 0.0001). */
@@ -599,6 +600,7 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     // ProtoOASymbol.leverageId (field 35) links to a ProtoOADynamicLeverage entity.
     // Fetch it if present to get real per-symbol leverage tiers instead of guessing.
     let dynamicTiers: DynamicLeverageTier[] = [];
+    let dynamicLeverageFetchReason: string | null = null;  // set when tiers are empty with a reason
     if (spec.leverageId !== null && spec.leverageId > 0) {
       try {
         dynamicTiers = await fetchDynamicLeverage({
@@ -609,9 +611,13 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
           clientSecret,
           leverageId:          spec.leverageId,
         });
+        if (dynamicTiers.length === 0) {
+          dynamicLeverageFetchReason = `PT2178 received but broker returned 0 tiers for leverageId=${spec.leverageId} (check API console hex dump)`;
+        }
       } catch (dynErr) {
+        dynamicLeverageFetchReason = String(dynErr);
         logger.warn({
-          symbol, leverageId: spec.leverageId, err: String(dynErr),
+          symbol, leverageId: spec.leverageId, err: dynamicLeverageFetchReason,
         }, "contract-spec/ctrader: dynamic leverage fetch failed");
       }
     }
@@ -774,50 +780,85 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     }
 
     // ── Symbol leverage display ───────────────────────────────────────────────
-    // Priority: dynamic tiers (from leverageId) > Broker Managed (no data at all).
-    // We NEVER copy account leverage here — per-symbol leverage can differ.
-    if (dynamicTiers.length > 0) {
-      // Format: "$0–$500K: 1:500  |  $500K–$2M: 1:200  |  $2M+: 1:100"
-      const fmtUsd = (cents: number): string => {
-        const usd = cents / 100;
-        if (usd >= 1_000_000) return `${Number.isInteger(usd / 1_000_000) ? usd / 1_000_000 : (usd / 1_000_000).toFixed(1)}M`;
-        if (usd >= 1_000)     return `${Math.round(usd / 1_000)}K`;
-        return `${Math.round(usd).toLocaleString()}`;
-      };
+    // ProtoOADynamicLeverageTier.leverage is stored ×100 (same "cents" convention
+    // as ProtoOATrader.leverageInCents) — already divided by 100 in fetchDynamicLeverage.
+    // volumeUsdCents ≥ 1e12 ($10B) is a sentinel meaning "all position sizes" — flat leverage.
+    //
+    // Tiers are sorted by volume ascending; tier[0] has the smallest cap → highest leverage ratio.
+    //
+    // We NEVER copy account leverage here — per-symbol leverage is always different.
 
-      // Max leverage = first tier (smallest volume, highest ratio)
-      const maxLev = dynamicTiers[0].leverage;
+    // USD sentinel threshold: $10 billion = 1,000,000,000,000 cents
+    const SENTINEL_USD_CENTS = 1e12;
+
+    const fmtUsdCents = (cents: number): string => {
+      // Returns compact USD string, e.g. 100000000 → "$1M", 500000 → "$5K"
+      const usd = cents / 100;
+      if (usd >= 1e9)  return `${(usd / 1e9).toFixed(usd % 1e9 === 0 ? 0 : 1)}B`;
+      if (usd >= 1e6)  return `${(usd / 1e6).toFixed(usd % 1e6 === 0 ? 0 : 1)}M`;
+      if (usd >= 1e3)  return `${Math.round(usd / 1e3)}K`;
+      return `${Math.round(usd).toLocaleString()}`;
+    };
+
+    if (dynamicTiers.length > 0) {
+      // Determine if this is flat (all tiers use sentinel) or truly tiered
+      const isFlatLeverage = dynamicTiers.every(t => t.volumeUsdCents >= SENTINEL_USD_CENTS);
+
+      // Max leverage = first tier (smallest volume cap → highest leverage ratio)
+      const maxLev = dynamicTiers[0]!.leverage;
       maxSymbolLeverageNum   = maxLev;
       maxSymbolLeverageLabel = `1:${maxLev}`;
-      extFields.push({ label: "Max Symbol Leverage", value: maxSymbolLeverageLabel });
 
-      if (dynamicTiers.length > 1) {
-        // Each tier's `volumeUsdCents` is the INCLUSIVE max for that tier.
-        // The next tier starts exclusively above it, so we use "> prev" notation
-        // to make the boundary semantics unambiguous.
+      logger.info({
+        symbol, leverageId: spec.leverageId,
+        isFlatLeverage, tierCount: dynamicTiers.length,
+        tiers: dynamicTiers.map(t => ({ volumeUsdCents: t.volumeUsdCents, leverage: t.leverage })),
+      }, "contract-spec/ctrader: leverage display resolved");
+
+      if (isFlatLeverage) {
+        // Single flat leverage applies to all position sizes
+        extFields.push({ label: "Dynamic Leverage", value: `1:${maxLev}` });
+      } else {
+        // Real tiered structure with different leverage ratios by position size
+        // Filter out any sentinel-capped final tier (it acts as "and above")
         const tierLines = dynamicTiers.map((t, i) => {
-          const isFirst = i === 0;
-          const isLast  = i === dynamicTiers.length - 1;
-          const toStr   = fmtUsd(t.volumeUsdCents);
-          if (isFirst) {
-            // 0 – $500K (inclusive): 1:500
-            return isLast ? `All: 1:${t.leverage}` : `0–${toStr}: 1:${t.leverage}`;
+          const isFirst   = i === 0;
+          const isLast    = i === dynamicTiers.length - 1;
+          const isSentinel = t.volumeUsdCents >= SENTINEL_USD_CENTS;
+
+          // from: exclusive lower bound (">prev" for non-first tiers)
+          const fromStr = isFirst ? "0" : `>${fmtUsdCents(dynamicTiers[i - 1]!.volumeUsdCents)}`;
+
+          if (isSentinel || isLast) {
+            // Last tier: ">[prev] USD" — no upper cap
+            return isFirst
+              ? `All positions: 1:${t.leverage}`
+              : `${fromStr} USD: 1:${t.leverage}`;
           }
-          // >$500K – $2M: 1:200  (lower bound exclusive, matches proto semantics)
-          const prevStr = fmtUsd(dynamicTiers[i - 1]!.volumeUsdCents);
-          return isLast
-            ? `>${prevStr}: 1:${t.leverage}`
-            : `>${prevStr}–${toStr}: 1:${t.leverage}`;
+          // Middle tier: "0–$100K USD"
+          return `${fromStr}–${fmtUsdCents(t.volumeUsdCents)} USD: 1:${t.leverage}`;
         });
-        extFields.push({ label: "Leverage Tiers (by notional)", value: tierLines.join("  |  ") });
+
+        extFields.push({
+          label: "Dynamic Leverage",
+          value: tierLines.join("\n"),
+        });
       }
     } else if (spec.leverageId !== null && spec.leverageId > 0) {
-      // leverageId is present but the tier fetch returned nothing (unlikely — log it)
-      logger.warn({ symbol, leverageId: spec.leverageId }, "contract-spec/ctrader: leverageId set but tiers empty");
-      extFields.push({ label: "Max Symbol Leverage", value: "Dynamic (tiers unavailable)" });
+      // leverageId is present in the symbol spec but the broker returned no tiers.
+      // Show the precise reason — never silently fall back.
+      const reason = dynamicLeverageFetchReason
+        ?? `leverageId=${spec.leverageId} present but PT2178 returned 0 tiers`;
+      logger.warn({ symbol, leverageId: spec.leverageId, reason },
+        "contract-spec/ctrader: leverageId set but tiers empty or fetch failed");
+      extFields.push({
+        label:     "Dynamic Leverage",
+        value:     `Unavailable — ${reason}`,
+        highlight: false,
+      });
     } else {
-      // ProtoOASymbol.leverageId is absent — broker exposed no per-symbol leverage data
-      extFields.push({ label: "Max Symbol Leverage", value: "Broker Managed" });
+      // ProtoOASymbol field 35 (leverageId) is absent — broker has no dynamic leverage profile
+      extFields.push({ label: "Dynamic Leverage", value: "No dynamic leverage profile assigned by broker." });
     }
 
     logger.info({ symbol, lotSizeNum, extCount: extFields.length }, "contract-spec/ctrader: ProtoOA ✓");
@@ -894,6 +935,134 @@ export function createContractInfoRouter(): IRouter {
     }
   });
 
+  // ── Debug: full dynamic-leverage diagnostic for a cTrader symbol ───────────
+  // GET /api/ctrader/debug-leverage/:symbol
+  // Returns raw leverageId, tier hex, all parsed fields. No cache.
+  router.get("/ctrader/debug-leverage/:symbol", async (req, res): Promise<void> => {
+    const symbol = (req.params["symbol"] ?? "").toUpperCase();
+    if (!symbol) { res.status(400).json({ error: "symbol required" }); return; }
+
+    try {
+      // ── Step 1: resolve cTrader account creds (same tables as buildCtraderSpec) ──
+      const [tokRow, cfgRow] = await Promise.all([
+        pool.query<{ access_token_enc: string }>(
+          "SELECT access_token_enc FROM ctrader_tokens ORDER BY id DESC LIMIT 1",
+        ),
+        pool.query<{ account_id: number; is_live: boolean }>(
+          "SELECT account_id, is_live FROM ctrader_spot_config WHERE id=1",
+        ),
+      ]);
+      if (!tokRow.rows.length || !cfgRow.rows.length) {
+        res.status(404).json({ error: "cTrader credentials not configured (check ctrader_tokens + ctrader_spot_config)" });
+        return;
+      }
+      const accessToken = decrypt(tokRow.rows[0]!.access_token_enc);
+      if (!accessToken) { res.status(500).json({ error: "cTrader token decrypt failed" }); return; }
+      const cfg          = cfgRow.rows[0]!;
+      const clientId     = process.env["CTRADER_CLIENT_ID"]    ?? "";
+      const clientSecret = process.env["CTRADER_CLIENT_SECRET"] ?? "";
+      if (!clientId || !clientSecret) {
+        res.status(500).json({ error: "CTRADER_CLIENT_ID/SECRET env not set" }); return;
+      }
+
+      // ── Step 2: look up symbolId from DB ──────────────────────────────────
+      const symRow = await pool.query<{ symbol_id: number; symbol_name: string; description: string }>(
+        "SELECT symbol_id, symbol_name, description FROM ctrader_symbols WHERE UPPER(symbol_name) = $1 LIMIT 1",
+        [symbol],
+      );
+      if (!symRow.rows.length) { res.status(404).json({ error: `Symbol ${symbol} not found in ctrader_symbols` }); return; }
+      const symbolId = symRow.rows[0]!.symbol_id;
+
+      logger.info({ symbol, symbolId, accountId: cfg.account_id, isLive: cfg.is_live },
+        "debug-leverage: starting fresh fetch (no cache)");
+
+      // ── Step 3: fetch symbol spec (gets leverageId from field 35) ─────────
+      const spec: CtraderSymbolSpec = await fetchSingleSymbolSpec({
+        symbolId, ctidTraderAccountId: cfg.account_id,
+        isLive: Boolean(cfg.is_live), accessToken, clientId, clientSecret,
+      });
+
+      const step3 = {
+        symbolId,
+        leverageId:           spec.leverageId,
+        digits:               spec.digits,
+        pipPosition:          spec.pipPosition,
+        lotSize:              spec.lotSize,
+        tradeMode:            spec.tradeMode,
+        minVolume:            spec.minVolume,
+        maxVolume:            spec.maxVolume,
+        specDurationMs:       spec.durationMs,
+        verdict: spec.leverageId !== null && spec.leverageId > 0
+          ? `leverageId=${spec.leverageId} found — will attempt dynamic leverage fetch`
+          : "leverageId absent (null/0) — broker has no dynamic leverage profile for this symbol",
+      };
+      logger.info(step3, "debug-leverage: symbol spec result");
+
+      if (!spec.leverageId || spec.leverageId <= 0) {
+        res.json({ symbol, symbolId, step3, step4: null, conclusion: step3.verdict });
+        return;
+      }
+
+      // ── Step 4: fetch dynamic leverage tiers (PT2177 → PT2178) ───────────
+      // fetchDynamicLeverage logs full hex at INFO level — check API server console
+      let tiers: DynamicLeverageTier[] = [];
+      let fetchError: string | null = null;
+      try {
+        tiers = await fetchDynamicLeverage({
+          ctidTraderAccountId: cfg.account_id,
+          isLive:              Boolean(cfg.is_live),
+          accessToken, clientId, clientSecret,
+          leverageId: spec.leverageId,
+        });
+      } catch (e) {
+        fetchError = String(e);
+        logger.error({ symbol, leverageId: spec.leverageId, err: fetchError },
+          "debug-leverage: PT2177→PT2178 fetch threw");
+      }
+
+      // CONFIRMED: ProtoOADynamicLeverageTier.leverage is stored ×100 (same as ProtoOATrader.leverageInCents)
+      // fetchDynamicLeverage already divides by 100. tiers[].leverage is the TRUE ratio (e.g. 500 = 1:500).
+      // volumeUsdCents ≥ 1e12 ($10B) is a sentinel meaning "flat leverage, no upper cap".
+      const SENTINEL = 1e12;
+      const step4 = {
+        leverageId:  spec.leverageId,
+        fetchError,
+        tierCount: tiers.length,
+        isFlatLeverage: tiers.length > 0 && tiers.every(t => t.volumeUsdCents >= SENTINEL),
+        tiers: tiers.map(t => ({
+          volumeUsdCents:    t.volumeUsdCents,
+          volumeUsd:         `${(t.volumeUsdCents / 100).toLocaleString()}`,
+          isSentinelVolume:  t.volumeUsdCents >= SENTINEL,
+          leverage:          t.leverage,          // already ÷100 — the REAL ratio
+          leverageLabel:     `1:${t.leverage}`,
+        })),
+        note: tiers.length > 0
+          ? `Confirmed: leverage is stored ×100 in proto and already divided. '1:${tiers[0]!.leverage}' is the correct display value.`
+          : fetchError
+            ? `PT2177 sent, fetch threw: ${fetchError}`
+            : "PT2178 received but 0 tiers parsed — check API console for full hex dump",
+      };
+
+      let conclusion: string;
+      if (fetchError) {
+        conclusion = `PT2177/2178 error: ${fetchError}`;
+      } else if (tiers.length === 0) {
+        conclusion = "PT2178 received but 0 tiers parsed — see API console hex dump";
+      } else if (step4.isFlatLeverage) {
+        conclusion = `Flat leverage: 1:${tiers[0]!.leverage} applies to all position sizes (single sentinel-volume tier).`;
+      } else {
+        conclusion = `${tiers.length} real tier(s). Leverage varies by position size. Check 'tiers' array.`;
+      }
+
+      logger.info({ symbol, symbolId, step3, step4, conclusion }, "debug-leverage: complete");
+      res.json({ symbol, symbolId, step3, step4, conclusion });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      logger.error({ symbol, err: msg }, "debug-leverage: fatal error");
+      res.status(500).json({ error: msg });
+    }
+  });
+
   // ── Broker-aware unified spec ──────────────────────────────────────────────
   // GET /api/contract-spec/:symbol?broker=delta|ctrader
   // When ?broker is omitted, auto-detects from symbol (same logic as frontend brokerRouter.ts).
@@ -928,15 +1097,18 @@ export function createContractInfoRouter(): IRouter {
 
     if (!symbol) { res.status(400).json({ error: "Symbol is required" }); return; }
 
+    const force    = req.query["force"] === "1";
     const cacheKey = `${broker}:${symbol}`;
     const hit      = specCache.get(cacheKey);
-    if (hit && Date.now() - hit.fetchedAt < SPEC_CACHE_TTL) {
+    if (!force && hit && Date.now() - hit.fetchedAt < SPEC_CACHE_TTL) {
       res.setHeader("Cache-Control", "public, max-age=60");
       res.json(hit.data);
       return;
     }
+    if (force) specCache.delete(cacheKey);
 
     try {
+      logger.info({ symbol, broker, force }, "contract-spec: building spec");
       const spec = broker === "ctrader"
         ? await buildCtraderSpec(symbol)
         : await buildDeltaSpec(symbol);
