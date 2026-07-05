@@ -3851,8 +3851,9 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   const [submitted,      setSubmitted]      = useState(false);
   const [contractExpanded, setContractExpanded] = useState(false);
   const [obExpanded,        setObExpanded]        = useState(false);
-  const [statsExpanded,     setStatsExpanded]     = useState(false);
-  const [calExpanded,       setCalExpanded]       = useState(false);
+  // lotRawInput: stores the user's in-progress typed string while the qty field is focused.
+  // null = input is at rest; non-null = user is actively editing (commit+clear on blur).
+  const [lotRawInput,       setLotRawInput]       = useState<string | null>(null);
   type BrokerContractSpec = {
     broker: "delta" | "ctrader"; symbol: string; fetchedAt: number;
     description: string; maxLeverageNum: number; lotSizeNum: number;
@@ -4595,22 +4596,6 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
             </div>
           </div>
 
-          {/* Trade Statistics — cTrader only, real closed-deal history */}
-          {activeBroker === "ctrader" && (
-            <TradeStatisticsSection
-              symbol={symbol}
-              expanded={statsExpanded}
-              onToggle={() => setStatsExpanded(v => !v)}
-            />
-          )}
-
-          {/* Economic Calendar — events relevant to this symbol's currencies */}
-          <MarketCalendarSection
-            symbol={symbol}
-            expanded={calExpanded}
-            onToggle={() => setCalExpanded(v => !v)}
-          />
-
           {/* Buy / Sell toggle */}
           <div style={{ display:"flex", gap:7, padding:"12px 14px 0" }}>
             {(["buy","sell"] as const).map(s => (
@@ -4911,24 +4896,37 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                 digits: contractSpec?.digits ?? 5,
               };
               const decrement = () => {
+                setLotRawInput(null); // discard any in-progress typed value
                 const snapped = snapToStep(Math.max(lotMin, lotQty - lotStep), mobileSpec);
                 setLotQty(parseFloat(snapped.toFixed(lotPrec)));
               };
               const increment = () => {
+                setLotRawInput(null); // discard any in-progress typed value
                 const snapped = snapToStep(Math.min(lotMax, lotQty + lotStep), mobileSpec);
                 setLotQty(parseFloat(snapped.toFixed(lotPrec)));
               };
-              const handleChange = (v: string) => {
-                const n = parseFloat(v);
-                if (!isNaN(n) && n > 0) setLotQty(n);
+              // onFocus: seed raw input so the user sees/edits the formatted value
+              const handleFocus = () => {
+                setLotRawInput(lotQty.toFixed(lotPrec));
               };
+              // onChange: allow intermediate states ("0.", "0.05") without forcing a reset.
+              // Only digits and a single decimal point are accepted.
+              const handleChange = (v: string) => {
+                const cleaned = v.replace(/[^0-9.]/g, "");
+                if ((cleaned.match(/\./g) ?? []).length > 1) return;
+                setLotRawInput(cleaned);
+              };
+              // onBlur: validate, snap to step grid, clamp to [min, max], commit.
               const handleBlur = (v: string) => {
+                setLotRawInput(null);
                 const raw = parseFloat(v);
                 if (isNaN(raw) || raw <= 0) { setLotQty(lotMin); return; }
-                // Use shared snapToStep for correct multi-decimal grid alignment
                 const snapped = snapToStep(Math.max(lotMin, Math.min(lotMax, raw)), mobileSpec);
                 setLotQty(parseFloat(snapped.toFixed(lotPrec)));
               };
+              // Display the raw string while typing; formatted number at rest
+              const displayVal = lotRawInput !== null ? lotRawInput : lotQty.toFixed(lotPrec);
+              const isEditing  = lotRawInput !== null;
               return (
                 <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                   <button
@@ -4945,19 +4943,22 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
                   >
                     <Minus style={{ width:14, height:14, color:TEXT_HI }} />
                   </button>
+                  {/* type="text" + inputMode="decimal" gives the numeric keyboard on mobile
+                      while letting intermediate values like "0." persist without the
+                      browser resetting the field mid-type (which type="number" causes). */}
                   <input
-                    type="number" inputMode="decimal"
-                    value={lotQty}
+                    type="text"
+                    inputMode="decimal"
+                    value={displayVal}
+                    onFocus={handleFocus}
                     onChange={e => handleChange(e.target.value)}
                     onBlur={e => handleBlur(e.target.value)}
-                    step={lotStep}
-                    min={lotMin}
-                    max={lotMax}
                     style={{
                       flex:1, height:40, borderRadius:8,
-                      background:TRADE_CARD, border:`1px solid rgba(255,255,255,0.08)`,
+                      background:TRADE_CARD,
+                      border:`1px solid ${isEditing ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)"}`,
                       outline:"none", color:TEXT_HI, fontSize:16, fontWeight:700,
-                      textAlign:"center",
+                      textAlign:"center", transition:"border-color 0.15s",
                     }}
                   />
                   <button
