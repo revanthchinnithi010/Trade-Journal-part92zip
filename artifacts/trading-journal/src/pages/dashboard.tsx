@@ -90,7 +90,7 @@ const StatCard = memo(function StatCard({
   positive?: boolean; accent?: boolean; bar?: number; trend?: string; index?: number;
 }) {
   return (
-    <AnimatedCard index={index} className="stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
+    <AnimatedCard index={index} className="glass-card stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-primary/[0.04] pointer-events-none" />
 
@@ -408,7 +408,7 @@ export default function Dashboard() {
       {/* ── Equity Curve + Weekly PNL ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2">
-          <AnimatedCard index={5} className="h-full">
+          <AnimatedCard index={5} className="glass-card h-full overflow-hidden">
             <div className="p-5 pb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -452,7 +452,7 @@ export default function Dashboard() {
         </div>
 
         <div>
-          <AnimatedCard index={6} className="h-full">
+          <AnimatedCard index={6} className="glass-card h-full overflow-hidden">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <BarChart2 className="w-3.5 h-3.5 text-primary" />
@@ -485,7 +485,7 @@ export default function Dashboard() {
       {/* ── Win/Loss Pie + Calendar ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div>
-          <AnimatedCard index={7} className="h-full">
+          <AnimatedCard index={7} className="glass-card h-full overflow-hidden">
             <div className="p-5 pb-2 flex items-center gap-2">
               <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
                 <Flame className="w-3.5 h-3.5 text-primary" />
@@ -537,7 +537,7 @@ export default function Dashboard() {
         </div>
 
         <div className="lg:col-span-2">
-          <AnimatedCard index={8} className="h-full">
+          <AnimatedCard index={8} className="glass-card h-full overflow-hidden">
             <div className="p-5 pb-2 flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -566,7 +566,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Recent Trades ── */}
-      <AnimatedCard index={9}>
+      <AnimatedCard index={9} className="glass-card overflow-hidden">
         <div className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
