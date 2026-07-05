@@ -65,8 +65,15 @@ function precisionFor(unit: DeltaUnit, dq: DeltaQtySpec): number {
   return dq.quantityMode === "coin" ? dq.quantityPrecision : 0;
 }
 
+/** Round to maxDecimals but drop trailing zeros when the value is a whole number. */
+function smartFixed(v: number, maxDecimals: number): string {
+  if (!isFinite(v)) return "0";
+  const rounded = parseFloat(v.toFixed(maxDecimals));
+  return Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(maxDecimals);
+}
+
 export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props) {
-  const [unit, setUnit]           = useState<DeltaUnit>("native");
+  const [unit, setUnit]           = useState<DeltaUnit>("lot");
   const [unitMenuOpen, setUnitMenuOpen] = useState(false);
   const [displayStr, setDisplayStr]     = useState("");
   const menuRef = useRef<HTMLDivElement>(null);
@@ -111,6 +118,28 @@ export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props
   const stepDisplay = contractsToDisplayQty(dq.stepSizeContracts, dq);
   const atMin = lotQty <= minDisplay;
   const atMax = lotQty >= maxDisplay;
+
+  // Live equivalent line — recomputed on every keystroke from whatever the user
+  // has typed so far (not just the committed/snapped value), so it tracks the
+  // input in real time exactly like the official Delta app.
+  const typed = parseFloat(displayStr);
+  const previewValue = !isNaN(typed) && typed >= 0 ? typed : contractsToUnit(contracts, unit, dq, livePrice) ?? 0;
+  const previewLots = unit === "lot" ? previewValue : (unitToContracts(previewValue, unit, dq, livePrice) ?? 0);
+  const previewNative = previewLots * dq.contractValue;
+  const previewUsd = livePrice && livePrice > 0 ? previewNative * livePrice : null;
+  const asset = dq.contractUnit;
+  const lotWord = (n: number) => (Math.abs(n - 1) < 1e-9 ? "Lot" : "Lots");
+
+  let equivalentText: string;
+  if (unit === "lot") {
+    equivalentText = `${smartFixed(previewLots, 0)} ${lotWord(previewLots)} ≈ ${formatDeltaQty(previewNative, dq)} ${asset}`;
+  } else if (unit === "native") {
+    equivalentText = `${formatDeltaQty(previewNative, dq)} ${asset} = ${smartFixed(previewLots, 2)} ${lotWord(previewLots)}`;
+  } else {
+    equivalentText = previewUsd != null
+      ? `${smartFixed(previewValue, 2)} USD ≈ ${formatDeltaQty(previewNative, dq)} ${asset} (${smartFixed(previewLots, 2)} ${lotWord(previewLots)})`
+      : `≈ ${formatDeltaQty(previewNative, dq)} ${asset} (${smartFixed(previewLots, 2)} ${lotWord(previewLots)})`;
+  }
 
   const commit = (rawContracts: number | null) => {
     if (rawContracts == null || isNaN(rawContracts)) {
@@ -236,9 +265,9 @@ export function DeltaQuantitySection({ dq, lotQty, setLotQty, livePrice }: Props
         </button>
       </div>
 
-      {/* Helper text — 1 Lot = X BTC, below the input */}
+      {/* Live equivalent — updates on every keystroke as the user types */}
       <div style={{ marginTop: 5, fontSize: 10, color: TEXT_DIM, fontWeight: 600 }}>
-        {`1 Lot = ${formatDeltaQty(dq.contractValue, dq)} ${dq.contractUnit}`}
+        {equivalentText}
       </div>
 
       {/* Min / Max / Step */}
