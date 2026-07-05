@@ -29,12 +29,17 @@ const PT = {
   HEARTBEAT_EVENT:  51,
 } as const;
 
+// Dynamic leverage payload types (confirmed from OpenApiModelMessages.proto PayloadType enum)
+const PT_DYN_LEV_REQ = 2177; // PROTO_OA_GET_DYNAMIC_LEVERAGE_REQ
+const PT_DYN_LEV_RES = 2178; // PROTO_OA_GET_DYNAMIC_LEVERAGE_RES
+
 const PT_NAME: Record<number, string> = {
-  2100: "APP_AUTH_REQ",       2101: "APP_AUTH_RES",
-  2102: "ACCT_AUTH_REQ",      2103: "ACCT_AUTH_RES",
-  2114: "SYMBOLS_LIST_REQ",   2115: "SYMBOLS_LIST_RES",
-  2116: "SYMBOL_BY_ID_REQ",   2117: "SYMBOL_BY_ID_RES",
+  2100: "APP_AUTH_REQ",          2101: "APP_AUTH_RES",
+  2102: "ACCT_AUTH_REQ",         2103: "ACCT_AUTH_RES",
+  2114: "SYMBOLS_LIST_REQ",      2115: "SYMBOLS_LIST_RES",
+  2116: "SYMBOL_BY_ID_REQ",      2117: "SYMBOL_BY_ID_RES",
   2142: "ERROR_RES",
+  2177: "GET_DYN_LEVERAGE_REQ",  2178: "GET_DYN_LEVERAGE_RES",
   51:   "HEARTBEAT_EVENT",
 };
 
@@ -1018,6 +1023,11 @@ export interface CtraderSymbolSpec {
   measurementUnits:    string | null;   // field 40
   swapPeriod:          number | null;   // field 36 (hours)
   schedule:            Array<{ startSecond: number; endSecond: number }>; // field 13, repeated ProtoOAInterval
+  // ── Leverage / margin fields ──────────────────────────────────────────────────
+  // field 35: leverageId → links to ProtoOADynamicLeverage (fetch via PT 2177/2178)
+  // NOTE: ProtoOASymbol has NO direct marginRate field. Field 13 = trading schedule.
+  // ProtoOATradingMode/marginRate fields belong to ProtoOADeal and ProtoOAPosition, not ProtoOASymbol.
+  leverageId:          number | null;   // field 35: ID for dynamic leverage entity; null = no dynamic leverage
   durationMs:          number;
 }
 
@@ -1114,6 +1124,31 @@ export async function fetchSingleSymbolSpec(opts: {
             const endSecond   = intf.find(x => x.fn === 4 && x.wt === 0)?.v as number | undefined;
             return { startSecond: startSecond ?? 0, endSecond: endSecond ?? 0 };
           }).filter(s => s.endSecond > 0);
+          // ── All raw field values for diagnostic logging ──────────────────────
+          const rawLeverageId = getVar(35); // field 35: dynamic leverage entity ID
+          // Note: ProtoOASymbol has no marginRate field. Field 13 = repeated ProtoOAInterval (schedule).
+          // All margin-related fields below are the complete set per the .proto source.
+          logger.info({
+            symbolId,
+            // Volume / lot fields
+            f9_maxVolume:             getVar(9),
+            f10_minVolume:            getVar(10),
+            f11_stepVolume:           getVar(11),
+            f12_maxExposure:          getVar(12),
+            f30_lotSize_cents:        getVar(30),
+            // Leverage / margin fields
+            f35_leverageId:           rawLeverageId,
+            // Distance / protection fields
+            f16_slDistance:           getVar(16),
+            f17_tpDistance:           getVar(17),
+            f18_gslDistance:          getVar(18),
+            // Trade control
+            f27_tradingMode:          getVar(27),
+            // No marginRate on ProtoOASymbol — field 13 is repeated ProtoOAInterval (schedule)
+            note: "ProtoOASymbol.marginRate does not exist. Field 13 = trading schedule. " +
+                  "Leverage is in field 35 (leverageId → ProtoOADynamicLeverage) or ProtoOATrader.leverageInCents.",
+          }, "ProtoOA fetchSingleSymbolSpec: raw margin/leverage fields");
+
           const spec: CtraderSymbolSpec = {
             symbolId:             getVar(1) ?? symbolId,
             digits:               getVar(2) ?? 5,
@@ -1138,6 +1173,7 @@ export async function fetchSingleSymbolSpec(opts: {
             measurementUnits:     getStr(40),
             swapPeriod:           getVar(36),
             schedule,
+            leverageId:           rawLeverageId,
             durationMs:           Date.now() - t0,
           };
 
@@ -1147,6 +1183,122 @@ export async function fetchSingleSymbolSpec(opts: {
             minVolume: spec.minVolume, durationMs: spec.durationMs,
           }, "ProtoOA fetchSingleSymbolSpec: ✓");
           finish(spec);
+        } catch (e) {
+          finish(null, `parse error: ${String(e)}`);
+        }
+        return;
+      }
+    };
+  });
+}
+
+// ── ProtoOAGetDynamicLeverageByIDReq (PT 2177 / 2178) ─────────────────────────
+// Fetches leverage tiers for a symbol via leverageId from ProtoOASymbol field 35.
+// Flow: APP_AUTH → ACCT_AUTH → GET_DYNAMIC_LEVERAGE_REQ → GET_DYNAMIC_LEVERAGE_RES
+//
+// ProtoOAGetDynamicLeverageByIDReq: field2=ctidTraderAccountId, field3=leverageId
+// ProtoOAGetDynamicLeverageByIDRes: field3=ProtoOADynamicLeverage
+//   ProtoOADynamicLeverage: field1=leverageId, field2=repeated ProtoOADynamicLeverageTier
+//   ProtoOADynamicLeverageTier: field1=volume (max USD cents), field2=leverage (e.g. 500 = 1:500)
+//   Tiers sorted ascending by volume. Last tier's leverage applies above its volume too.
+
+export interface DynamicLeverageTier {
+  volumeUsdCents: number;  // max USD notional in cents at which this tier applies
+  leverage:       number;  // leverage ratio, e.g. 500 = 1:500
+}
+
+function mkDynamicLeverageReq(ctidTraderAccountId: number, leverageId: number): Buffer {
+  return buildFrame(PT_DYN_LEV_REQ, [
+    ...u32f(1, PT_DYN_LEV_REQ),
+    ...u32f(2, ctidTraderAccountId),
+    ...u32f(3, leverageId),   // leverageId is int64 in proto; varint encoding handles JS safe integers
+  ]);
+}
+
+export async function fetchDynamicLeverage(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  leverageId:          number;
+  timeoutMs?:          number;
+}): Promise<DynamicLeverageTier[]> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, leverageId, timeoutMs = 10_000,
+  } = opts;
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+
+  logger.info({ ctidTraderAccountId, leverageId, isLive, host }, "ProtoOA fetchDynamicLeverage: starting");
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish(null, `timeout after ${timeoutMs}ms`), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(tiers: DynamicLeverageTier[] | null, err?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      if (err) reject(new Error(err));
+      else resolve(tiers ?? []);
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish(null, `socket error: ${e.message}`);
+    conn.onClose   = () => { if (!settled) finish(null, "connection closed"); };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        finish(null, `ProtoOA error ${errorCode}: ${description}`);
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "dyn_lev";
+        conn.write("GetDynamicLeverageReq", mkDynamicLeverageReq(ctidTraderAccountId, leverageId));
+        return;
+      }
+
+      if (pt === PT_DYN_LEV_RES && step === "dyn_lev") {
+        try {
+          // ProtoOAGetDynamicLeverageByIDRes: field3 = ProtoOADynamicLeverage
+          const outer     = parseMsgFull(payload);
+          const dynLevBuf = fGetBytes(outer, 3);
+          if (!dynLevBuf) {
+            logger.warn({ leverageId }, "ProtoOA fetchDynamicLeverage: no sub-message in RES — returning empty");
+            finish([]);
+            return;
+          }
+
+          // ProtoOADynamicLeverage: field2 = repeated ProtoOADynamicLeverageTier
+          const dynLev  = parseMsgFull(dynLevBuf);
+          const tierBufs = fGetAllBytes(dynLev, 2);
+
+          const tiers: DynamicLeverageTier[] = tierBufs
+            .map(b => {
+              const tf = parseMsgFull(b);
+              return {
+                volumeUsdCents: fGetVar(tf, 1),
+                leverage:       fGetVar(tf, 2),
+              };
+            })
+            .filter(t => t.leverage > 0);
+
+          logger.info({ leverageId, tiers }, "ProtoOA fetchDynamicLeverage: ✓");
+          finish(tiers);
         } catch (e) {
           finish(null, `parse error: ${String(e)}`);
         }

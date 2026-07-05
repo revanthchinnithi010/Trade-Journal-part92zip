@@ -2,7 +2,10 @@ import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
-import { fetchSingleSymbolSpec, fetchTraderInfo, fetchAssetList, type CtraderAsset } from "../lib/ctraderProtoOA.js";
+import {
+  fetchSingleSymbolSpec, fetchTraderInfo, fetchDynamicLeverage, fetchAssetList,
+  type CtraderAsset, type DynamicLeverageTier,
+} from "../lib/ctraderProtoOA.js";
 
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
 const CACHE_TTL_MS     = 5  * 60 * 1_000;
@@ -572,14 +575,46 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
       logger.warn({ symbol, err: String(traderResult.reason) }, "contract-spec/ctrader: trader info fetch skipped");
     }
 
-    // ── Symbol-specific max leverage — NEVER assume this equals account leverage ──
-    // cTrader's ProtoOASymbol (as parsed by fetchSingleSymbolSpec) does not expose a
-    // verified per-symbol margin-requirement or leverage field — only account-wide
-    // leverage is available via ProtoOATrader (handled above). If a genuine
-    // margin-requirement percentage is ever available, convert it via
-    // marginPctToMaxLeverage(); until then, show "Broker Managed" rather than
-    // fabricating or reusing the account leverage value.
-    extFields.push({ label: "Max Symbol Leverage", value: maxSymbolLeverageLabel });
+    // ── Raw margin/leverage diagnostic log ────────────────────────────────────
+    // Print every field from ProtoOASymbol that is margin or leverage related.
+    // leverageId (field 35) is the ONLY way cTrader exposes per-symbol leverage.
+    // ProtoOASymbol has no marginRate field — field 13 is the trading schedule.
+    logger.info({
+      symbol,
+      f35_leverageId:       spec.leverageId,
+      f9_maxVolume:         spec.maxVolume,
+      f10_minVolume:        spec.minVolume,
+      f11_stepVolume:       spec.stepVolume,
+      f30_lotSize_units:    spec.lotSize,
+      f27_tradeMode:        spec.tradeMode,
+      f34_pnlConvFeeRate:   spec.pnlConversionFeeRate,
+      accountLeverage:      leverageNum,
+      accountMaxLeverage:   maxLeverageNum,
+      verdict: spec.leverageId !== null
+        ? `leverageId=${spec.leverageId} — will fetch dynamic tiers`
+        : "leverageId absent — no per-symbol leverage data; will show Broker Managed",
+    }, "contract-spec/ctrader: raw margin/leverage fields");
+
+    // ── Dynamic leverage fetch ─────────────────────────────────────────────────
+    // ProtoOASymbol.leverageId (field 35) links to a ProtoOADynamicLeverage entity.
+    // Fetch it if present to get real per-symbol leverage tiers instead of guessing.
+    let dynamicTiers: DynamicLeverageTier[] = [];
+    if (spec.leverageId !== null && spec.leverageId > 0) {
+      try {
+        dynamicTiers = await fetchDynamicLeverage({
+          ctidTraderAccountId: cfg.account_id,
+          isLive:              Boolean(cfg.is_live),
+          accessToken,
+          clientId,
+          clientSecret,
+          leverageId:          spec.leverageId,
+        });
+      } catch (dynErr) {
+        logger.warn({
+          symbol, leverageId: spec.leverageId, err: String(dynErr),
+        }, "contract-spec/ctrader: dynamic leverage fetch failed");
+      }
+    }
 
     const TRADE_MODES: Record<number, string> = { 0: "Enabled", 1: "Disabled", 2: "Close Only" };
     const SWAP_TYPES:  Record<number, string>  = { 0: "Points / Day", 1: "% / Year" };
@@ -736,6 +771,53 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
         extFields.push({ label: "Base Asset",  value: pair.base });
         extFields.push({ label: "Quote Asset", value: pair.quote });
       }
+    }
+
+    // ── Symbol leverage display ───────────────────────────────────────────────
+    // Priority: dynamic tiers (from leverageId) > Broker Managed (no data at all).
+    // We NEVER copy account leverage here — per-symbol leverage can differ.
+    if (dynamicTiers.length > 0) {
+      // Format: "$0–$500K: 1:500  |  $500K–$2M: 1:200  |  $2M+: 1:100"
+      const fmtUsd = (cents: number): string => {
+        const usd = cents / 100;
+        if (usd >= 1_000_000) return `${Number.isInteger(usd / 1_000_000) ? usd / 1_000_000 : (usd / 1_000_000).toFixed(1)}M`;
+        if (usd >= 1_000)     return `${Math.round(usd / 1_000)}K`;
+        return `${Math.round(usd).toLocaleString()}`;
+      };
+
+      // Max leverage = first tier (smallest volume, highest ratio)
+      const maxLev = dynamicTiers[0].leverage;
+      maxSymbolLeverageNum   = maxLev;
+      maxSymbolLeverageLabel = `1:${maxLev}`;
+      extFields.push({ label: "Max Symbol Leverage", value: maxSymbolLeverageLabel });
+
+      if (dynamicTiers.length > 1) {
+        // Each tier's `volumeUsdCents` is the INCLUSIVE max for that tier.
+        // The next tier starts exclusively above it, so we use "> prev" notation
+        // to make the boundary semantics unambiguous.
+        const tierLines = dynamicTiers.map((t, i) => {
+          const isFirst = i === 0;
+          const isLast  = i === dynamicTiers.length - 1;
+          const toStr   = fmtUsd(t.volumeUsdCents);
+          if (isFirst) {
+            // 0 – $500K (inclusive): 1:500
+            return isLast ? `All: 1:${t.leverage}` : `0–${toStr}: 1:${t.leverage}`;
+          }
+          // >$500K – $2M: 1:200  (lower bound exclusive, matches proto semantics)
+          const prevStr = fmtUsd(dynamicTiers[i - 1]!.volumeUsdCents);
+          return isLast
+            ? `>${prevStr}: 1:${t.leverage}`
+            : `>${prevStr}–${toStr}: 1:${t.leverage}`;
+        });
+        extFields.push({ label: "Leverage Tiers (by notional)", value: tierLines.join("  |  ") });
+      }
+    } else if (spec.leverageId !== null && spec.leverageId > 0) {
+      // leverageId is present but the tier fetch returned nothing (unlikely — log it)
+      logger.warn({ symbol, leverageId: spec.leverageId }, "contract-spec/ctrader: leverageId set but tiers empty");
+      extFields.push({ label: "Max Symbol Leverage", value: "Dynamic (tiers unavailable)" });
+    } else {
+      // ProtoOASymbol.leverageId is absent — broker exposed no per-symbol leverage data
+      extFields.push({ label: "Max Symbol Leverage", value: "Broker Managed" });
     }
 
     logger.info({ symbol, lotSizeNum, extCount: extFields.length }, "contract-spec/ctrader: ProtoOA ✓");
