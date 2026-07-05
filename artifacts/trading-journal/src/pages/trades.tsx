@@ -1287,6 +1287,6 @@ export default function Trades() {
           )}
         </SheetContent>
       </Sheet>
-    </div>
+    </PageTransition>
   );
 }

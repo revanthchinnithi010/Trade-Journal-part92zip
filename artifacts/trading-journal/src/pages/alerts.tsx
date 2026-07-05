@@ -29,6 +29,7 @@ import {
   AnimatedButton,
   AnimatedIconButton,
   AnimatedModal,
+  NumberCounter,
 } from "@/components/animations";
 
 // ─── Small helpers ─────────────────────────────────────────────────────────────

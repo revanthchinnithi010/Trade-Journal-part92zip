@@ -30,6 +30,10 @@ interface AnimatedButtonProps extends SafeButtonProps {
   hoverLift?:  number;
   /** Disable all motion (e.g. when button is logically disabled) */
   noMotion?:   boolean;
+  /** Cosmetic variant — purely a styling hint, consumers style via className */
+  variant?:    "default" | "outline" | "ghost" | "destructive" | "secondary";
+  /** Cosmetic size hint — purely a styling hint, consumers style via className */
+  size?:       "default" | "sm" | "lg" | "icon";
 }
 
 export function AnimatedButton({
@@ -40,6 +44,8 @@ export function AnimatedButton({
   noMotion   = false,
   disabled,
   style,
+  variant: _variant,
+  size: _size,
   ...rest
 }: AnimatedButtonProps) {
   const reduced = useReducedMotion();
@@ -74,6 +80,10 @@ export function AnimatedButton({
 interface AnimatedIconButtonProps extends SafeButtonProps {
   rotateOnHover?: number;
   noMotion?:      boolean;
+  /** Cosmetic variant — purely a styling hint, consumers style via className */
+  variant?:       "default" | "outline" | "ghost" | "destructive" | "secondary";
+  /** Cosmetic size hint — purely a styling hint, consumers style via className */
+  size?:          "default" | "sm" | "lg" | "icon";
 }
 
 export function AnimatedIconButton({
@@ -82,6 +92,8 @@ export function AnimatedIconButton({
   noMotion      = false,
   disabled,
   style,
+  variant: _variant,
+  size: _size,
   ...rest
 }: AnimatedIconButtonProps) {
   const reduced = useReducedMotion();

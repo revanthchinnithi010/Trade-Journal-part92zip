@@ -30,9 +30,6 @@ import {
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
 
-const DASHBOARD_TIMEOUT_MS = 2_000;
-
-
 const GREEN = "hsl(145 58% 52%)";
 const RED   = "hsl(0 68% 58%)";
 const PURPLE = "#60a5fa";

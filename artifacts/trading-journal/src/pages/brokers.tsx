@@ -21,6 +21,7 @@ import {
   type BrokerName,
 } from "@/data/brokerData";
 import {
+  AnimatedPresenceList,
   PageTransition,
   AnimatedCard,
   AnimatedButton,
@@ -958,6 +959,7 @@ export default function Brokers() {
             ))}
           </div>
         </AnimatedCard>
+      </div>
       </div>
     </PageTransition>
   );

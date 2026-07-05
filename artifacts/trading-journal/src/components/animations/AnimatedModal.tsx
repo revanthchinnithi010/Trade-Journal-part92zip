@@ -18,9 +18,13 @@ import {
 } from "@/animations/motion";
 
 interface AnimatedModalProps {
-  open:         boolean;
+  open?:        boolean;
+  /** Alias for `open`, for call sites that pass `isOpen` */
+  isOpen?:      boolean;
   onClose:      () => void;
   children:     React.ReactNode;
+  /** Optional title — rendered as a simple header when provided */
+  title?:       string;
   /** "dialog" (centered) or "sheet" (bottom drawer). Default: "dialog" */
   mode?:        "dialog" | "sheet";
   /** Extra classes on the inner content panel */
@@ -34,8 +38,10 @@ interface AnimatedModalProps {
 
 export function AnimatedModal({
   open,
+  isOpen,
   onClose,
   children,
+  title,
   mode           = "dialog",
   panelClassName,
   panelStyle,
@@ -43,10 +49,11 @@ export function AnimatedModal({
   backdrop       = true,
 }: AnimatedModalProps) {
   const reduced = useReducedMotion();
+  const isVisible = open ?? isOpen ?? false;
 
   const content = (
     <AnimatePresence>
-      {open && (
+      {isVisible && (
         <>
           {/* Backdrop */}
           {backdrop && (
@@ -90,6 +97,11 @@ export function AnimatedModal({
             }}
             className={panelClassName}
           >
+            {title && (
+              <div style={{ padding: "14px 16px 0", fontSize: 14, fontWeight: 700, color: "white" }}>
+                {title}
+              </div>
+            )}
             {children}
           </motion.div>
         </>

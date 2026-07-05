@@ -503,7 +503,7 @@ export default function Reports() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-          </div>
+          </AnimatedCard>
         </div>
       </div>
 
