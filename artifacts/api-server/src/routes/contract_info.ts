@@ -117,6 +117,14 @@ export interface BrokerContractSpec {
   stepVolumeLots: number | null;
   /** Actual account leverage (e.g. 100 for 1:100), read from ProtoOATrader field 10 ÷ 100. */
   leverage:       number | null;
+  /**
+   * Symbol-specific maximum leverage — DISTINCT from account leverage. For Delta this is
+   * read directly from the product's own max_leverage / initial_margin (always real,
+   * per-contract). For cTrader this is null (no verified per-symbol margin/leverage field
+   * is currently exposed by ProtoOASymbol) — the UI must show "Broker Managed" and must
+   * NEVER fall back to the account leverage value.
+   */
+  maxSymbolLeverageNum: number | null;
   /** Pip decimal position (e.g. 4 for EURUSD means 1 pip = 0.0001). */
   pipPosition:    number | null;
   /** Price decimal precision shown by broker (e.g. 5 for EURUSD). */
@@ -139,6 +147,16 @@ function toMarginPct(v: string | number | undefined): string {
   return `${n}%`;
 }
 
+/**
+ * Convert a margin-requirement percentage into the maximum leverage it implies.
+ * Example: 0.5% → 1:200, 1% → 1:100, 2% → 1:50.
+ * Returns null (never a fabricated number) for invalid/zero input.
+ */
+function marginPctToMaxLeverage(marginPct: number): number | null {
+  if (isNaN(marginPct) || marginPct <= 0) return null;
+  return Math.round(100 / marginPct);
+}
+
 function formatProduct(p: RawDeltaProduct): ContractInfo {
   const underlying = p.underlying_asset?.symbol ?? p.symbol.replace(/USD.*$/, "");
   const settling   = p.settling_asset?.symbol ?? "USD";
@@ -159,7 +177,7 @@ function formatProduct(p: RawDeltaProduct): ContractInfo {
   if (!isNaN(rawMaxLev) && rawMaxLev > 0) {
     maxLeverageNum = Math.round(rawMaxLev);
   } else if (!isNaN(rawIM) && rawIM > 0) {
-    maxLeverageNum = Math.round(100 / rawIM);
+    maxLeverageNum = marginPctToMaxLeverage(rawIM) ?? 0;
   } else if (!isNaN(rawDefLev) && rawDefLev > 0) {
     maxLeverageNum = Math.round(rawDefLev);
   }
@@ -401,7 +419,7 @@ async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
     { label: "Settlement Currency", value: info.settlementCurrency },
     { label: "Initial Margin",      value: info.initialMargin },
     { label: "Maintenance Margin",  value: info.maintenanceMargin },
-    { label: "Max Leverage",        value: info.maxLeverage },
+    { label: "Max Symbol Leverage", value: info.maxLeverage },
     { label: "Underlying Index",    value: info.underlyingIndex },
     { label: "Position Limit",      value: info.positionLimit },
     { label: "Trading Status",      value: info.status, highlight: info.status === "Operational" },
@@ -429,6 +447,9 @@ async function buildDeltaSpec(symbol: string): Promise<BrokerContractSpec> {
     maxVolumeLots:  null,
     stepVolumeLots: null,
     leverage:       null,
+    // Delta's max leverage is always symbol-specific real data (from the product's own
+    // max_leverage / initial_margin) — never a generic account-wide value.
+    maxSymbolLeverageNum: info.maxLeverageNum > 0 ? info.maxLeverageNum : null,
     pipPosition:    null,
     digits:         null,
     deltaQty,
@@ -460,6 +481,7 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
       fetchedAt: Date.now(),
       description: symbol,
       maxLeverageNum: 0,
+      maxSymbolLeverageNum: null,
       lotSizeNum: 0.01,
       settlementCurrency: "USD",
       partial: true,
@@ -496,6 +518,8 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
   let leverageNum:    number | null = null;
   let pipPositionNum: number | null = db.pip_position ?? null;
   let digitsNum:      number | null = db.digits ?? null;
+  let maxSymbolLeverageNum:   number | null = null;
+  let maxSymbolLeverageLabel: string        = "Broker Managed";
 
   try {
     const [tokRow, cfgRow] = await Promise.all([
@@ -544,12 +568,18 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
       leverageNum    = traderResult.value.leverage;
       maxLeverageNum = traderResult.value.maxLeverage ?? traderResult.value.leverage;
       extFields.push({ label: "Account Leverage", value: `1:${traderResult.value.leverage}` });
-      if (traderResult.value.maxLeverage !== null && traderResult.value.maxLeverage !== traderResult.value.leverage) {
-        extFields.push({ label: "Max Leverage", value: `1:${traderResult.value.maxLeverage}` });
-      }
     } else if (traderResult.status === "rejected") {
       logger.warn({ symbol, err: String(traderResult.reason) }, "contract-spec/ctrader: trader info fetch skipped");
     }
+
+    // ── Symbol-specific max leverage — NEVER assume this equals account leverage ──
+    // cTrader's ProtoOASymbol (as parsed by fetchSingleSymbolSpec) does not expose a
+    // verified per-symbol margin-requirement or leverage field — only account-wide
+    // leverage is available via ProtoOATrader (handled above). If a genuine
+    // margin-requirement percentage is ever available, convert it via
+    // marginPctToMaxLeverage(); until then, show "Broker Managed" rather than
+    // fabricating or reusing the account leverage value.
+    extFields.push({ label: "Max Symbol Leverage", value: maxSymbolLeverageLabel });
 
     const TRADE_MODES: Record<number, string> = { 0: "Enabled", 1: "Disabled", 2: "Close Only" };
     const SWAP_TYPES:  Record<number, string>  = { 0: "Points / Day", 1: "% / Year" };
@@ -727,6 +757,9 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     maxVolumeLots,
     stepVolumeLots,
     leverage:       leverageNum,
+    // Never fabricated — null unless a verified per-symbol margin/leverage field is
+    // decoded above; the UI shows "Broker Managed" via the extFields entry instead.
+    maxSymbolLeverageNum,
     pipPosition:    pipPositionNum,
     digits:         digitsNum,
     // cTrader never uses Delta contract specs — always null here

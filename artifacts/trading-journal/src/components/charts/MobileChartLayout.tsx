@@ -3863,6 +3863,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
     maxVolumeLots:  number | null;
     stepVolumeLots: number | null;
     leverage:       number | null;  // actual account leverage
+    maxSymbolLeverageNum: number | null; // symbol-specific max leverage, NEVER same as account leverage; null = broker doesn't expose it
     pipPosition:    number | null;
     digits:         number | null;
     // Delta-only quantity spec (contracts/coin), null for cTrader — never mix with lot fields above
