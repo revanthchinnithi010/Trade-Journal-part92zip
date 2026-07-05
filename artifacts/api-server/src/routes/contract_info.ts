@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { logger } from "../lib/logger.js";
 import { pool } from "@workspace/db";
 import { decrypt } from "../services/BrokerEncryption.js";
-import { fetchSingleSymbolSpec } from "../lib/ctraderProtoOA.js";
+import { fetchSingleSymbolSpec, fetchTraderInfo } from "../lib/ctraderProtoOA.js";
 
 const DELTA_INDIA_REST = "https://api.india.delta.exchange";
 const CACHE_TTL_MS     = 5  * 60 * 1_000;
@@ -321,51 +321,95 @@ async function buildCtraderSpec(symbol: string): Promise<BrokerContractSpec> {
     const clientSecret = process.env["CTRADER_CLIENT_SECRET"];
     if (!clientId || !clientSecret) throw new Error("CTRADER_CLIENT_ID/SECRET not set");
 
-    const spec = await fetchSingleSymbolSpec({
-      ctidTraderAccountId: cfg.account_id,
-      isLive:              Boolean(cfg.is_live),
-      accessToken,
-      clientId,
-      clientSecret,
-      symbolId: db.symbol_id,
-    });
+    const [specResult, traderResult] = await Promise.allSettled([
+      fetchSingleSymbolSpec({
+        ctidTraderAccountId: cfg.account_id,
+        isLive:              Boolean(cfg.is_live),
+        accessToken,
+        clientId,
+        clientSecret,
+        symbolId: db.symbol_id,
+      }),
+      fetchTraderInfo({
+        ctidTraderAccountId: cfg.account_id,
+        isLive:              Boolean(cfg.is_live),
+        accessToken,
+        clientId,
+        clientSecret,
+      }),
+    ]);
+
+    if (specResult.status === "rejected") throw specResult.reason;
+    const spec = specResult.value;
+
+    if (traderResult.status === "fulfilled" && traderResult.value.leverage !== null) {
+      maxLeverageNum = traderResult.value.maxLeverage ?? traderResult.value.leverage;
+      extFields.push({ label: "Account Leverage", value: `1:${traderResult.value.leverage}` });
+      if (traderResult.value.maxLeverage !== null && traderResult.value.maxLeverage !== traderResult.value.leverage) {
+        extFields.push({ label: "Max Leverage", value: `1:${traderResult.value.maxLeverage}` });
+      }
+    } else if (traderResult.status === "rejected") {
+      logger.warn({ symbol, err: String(traderResult.reason) }, "contract-spec/ctrader: trader info fetch skipped");
+    }
 
     const TRADE_MODES: Record<number, string> = { 0: "Enabled", 1: "Disabled", 2: "Close Only" };
     const SWAP_TYPES:  Record<number, string>  = { 0: "Points / Day", 1: "% / Year" };
+    const DAY_NAMES:   Record<number, string>  = {
+      0: "Monday", 1: "Tuesday", 2: "Wednesday", 3: "Thursday", 4: "Friday", 5: "Saturday", 6: "Sunday",
+    };
 
+    const tickSize = 1 / Math.pow(10, spec.digits);
+
+    if (tickSize > 0) extFields.push({ label: "Tick Size", value: tickSize.toPrecision(1) });
+
+    if (spec.lotSize !== null && spec.lotSize > 0) {
+      lotSizeNum = spec.lotSize;
+      extFields.push({ label: "Lot Size", value: `${spec.lotSize.toLocaleString()} units` });
+    }
     if (spec.minVolume !== null) {
-      lotSizeNum = spec.minVolume / 100;
-      extFields.push({ label: "Min Volume",  value: `${lotSizeNum} lot${lotSizeNum !== 1 ? "s" : ""}` });
+      const minLots = spec.minVolume / 100;
+      extFields.push({ label: "Min Volume",  value: `${minLots} lot${minLots !== 1 ? "s" : ""}` });
     }
     if (spec.maxVolume  !== null) extFields.push({ label: "Max Volume",  value: `${spec.maxVolume  / 100} lots` });
     if (spec.stepVolume !== null) extFields.push({ label: "Volume Step", value: `${spec.stepVolume / 100} lots` });
 
-    if (spec.initialMarginPct !== null && spec.initialMarginPct > 0) {
-      maxLeverageNum = Math.round(100 / spec.initialMarginPct);
-      extFields.push({ label: "Initial Margin",  value: `${spec.initialMarginPct.toFixed(2)}%` });
-      extFields.push({ label: "Max Leverage",    value: `${maxLeverageNum}x` });
-    }
-    if (spec.maintenancePct !== null && spec.maintenancePct > 0) {
-      extFields.push({ label: "Maintenance Margin", value: `${spec.maintenancePct.toFixed(2)}%` });
-    }
     if (spec.tradeMode !== null) {
       extFields.push({
-        label:     "Trade Mode",
+        label:     "Execution Mode",
         value:     TRADE_MODES[spec.tradeMode] ?? String(spec.tradeMode),
         highlight: spec.tradeMode === 0,
       });
     }
+    if (spec.swapLong !== null) {
+      extFields.push({ label: "Swap Long", value: spec.swapLong.toFixed(2), highlight: spec.swapLong >= 0 });
+    }
+    if (spec.swapShort !== null) {
+      extFields.push({ label: "Swap Short", value: spec.swapShort.toFixed(2), highlight: spec.swapShort >= 0 });
+    }
     if (spec.swapType !== null) {
       extFields.push({ label: "Swap Type", value: SWAP_TYPES[spec.swapType] ?? String(spec.swapType) });
     }
-    if (spec.scheduleTimeZone) {
-      extFields.push({ label: "Timezone", value: spec.scheduleTimeZone });
+    if (spec.swapRollover3Days !== null) {
+      extFields.push({ label: "Triple Swap Day", value: DAY_NAMES[spec.swapRollover3Days] ?? String(spec.swapRollover3Days) });
     }
-    if (spec.description && spec.description !== db.symbol_name) {
-      baseFields[1] = { label: "Description", value: spec.description };
+    if (spec.pnlConversionFeeRate !== null) {
+      const pct = spec.pnlConversionFeeRate * 0.01;
+      extFields.push({ label: "Currency Conversion Fee", value: pct > 0 ? `${pct.toFixed(2)}%` : "None" });
+    }
+    if (spec.minCommission !== null && spec.minCommission > 0) {
+      extFields.push({
+        label: "Commission",
+        value: `${spec.minCommission.toFixed(2)}${spec.minCommissionAsset ? " " + spec.minCommissionAsset : ""} min`,
+      });
+    }
+    if (spec.scheduleTimeZone) {
+      extFields.push({ label: "Schedule Timezone", value: spec.scheduleTimeZone });
+    }
+    if (spec.measurementUnits) {
+      extFields.push({ label: "Measurement Units", value: spec.measurementUnits });
     }
 
-    logger.info({ symbol, maxLeverageNum, lotSizeNum, extCount: extFields.length }, "contract-spec/ctrader: ProtoOA ✓");
+    logger.info({ symbol, lotSizeNum, extCount: extFields.length }, "contract-spec/ctrader: ProtoOA ✓");
   } catch (err) {
     logger.warn({ symbol, err: String(err) }, "contract-spec/ctrader: ProtoOA fetch skipped, using DB only");
   }

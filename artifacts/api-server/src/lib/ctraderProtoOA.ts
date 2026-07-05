@@ -26,6 +26,7 @@ const PT = {
   SYMBOL_BY_ID_REQ: 2116,   // ← was 2117
   SYMBOL_BY_ID_RES: 2117,   // ← was 2118
   ERROR_RES:        2142,
+  HEARTBEAT_EVENT:  51,
 } as const;
 
 const PT_NAME: Record<number, string> = {
@@ -994,21 +995,29 @@ export async function reconcileAccount(opts: {
 // Uses parseMsgFull so double fields (fn=29 initialMargin, fn=30 maintenanceMargin) decode correctly.
 
 export interface CtraderSymbolSpec {
-  symbolId:          number;
-  digits:            number;
-  pipPosition:       number;
-  minVolume:         number | null;   // raw: divide by 100 for standard lots
-  maxVolume:         number | null;
-  stepVolume:        number | null;
-  tradeMode:         number | null;   // 0=ENABLED, 1=DISABLED, 2=CLOSE_ONLY
-  swapType:          number | null;   // 0=PIPS, 1=PERCENTAGE
-  swapRollover3Days: number | null;
-  initialMarginPct:  number | null;   // double percentage (e.g. 3.333)
-  maintenancePct:    number | null;   // double percentage
-  commissionType:    number | null;
-  scheduleTimeZone:  string | null;
-  description:       string | null;
-  durationMs:        number;
+  symbolId:            number;
+  digits:              number;
+  pipPosition:         number;
+  minVolume:           number | null;   // raw: divide by 100 for standard lots
+  maxVolume:           number | null;
+  stepVolume:          number | null;
+  tradeMode:           number | null;   // field 27: 0=ENABLED, 1=DISABLED, 2=CLOSE_ONLY (execution mode)
+  swapType:            number | null;   // field 29: 0=PIPS, 1=PERCENTAGE
+  swapRollover3Days:   number | null;   // field 6: Triple Swap Day (DayOfWeek enum, 0=MONDAY..6=SUNDAY)
+  swapLong:            number | null;   // field 7: double
+  swapShort:           number | null;   // field 8: double
+  commissionType:      number | null;   // field 15
+  minCommission:       number | null;   // field 32 (preciseMinCommission) / 1e8
+  minCommissionAsset:  string | null;   // field 23
+  scheduleTimeZone:    string | null;   // field 26
+  lotSize:             number | null;   // field 30 (cents) / 100 = contract size in units
+  pnlConversionFeeRate: number | null;  // field 34: currency conversion fee, 1 = 0.01%
+  slDistance:          number | null;   // field 16
+  tpDistance:          number | null;   // field 17
+  distanceSetIn:       number | null;   // field 20
+  measurementUnits:    string | null;   // field 40
+  swapPeriod:          number | null;   // field 36 (hours)
+  durationMs:          number;
 }
 
 export async function fetchSingleSymbolSpec(opts: {
@@ -1089,30 +1098,163 @@ export async function fetchSingleSymbolSpec(opts: {
             return f ? (f.v as Buffer).toString("utf8") : null;
           };
 
+          // Verified field numbers (spotware/openapi-proto-messages, ProtoOASymbol):
+          // 1 symbolId, 2 digits, 3 pipPosition, 6 swapRollover3Days (Triple Swap Day),
+          // 7 swapLong(double), 8 swapShort(double), 9 maxVolume, 10 minVolume, 11 stepVolume,
+          // 15 commissionType, 16 slDistance, 17 tpDistance, 20 distanceSetIn,
+          // 23 minCommissionAsset(str), 26 scheduleTimeZone(str), 27 tradingMode (execution mode),
+          // 29 swapCalculationType, 30 lotSize(cents), 32 preciseMinCommission(/1e8),
+          // 34 pnlConversionFeeRate (currency conversion fee, 1=0.01%), 36 swapPeriod(hrs), 40 measurementUnits.
+          const preciseMinCommission = getVar(32);
           const spec: CtraderSymbolSpec = {
-            symbolId:          getVar(1) ?? symbolId,
-            digits:            getVar(2) ?? 5,
-            pipPosition:       getVar(3) ?? 4,
-            minVolume:         getVar(10),
-            maxVolume:         getVar(9),
-            stepVolume:        getVar(11),
-            tradeMode:         getVar(32),
-            swapType:          getVar(34),
-            swapRollover3Days: getVar(6),
-            initialMarginPct:  getDbl(29),
-            maintenancePct:    getDbl(30),
-            commissionType:    getVar(14),
-            scheduleTimeZone:  getStr(13),
-            description:       getStr(37),
-            durationMs:        Date.now() - t0,
+            symbolId:             getVar(1) ?? symbolId,
+            digits:               getVar(2) ?? 5,
+            pipPosition:          getVar(3) ?? 4,
+            minVolume:            getVar(10),
+            maxVolume:            getVar(9),
+            stepVolume:           getVar(11),
+            tradeMode:            getVar(27),
+            swapType:             getVar(29),
+            swapRollover3Days:    getVar(6),
+            swapLong:             getDbl(7),
+            swapShort:            getDbl(8),
+            commissionType:       getVar(15),
+            minCommission:        preciseMinCommission !== null ? preciseMinCommission / 1e8 : null,
+            minCommissionAsset:   getStr(23),
+            scheduleTimeZone:     getStr(26),
+            lotSize:              (() => { const v = getVar(30); return v !== null ? v / 100 : null; })(),
+            pnlConversionFeeRate: getVar(34),
+            slDistance:           getVar(16),
+            tpDistance:           getVar(17),
+            distanceSetIn:        getVar(20),
+            measurementUnits:     getStr(40),
+            swapPeriod:           getVar(36),
+            durationMs:           Date.now() - t0,
           };
 
           logger.info({
             symbolId, digits: spec.digits, pipPosition: spec.pipPosition,
-            tradeMode: spec.tradeMode, initialMarginPct: spec.initialMarginPct,
+            tradeMode: spec.tradeMode, lotSize: spec.lotSize,
             minVolume: spec.minVolume, durationMs: spec.durationMs,
           }, "ProtoOA fetchSingleSymbolSpec: ✓");
           finish(spec);
+        } catch (e) {
+          finish(null, `parse error: ${String(e)}`);
+        }
+        return;
+      }
+    };
+  });
+}
+
+// ── ProtoOATraderReq — account leverage / deposit currency (PT 2121 / 2122) ───
+// Flow: APP_AUTH → ACCT_AUTH → TRADER_REQ → TRADER_RES { field3: ProtoOATrader }
+// ProtoOATrader: 10 leverageInCents (leverage = v/100), 12 maxLeverageInCents,
+// 15 accountType(enum), 20 moneyDigits, 8 depositAssetId.
+
+const PT_TRADER_REQ = 2121;
+const PT_TRADER_RES = 2122;
+
+export interface CtraderTraderInfo {
+  leverage:       number | null;   // e.g. 100 = 1:100
+  maxLeverage:    number | null;
+  moneyDigits:    number | null;
+  depositAssetId: number | null;
+  accountType:    number | null;
+  durationMs:     number;
+}
+
+function mkTraderReq(ctidTraderAccountId: number): Buffer {
+  return buildFrame(PT_TRADER_REQ, [
+    ...u32f(1, PT_TRADER_REQ),
+    ...u32f(2, ctidTraderAccountId),
+  ]);
+}
+
+export async function fetchTraderInfo(opts: {
+  ctidTraderAccountId: number;
+  isLive:              boolean;
+  accessToken:         string;
+  clientId:            string;
+  clientSecret:        string;
+  timeoutMs?:          number;
+}): Promise<CtraderTraderInfo> {
+  const {
+    ctidTraderAccountId, isLive, accessToken,
+    clientId, clientSecret, timeoutMs = 10_000,
+  } = opts;
+
+  const host = isLive ? LIVE_HOST : DEMO_HOST;
+  const t0   = Date.now();
+
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const conn  = makeTlsConn(host, PORT);
+    const timer = setTimeout(() => finish(null, `timeout after ${timeoutMs}ms`), timeoutMs);
+    let step    = "app_auth";
+
+    function finish(info: CtraderTraderInfo | null, err?: string) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.destroy();
+      if (err || !info) reject(new Error(err ?? "fetchTraderInfo: no result"));
+      else resolve(info);
+    }
+
+    conn.onConnect = () => { conn.write("AppAuthReq", mkAppAuthReq(clientId, clientSecret)); };
+    conn.onError   = (e) => finish(null, `socket error: ${e.message}`);
+    conn.onClose   = () => { if (!settled) finish(null, "connection closed"); };
+
+    conn.onFrame = (pt, payload) => {
+      if (pt === PT.ERROR_RES) {
+        const { errorCode, description } = parseErrorRes(payload);
+        finish(null, `ProtoOA error ${errorCode}: ${description}`);
+        return;
+      }
+      if (pt === PT.HEARTBEAT_EVENT) return;
+
+      if (pt === PT.APP_AUTH_RES && step === "app_auth") {
+        step = "acct_auth";
+        conn.write("AcctAuthReq", mkAcctAuthReq(ctidTraderAccountId, accessToken));
+        return;
+      }
+
+      if (pt === PT.ACCT_AUTH_RES && step === "acct_auth") {
+        step = "trader_info";
+        conn.write("TraderReq", mkTraderReq(ctidTraderAccountId));
+        return;
+      }
+
+      if (pt === PT_TRADER_RES && step === "trader_info") {
+        try {
+          const outer     = parseMsgFull(payload);
+          const traderBuf = outer.find(f => f.fn === 3 && f.wt === 2)?.v as Buffer | undefined;
+          if (!traderBuf) { finish(null, "TRADER_RES: no trader sub-message"); return; }
+
+          const tf     = parseMsgFull(traderBuf);
+          const getVar = (fn: number): number | null => {
+            const f = tf.find(x => x.fn === fn && x.wt === 0);
+            return f !== undefined ? (f.v as number) : null;
+          };
+
+          const leverageCents    = getVar(10);
+          const maxLeverageCents = getVar(12);
+
+          const info: CtraderTraderInfo = {
+            leverage:       leverageCents    !== null ? leverageCents    / 100 : null,
+            maxLeverage:    maxLeverageCents !== null ? maxLeverageCents / 100 : null,
+            moneyDigits:    getVar(20),
+            depositAssetId: getVar(8),
+            accountType:    getVar(15),
+            durationMs:     Date.now() - t0,
+          };
+
+          logger.info({
+            ctidTraderAccountId, leverage: info.leverage, maxLeverage: info.maxLeverage,
+            durationMs: info.durationMs,
+          }, "ProtoOA fetchTraderInfo: ✓");
+          finish(info);
         } catch (e) {
           finish(null, `parse error: ${String(e)}`);
         }
