@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from "react";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { popupManager } from "@/lib/popupManager";
-import { Switch, Route, Router as WouterRouter, useLocation } from "wouter";
+import { Router as WouterRouter, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -88,6 +88,14 @@ const CHARTS_NODE = (
   </Suspense>
 );
 
+// Known pathnames — used to decide whether to render NotFound.
+const KNOWN_PATHS = new Set([
+  "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
+  "/calendar", "/notebook", "/settings",
+  "/calc/crypto", "/calc/forex", "/calc/position", "/calc/margin", "/calc/risk",
+  "/portfolio", "/trade", "/ctrader-test", "/charts",
+]);
+
 function Router() {
   const [location] = useLocation();
 
@@ -99,44 +107,51 @@ function Router() {
     return () => clearTimeout(id);
   }, []);
 
+  // Strip query-string so "/portfolio?tab=positions" matches "/portfolio".
+  const pathname = location.split("?")[0];
+
   return (
     // chartsNode is always rendered (inside Layout) but hidden off-route.
-    // children (the Switch) only gets rendered for non-charts pages.
+    // All other pages are rendered below using per-route conditionals.
     <Layout chartsNode={CHARTS_NODE}>
       {/*
         AnimatePresence handles page exit before the next page enters.
-        The `key` on PageTransition changes with each route, triggering the
-        exit animation on the old page and enter on the new one.
+        Each route is a SEPARATE conditional — NOT wrapped in a shared Switch.
+
+        Why no Switch here:
+        Switch re-evaluates routes against the current location on every render.
+        When AnimatePresence keeps the OLD PageTransition alive for its exit
+        animation, that PageTransition's Switch would re-match the NEW location
+        and render the new page's content inside the exiting wrapper — causing
+        the new page to appear twice simultaneously (once exiting, once entering).
+
+        Individual conditionals fix this: each PageTransition renders one
+        hardcoded component, so the exiting wrapper always shows the old page
+        content regardless of what the current location becomes.
+
         `initial={false}` skips the animation on the very first render.
-        Charts is excluded because it's a keep-alive node — it never
-        unmounts and doesn't need a transition.
+        Charts is excluded — it is a keep-alive node that never unmounts.
       */}
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="popLayout" initial={false}>
-          {location !== "/charts" && (
-            <PageTransition key={location} style={{ height: "100%" }}>
-              <Switch>
-                <Route path="/">{() => <Dashboard />}</Route>
-                <Route path="/markets">{() => <Markets />}</Route>
-                <Route path="/trades">{() => <Trades />}</Route>
-                <Route path="/brokers">{() => <Brokers />}</Route>
-                <Route path="/alerts">{() => <Alerts />}</Route>
-                <Route path="/reports">{() => <Reports />}</Route>
-                <Route path="/calendar">{() => <Calendar />}</Route>
-                <Route path="/notebook">{() => <Notebook />}</Route>
-                <Route path="/settings">{() => <Settings />}</Route>
-                <Route path="/calc/crypto">{() => <CalcCrypto />}</Route>
-                <Route path="/calc/forex">{() => <CalcForex />}</Route>
-                <Route path="/calc/position">{() => <CalcPosition />}</Route>
-                <Route path="/calc/margin">{() => <CalcMargin />}</Route>
-                <Route path="/calc/risk">{() => <CalcRisk />}</Route>
-                <Route path="/portfolio">{() => <Portfolio />}</Route>
-                <Route path="/trade">{() => <Trade />}</Route>
-                <Route path="/ctrader-test">{() => <CtraderTest />}</Route>
-                <Route>{() => <NotFound />}</Route>
-              </Switch>
-            </PageTransition>
-          )}
+          {pathname === "/"             && <PageTransition key="/"             style={{ height: "100%" }}><Dashboard   /></PageTransition>}
+          {pathname === "/markets"      && <PageTransition key="/markets"      style={{ height: "100%" }}><Markets     /></PageTransition>}
+          {pathname === "/trades"       && <PageTransition key="/trades"       style={{ height: "100%" }}><Trades      /></PageTransition>}
+          {pathname === "/brokers"      && <PageTransition key="/brokers"      style={{ height: "100%" }}><Brokers     /></PageTransition>}
+          {pathname === "/alerts"       && <PageTransition key="/alerts"       style={{ height: "100%" }}><Alerts      /></PageTransition>}
+          {pathname === "/reports"      && <PageTransition key="/reports"      style={{ height: "100%" }}><Reports     /></PageTransition>}
+          {pathname === "/calendar"     && <PageTransition key="/calendar"     style={{ height: "100%" }}><Calendar    /></PageTransition>}
+          {pathname === "/notebook"     && <PageTransition key="/notebook"     style={{ height: "100%" }}><Notebook    /></PageTransition>}
+          {pathname === "/settings"     && <PageTransition key="/settings"     style={{ height: "100%" }}><Settings    /></PageTransition>}
+          {pathname === "/calc/crypto"  && <PageTransition key="/calc/crypto"  style={{ height: "100%" }}><CalcCrypto  /></PageTransition>}
+          {pathname === "/calc/forex"   && <PageTransition key="/calc/forex"   style={{ height: "100%" }}><CalcForex   /></PageTransition>}
+          {pathname === "/calc/position"&& <PageTransition key="/calc/position"style={{ height: "100%" }}><CalcPosition/></PageTransition>}
+          {pathname === "/calc/margin"  && <PageTransition key="/calc/margin"  style={{ height: "100%" }}><CalcMargin  /></PageTransition>}
+          {pathname === "/calc/risk"    && <PageTransition key="/calc/risk"    style={{ height: "100%" }}><CalcRisk    /></PageTransition>}
+          {pathname === "/portfolio"    && <PageTransition key="/portfolio"    style={{ height: "100%" }}><Portfolio   /></PageTransition>}
+          {pathname === "/trade"        && <PageTransition key="/trade"        style={{ height: "100%" }}><Trade       /></PageTransition>}
+          {pathname === "/ctrader-test" && <PageTransition key="/ctrader-test" style={{ height: "100%" }}><CtraderTest /></PageTransition>}
+          {!KNOWN_PATHS.has(pathname)   && <PageTransition key="not-found"    style={{ height: "100%" }}><NotFound    /></PageTransition>}
         </AnimatePresence>
       </Suspense>
     </Layout>
