@@ -527,8 +527,15 @@ export interface SharedMarketSelectorProps {
   visible?:      boolean;
   /** Currently charted symbol (highlighted amber) */
   activeSymbol:  string;
-  /** Called when user selects a symbol */
+  /** Called when user selects a symbol (always fires, both tabs) */
   onSelect:      (symbol: string) => void;
+  /**
+   * Optional: called only when a symbol row in the WATCHLIST tab is tapped.
+   * Falls back to onSelect if not provided.
+   * Markets tab row taps always use onSelect regardless.
+   * Allows Markets page to open a picker sheet only on Watchlist taps.
+   */
+  onWatchlistTap?: (symbol: string) => void;
   /** Called to close (sheet mode: required; page mode: ignored) */
   onClose?:      () => void;
   /**
@@ -543,6 +550,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   visible = true,
   activeSymbol,
   onSelect,
+  onWatchlistTap,
   onClose,
   headerActions,
 }: SharedMarketSelectorProps) {
@@ -622,8 +630,10 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   // useLatest for onSelect — keeps handleSymbolTap stable regardless of parent re-renders.
   // Without this, any parent re-render passing a new onSelect reference clears the entire
   // per-symbol callback cache, triggering a full re-render of all SymbolRow components.
-  const onSelectRef = useRef(onSelect);
+  const onSelectRef      = useRef(onSelect);
+  const onWatchlistTapRef = useRef(onWatchlistTap);
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { onWatchlistTapRef.current = onWatchlistTap; }, [onWatchlistTap]);
 
   const isTouchRef = useRef(typeof window !== "undefined" && navigator.maxTouchPoints > 0);
 
@@ -1065,6 +1075,31 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     return tapCbCache.current.get(symbol)!;
   }, [handleSymbolTap]);
 
+  // ── Watchlist-specific tap handler ─────────────────────────────────────
+  // Routes Watchlist row taps through onWatchlistTap (if provided) or falls
+  // back to onSelect. Markets tab row taps always use handleSymbolTap/onSelect.
+  // Separate callback cache prevents invalidating getTapCb on prop changes.
+
+  const handleWatchlistSymbolTap = useCallback((symbol: string) => {
+    (onWatchlistTapRef.current ?? onSelectRef.current)(symbol);
+    if (mode === "sheet") doClose();
+  }, [doClose, mode]); // refs deliberately excluded — stable reads
+
+  const watchlistTapCbCache = useRef(new Map<string, () => void>());
+  const prevWatchlistTap    = useRef(handleWatchlistSymbolTap);
+
+  if (prevWatchlistTap.current !== handleWatchlistSymbolTap) {
+    prevWatchlistTap.current = handleWatchlistSymbolTap;
+    watchlistTapCbCache.current.clear();
+  }
+
+  const getWatchlistTapCb = useCallback((symbol: string) => {
+    if (!watchlistTapCbCache.current.has(symbol)) {
+      watchlistTapCbCache.current.set(symbol, () => handleWatchlistSymbolTap(symbol));
+    }
+    return watchlistTapCbCache.current.get(symbol)!;
+  }, [handleWatchlistSymbolTap]);
+
   // ── Per-broker lookup Maps — O(1) symbol resolution ────────────────────
   // Replaces O(n) .find() calls in watchlistRows (previously O(watchlist×symbols)).
   const ctraderSymbolMap = useMemo(() => {
@@ -1275,7 +1310,11 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           </div>
         </div>
 
-        {/* Search bar */}
+        {/* Search bar — hidden on Watchlist tab in page mode (Markets requirement).
+            In sheet mode (Charts picker) it is always shown for both tabs.
+            In page mode it shows only on the Markets tab so items move up
+            immediately and no blank space is left behind. */}
+        {(mode !== "page" || activeTab !== "Watchlist") && (
         <div style={{ padding: "8px 12px 6px" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
@@ -1308,6 +1347,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
             )}
           </div>
         </div>
+        )}
 
         <CtraderStatusBar />
       </div>
@@ -1320,6 +1360,11 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           // Sheet mode: start locked (hidden); applySnapDom() unlocks on FULL snap.
           // Page mode: always scrollable.
           overflowY: mode === "page" ? "auto" : "hidden",
+          // Page mode: add bottom clearance so the last row clears the fixed
+          // bottom nav bar (~72 px) + safe-area inset on notched devices.
+          paddingBottom: mode === "page"
+            ? "calc(80px + env(safe-area-inset-bottom, 0px))"
+            : undefined,
         }}
       >
         {!contentReady ? null : (
@@ -1349,7 +1394,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
                           isFavorite={wItem?.isFavorite ?? false}
                           isActive={activeSymbol === row.symbol}
                           onStarPress={getStarCb(row.symbol)}
-                          onTap={getTapCb(row.symbol)}
+                          onTap={getWatchlistTapCb(row.symbol)}
                         />
                       </div>
                     );

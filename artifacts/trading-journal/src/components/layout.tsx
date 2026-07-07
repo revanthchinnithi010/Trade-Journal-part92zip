@@ -640,13 +640,15 @@ export const Layout = memo(function Layout({
             {dashboardNode}
           </div>
 
-          {/* Markets — always mounted */}
+          {/* Markets — always mounted; full-screen, no paddingBottom.
+              The fixed bottom nav bar overlays on top. SharedMarketSelector
+              adds internal scroll clearance so the last list item is always
+              visible above the nav pill. */}
           <div style={{
             position:      "absolute",
             inset:         0,
             display:       pathname === "/markets" ? "flex" : "none",
             flexDirection: "column",
-            paddingBottom: isMobile ? 80 : 0,
           }}>
             {marketsNode}
           </div>
