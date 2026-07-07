@@ -75,6 +75,27 @@ function PageLoader() {
   );
 }
 
+/**
+ * StandardPageWrapper — scroll container + padding for regular (non-full-height) pages.
+ *
+ * Previously these styles lived on the Layout's location-based content wrapper.
+ * Moving them here means the Layout always renders a single stable wrapper div
+ * regardless of the current route, preventing the mid-transition container
+ * switch that caused the Dashboard zoom/resize bug when opening Portfolio.
+ *
+ * Portfolio and Markets do NOT use this wrapper — they manage their own
+ * height-filling flex layout internally.
+ */
+function StandardPageWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <div style={{ height: "100%", overflowY: "auto" }} className="scroll-container">
+      <div className="p-5 md:p-6 pb-10 mx-auto max-w-[1400px] min-h-full">
+        {children}
+      </div>
+    </div>
+  );
+}
+
 // ── Keep-alive charts node ────────────────────────────────────────────────────
 // Charts is rendered OUTSIDE the route Switch so wouter never unmounts it.
 // The Layout component hides it with display:none when the user is on another
@@ -134,24 +155,31 @@ function Router() {
       */}
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="popLayout" initial={false}>
-          {pathname === "/"             && <PageTransition key="/"             style={{ height: "100%" }}><Dashboard   /></PageTransition>}
+          {/*
+            Standard pages use <StandardPageWrapper> which provides the
+            overflow-auto scroll container + padding that previously lived
+            on the Layout's location-based content wrapper. Portfolio and
+            Markets manage their own layout internally and do NOT get the
+            wrapper.  Charts is a keep-alive node outside AnimatePresence.
+          */}
+          {pathname === "/"             && <PageTransition key="/"             style={{ height: "100%" }}><StandardPageWrapper><Dashboard   /></StandardPageWrapper></PageTransition>}
           {pathname === "/markets"      && <PageTransition key="/markets"      style={{ height: "100%" }}><Markets     /></PageTransition>}
-          {pathname === "/trades"       && <PageTransition key="/trades"       style={{ height: "100%" }}><Trades      /></PageTransition>}
-          {pathname === "/brokers"      && <PageTransition key="/brokers"      style={{ height: "100%" }}><Brokers     /></PageTransition>}
-          {pathname === "/alerts"       && <PageTransition key="/alerts"       style={{ height: "100%" }}><Alerts      /></PageTransition>}
-          {pathname === "/reports"      && <PageTransition key="/reports"      style={{ height: "100%" }}><Reports     /></PageTransition>}
-          {pathname === "/calendar"     && <PageTransition key="/calendar"     style={{ height: "100%" }}><Calendar    /></PageTransition>}
-          {pathname === "/notebook"     && <PageTransition key="/notebook"     style={{ height: "100%" }}><Notebook    /></PageTransition>}
-          {pathname === "/settings"     && <PageTransition key="/settings"     style={{ height: "100%" }}><Settings    /></PageTransition>}
-          {pathname === "/calc/crypto"  && <PageTransition key="/calc/crypto"  style={{ height: "100%" }}><CalcCrypto  /></PageTransition>}
-          {pathname === "/calc/forex"   && <PageTransition key="/calc/forex"   style={{ height: "100%" }}><CalcForex   /></PageTransition>}
-          {pathname === "/calc/position"&& <PageTransition key="/calc/position"style={{ height: "100%" }}><CalcPosition/></PageTransition>}
-          {pathname === "/calc/margin"  && <PageTransition key="/calc/margin"  style={{ height: "100%" }}><CalcMargin  /></PageTransition>}
-          {pathname === "/calc/risk"    && <PageTransition key="/calc/risk"    style={{ height: "100%" }}><CalcRisk    /></PageTransition>}
+          {pathname === "/trades"       && <PageTransition key="/trades"       style={{ height: "100%" }}><StandardPageWrapper><Trades      /></StandardPageWrapper></PageTransition>}
+          {pathname === "/brokers"      && <PageTransition key="/brokers"      style={{ height: "100%" }}><StandardPageWrapper><Brokers     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/alerts"       && <PageTransition key="/alerts"       style={{ height: "100%" }}><StandardPageWrapper><Alerts      /></StandardPageWrapper></PageTransition>}
+          {pathname === "/reports"      && <PageTransition key="/reports"      style={{ height: "100%" }}><StandardPageWrapper><Reports     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calendar"     && <PageTransition key="/calendar"     style={{ height: "100%" }}><StandardPageWrapper><Calendar    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/notebook"     && <PageTransition key="/notebook"     style={{ height: "100%" }}><StandardPageWrapper><Notebook    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/settings"     && <PageTransition key="/settings"     style={{ height: "100%" }}><StandardPageWrapper><Settings    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/crypto"  && <PageTransition key="/calc/crypto"  style={{ height: "100%" }}><StandardPageWrapper><CalcCrypto  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/forex"   && <PageTransition key="/calc/forex"   style={{ height: "100%" }}><StandardPageWrapper><CalcForex   /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/position"&& <PageTransition key="/calc/position"style={{ height: "100%" }}><StandardPageWrapper><CalcPosition/></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/margin"  && <PageTransition key="/calc/margin"  style={{ height: "100%" }}><StandardPageWrapper><CalcMargin  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/risk"    && <PageTransition key="/calc/risk"    style={{ height: "100%" }}><StandardPageWrapper><CalcRisk    /></StandardPageWrapper></PageTransition>}
           {pathname === "/portfolio"    && <PageTransition key="/portfolio"    style={{ height: "100%" }} variant="detail"><Portfolio   /></PageTransition>}
-          {pathname === "/trade"        && <PageTransition key="/trade"        style={{ height: "100%" }}><Trade       /></PageTransition>}
-          {pathname === "/ctrader-test" && <PageTransition key="/ctrader-test" style={{ height: "100%" }}><CtraderTest /></PageTransition>}
-          {!KNOWN_PATHS.has(pathname)   && <PageTransition key="not-found"    style={{ height: "100%" }}><NotFound    /></PageTransition>}
+          {pathname === "/trade"        && <PageTransition key="/trade"        style={{ height: "100%" }}><StandardPageWrapper><Trade       /></StandardPageWrapper></PageTransition>}
+          {pathname === "/ctrader-test" && <PageTransition key="/ctrader-test" style={{ height: "100%" }}><StandardPageWrapper><CtraderTest /></StandardPageWrapper></PageTransition>}
+          {!KNOWN_PATHS.has(pathname)   && <PageTransition key="not-found"    style={{ height: "100%" }}><StandardPageWrapper><NotFound    /></StandardPageWrapper></PageTransition>}
         </AnimatePresence>
       </Suspense>
     </Layout>

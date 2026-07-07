@@ -222,7 +222,7 @@ export default function Portfolio() {
   ];
 
   return (
-    <div className="flex flex-col h-full min-h-0 pb-4">
+    <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
       {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-1 pt-1 pb-4">
         <button

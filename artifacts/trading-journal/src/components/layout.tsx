@@ -410,18 +410,20 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — all non-chart/portfolio/markets pages.
-            AnimatePresence keeps the header mounted during its exit animation
-            (opacity 0 → unmount) so the 60px space doesn't vanish instantly
-            while the outgoing page is still fading — eliminating the visible
-            layout jump on navigation to/from Portfolio and Markets. */}
-        <AnimatePresence>
-        {location !== "/charts" && location !== "/portfolio" && location !== "/markets" && (
+        {/* Top Header — present on every non-chart page.
+            Never removed from the DOM (no AnimatePresence unmount) so the
+            60px slot is always reserved — eliminating the layout jump that
+            occurred when the header unmounted mid-transition.
+            On /portfolio and /markets the header fades to opacity-0 and
+            loses pointer-events so it's invisible but still occupies space,
+            keeping the content wrapper height stable during page transitions. */}
+        {location !== "/charts" && (
           <motion.header
             key="global-header"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            initial={false}
+            animate={{
+              opacity: (location === "/portfolio" || location === "/markets") ? 0 : 1,
+            }}
             transition={{ duration: 0.15, ease: [0.4, 0, 1, 1] }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
@@ -429,6 +431,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               backdropFilter:       "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               borderBottom:         "1px solid var(--surface-header-border)",
+              pointerEvents:        (location === "/portfolio" || location === "/markets") ? "none" : "auto",
             }}
           >
             {/* Left: hamburger + page name */}
@@ -587,7 +590,6 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
             </div>
           </motion.header>
         )}
-        </AnimatePresence>
 
         {/* ── Charts page — always mounted, hidden off-route ───────────────────────
             display:none removes the element from layout entirely (zero height,
@@ -612,34 +614,26 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
           </div>
         )}
 
-        {/* Page Content — non-charts pages */}
+        {/* Page Content — non-charts pages.
+            A single, stable wrapper for ALL non-chart routes so that the
+            layout context never changes mid-transition. Previously the wrapper
+            switched between overflow-auto (standard) / overflow-hidden flex
+            (portfolio/markets) the instant `location` changed, which caused
+            the outgoing page's exit animation (position:absolute via
+            mode="popLayout") to play inside the wrong container, producing
+            the visible zoom/resize artifact.
+            Each page is now responsible for its own scroll behaviour:
+            - Standard pages: wrapped in <StandardPageWrapper> (App.tsx)
+            - Portfolio: uses h-full flex-col internally
+            - Markets: uses h-full flex-col internally
+            paddingBottom only applied on mobile to clear the fixed bottom nav. */}
         {location !== "/charts" && (
-          location === "/markets" ? (
-            <div
-              className="flex-1 overflow-hidden flex flex-col"
-              style={isMobile ? { paddingBottom: 80 } : undefined}
-            >
-              {children}
-            </div>
-          ) : location === "/portfolio" ? (
-            <div
-              className="flex-1 overflow-hidden flex flex-col"
-              style={isMobile ? { paddingBottom: 56 } : undefined}
-            >
-              <div className="p-4 md:p-6 pb-2 mx-auto w-full max-w-[1400px] flex flex-col flex-1 min-h-0">
-                {children}
-              </div>
-            </div>
-          ) : (
-            <div
-              className="flex-1 overflow-auto scroll-container"
-              style={isMobile ? { paddingBottom: 56 } : undefined}
-            >
-              <div className="p-5 md:p-6 pb-10 mx-auto max-w-[1400px] min-h-full">
-                {children}
-              </div>
-            </div>
-          )
+          <div
+            className="flex-1 flex flex-col overflow-hidden"
+            style={isMobile ? { paddingBottom: location === "/markets" ? 80 : 56 } : undefined}
+          >
+            {children}
+          </div>
         )}
       </main>
 
