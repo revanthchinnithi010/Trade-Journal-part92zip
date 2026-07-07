@@ -25,7 +25,7 @@ function loadProfile(): ProfileData {
     const raw = localStorage.getItem("tradevault_profile");
     if (raw) return JSON.parse(raw) as ProfileData;
   } catch { /**/ }
-  return { name: "Revanth Chinnithi", email: "revanth@tradevault.app", avatarDataUrl: null };
+  return { name: "Trader", email: "", avatarDataUrl: null };
 }
 
 function saveProfile(p: ProfileData) {

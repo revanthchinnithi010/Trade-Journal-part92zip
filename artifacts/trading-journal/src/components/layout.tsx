@@ -175,6 +175,9 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
 
   const { unreadCount } = useNotifications();
   const { profile, update: updateProfile } = useProfile();
+  const sidebarBalance          = useBrokerStore(s => s.balance);
+  const sidebarConnectionStatus = useBrokerStore(s => s.connectionStatus);
+  const sidebarActiveAccount    = useBrokerStore(s => s.activeAccount);
 
   const bellBtnRef    = useRef<HTMLButtonElement>(null);
   const profileBtnRef = useRef<HTMLDivElement>(null);
@@ -303,10 +306,10 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
           <div className="flex-1 min-w-0">
             <p className="text-[15px] font-bold tracking-tight text-foreground leading-none">TradeVault</p>
             <p
-              className="signature-shimmer text-[13px] leading-none mt-[5px]"
+              className="signature-shimmer text-[13px] leading-none mt-[5px] truncate"
               style={{ color: "rgba(148,163,184,0.72)" }}
             >
-              Revanth Chinnithi
+              {profile.name}
             </p>
           </div>
           <Button
@@ -356,26 +359,49 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               border:     "1px solid var(--surface-btn-border)",
             }}
           >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full" style={{ background: "#94a3b8", boxShadow: "0 0 6px rgba(148,163,184,0.30)" }} />
-                <span className="text-[10px] text-muted-foreground font-medium">Account Balance</span>
-              </div>
-              <TrendingUp className="w-2.5 h-2.5 text-muted-foreground/50" />
-            </div>
-            <p className="text-[15px] font-bold text-foreground tracking-tight leading-none">$12,453.20</p>
-            <div className="flex items-center justify-between mt-2">
-              <span
-                className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full text-foreground/60"
-                style={{
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border:     "1px solid rgba(255, 255, 255, 0.10)",
-                }}
-              >
-                Pro Plan
-              </span>
-              <span className="text-[10px] font-semibold text-emerald-400">+$1,986 MTD</span>
-            </div>
+            {(() => {
+              const connected = sidebarConnectionStatus === "connected";
+              const bal       = sidebarBalance;
+              const walletNum = bal ? parseFloat(bal.walletBalance) : null;
+              const upnlNum   = bal ? parseFloat(bal.unrealisedPnl) : null;
+              const dotColor  = connected ? "#34d399" : "#94a3b8";
+              const dotGlow   = connected ? "0 0 6px rgba(52,211,153,0.55)" : "0 0 6px rgba(148,163,184,0.30)";
+              const fmtUsd    = (n: number) =>
+                n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+              const brokerLabel = sidebarActiveAccount?.label ?? (connected ? "Broker" : "No Broker");
+              return (
+                <>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full" style={{ background: dotColor, boxShadow: dotGlow }} />
+                      <span className="text-[10px] text-muted-foreground font-medium">Account Balance</span>
+                    </div>
+                    <TrendingUp className="w-2.5 h-2.5 text-muted-foreground/50" />
+                  </div>
+                  <p className="text-[15px] font-bold text-foreground tracking-tight leading-none">
+                    {walletNum !== null && !isNaN(walletNum) ? fmtUsd(walletNum) : "—"}
+                  </p>
+                  <div className="flex items-center justify-between mt-2">
+                    <span
+                      className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full text-foreground/60 truncate max-w-[110px]"
+                      style={{
+                        background: "rgba(255, 255, 255, 0.05)",
+                        border:     "1px solid rgba(255, 255, 255, 0.10)",
+                      }}
+                    >
+                      {brokerLabel}
+                    </span>
+                    {upnlNum !== null && !isNaN(upnlNum) ? (
+                      <span className={`text-[10px] font-semibold ${upnlNum >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {upnlNum >= 0 ? "+" : ""}{fmtUsd(upnlNum)} uPnL
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-foreground/40">Not connected</span>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         </div>
       </motion.aside>

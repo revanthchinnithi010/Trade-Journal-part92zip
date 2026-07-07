@@ -68,7 +68,17 @@ export function createApp(deps: {
 
   app.use(
     session({
-      secret: process.env["SESSION_SECRET"] ?? "dev-fallback-secret-replace-in-prod",
+      secret: (() => {
+        const s = process.env["SESSION_SECRET"];
+        if (!s) {
+          if (process.env["NODE_ENV"] === "production") {
+            logger.error("SESSION_SECRET is not set — sessions are insecure in production. Add it to Replit Secrets.");
+          } else {
+            logger.warn("SESSION_SECRET is not set — using insecure dev fallback. Set SESSION_SECRET in Replit Secrets before deploying.");
+          }
+        }
+        return s ?? "dev-fallback-secret-replace-in-prod";
+      })(),
       resave: false,
       saveUninitialized: false,
       proxy: true,
