@@ -138,11 +138,31 @@ function ReconnectBanner() {
   );
 }
 
-export const Layout = memo(function Layout({ children, chartsNode }: { children: React.ReactNode; chartsNode?: React.ReactNode }) {
+// Bottom-tab paths — pages that are always mounted and shown via display:none/flex.
+// AnimatePresence / PageTransition must NOT wrap these routes.
+const BOTTOM_TAB_PATHS = new Set(["/", "/markets", "/trades", "/charts", "/alerts"]);
+
+export const Layout = memo(function Layout({
+  children,
+  chartsNode,
+  dashboardNode,
+  marketsNode,
+  tradesNode,
+  alertsNode,
+}: {
+  children:      React.ReactNode;
+  chartsNode?:   React.ReactNode;
+  dashboardNode?: React.ReactNode;
+  marketsNode?:  React.ReactNode;
+  tradesNode?:   React.ReactNode;
+  alertsNode?:   React.ReactNode;
+}) {
   useBrokerWs();
   const isMobile                = useIsMobile();
   const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
   const [location]    = useLocation();
+  // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
+  const pathname      = location.split("?")[0];
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const reducedMotion = useReducedMotion();
   const [notifOpen,   setNotifOpen]   = useState(false);
@@ -204,7 +224,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
   }, []);
 
   const currentPageLabel =
-    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === location)?.label || "TradeVault";
+    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
 
   const { theme, toggleTheme } = useTheme();
   const { currency, setCurrency, fetchRate } = useCurrencyStore();
@@ -234,9 +254,9 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               position:             "fixed",
               inset:                0,
               zIndex:               49,
-              background:           location === "/charts" ? "transparent" : "var(--surface-backdrop)",
-              backdropFilter:       location === "/charts" ? "none" : "blur(2px)",
-              WebkitBackdropFilter: location === "/charts" ? "none" : "blur(2px)",
+              background:           pathname === "/charts" ? "transparent" : "var(--surface-backdrop)",
+              backdropFilter:       pathname === "/charts" ? "none" : "blur(2px)",
+              WebkitBackdropFilter: pathname === "/charts" ? "none" : "blur(2px)",
             }}
           />
         )
@@ -254,9 +274,9 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
                 position:             "fixed",
                 inset:                0,
                 zIndex:               49,
-                background:           location === "/charts" ? "transparent" : "var(--surface-backdrop)",
-                backdropFilter:       location === "/charts" ? "none" : "blur(2px)",
-                WebkitBackdropFilter: location === "/charts" ? "none" : "blur(2px)",
+                background:           pathname === "/charts" ? "transparent" : "var(--surface-backdrop)",
+                backdropFilter:       pathname === "/charts" ? "none" : "blur(2px)",
+                WebkitBackdropFilter: pathname === "/charts" ? "none" : "blur(2px)",
               }}
             />
           )}
@@ -339,7 +359,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
                     href={navItem.href}
                     label={navItem.label}
                     icon={navItem.icon}
-                    isActive={location === navItem.href}
+                    isActive={pathname === navItem.href}
                     onClick={closeSidebar}
                     badge={BADGES[navItem.href]}
                   />
@@ -417,12 +437,12 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
             On /portfolio and /markets the header fades to opacity-0 and
             loses pointer-events so it's invisible but still occupies space,
             keeping the content wrapper height stable during page transitions. */}
-        {location !== "/charts" && (
+        {pathname !== "/charts" && (
           <motion.header
             key="global-header"
             initial={false}
             animate={{
-              opacity: (location === "/portfolio" || location === "/markets") ? 0 : 1,
+              opacity: (pathname === "/portfolio" || pathname === "/markets") ? 0 : 1,
             }}
             transition={{ duration: 0.15, ease: [0.4, 0, 1, 1] }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
@@ -431,7 +451,7 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
               backdropFilter:       "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               borderBottom:         "1px solid var(--surface-header-border)",
-              pointerEvents:        (location === "/portfolio" || location === "/markets") ? "none" : "auto",
+              pointerEvents:        (pathname === "/portfolio" || pathname === "/markets") ? "none" : "auto",
             }}
           >
             {/* Left: hamburger + page name */}
@@ -591,50 +611,102 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
           </motion.header>
         )}
 
-        {/* ── Charts page — always mounted, hidden off-route ───────────────────────
-            display:none removes the element from layout entirely (zero height,
-            zero pointer events) while keeping the React subtree alive in memory.
-            The LWC chart instance, loaded candles, drawings, and all gesture
-            state survive tab switches — no re-init, no re-fetch.
-            The ResizeObserver inside CustomChart fires automatically when this
-            container changes from display:none → display:flex, so LWC resizes
-            itself to the correct dimensions without any manual nudge. */}
-        {chartsNode && (
-          <div
-            className="flex-1 overflow-hidden"
-            style={{
-              display:            location === "/charts" ? "flex" : "none",
+        {/* ── Unified content area ──────────────────────────────────────────────────
+            All five bottom-tab pages are always mounted and toggled with
+            display:none/flex (the same keep-alive pattern already used for
+            Charts). This is the root-cause fix for the slow slide animation:
+            - Pages never unmount on tab switch → staggered card animations
+              (cardVariants y:20 + delay:i*0.055) never re-run.
+            - Scroll position, component state, and loaded data survive.
+            - No AnimatePresence exit/enter cycle → instant, zero-latency tabs.
+
+            Sidebar pages (Settings, Reports, etc.) are rendered via `children`
+            which still carries AnimatePresence for a clean fade transition.
+            They are only visible when the path is NOT a bottom-tab path.
+
+            position:relative on the container + position:absolute inset:0 on
+            each child ensures all pages occupy exactly the same rect regardless
+            of the display value, preventing any layout recalculation on switch. */}
+        <div className="flex-1 overflow-hidden" style={{ position: "relative" }}>
+
+          {/* Dashboard — always mounted */}
+          <div style={{
+            position:      "absolute",
+            inset:         0,
+            display:       pathname === "/"        ? "flex" : "none",
+            flexDirection: "column",
+            paddingBottom: isMobile ? 80 : 0,
+          }}>
+            {dashboardNode}
+          </div>
+
+          {/* Markets — always mounted */}
+          <div style={{
+            position:      "absolute",
+            inset:         0,
+            display:       pathname === "/markets" ? "flex" : "none",
+            flexDirection: "column",
+            paddingBottom: isMobile ? 80 : 0,
+          }}>
+            {marketsNode}
+          </div>
+
+          {/* Trades — always mounted */}
+          <div style={{
+            position:      "absolute",
+            inset:         0,
+            display:       pathname === "/trades"  ? "flex" : "none",
+            flexDirection: "column",
+            paddingBottom: isMobile ? 80 : 0,
+          }}>
+            {tradesNode}
+          </div>
+
+          {/* Charts — always mounted; touch/scroll locked for gesture handling.
+              ResizeObserver inside CustomChart fires on display:none → flex
+              transition so LWC resizes itself without any manual nudge. */}
+          {chartsNode && (
+            <div style={{
+              position:           "absolute",
+              inset:              0,
+              display:            pathname === "/charts" ? "flex" : "none",
               flexDirection:      "column",
               touchAction:        "none",
               overscrollBehavior: "none",
               paddingBottom:      (isMobile && !mobileChartFullscreen) ? 80 : 0,
-            }}
-          >
-            {chartsNode}
-          </div>
-        )}
+            }}>
+              {chartsNode}
+            </div>
+          )}
 
-        {/* Page Content — non-charts pages.
-            A single, stable wrapper for ALL non-chart routes so that the
-            layout context never changes mid-transition. Previously the wrapper
-            switched between overflow-auto (standard) / overflow-hidden flex
-            (portfolio/markets) the instant `location` changed, which caused
-            the outgoing page's exit animation (position:absolute via
-            mode="popLayout") to play inside the wrong container, producing
-            the visible zoom/resize artifact.
-            Each page is now responsible for its own scroll behaviour:
-            - Standard pages: wrapped in <StandardPageWrapper> (App.tsx)
-            - Portfolio: uses h-full flex-col internally
-            - Markets: uses h-full flex-col internally
-            paddingBottom only applied on mobile to clear the fixed bottom nav. */}
-        {location !== "/charts" && (
-          <div
-            className="flex-1 flex flex-col overflow-hidden"
-            style={isMobile ? { paddingBottom: location === "/markets" ? 80 : 56 } : undefined}
-          >
-            {children}
+          {/* Alerts — always mounted */}
+          <div style={{
+            position:      "absolute",
+            inset:         0,
+            display:       pathname === "/alerts"  ? "flex" : "none",
+            flexDirection: "column",
+            paddingBottom: isMobile ? 80 : 0,
+          }}>
+            {alertsNode}
           </div>
-        )}
+
+          {/* Sidebar pages (Brokers, Settings, Reports, etc.) — mount on demand.
+              Hidden entirely when on a tab path so they do not overlap the
+              always-mounted tab content. AnimatePresence (in App.tsx children)
+              provides a subtle fade on enter/exit. */}
+          {!BOTTOM_TAB_PATHS.has(pathname) && (
+            <div style={{
+              position:      "absolute",
+              inset:         0,
+              display:       "flex",
+              flexDirection: "column",
+              overflow:      "hidden",
+              paddingBottom: isMobile ? 56 : 0,
+            }}>
+              {children}
+            </div>
+          )}
+        </div>
       </main>
 
       {/* ── Mobile bottom navigation bar ── */}

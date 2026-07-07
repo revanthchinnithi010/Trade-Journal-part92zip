@@ -96,13 +96,35 @@ function StandardPageWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ── Keep-alive charts node ────────────────────────────────────────────────────
-// Charts is rendered OUTSIDE the route Switch so wouter never unmounts it.
-// The Layout component hides it with display:none when the user is on another
-// page, so the LWC chart instance, canvas, and loaded candles all survive tab
-// switches. Suspense fallback=null keeps the charts container empty-but-dark
-// while the lazy JS bundle is still loading (invisible to the user since the
-// container is hidden until they navigate to /charts).
+// ── Keep-alive bottom-tab nodes ───────────────────────────────────────────────
+// All five bottom-tab pages are rendered OUTSIDE AnimatePresence so wouter
+// never unmounts them on a tab switch. Layout shows the active one with
+// display:flex and hides others with display:none, preserving scroll position,
+// component state, and — critically — preventing staggered card animations
+// (cardVariants y:20 + delay:i*0.055) from re-running on every tab visit.
+//
+// Suspense fallback=null keeps each container empty while the lazy bundle loads
+// (invisible to the user since the container is hidden until they navigate).
+const DASHBOARD_NODE = (
+  <Suspense fallback={null}>
+    <StandardPageWrapper><Dashboard /></StandardPageWrapper>
+  </Suspense>
+);
+const MARKETS_NODE = (
+  <Suspense fallback={null}>
+    <Markets />
+  </Suspense>
+);
+const TRADES_NODE = (
+  <Suspense fallback={null}>
+    <StandardPageWrapper><Trades /></StandardPageWrapper>
+  </Suspense>
+);
+const ALERTS_NODE = (
+  <Suspense fallback={null}>
+    <StandardPageWrapper><Alerts /></StandardPageWrapper>
+  </Suspense>
+);
 const CHARTS_NODE = (
   <Suspense fallback={null}>
     <Charts />
@@ -132,41 +154,31 @@ function Router() {
   const pathname = location.split("?")[0];
 
   return (
-    // chartsNode is always rendered (inside Layout) but hidden off-route.
-    // All other pages are rendered below using per-route conditionals.
-    <Layout chartsNode={CHARTS_NODE}>
+    // Bottom-tab pages (Dashboard, Markets, Trades, Charts, Alerts) are passed
+    // as always-mounted keep-alive nodes. Layout toggles them with display:none/flex.
+    // Sidebar pages (Brokers, Reports, Settings, etc.) are still rendered through
+    // AnimatePresence so they get a clean fade transition and are unmounted when left.
+    <Layout
+      chartsNode={CHARTS_NODE}
+      dashboardNode={DASHBOARD_NODE}
+      marketsNode={MARKETS_NODE}
+      tradesNode={TRADES_NODE}
+      alertsNode={ALERTS_NODE}
+    >
       {/*
-        AnimatePresence handles page exit before the next page enters.
-        Each route is a SEPARATE conditional — NOT wrapped in a shared Switch.
+        AnimatePresence handles enter/exit only for SIDEBAR pages — pages reachable
+        via the hamburger sidebar, not the bottom tab bar. Tab pages are excluded
+        because they must never unmount; their staggered card animations would
+        re-run on every tab visit if they were inside AnimatePresence.
 
-        Why no Switch here:
-        Switch re-evaluates routes against the current location on every render.
-        When AnimatePresence keeps the OLD PageTransition alive for its exit
-        animation, that PageTransition's Switch would re-match the NEW location
-        and render the new page's content inside the exiting wrapper — causing
-        the new page to appear twice simultaneously (once exiting, once entering).
-
-        Individual conditionals fix this: each PageTransition renders one
-        hardcoded component, so the exiting wrapper always shows the old page
-        content regardless of what the current location becomes.
+        Each route is a SEPARATE conditional (not Switch) so AnimatePresence
+        can keep the exiting element alive without re-matching the new location.
 
         `initial={false}` skips the animation on the very first render.
-        Charts is excluded — it is a keep-alive node that never unmounts.
       */}
       <Suspense fallback={<PageLoader />}>
         <AnimatePresence mode="popLayout" initial={false}>
-          {/*
-            Standard pages use <StandardPageWrapper> which provides the
-            overflow-auto scroll container + padding that previously lived
-            on the Layout's location-based content wrapper. Portfolio and
-            Markets manage their own layout internally and do NOT get the
-            wrapper.  Charts is a keep-alive node outside AnimatePresence.
-          */}
-          {pathname === "/"             && <PageTransition key="/"             style={{ height: "100%" }}><StandardPageWrapper><Dashboard   /></StandardPageWrapper></PageTransition>}
-          {pathname === "/markets"      && <PageTransition key="/markets"      style={{ height: "100%" }}><Markets     /></PageTransition>}
-          {pathname === "/trades"       && <PageTransition key="/trades"       style={{ height: "100%" }}><StandardPageWrapper><Trades      /></StandardPageWrapper></PageTransition>}
           {pathname === "/brokers"      && <PageTransition key="/brokers"      style={{ height: "100%" }}><StandardPageWrapper><Brokers     /></StandardPageWrapper></PageTransition>}
-          {pathname === "/alerts"       && <PageTransition key="/alerts"       style={{ height: "100%" }}><StandardPageWrapper><Alerts      /></StandardPageWrapper></PageTransition>}
           {pathname === "/reports"      && <PageTransition key="/reports"      style={{ height: "100%" }}><StandardPageWrapper><Reports     /></StandardPageWrapper></PageTransition>}
           {pathname === "/calendar"     && <PageTransition key="/calendar"     style={{ height: "100%" }}><StandardPageWrapper><Calendar    /></StandardPageWrapper></PageTransition>}
           {pathname === "/notebook"     && <PageTransition key="/notebook"     style={{ height: "100%" }}><StandardPageWrapper><Notebook    /></StandardPageWrapper></PageTransition>}
