@@ -45,35 +45,27 @@ export const SPRING_MODAL: Transition = {
 };
 
 // ── Page transitions ──────────────────────────────────────────────────────
+// Pure opacity — the only property guaranteed to work correctly inside
+// overflow:hidden containers with simultaneously-switching layout wrappers.
+// y/scale movements fight against the instant container-switch in Layout
+// and produce visual snaps; plain opacity masks them cleanly.
 
-/** Default page swap — vertical lift + fade. Used for top-level pages. */
+/** Default page swap — fast cross-fade. */
 export const pageVariants: Variants = {
-  initial: { opacity: 0, y: 22, scale: 0.982 },
-  enter: {
-    opacity: 1, y: 0, scale: 1,
-    transition: { type: "spring", stiffness: 320, damping: 28, mass: 0.85 },
-  },
-  exit: {
-    opacity: 0, y: -14, scale: 0.988,
-    transition: { duration: 0.2, ease: EASE_IN_OUT },
-  },
+  initial: { opacity: 0 },
+  enter:   { opacity: 1, transition: { duration: 0.2,  ease: [0.0, 0.0, 0.2, 1] } },
+  exit:    { opacity: 0, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
 };
 
 /**
- * Detail / drill-down page — slides in from the right on enter, slides back
- * out to the right on exit (iOS "push" navigation feel).
- * Use for pages accessed via a tap on a card / "→" link (e.g. Portfolio).
+ * Detail page (e.g. Portfolio) — fade + gentle zoom-in.
+ * Scale stays within container bounds (0.97 < 1) so overflow:hidden never clips.
+ * The subtle scale gives a distinct "expanding into detail" feel vs plain pages.
  */
 export const pageDetailVariants: Variants = {
-  initial: { opacity: 0, x: 60, scale: 0.96 },
-  enter: {
-    opacity: 1, x: 0, scale: 1,
-    transition: { type: "spring", stiffness: 380, damping: 32, mass: 0.85 },
-  },
-  exit: {
-    opacity: 0, x: 48, scale: 0.97,
-    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
-  },
+  initial: { opacity: 0, scale: 0.97 },
+  enter:   { opacity: 1, scale: 1, transition: { duration: 0.24, ease: [0.0, 0.0, 0.2, 1] } },
+  exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
 };
 
 // ── Sidebar ───────────────────────────────────────────────────────────────

@@ -410,9 +410,19 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — all non-chart/portfolio/markets pages */}
+        {/* Top Header — all non-chart/portfolio/markets pages.
+            AnimatePresence keeps the header mounted during its exit animation
+            (opacity 0 → unmount) so the 60px space doesn't vanish instantly
+            while the outgoing page is still fading — eliminating the visible
+            layout jump on navigation to/from Portfolio and Markets. */}
+        <AnimatePresence>
         {location !== "/charts" && location !== "/portfolio" && location !== "/markets" && (
-          <header
+          <motion.header
+            key="global-header"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15, ease: [0.4, 0, 1, 1] }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
               background:           "var(--surface-header)",
@@ -575,8 +585,9 @@ export const Layout = memo(function Layout({ children, chartsNode }: { children:
                 )}
               </div>
             </div>
-          </header>
+          </motion.header>
         )}
+        </AnimatePresence>
 
         {/* ── Charts page — always mounted, hidden off-route ───────────────────────
             display:none removes the element from layout entirely (zero height,
