@@ -148,7 +148,7 @@ function Router() {
           {pathname === "/calc/position"&& <PageTransition key="/calc/position"style={{ height: "100%" }}><CalcPosition/></PageTransition>}
           {pathname === "/calc/margin"  && <PageTransition key="/calc/margin"  style={{ height: "100%" }}><CalcMargin  /></PageTransition>}
           {pathname === "/calc/risk"    && <PageTransition key="/calc/risk"    style={{ height: "100%" }}><CalcRisk    /></PageTransition>}
-          {pathname === "/portfolio"    && <PageTransition key="/portfolio"    style={{ height: "100%" }}><Portfolio   /></PageTransition>}
+          {pathname === "/portfolio"    && <PageTransition key="/portfolio"    style={{ height: "100%" }} variant="detail"><Portfolio   /></PageTransition>}
           {pathname === "/trade"        && <PageTransition key="/trade"        style={{ height: "100%" }}><Trade       /></PageTransition>}
           {pathname === "/ctrader-test" && <PageTransition key="/ctrader-test" style={{ height: "100%" }}><CtraderTest /></PageTransition>}
           {!KNOWN_PATHS.has(pathname)   && <PageTransition key="not-found"    style={{ height: "100%" }}><NotFound    /></PageTransition>}

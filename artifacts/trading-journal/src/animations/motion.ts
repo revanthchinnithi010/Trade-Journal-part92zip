@@ -45,15 +45,34 @@ export const SPRING_MODAL: Transition = {
 };
 
 // ── Page transitions ──────────────────────────────────────────────────────
+
+/** Default page swap — vertical lift + fade. Used for top-level pages. */
 export const pageVariants: Variants = {
-  initial: { opacity: 0, y: 14, scale: 0.988 },
+  initial: { opacity: 0, y: 22, scale: 0.982 },
   enter: {
     opacity: 1, y: 0, scale: 1,
-    transition: { ...SPRING_SMOOTH, duration: 0.32 },
+    transition: { type: "spring", stiffness: 320, damping: 28, mass: 0.85 },
   },
   exit: {
-    opacity: 0, y: -8, scale: 0.994,
-    transition: { duration: 0.18, ease: EASE_IN_OUT },
+    opacity: 0, y: -14, scale: 0.988,
+    transition: { duration: 0.2, ease: EASE_IN_OUT },
+  },
+};
+
+/**
+ * Detail / drill-down page — slides in from the right on enter, slides back
+ * out to the right on exit (iOS "push" navigation feel).
+ * Use for pages accessed via a tap on a card / "→" link (e.g. Portfolio).
+ */
+export const pageDetailVariants: Variants = {
+  initial: { opacity: 0, x: 60, scale: 0.96 },
+  enter: {
+    opacity: 1, x: 0, scale: 1,
+    transition: { type: "spring", stiffness: 380, damping: 32, mass: 0.85 },
+  },
+  exit: {
+    opacity: 0, x: 48, scale: 0.97,
+    transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
   },
 };
 
