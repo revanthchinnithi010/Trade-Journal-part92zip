@@ -138,24 +138,12 @@ function ReconnectBanner() {
   );
 }
 
-// Bottom-tab paths — pages that are always mounted and shown via display:none/flex.
-// AnimatePresence / PageTransition must NOT wrap these routes.
-const BOTTOM_TAB_PATHS = new Set(["/", "/markets", "/trades", "/charts", "/alerts"]);
-
 export const Layout = memo(function Layout({
   children,
   chartsNode,
-  dashboardNode,
-  marketsNode,
-  tradesNode,
-  alertsNode,
 }: {
-  children:      React.ReactNode;
-  chartsNode?:   React.ReactNode;
-  dashboardNode?: React.ReactNode;
-  marketsNode?:  React.ReactNode;
-  tradesNode?:   React.ReactNode;
-  alertsNode?:   React.ReactNode;
+  children:    React.ReactNode;
+  chartsNode?: React.ReactNode;
 }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
@@ -430,19 +418,15 @@ export const Layout = memo(function Layout({
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — present on every non-chart page.
-            Never removed from the DOM (no AnimatePresence unmount) so the
-            60px slot is always reserved — eliminating the layout jump that
-            occurred when the header unmounted mid-transition.
-            On /portfolio and /markets the header fades to opacity-0 and
-            loses pointer-events so it's invisible but still occupies space,
-            keeping the content wrapper height stable during page transitions. */}
-        {pathname !== "/charts" && (
+        {/* Top Header — hidden on /charts (gesture surface) and /markets (full-screen page).
+            All other pages show it. Portfolio fades it to opacity-0 to keep stable height
+            during its slide-in transition. */}
+        {pathname !== "/charts" && pathname !== "/markets" && (
           <motion.header
             key="global-header"
             initial={false}
             animate={{
-              opacity: (pathname === "/portfolio" || pathname === "/markets") ? 0 : 1,
+              opacity: pathname === "/portfolio" ? 0 : 1,
             }}
             transition={{ duration: 0.15, ease: [0.4, 0, 1, 1] }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
@@ -451,7 +435,7 @@ export const Layout = memo(function Layout({
               backdropFilter:       "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               borderBottom:         "1px solid var(--surface-header-border)",
-              pointerEvents:        (pathname === "/portfolio" || pathname === "/markets") ? "none" : "auto",
+              pointerEvents:        pathname === "/portfolio" ? "none" : "auto",
             }}
           >
             {/* Left: hamburger + page name */}
@@ -611,62 +595,17 @@ export const Layout = memo(function Layout({
           </motion.header>
         )}
 
-        {/* ── Unified content area ──────────────────────────────────────────────────
-            All five bottom-tab pages are always mounted and toggled with
-            display:none/flex (the same keep-alive pattern already used for
-            Charts). This is the root-cause fix for the slow slide animation:
-            - Pages never unmount on tab switch → staggered card animations
-              (cardVariants y:20 + delay:i*0.055) never re-run.
-            - Scroll position, component state, and loaded data survive.
-            - No AnimatePresence exit/enter cycle → instant, zero-latency tabs.
+        {/* ── Content area ─────────────────────────────────────────────────────────
+            Charts is the only keep-alive page: its LWC instance must survive tab
+            switches (resize + state would reset on remount). Every other page is
+            rendered via AnimatePresence in App.tsx — it mounts on navigate-in and
+            unmounts on navigate-out so only ONE page is ever in the DOM at a time.
 
-            Sidebar pages (Settings, Reports, etc.) are rendered via `children`
-            which still carries AnimatePresence for a clean fade transition.
-            They are only visible when the path is NOT a bottom-tab path.
-
-            position:relative on the container + position:absolute inset:0 on
-            each child ensures all pages occupy exactly the same rect regardless
-            of the display value, preventing any layout recalculation on switch. */}
+            Markets removes the top header entirely (see condition above) so the
+            flex-1 div here fills the full viewport height when on /markets. */}
         <div className="flex-1 overflow-hidden" style={{ position: "relative" }}>
 
-          {/* Dashboard — always mounted */}
-          <div style={{
-            position:      "absolute",
-            inset:         0,
-            display:       pathname === "/"        ? "flex" : "none",
-            flexDirection: "column",
-            paddingBottom: isMobile ? 80 : 0,
-          }}>
-            {dashboardNode}
-          </div>
-
-          {/* Markets — always mounted; full-screen, no paddingBottom.
-              The fixed bottom nav bar overlays on top. SharedMarketSelector
-              adds internal scroll clearance so the last list item is always
-              visible above the nav pill. */}
-          <div style={{
-            position:      "absolute",
-            inset:         0,
-            display:       pathname === "/markets" ? "flex" : "none",
-            flexDirection: "column",
-          }}>
-            {marketsNode}
-          </div>
-
-          {/* Trades — always mounted */}
-          <div style={{
-            position:      "absolute",
-            inset:         0,
-            display:       pathname === "/trades"  ? "flex" : "none",
-            flexDirection: "column",
-            paddingBottom: isMobile ? 80 : 0,
-          }}>
-            {tradesNode}
-          </div>
-
-          {/* Charts — always mounted; touch/scroll locked for gesture handling.
-              ResizeObserver inside CustomChart fires on display:none → flex
-              transition so LWC resizes itself without any manual nudge. */}
+          {/* Charts — keep-alive; touch/scroll locked for LWC gesture handling. */}
           {chartsNode && (
             <div style={{
               position:           "absolute",
@@ -681,29 +620,16 @@ export const Layout = memo(function Layout({
             </div>
           )}
 
-          {/* Alerts — always mounted */}
-          <div style={{
-            position:      "absolute",
-            inset:         0,
-            display:       pathname === "/alerts"  ? "flex" : "none",
-            flexDirection: "column",
-            paddingBottom: isMobile ? 80 : 0,
-          }}>
-            {alertsNode}
-          </div>
-
-          {/* Sidebar pages (Brokers, Settings, Reports, etc.) — mount on demand.
-              Hidden entirely when on a tab path so they do not overlap the
-              always-mounted tab content. AnimatePresence (in App.tsx children)
-              provides a subtle fade on enter/exit. */}
-          {!BOTTOM_TAB_PATHS.has(pathname) && (
+          {/* All other pages — mounted/unmounted by AnimatePresence in App.tsx.
+              The paddingBottom for the mobile nav bar is applied per-page in
+              App.tsx via StandardPageWrapper or the page's own layout. */}
+          {pathname !== "/charts" && (
             <div style={{
               position:      "absolute",
               inset:         0,
               display:       "flex",
               flexDirection: "column",
               overflow:      "hidden",
-              paddingBottom: isMobile ? 56 : 0,
             }}>
               {children}
             </div>
