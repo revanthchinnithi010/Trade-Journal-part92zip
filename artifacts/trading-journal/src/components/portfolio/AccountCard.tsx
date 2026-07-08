@@ -50,7 +50,7 @@ interface Props {
 }
 
 export default function AccountCard({ account, index = 0 }: Props) {
-  const [isExpanded, setIsExpanded] = useState(true);
+  const [isExpanded, setIsExpanded] = useState(false);
   const reduced = useReducedMotion();
   const accent = BROKER_ACCENT[account.brokerId] ?? "#f97316";
 
@@ -61,7 +61,7 @@ export default function AccountCard({ account, index = 0 }: Props) {
   const content = (
     <div className="glass-card overflow-hidden h-full">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-4 pb-3">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
         {/* Left: accent dot + broker name */}
         <div className="flex items-center gap-2">
           <span
@@ -109,13 +109,12 @@ export default function AccountCard({ account, index = 0 }: Props) {
         </div>
       </div>
 
-      {/* Account value — always visible */}
+      {/* Balance — always visible, no label */}
       <div className="px-4 pb-3">
-        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 mb-1">
-          Account Value
-        </p>
         <DualAmount usd={account.accountValueUSD} toINR={account.toINR} />
-        <p className="text-[10px] text-muted-foreground/40 mt-1">{account.rateLabel}</p>
+        {account.rateLabel && (
+          <p className="text-[10px] text-muted-foreground/40 mt-0.5">{account.rateLabel}</p>
+        )}
       </div>
 
       {/* Collapsible metrics */}
