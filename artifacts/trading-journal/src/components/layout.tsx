@@ -212,9 +212,9 @@ export const Layout = memo(function Layout({
   }, []);
 
   const currentPageLabel =
-    pathname === "/portfolio"
-      ? "Portfolio"
-      : NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
+    pathname === "/portfolio"    ? "Portfolio"          :
+    pathname === "/pnl"          ? "Net PNL Analytics"  :
+    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
 
   const { theme, toggleTheme } = useTheme();
   const { currency, setCurrency, fetchRate } = useCurrencyStore();
@@ -443,7 +443,7 @@ export const Layout = memo(function Layout({
           >
             {/* Left: hamburger (or back-arrow on detail pages) + page name */}
             <div className="flex items-center gap-3 shrink-0">
-              {pathname === "/portfolio" ? (
+              {(pathname === "/portfolio" || pathname === "/pnl") ? (
                 <button
                   onClick={() => navigate("/")}
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"

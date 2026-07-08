@@ -168,9 +168,14 @@ export default function AccountValueWidget({
           </div>
         </div>
 
-        {/* Net PNL */}
+        {/* Net PNL — tapping navigates to the PNL Analytics page */}
         <div className="px-3.5 py-3 border-r border-white/[0.06]">
-          <span className="block text-[11px] font-semibold text-white/40 mb-1.5">Net PNL</span>
+          <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/pnl")}>
+            <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
+              Net PNL
+            </span>
+            <ChevronRight className="w-3 h-3 text-white/30" />
+          </button>
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-black leading-none" style={{ color: netPos ? "#34d399" : "#f87171" }}>
               {fmt(resolvedNetPnlDisplay, currency, masked)}

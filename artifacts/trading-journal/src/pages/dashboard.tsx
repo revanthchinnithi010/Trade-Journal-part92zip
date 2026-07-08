@@ -375,14 +375,16 @@ export default function Dashboard() {
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard
-          index={0}
-          label="Net PNL"
-          value={formatAmount(combined.display.netPnl, currency)}
-          icon={combined.usd.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
-          positive={combined.usd.netPnl > 0 ? true : combined.usd.netPnl < 0 ? false : undefined}
-          sub={<span className="flex items-center gap-1"><span className={combined.usd.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{combined.usd.netPnl >= 0 ? "▲" : "▼"}</span>Delta + cTrader</span>}
-        />
+        <Link href="/pnl" className="block h-full cursor-pointer">
+          <StatCard
+            index={0}
+            label="Net PNL"
+            value={formatAmount(combined.display.netPnl, currency)}
+            icon={combined.usd.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
+            positive={combined.usd.netPnl > 0 ? true : combined.usd.netPnl < 0 ? false : undefined}
+            sub={<span className="flex items-center gap-1"><span className={combined.usd.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{combined.usd.netPnl >= 0 ? "▲" : "▼"}</span>Delta + cTrader</span>}
+          />
+        </Link>
         <StatCard
           index={1}
           label="Win Rate"

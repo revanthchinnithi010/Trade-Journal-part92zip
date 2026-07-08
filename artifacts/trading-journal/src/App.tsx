@@ -32,8 +32,9 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 // Using lazy() still splits the bundle (fast initial load), but the module
 // is preloaded eagerly in the background so the first tap to /charts is instant.
 const Charts      = lazy(() => import("@/pages/charts"));
-const Portfolio   = lazy(() => import("@/pages/portfolio"));
-const Trade       = lazy(() => import("@/pages/trade"));
+const Portfolio    = lazy(() => import("@/pages/portfolio"));
+const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
+const Trade        = lazy(() => import("@/pages/trade"));
 const NotFound      = lazy(() => import("@/pages/not-found"));
 const CtraderTest   = lazy(() => import("@/pages/ctrader-test"));
 
@@ -149,7 +150,7 @@ const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
   "/calendar", "/notebook", "/settings",
   "/calc/crypto", "/calc/forex", "/calc/position", "/calc/margin", "/calc/risk",
-  "/portfolio", "/trade", "/ctrader-test", "/charts",
+  "/portfolio", "/pnl", "/trade", "/ctrader-test", "/charts",
 ]);
 
 /**
@@ -243,6 +244,7 @@ function Router() {
                box directly as its height reference, not an outer page-scroll
                container. */}
           {pathname === "/portfolio"     && <PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition>}
+          {pathname === "/pnl"          && <PageTransition key="/pnl"       variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition>}
 
           {/* ── 404 ── */}
           {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition>}
