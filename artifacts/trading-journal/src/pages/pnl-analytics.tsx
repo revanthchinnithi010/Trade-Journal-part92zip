@@ -1,11 +1,14 @@
 import { memo, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
-  CalendarDays, Target, Flame, Zap, Trophy, AlertTriangle,
+  CalendarDays, Target, Flame, Zap, Trophy,
 } from "lucide-react";
 import {
   useGetStatsSummary, useGetEquityCurve, useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
+import {
+  DEMO_STATS, DEMO_EQUITY_CURVE, getDemoCalendarHeatmap,
+} from "@/data/demoAnalyticsData";
 import {
   Bar, BarChart as RechartsBarChart, ResponsiveContainer, Tooltip,
   XAxis, YAxis, Area, AreaChart, Cell, ReferenceLine,
@@ -264,13 +267,29 @@ export default function PnlAnalytics() {
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
 
-  const { data: stats } = useGetStatsSummary();
-  const { data: equity, isLoading: equityLoading } = useGetEquityCurve();
+  const { data: liveStats,  isFetched: statsFetched  } = useGetStatsSummary();
+  const { data: liveEquity, isFetched: equityFetched } = useGetEquityCurve();
 
   const now = useMemo(() => new Date(), []);
-  const { data: calData } = useGetCalendarHeatmap({
+  const { data: liveCalData, isFetched: calFetched } = useGetCalendarHeatmap({
     year: now.getFullYear(), month: now.getMonth() + 1,
   });
+
+  // ── Single state machine: "loading" | "live" | "demo" ─────────────────────
+  // All three queries must settle before we decide; this prevents flashing demo
+  // content while live data is still in-flight.
+  //
+  // To swap in live data: remove the pageState block and the IS_DEMO / demo
+  // data lines below, then use liveStats/liveEquity/liveCalData directly.
+  const queriesSettled = statsFetched && equityFetched && calFetched;
+  const hasLiveData    = (liveEquity?.length ?? 0) > 0 || (liveStats?.totalTrades ?? 0) > 0;
+  type PageState = "loading" | "live" | "demo";
+  const pageState: PageState = !queriesSettled ? "loading" : hasLiveData ? "live" : "demo";
+  const IS_DEMO = pageState === "demo";
+
+  const stats   = pageState === "live" ? liveStats   : pageState === "demo" ? DEMO_STATS   : undefined;
+  const equity  = pageState === "live" ? liveEquity  : pageState === "demo" ? DEMO_EQUITY_CURVE : undefined;
+  const calData = pageState === "live" ? liveCalData : pageState === "demo" ? getDemoCalendarHeatmap(now.getFullYear(), now.getMonth() + 1) : undefined;
 
   // ── All daily PNL points from equity curve, sorted ascending ───────────
   type RawEquityPoint = { date: string; pnl: number; equity: number };
@@ -380,40 +399,7 @@ export default function PnlAnalytics() {
 
   const pnlSign = (v: number) => (v > 0 ? "+" : "");
 
-  // ── Loading skeleton ──────────────────────────────────────────────────
-  if (equityLoading && !equity) {
-    return (
-      <PageTransition className="space-y-4 pb-12" fill={false}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
-        </div>
-        <div className="h-8 w-80 rounded-xl shimmer-loading" />
-        {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
-      </PageTransition>
-    );
-  }
-
-  // ── Full empty state ──────────────────────────────────────────────────
-  const hasAnyData = allDaily.length > 0 || (stats?.totalTrades ?? 0) > 0;
-  if (!hasAnyData) {
-    return (
-      <PageTransition className="pb-12" fill={false}>
-        <div className="glass-card flex flex-col items-center justify-center py-28 gap-5 mt-4">
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center"
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
-          >
-            <BarChart2 className="w-9 h-9 text-muted-foreground/25" />
-          </div>
-          <div className="text-center">
-            <p className="text-[17px] font-bold text-muted-foreground/50 mb-1">No trade history yet</p>
-            <p className="text-[13px] text-muted-foreground/30">Record trades to see your PNL analytics here</p>
-          </div>
-        </div>
-      </PageTransition>
-    );
-  }
-
+  // ── All hooks must appear before any early returns ────────────────────
   const filterLabel = TIME_FILTERS.find(f => f.id === timeFilter)?.label ?? "All";
 
   // ── Daily chart data ──────────────────────────────────────────────────
@@ -428,8 +414,40 @@ export default function PnlAnalytics() {
   const monthlyMinW = Math.max(360, monthlyData.length * 56);
   const cumMinW     = Math.max(520, cumulativeData.length * 22);
 
+  // ── Derived per-trade stats ───────────────────────────────────────────
+  const grossProfit = (stats?.averageWin  ?? 0) * (stats?.winCount  ?? 0);
+  const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
+
+  // ── Loading skeleton (after all hooks) ───────────────────────────────
+  if (pageState === "loading") {
+    return (
+      <PageTransition className="space-y-4 pb-12" fill={false}>
+        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+          {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
+        </div>
+        <div className="h-8 w-80 rounded-xl shimmer-loading" />
+        {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
+      </PageTransition>
+    );
+  }
+
   return (
     <PageTransition className="space-y-4 pb-12" fill={false}>
+
+      {/* ── Demo data banner ── */}
+      {IS_DEMO && (
+        <div
+          className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl text-[11px] font-semibold"
+          style={{
+            background: "rgba(251,191,36,0.07)",
+            border: "1px solid rgba(251,191,36,0.22)",
+            color: "rgba(251,191,36,0.85)",
+          }}
+        >
+          <span className="w-1.5 h-1.5 rounded-full bg-amber-400/80 flex-shrink-0 animate-pulse" />
+          Demo data — connect your broker or record trades to see your real analytics
+        </div>
+      )}
 
       {/* ── Top 6 KPI cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
@@ -719,8 +737,99 @@ export default function PnlAnalytics() {
         </div>
       </AnimatedCard>
 
-      {/* ── Stats grid ── */}
+      {/* ── Trade Statistics grid ── */}
       <AnimatedCard index={5} className="glass-card overflow-hidden">
+        <ChartHeader icon={Trophy} title="Trade Statistics" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 border-t border-border/50 divide-y divide-border/40">
+
+          {/* Row 1 */}
+          <div className="col-span-2 sm:col-span-3 lg:col-span-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 divide-x divide-border/40">
+            <StatItem
+              label="Win Rate"
+              value={stats ? `${stats.winRate.toFixed(1)}%` : "—"}
+              sub="Trades closed positive"
+              color="#34d399"
+            />
+            <StatItem
+              label="Profit Factor"
+              value={stats ? stats.profitFactor.toFixed(2) : "—"}
+              sub="Gross profit / gross loss"
+              color={stats && stats.profitFactor >= 1 ? "#34d399" : "#f87171"}
+            />
+            <StatItem
+              label="Avg Risk / Reward"
+              value={stats ? `${stats.averageRR.toFixed(2)}R` : "—"}
+              sub="Average RR across winners"
+              color="#60a5fa"
+            />
+            <StatItem
+              label="Total Trades"
+              value={stats ? String(stats.totalTrades) : "—"}
+              sub={stats ? `${stats.winCount}W · ${stats.lossCount}L${stats.breakevenCount ? ` · ${stats.breakevenCount}B` : ""}` : undefined}
+            />
+          </div>
+
+          {/* Row 2 */}
+          <div className="col-span-2 sm:col-span-3 lg:col-span-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 divide-x divide-border/40 border-t border-border/40">
+            <StatItem
+              label="Average Win"
+              value={stats && stats.averageWin > 0 ? `+${fc(stats.averageWin)}` : "—"}
+              sub="Per winning trade"
+              color="#34d399"
+            />
+            <StatItem
+              label="Average Loss"
+              value={stats && stats.averageLoss > 0 ? `-${fc(stats.averageLoss)}` : "—"}
+              sub="Per losing trade"
+              color="#f87171"
+            />
+            <StatItem
+              label="Best Trade"
+              value={stats && stats.largestWin > 0 ? `+${fc(stats.largestWin)}` : "—"}
+              sub="Single trade high"
+              color="#34d399"
+            />
+            <StatItem
+              label="Worst Trade"
+              value={stats && stats.largestLoss > 0 ? `-${fc(stats.largestLoss)}` : "—"}
+              sub="Single trade low"
+              color="#f87171"
+            />
+          </div>
+
+          {/* Row 3 */}
+          <div className="col-span-2 sm:col-span-3 lg:col-span-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 divide-x divide-border/40 border-t border-border/40">
+            <StatItem
+              label="Net Profit"
+              value={stats ? `${pnlSign(stats.netPnl)}${fc(stats.netPnl)}` : "—"}
+              sub="Gross profit − gross loss"
+              color={stats && stats.netPnl >= 0 ? "#34d399" : "#f87171"}
+            />
+            <StatItem
+              label="Gross Profit"
+              value={grossProfit > 0 ? `+${fc(grossProfit)}` : "—"}
+              sub={`${stats?.winCount ?? 0} winning trades`}
+              color="#34d399"
+            />
+            <StatItem
+              label="Gross Loss"
+              value={grossLoss > 0 ? `-${fc(grossLoss)}` : "—"}
+              sub={`${stats?.lossCount ?? 0} losing trades`}
+              color="#f87171"
+            />
+            <StatItem
+              label="Win Streak"
+              value={stats && stats.currentStreak > 0 ? `+${stats.currentStreak}` : stats && stats.currentStreak < 0 ? String(stats.currentStreak) : "—"}
+              sub="Current streak"
+              color={stats && stats.currentStreak > 0 ? "#34d399" : stats && stats.currentStreak < 0 ? "#f87171" : undefined}
+            />
+          </div>
+
+        </div>
+      </AnimatedCard>
+
+      {/* ── Daily / Period stats grid ── */}
+      <AnimatedCard index={6} className="glass-card overflow-hidden">
         <ChartHeader
           icon={Target}
           title="PNL Statistics"
