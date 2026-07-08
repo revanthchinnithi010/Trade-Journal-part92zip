@@ -58,6 +58,38 @@ export const pageVariants: Variants = {
 };
 
 /**
+ * Tab page slide — direction-aware horizontal slide for bottom-tab navigation.
+ *
+ * `custom` is the direction integer passed from AnimatePresence:
+ *   > 0  → navigating to a higher-index tab  (enter from right, exit to left)
+ *   < 0  → navigating to a lower-index tab   (enter from left, exit to right)
+ *   = 0  → non-tab navigation (sidebar ↔ tab) → plain opacity cross-fade
+ *
+ * The parent container must have overflow:hidden to clip the off-screen pages
+ * during the simultaneous slide (AnimatePresence mode="sync").
+ */
+export const tabPageVariants: Variants = {
+  initial: (dir: number) => ({
+    x:       dir === 0 ? 0        : (dir > 0 ? "100%" : "-100%"),
+    opacity: dir === 0 ? 0        : 1,
+  }),
+  enter: (dir: number) => ({
+    x:          0,
+    opacity:    1,
+    transition: dir === 0
+      ? { duration: 0.2, ease: [0.0, 0.0, 0.2, 1] }
+      : { type: "spring", stiffness: 320, damping: 32, mass: 0.85 },
+  }),
+  exit: (dir: number) => ({
+    x:          dir === 0 ? 0        : (dir > 0 ? "-100%" : "100%"),
+    opacity:    dir === 0 ? 0        : 1,
+    transition: dir === 0
+      ? { duration: 0.14, ease: [0.4, 0, 1, 1] }
+      : { type: "spring", stiffness: 320, damping: 32, mass: 0.85 },
+  }),
+};
+
+/**
  * Detail page (e.g. Portfolio) — fade + gentle zoom-in.
  * Scale stays within container bounds (0.97 < 1) so overflow:hidden never clips.
  * The subtle scale gives a distinct "expanding into detail" feel vs plain pages.

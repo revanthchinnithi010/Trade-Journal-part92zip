@@ -418,10 +418,11 @@ export const Layout = memo(function Layout({
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — hidden on /charts (gesture surface) and /markets (full-screen page).
-            All other pages show it. Portfolio fades it to opacity-0 to keep stable height
-            during its slide-in transition. */}
-        {pathname !== "/charts" && pathname !== "/markets" && (
+        {/* Top Header — hidden on /charts only (gesture surface owns the full viewport).
+            All other pages, including /markets, show it so the layout height is stable
+            during horizontal slide transitions. Portfolio fades it to opacity-0 to keep
+            the stable height during its slide-in transition. */}
+        {pathname !== "/charts" && (
           <motion.header
             key="global-header"
             initial={false}
