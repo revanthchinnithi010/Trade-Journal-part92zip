@@ -45,59 +45,58 @@ export const SPRING_MODAL: Transition = {
 };
 
 // ── Page transitions ──────────────────────────────────────────────────────
-// Pure opacity — the only property guaranteed to work correctly inside
-// overflow:hidden containers with simultaneously-switching layout wrappers.
-// y/scale movements fight against the instant container-switch in Layout
-// and produce visual snaps; plain opacity masks them cleanly.
+// GPU-safe: only opacity + transform (x, y, scale).
+// All transitions favour opacity-led cross-fades to avoid the "page shifting"
+// feel of full-width slides. Directional cues come from small x offsets (≤28px)
+// rather than viewport-width travel, keeping content visually stable.
 
-/** Default page swap — fast cross-fade. */
+/**
+ * Default page swap — fade + subtle slide-up.
+ * Used for sidebar / non-tab pages (mode="wait").
+ */
 export const pageVariants: Variants = {
-  initial: { opacity: 0 },
-  enter:   { opacity: 1, transition: { duration: 0.2,  ease: [0.0, 0.0, 0.2, 1] } },
-  exit:    { opacity: 0, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
+  initial: { opacity: 0, y: 10 },
+  enter:   { opacity: 1, y: 0,  transition: { duration: 0.22, ease: EASE_OUT_EXPO } },
+  exit:    { opacity: 0, y: -6, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
 };
 
 /**
- * Tab page slide — direction-aware horizontal slide for bottom-tab navigation.
+ * Tab page — direction-aware fade-shift for bottom-tab navigation.
  *
- * `custom` is the direction integer passed from AnimatePresence:
- *   > 0  → navigating to a higher-index tab  (enter from right, exit to left)
- *   < 0  → navigating to a lower-index tab   (enter from left, exit to right)
- *   = 0  → non-tab navigation (sidebar ↔ tab) → plain opacity cross-fade
+ * `custom` is the direction integer forwarded from AnimatePresence:
+ *   > 0  → higher-index tab  (enter fades in from +28px right, exits to -28px left)
+ *   < 0  → lower-index tab   (enter fades in from -28px left,  exits to +28px right)
+ *   = 0  → non-tab cross-nav → plain opacity cross-fade
  *
- * The parent container must have overflow:hidden to clip the off-screen pages
- * during the simultaneous slide (AnimatePresence mode="sync").
+ * Small x offset (28px) instead of full viewport width — gives directionality
+ * without the jarring slide-across effect.
  */
+const TAB_X = 28;
 export const tabPageVariants: Variants = {
   initial: (dir: number) => ({
-    x:       dir === 0 ? 0        : (dir > 0 ? "100%" : "-100%"),
-    opacity: dir === 0 ? 0        : 1,
+    x:       dir === 0 ? 0 : (dir > 0 ? TAB_X : -TAB_X),
+    opacity: 0,
   }),
-  enter: (dir: number) => ({
+  enter: (_dir: number) => ({
     x:          0,
     opacity:    1,
-    transition: dir === 0
-      ? { duration: 0.2, ease: [0.0, 0.0, 0.2, 1] }
-      : { type: "spring", stiffness: 320, damping: 32, mass: 0.85 },
+    transition: { duration: 0.22, ease: EASE_OUT_EXPO },
   }),
   exit: (dir: number) => ({
-    x:          dir === 0 ? 0        : (dir > 0 ? "-100%" : "100%"),
-    opacity:    dir === 0 ? 0        : 1,
-    transition: dir === 0
-      ? { duration: 0.14, ease: [0.4, 0, 1, 1] }
-      : { type: "spring", stiffness: 320, damping: 32, mass: 0.85 },
+    x:          dir === 0 ? 0 : (dir > 0 ? -TAB_X : TAB_X),
+    opacity:    0,
+    transition: { duration: 0.16, ease: [0.4, 0, 1, 1] },
   }),
 };
 
 /**
  * Detail page (e.g. Portfolio) — fade + gentle zoom-in.
- * Scale stays within container bounds (0.97 < 1) so overflow:hidden never clips.
- * The subtle scale gives a distinct "expanding into detail" feel vs plain pages.
+ * Scale stays within container bounds (0.97–1) so overflow:hidden never clips.
  */
 export const pageDetailVariants: Variants = {
-  initial: { opacity: 0, scale: 0.97 },
-  enter:   { opacity: 1, scale: 1, transition: { duration: 0.24, ease: [0.0, 0.0, 0.2, 1] } },
-  exit:    { opacity: 0, scale: 0.98, transition: { duration: 0.16, ease: [0.4, 0, 1, 1] } },
+  initial: { opacity: 0, scale: 0.97, y: 8 },
+  enter:   { opacity: 1, scale: 1,    y: 0, transition: { duration: 0.26, ease: EASE_PREMIUM } },
+  exit:    { opacity: 0, scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
 };
 
 // ── Sidebar ───────────────────────────────────────────────────────────────

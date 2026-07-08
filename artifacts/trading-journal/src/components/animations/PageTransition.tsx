@@ -8,10 +8,11 @@
  *
  * variant="page"   — default opacity cross-fade (sidebar pages)
  * variant="detail" — fade + gentle zoom-in (drill-down pages, e.g. Portfolio)
- * variant="tab"    — direction-aware horizontal slide (bottom-tab pages).
+ * variant="tab"    — direction-aware fade-shift (bottom-tab pages). Small x offset
+ *                    (±28px) + opacity gives directional cues without full-width sliding.
  *                    Requires `custom` (direction int) forwarded from AnimatePresence.
  *                    Renders position:absolute;inset:0 so two pages can coexist
- *                    side-by-side during AnimatePresence mode="sync" transitions.
+ *                    during AnimatePresence mode="sync" transitions.
  */
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
