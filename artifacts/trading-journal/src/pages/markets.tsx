@@ -1,4 +1,5 @@
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
+import { useLocation } from "wouter";
 import { useChartStore } from "@/store/chartStore";
 import { SharedMarketSelector } from "@/components/SharedMarketSelector";
 
@@ -8,49 +9,24 @@ import { SharedMarketSelector } from "@/components/SharedMarketSelector";
  * Layout: position:absolute inset:0 so it sits behind the fixed bottom nav bar.
  *
  * Symbol selection:
- * - Watchlist tab tap → onWatchlistTap → sets symbol as active, lazy-mounts the
- *   same SharedMarketSelector sheet used in the Charts mini control bar.
- * - Markets tab tap  → onSelect → just updates chartStore.symbol (no sheet).
- *
- * Sheet lifecycle:
- * - pickerMounted: controls whether the sheet instance exists in the DOM.
- *   Lazy-mount (set true on open) avoids duplicating Delta/cTrader API fetches.
- * - pickerOpen (visible prop): controls sheet visibility / slide animation.
- *   The sheet's own doClose() animates out, then fires onClose → we unmount.
+ * - Watchlist tab tap → onWatchlistTap → sets symbol in chartStore then navigates
+ *   directly to /charts. No secondary sheet is opened.
+ * - Markets tab tap  → onSelect → just updates chartStore.symbol (no navigation).
  */
 export default function Markets() {
   const chartSymbol = useChartStore(s => s.symbol);
+  const [, navigate] = useLocation();
 
-  // Lazy-mount gate: sheet instance is only in the DOM while pickerMounted=true.
-  const [pickerMounted, setPickerMounted] = useState(false);
-  // Visible prop fed to the sheet — drives open/close animation inside the component.
-  const [pickerOpen,    setPickerOpen]    = useState(false);
-
-  // Watchlist row tap: select symbol + open the same sheet picker as Charts.
+  // Watchlist row tap: select symbol then go straight to the Charts page.
+  // No secondary sheet — the chart will read the updated symbol from chartStore.
   const handleWatchlistTap = useCallback((symbol: string) => {
-    useChartStore.getState().setSymbol(symbol);
-    localStorage.setItem("tv_symbol", symbol);
-    setPickerMounted(true);   // mount first (avoids first-render flash)
-    setPickerOpen(true);      // triggers sheet open animation
-  }, []);
+    useChartStore.getState().setSymbol(symbol); // also persists to localStorage internally
+    navigate("/charts");
+  }, [navigate]);
 
-  // Markets tab row tap: select symbol only, no sheet.
+  // Markets tab row tap: select symbol only, stay on Markets.
   const handleMarketsSelect = useCallback((symbol: string) => {
-    useChartStore.getState().setSymbol(symbol);
-    localStorage.setItem("tv_symbol", symbol);
-  }, []);
-
-  // Sheet symbol picked: update shared state. The sheet itself calls doClose()
-  // which animates out and then fires onClose — we don't need to close here.
-  const handlePickerSelect = useCallback((symbol: string) => {
-    useChartStore.getState().setSymbol(symbol);
-    localStorage.setItem("tv_symbol", symbol);
-  }, []);
-
-  // Called by the sheet after its close animation completes — safe to unmount.
-  const handlePickerClose = useCallback(() => {
-    setPickerOpen(false);
-    setPickerMounted(false);
+    useChartStore.getState().setSymbol(symbol); // also persists to localStorage internally
   }, []);
 
   return (
@@ -67,18 +43,6 @@ export default function Markets() {
         onSelect={handleMarketsSelect}
         onWatchlistTap={handleWatchlistTap}
       />
-
-      {/* Symbol picker popup — lazy-mounted, exact same component as Charts mini
-          control bar. Mounts on first Watchlist tap, unmounts after close animation. */}
-      {pickerMounted && (
-        <SharedMarketSelector
-          mode="sheet"
-          visible={pickerOpen}
-          activeSymbol={chartSymbol}
-          onSelect={handlePickerSelect}
-          onClose={handlePickerClose}
-        />
-      )}
     </div>
   );
 }
