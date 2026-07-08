@@ -1,14 +1,17 @@
 import { useState } from "react";
 import {
   Eye, EyeOff, TrendingUp, TrendingDown,
-  RefreshCw, ChevronRight, Wallet, Plus, Loader2,
+  RefreshCw, ChevronRight, Wallet, Loader2,
   Clock, CheckCircle, XCircle, AlertCircle,
 } from "lucide-react";
 import { useCurrencyStore } from "@/store/currencyStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
-import { useGetEquityCurve, useGetStatsSummary, useListTrades } from "@workspace/api-client-react";
+import { useListTrades } from "@workspace/api-client-react";
 import type { BrokerPosition, BrokerOrder } from "@/types/broker";
+import { useDeltaAccount } from "@/store/deltaAccountStore";
+import { useCtraderAccount } from "@/store/ctraderAccountStore";
+import AccountCard from "@/components/portfolio/AccountCard";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -176,27 +179,16 @@ export default function Portfolio() {
   const [tab, setTab] = useState<Tab>("balances");
   const [masked, setMasked] = useState(false);
 
-  const xr = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
-
-  const { data: equity }  = useGetEquityCurve();
-  const { data: stats }   = useGetStatsSummary();
   const { data: tradeRes } = useListTrades({ limit: 200 });
 
-  const { positions, orders, balance, connectionStatus, refreshPositions, refreshOrders } = useBrokerStore();
+  const { positions, orders, connectionStatus, refreshPositions, refreshOrders } = useBrokerStore();
 
-  const accountValueUSD = equity && equity.length > 0
-    ? equity[equity.length - 1].equity
-    : Math.max(stats?.netPnl ?? 0, 0);
-  const accountValueINR = accountValueUSD * xr;
+  const deltaAccount   = useDeltaAccount();
+  const ctraderAccount = useCtraderAccount();
 
-  const upnlUSD = Number(balance?.unrealisedPnl ?? 0);
-  const upnlINR = upnlUSD * xr;
+  const upnlUSD = deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD;
+  const upnlINR = deltaAccount.toINR(deltaAccount.unrealizedPnlUSD) + ctraderAccount.toINR(ctraderAccount.unrealizedPnlUSD);
   const upPos   = upnlUSD >= 0;
-
-  const walletUSD = Number(balance?.walletBalance ?? 0);
-  const walletINR = walletUSD * xr;
-  const availUSD  = Number(balance?.availableToWithdraw ?? 0);
-  const availINR  = availUSD * xr;
 
   const openTrades = (tradeRes?.trades ?? []).filter(
     (t) => (t as { exitPrice?: number | null }).exitPrice == null
@@ -265,44 +257,22 @@ export default function Portfolio() {
         {/* ══ BALANCES ══ */}
         {tab === "balances" && (
           <>
-            {/* Account Value card */}
-            <div className="glass-card overflow-hidden">
-              <div className="px-4 pt-4 pb-3">
-                <div className="flex items-center justify-between mb-3">
-                  <span className="text-[12px] font-semibold text-white/45">Account Value</span>
-                  <button
-                    className="text-[11px] font-bold transition-colors"
-                    style={{ color: "#f97316" }}
-                  >
-                    PNL Analytics
-                  </button>
-                </div>
-                <div className="flex items-center gap-3">
-                  <DualValue inr={accountValueINR} usd={accountValueUSD} masked={masked} size="lg" />
-                  <button
-                    onClick={() => setMasked(m => !m)}
-                    className="text-white/30 hover:text-white/55 transition-colors"
-                  >
-                    {masked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
+            {/* Mask toggle */}
+            <div className="flex items-center justify-end px-1">
+              <button
+                onClick={() => setMasked(m => !m)}
+                className="flex items-center gap-1.5 text-[11px] font-semibold text-white/40 hover:text-white/65 transition-colors"
+              >
+                {masked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {masked ? "Show balances" : "Hide balances"}
+              </button>
             </div>
 
-            {/* Wallet sections */}
-            <div className="glass-card overflow-hidden">
-              <WalletRow
-                label="Available for Trading"
-                inr={availINR}
-                usd={availUSD}
-                masked={masked}
-              />
+            {/* Two broker account cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <AccountCard account={deltaAccount} masked={masked} index={0} />
+              <AccountCard account={ctraderAccount} masked={masked} index={1} />
             </div>
-
-            {/* Conversion rate */}
-            <p className="text-center text-[12px] text-white/25 py-1">
-              Conversion Rate: &nbsp;1 USD = ₹85
-            </p>
           </>
         )}
 

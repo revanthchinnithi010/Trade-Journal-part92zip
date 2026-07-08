@@ -6,13 +6,14 @@ import {
   useListTrades,
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
-import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
+import { useCurrencyFormatter, useCurrencyAxisFormatter, formatAmount, useCurrencyStore } from "@/store/currencyStore";
 import {
   ArrowUpRight, ArrowDownRight, TrendingUp, Percent, Layers,
   BarChart2, Activity, Target, Flame, ChevronRight,
   TrendingDown, Briefcase, DollarSign,
 } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
+import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
 import {
   Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
@@ -239,6 +240,7 @@ export default function Dashboard() {
   const ticks         = useTickStore(s => s.ticks);
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
+  const currency      = useCurrencyStore(s => s.currency);
 
   useEffect(() => {
     console.log("[Dashboard] mount");
@@ -257,6 +259,8 @@ export default function Dashboard() {
     = useGetWeeklyPnl();
   const { data: recentTrades, isLoading: tradesLoading, isError: tradesError }
     = useListTrades({ limit: 10 });
+
+  const combined = useCombinedPortfolio();
 
   useEffect(() => {
     const anyLoading = statsLoading || equityLoading || weeklyLoading || tradesLoading;
@@ -350,10 +354,21 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Account Value Widget ── */}
+      {/* ── Account Value Widget ──
+          accountValue/upnl/pnl are sourced ONLY from combinedPortfolio
+          (Delta Exchange + cTrader combined). The `Display` props are already
+          converted using per-broker rates (Delta=fixed ₹85, cTrader=live).
+          AccountValueWidget uses them directly — it must NOT re-multiply by
+          the global exchange rate or Delta amounts will be double-converted. */}
       <AccountValueWidget
-        accountValueUSD={resolvedEquity.length > 0 ? resolvedEquity[resolvedEquity.length - 1].equity : Math.max(resolvedStats.netPnl, 0)}
-        upnlUSD={upnlUSD}
+        accountValueUSD={combined.usd.accountValue}
+        accountValueDisplay={combined.display.accountValue}
+        upnlUSD={combined.usd.unrealizedPnl}
+        upnlDisplay={combined.display.unrealizedPnl}
+        realizedPnlUSD={combined.usd.realizedPnl}
+        realizedPnlDisplay={combined.display.realizedPnl}
+        netPnlUSD={combined.usd.netPnl}
+        netPnlDisplay={combined.display.netPnl}
         openPositions={openTrades.length}
         openOrders={0}
       />
@@ -363,10 +378,10 @@ export default function Dashboard() {
         <StatCard
           index={0}
           label="Net PNL"
-          value={fc(resolvedStats.netPnl)}
-          icon={resolvedStats.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
-          positive={resolvedStats.netPnl > 0 ? true : resolvedStats.netPnl < 0 ? false : undefined}
-          sub={<span className="flex items-center gap-1"><span className={resolvedStats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{resolvedStats.netPnl >= 0 ? "▲" : "▼"}</span>All time</span>}
+          value={formatAmount(combined.display.netPnl, currency)}
+          icon={combined.usd.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
+          positive={combined.usd.netPnl > 0 ? true : combined.usd.netPnl < 0 ? false : undefined}
+          sub={<span className="flex items-center gap-1"><span className={combined.usd.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{combined.usd.netPnl >= 0 ? "▲" : "▼"}</span>Delta + cTrader</span>}
         />
         <StatCard
           index={1}
