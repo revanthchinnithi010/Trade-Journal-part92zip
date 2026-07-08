@@ -339,7 +339,7 @@ export default function Dashboard() {
   const apiOffline = statsError && equityError && weeklyError && tradesError;
 
   return (
-    <PageTransition className="space-y-4 pb-12">
+    <PageTransition className="space-y-4 pb-12" fill={false}>
 
       {apiOffline && (
         <div className="glass-card px-5 py-3 flex items-center gap-3 border-amber-500/20 bg-amber-500/[0.04]">

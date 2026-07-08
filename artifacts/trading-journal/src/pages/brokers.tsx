@@ -723,7 +723,7 @@ export default function Brokers() {
   const growwCount = SAMPLE_SYNCED_TRADES.filter(t => t.broker === "Groww").length;
 
   return (
-    <PageTransition>
+    <PageTransition fill={false}>
       <div className="space-y-6 pb-12">
         {/* Page Header */}
         <div className="flex items-start justify-between flex-wrap gap-4">

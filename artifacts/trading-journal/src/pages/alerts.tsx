@@ -1182,7 +1182,7 @@ export default function Alerts() {
     : null;
 
   return (
-    <PageTransition>
+    <PageTransition fill={false}>
       <div className="space-y-5">
         {/* ── Header ──────────────────────────────────────────────────────────── */}
         <div className="flex items-center justify-between flex-wrap gap-3">

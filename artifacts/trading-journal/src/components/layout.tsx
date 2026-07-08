@@ -4,7 +4,7 @@ import {
   BookOpen, Settings, Menu, X, Zap, Search, Bell, ChevronDown,
   TrendingUp, Link2, BellRing, Bitcoin, Globe, Crosshair,
   Layers, ShieldCheck, CandlestickChart, WifiOff, Loader2,
-  Sun, Moon, FlaskConical,
+  Sun, Moon, FlaskConical, ArrowLeft,
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
@@ -148,7 +148,7 @@ export const Layout = memo(function Layout({
   useBrokerWs();
   const isMobile                = useIsMobile();
   const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
-  const [location]    = useLocation();
+  const [location, navigate] = useLocation();
   // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
   const pathname      = location.split("?")[0];
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -212,7 +212,9 @@ export const Layout = memo(function Layout({
   }, []);
 
   const currentPageLabel =
-    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
+    pathname === "/portfolio"
+      ? "Portfolio"
+      : NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
 
   const { theme, toggleTheme } = useTheme();
   const { currency, setCurrency, fetchRate } = useCurrencyStore();
@@ -418,10 +420,18 @@ export const Layout = memo(function Layout({
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — hidden on /charts (gesture surface owns the full viewport)
-            and /portfolio (Portfolio renders its own full-page back-button header).
-            All other pages show the global header so layout height is stable. */}
-        {pathname !== "/charts" && pathname !== "/portfolio" && (
+        {/* Top Header — hidden ONLY on /charts (gesture surface owns the full
+            viewport). Every other page, including /portfolio, keeps this same
+            header mounted at all times so it never disappears mid-navigation.
+            Previously /portfolio hid this header and relied on its own inline
+            back-button row instead — but that row lives inside the AnimatePresence
+            content tree while this header lives in Layout (a separate, always-
+            mounted tree). Toggling them on raw pathname change (instant) vs. the
+            content's animated exit/enter (delayed ~200ms) caused a headerless
+            flash while Dashboard's exit animation was still playing. Keeping one
+            persistent header — swapping only its left control between hamburger
+            and back-arrow — eliminates that gap entirely. */}
+        {pathname !== "/charts" && (
           <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
@@ -431,17 +441,30 @@ export const Layout = memo(function Layout({
               borderBottom:         "1px solid var(--surface-header-border)",
             }}
           >
-            {/* Left: hamburger + page name */}
+            {/* Left: hamburger (or back-arrow on detail pages) + page name */}
             <div className="flex items-center gap-3 shrink-0">
-              <button
-                onClick={openSidebar}
-                className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
-                style={{ border: "1px solid var(--surface-btn-border)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-active-border)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-border)"; }}
-              >
-                <Menu className="w-[17px] h-[17px]" />
-              </button>
+              {pathname === "/portfolio" ? (
+                <button
+                  onClick={() => navigate("/")}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
+                  style={{ border: "1px solid var(--surface-btn-border)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-active-border)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-border)"; }}
+                  aria-label="Back"
+                >
+                  <ArrowLeft className="w-[17px] h-[17px]" />
+                </button>
+              ) : (
+                <button
+                  onClick={openSidebar}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
+                  style={{ border: "1px solid var(--surface-btn-border)" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-active-border)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-border)"; }}
+                >
+                  <Menu className="w-[17px] h-[17px]" />
+                </button>
+              )}
               <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
                 {currentPageLabel}
               </h1>

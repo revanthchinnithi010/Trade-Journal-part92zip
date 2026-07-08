@@ -88,14 +88,44 @@ function PageLoader() {
  * height-filling flex layout internally.
  */
 /**
+ * Scroll positions are cached per-pathname across mount/unmount cycles. Each
+ * StandardPageWrapper instance is destroyed when its page exits (AnimatePresence
+ * mode="wait" fully unmounts non-keep-alive pages), so React state can't carry
+ * the scroll offset — a module-level cache survives the unmount and lets a page
+ * restore exactly where the user left it when they navigate back.
+ */
+const scrollPositions = new Map<string, number>();
+
+/**
  * StandardPageWrapper — scroll container for regular (non-full-height) pages.
  *
  * `bottomPad` overrides the default 40px bottom spacing. Pass 80 on mobile so
  * the last content item scrolls above the fixed bottom nav bar.
+ *
+ * `pathname` keys the scroll-position cache so returning to this route restores
+ * the exact scroll offset the user had before navigating away.
  */
-function StandardPageWrapper({ children, bottomPad = 40 }: { children: React.ReactNode; bottomPad?: number }) {
+function StandardPageWrapper({ children, bottomPad = 40, pathname }: { children: React.ReactNode; bottomPad?: number; pathname: string }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const saved = scrollPositions.get(pathname);
+    if (saved) el.scrollTop = saved;
+
+    const onScroll = () => { scrollPositions.set(pathname, el.scrollTop); };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      // Capture the final position on unmount too, in case no scroll event
+      // fired after the last programmatic update.
+      scrollPositions.set(pathname, el.scrollTop);
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [pathname]);
+
   return (
-    <div style={{ height: "100%", overflowY: "auto" }} className="scroll-container">
+    <div ref={scrollRef} style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }} className="scroll-container">
       <div
         className="p-5 md:p-6 mx-auto max-w-[1400px] min-h-full"
         style={{ paddingBottom: bottomPad }}
@@ -187,30 +217,35 @@ function Router() {
         */}
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           {/* ── Tab pages — direction-aware fade-shift ── */}
-          {pathname === "/"        && <PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Dashboard /></StandardPageWrapper></PageTransition>}
+          {pathname === "/"        && <PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/"><Dashboard /></StandardPageWrapper></PageTransition>}
           {pathname === "/markets" && <PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition>}
-          {pathname === "/trades"  && <PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Trades    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/alerts"  && <PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Alerts    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/trades"  && <PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/alerts"  && <PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition>}
 
           {/* ── Sidebar / utility pages — fade + slide-up ── */}
-          {pathname === "/brokers"       && <PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp}><Brokers     /></StandardPageWrapper></PageTransition>}
-          {pathname === "/reports"       && <PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp}><Reports     /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calendar"      && <PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp}><Calendar    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/notebook"      && <PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp}><Notebook    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/settings"      && <PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp}><Settings    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/crypto"   && <PageTransition key="/calc/crypto"  custom={dir}><StandardPageWrapper bottomPad={bp}><CalcCrypto  /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/forex"    && <PageTransition key="/calc/forex"   custom={dir}><StandardPageWrapper bottomPad={bp}><CalcForex   /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/position" && <PageTransition key="/calc/position"custom={dir}><StandardPageWrapper bottomPad={bp}><CalcPosition/></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/margin"   && <PageTransition key="/calc/margin"  custom={dir}><StandardPageWrapper bottomPad={bp}><CalcMargin  /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/risk"     && <PageTransition key="/calc/risk"    custom={dir}><StandardPageWrapper bottomPad={bp}><CalcRisk    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/trade"         && <PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp}><Trade       /></StandardPageWrapper></PageTransition>}
-          {pathname === "/ctrader-test"  && <PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp}><CtraderTest /></StandardPageWrapper></PageTransition>}
+          {pathname === "/brokers"       && <PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/brokers"><Brokers     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/reports"       && <PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calendar"      && <PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calendar"><Calendar    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/notebook"      && <PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/notebook"><Notebook    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/settings"      && <PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/settings"><Settings    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/crypto"   && <PageTransition key="/calc/crypto"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/crypto"><CalcCrypto  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/forex"    && <PageTransition key="/calc/forex"   custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/forex"><CalcForex   /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/position" && <PageTransition key="/calc/position"custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/position"><CalcPosition/></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/margin"   && <PageTransition key="/calc/margin"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/margin"><CalcMargin  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/risk"     && <PageTransition key="/calc/risk"    custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/risk"><CalcRisk    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/trade"         && <PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trade"><Trade       /></StandardPageWrapper></PageTransition>}
+          {pathname === "/ctrader-test"  && <PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/ctrader-test"><CtraderTest /></StandardPageWrapper></PageTransition>}
 
-          {/* ── Detail pages — fade + scale ── */}
+          {/* ── Detail pages — fade + scale ──
+               Portfolio manages its own internal scroll region (tab content
+               area) inside a fixed-height flex column, so it is NOT wrapped in
+               StandardPageWrapper — it needs the PageTransition's absolute-fill
+               box directly as its height reference, not an outer page-scroll
+               container. */}
           {pathname === "/portfolio"     && <PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition>}
 
           {/* ── 404 ── */}
-          {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp}><NotFound    /></StandardPageWrapper></PageTransition>}
+          {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition>}
         </AnimatePresence>
       </Suspense>
     </Layout>

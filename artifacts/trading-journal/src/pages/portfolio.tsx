@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
 import {
-  ArrowLeft, Eye, EyeOff, TrendingUp, TrendingDown,
+  Eye, EyeOff, TrendingUp, TrendingDown,
   RefreshCw, ChevronRight, Wallet, Plus, Loader2,
   Clock, CheckCircle, XCircle, AlertCircle,
 } from "lucide-react";
@@ -174,7 +173,6 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
 type Tab = "balances" | "positions" | "orders" | "stop-orders";
 
 export default function Portfolio() {
-  const [, navigate]  = useLocation();
   const [tab, setTab] = useState<Tab>("balances");
   const [masked, setMasked] = useState(false);
   const [marginMode, setMarginMode] = useState<"main" | "isolated">("main");
@@ -223,17 +221,11 @@ export default function Portfolio() {
 
   return (
     <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
-      {/* ── Top bar ── */}
-      <div className="flex items-center gap-3 px-1 pt-1 pb-4">
-        <button
-          onClick={() => navigate("/")}
-          className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors hover:bg-white/[0.07]"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-        >
-          <ArrowLeft className="w-4 h-4 text-white/60" />
-        </button>
-        <h1 className="text-[16px] font-black text-white flex-1">Portfolio</h1>
-
+      {/* ── Action bar ──
+          Back navigation + page title now live in the persistent global header
+          (Layout.tsx) so they never disappear during the Dashboard↔Portfolio
+          transition. This row only holds page-local controls. */}
+      <div className="flex items-center justify-end gap-3 px-1 pt-3 pb-4">
         {/* Main / Isolated toggle */}
         <div
           className="flex rounded-xl overflow-hidden"

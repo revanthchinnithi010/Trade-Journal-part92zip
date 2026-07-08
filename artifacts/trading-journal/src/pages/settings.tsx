@@ -800,7 +800,7 @@ function BackupPanel() {
 /* ─── Settings Page ─────────────────────────────────────────────── */
 export default function Settings() {
   return (
-    <PageTransition className="space-y-5 max-w-3xl pb-16">
+    <PageTransition className="space-y-5 max-w-3xl pb-16" fill={false}>
       <div>
         <h1 className="text-2xl font-black tracking-tight text-white mb-1">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage connections, preferences, and trading parameters.</p>

@@ -239,7 +239,7 @@ export default function Reports() {
   const worstSymbol = [...(symbolStats ?? [])].sort((a, b) => a.pnl - b.pnl)[0];
 
   return (
-    <PageTransition className="space-y-5 pb-12">
+    <PageTransition className="space-y-5 pb-12" fill={false}>
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">

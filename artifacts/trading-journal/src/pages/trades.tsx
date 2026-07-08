@@ -487,7 +487,7 @@ export default function Trades() {
   const labelCls = "text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider";
 
   return (
-    <PageTransition className="space-y-5 pb-12">
+    <PageTransition className="space-y-5 pb-12" fill={false}>
 
       {/* ── Filter Bar ── */}
       {isMobile ? (

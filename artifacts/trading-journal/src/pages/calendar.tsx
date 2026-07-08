@@ -91,7 +91,7 @@ export default function CalendarPage() {
   const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
-    <PageTransition className="space-y-5 pb-12">
+    <PageTransition className="space-y-5 pb-12" fill={false}>
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
