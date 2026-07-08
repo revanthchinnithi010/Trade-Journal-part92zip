@@ -175,7 +175,6 @@ type Tab = "balances" | "positions" | "orders" | "stop-orders";
 export default function Portfolio() {
   const [tab, setTab] = useState<Tab>("balances");
   const [masked, setMasked] = useState(false);
-  const [marginMode, setMarginMode] = useState<"main" | "isolated">("main");
 
   const xr = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
 
@@ -221,38 +220,13 @@ export default function Portfolio() {
 
   return (
     <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
-      {/* ── Action bar ──
+      {/* ── Tabs ──
           Back navigation + page title now live in the persistent global header
           (Layout.tsx) so they never disappear during the Dashboard↔Portfolio
-          transition. This row only holds page-local controls. */}
-      <div className="flex items-center justify-end gap-3 px-1 pt-3 pb-4">
-        {/* Main / Isolated toggle */}
-        <div
-          className="flex rounded-xl overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", padding: 2 }}
-        >
-          {(["main", "isolated"] as const).map(m => (
-            <button
-              key={m}
-              onClick={() => setMarginMode(m)}
-              className="px-3 py-1 rounded-lg text-[11px] font-bold transition-all capitalize"
-              style={marginMode === m ? {
-                background: "rgba(249,115,22,0.2)",
-                color: "#f97316",
-                border: "1px solid rgba(249,115,22,0.3)",
-              } : {
-                color: "rgba(255,255,255,0.35)",
-              }}
-            >
-              {m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* ── Tabs ── */}
+          transition. Tabs sit directly below the header now that the
+          Main/Isolated toggle has been removed. */}
       <div
-        className="flex gap-0 mb-4"
+        className="flex gap-0 mt-3 mb-4"
         style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
       >
         {TABS.map(t => (
