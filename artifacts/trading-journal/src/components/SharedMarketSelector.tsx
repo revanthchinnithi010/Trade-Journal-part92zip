@@ -584,7 +584,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
       setRawSearch("");
       setSearch("");
       setActiveTab("Watchlist");
-      setTimeout(() => searchRef.current?.focus(), 280);
+      // No auto-focus — search bar is hidden in sheet mode
     }
   }, [mode, visible]);
 
@@ -896,22 +896,26 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
     };
   }, [sheetMounted, applyDrag, commitSnap]);
 
-  // ── Opening animation: CLOSED → HALF ─────────────────────────────────────
+  // ── Opening animation: CLOSED → FULL ─────────────────────────────────────
+  // Opens at full snap (95% vh) so the maximum number of watchlist items are
+  // immediately visible — no search bar means more vertical real-estate.
   useEffect(() => {
     if (!sheetMounted) return;
     const sheet = sheetRef.current;
     if (!sheet) return;
     ds.current.closing = false;
-    ds.current.snap    = "half";
+    ds.current.snap    = "full";
     const offY = window.innerHeight + 20;
     sheet.style.transition = "none";
     sheet.style.transform  = `translateY(${offY}px)`;
-    applySnapDom("half"); // start with scroll locked
+    applySnapDom("half"); // keep scroll locked during the spring animation
     let r1 = 0, r2 = 0;
     r1 = requestAnimationFrame(() => {
       r2 = requestAnimationFrame(() => {
         computeSnaps();
-        animateTo(snapYRef.current.half, "transform 0.28s cubic-bezier(0.22,1,0.36,1)");
+        animateTo(snapYRef.current.full, "transform 0.28s cubic-bezier(0.22,1,0.36,1)");
+        // Unlock scroll once animation has settled
+        setTimeout(() => applySnapDom("full"), 280);
       });
     });
     return () => { cancelAnimationFrame(r1); cancelAnimationFrame(r2); };
@@ -1310,11 +1314,11 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           </div>
         </div>
 
-        {/* Search bar — hidden on Watchlist tab in page mode (Markets requirement).
-            In sheet mode (Charts picker) it is always shown for both tabs.
-            In page mode it shows only on the Markets tab so items move up
-            immediately and no blank space is left behind. */}
-        {(mode !== "page" || activeTab !== "Watchlist") && (
+        {/* Search bar — only shown in page mode on the Markets tab.
+            Hidden in sheet mode (Charts picker) so items sit directly below
+            the segmented control with no gap. Also hidden on Watchlist tab
+            in page mode (Markets page requirement). */}
+        {mode === "page" && activeTab !== "Watchlist" && (
         <div style={{ padding: "8px 12px 6px" }}>
           <div style={{
             display: "flex", alignItems: "center", gap: 8,
@@ -1326,7 +1330,7 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
               ref={searchRef}
               value={rawSearch}
               onChange={handleSearchChange}
-              placeholder={activeTab === "Watchlist" ? "Search watchlist…" : "Search all markets…"}
+              placeholder="Search all markets…"
               style={{
                 flex: 1, background: "none", border: "none", outline: "none",
                 color: "#e2e8f0", fontSize: 13.5, caretColor: "#f59e0b", minWidth: 0,
