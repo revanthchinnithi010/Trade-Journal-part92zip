@@ -5732,7 +5732,7 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
     onRenameNamedLayout, onDeleteNamedLayout, activeLayoutId,
   } = props;
 
-  const [, navigate]  = useLocation();
+  const [location, navigate]  = useLocation();
   // Narrow selectors — only re-renders when these specific fields change.
   // Do NOT use useChartStore() (broad) — livePrice updates on every tick and
   // would re-render this 3000-line component on every market data event.
@@ -5768,6 +5768,16 @@ export const MobileChartLayout = memo(function MobileChartLayout(props: MobileCh
   const [slotSymbols,       setSlotSymbols]       = useState<string[]>(["ETHUSD", "SOLUSD", "DOGEUSD"]);
   const [slotIntervals,     setSlotIntervals]     = useState<string[]>(() => [interval, interval, interval]);
   const slotInitRef = useRef(false);
+
+  // Charts is keep-alive (never unmounts), so we must manually close overlays
+  // when the user navigates to another route. Without this the watchlist portal
+  // (rendered in document.body at z-index 200) persists above every other page.
+  useEffect(() => {
+    const pathname = location.split("?")[0];
+    if (pathname !== "/charts") {
+      setShowWatchlist(false);
+    }
+  }, [location]);
 
   // One-time init: seed slot symbols from watchlist when it first loads
   useEffect(() => {

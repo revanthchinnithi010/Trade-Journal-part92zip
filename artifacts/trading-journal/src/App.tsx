@@ -163,59 +163,54 @@ function Router() {
   // On mobile the fixed bottom nav bar is ~80px tall; pages need that clearance.
   const bp = isMobile ? 80 : 40;
 
-  // Whether the current route is a bottom-tab page.
-  const isTabPage = TAB_ORDER.includes(pathname) && pathname !== "/charts";
-
   return (
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
     <Layout chartsNode={CHARTS_NODE}>
       <Suspense fallback={<PageLoader />}>
         {/*
-          ── Tab pages: AnimatePresence mode="sync" ──────────────────────────
-          Both the exiting and entering pages are in the DOM simultaneously so
-          they can slide past each other like a native tab bar. mode="sync" is
-          required for this — mode="wait" would serialise them, killing the effect.
+          ── Single AnimatePresence (mode="wait") ────────────────────────────
+          All pages — tab pages, sidebar pages, detail pages — live in ONE
+          AnimatePresence so only a single page is ever in the DOM at a time.
+          This prevents the cross-group stacking bug where a tab page (absolute)
+          floated on top of a sidebar page (flow) during their concurrent exit/enter.
 
-          Each PageTransition uses variant="tab" which sets position:absolute;inset:0
-          so the two overlapping pages clip inside the overflow:hidden container.
+          mode="wait": current page fully exits before the next one enters.
+          With fade-shift transitions (≤220ms) this feels instant on mobile.
 
-          `custom` (the direction integer) is passed at the AnimatePresence level so
-          Motion uses the latest value for the EXITING page's exit animation even
-          though that component was last rendered with the previous dir.
-          `initial={false}` skips the slide-in on the very first page load.
+          All PageTransitions use position:absolute;inset:0 — they fill the
+          absolute container in layout.tsx and layer correctly.
+
+          `custom={dir}` at the AP level so the EXITING page reads the correct
+          direction even after pathname has changed. `initial={false}` skips
+          the enter animation on the very first load.
         */}
-        <AnimatePresence mode="sync" custom={dir} initial={false}>
+        <AnimatePresence mode="wait" custom={dir} initial={false}>
+          {/* ── Tab pages — direction-aware fade-shift ── */}
           {pathname === "/"        && <PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Dashboard /></StandardPageWrapper></PageTransition>}
           {pathname === "/markets" && <PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition>}
           {pathname === "/trades"  && <PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Trades    /></StandardPageWrapper></PageTransition>}
           {pathname === "/alerts"  && <PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp}><Alerts    /></StandardPageWrapper></PageTransition>}
-        </AnimatePresence>
 
-        {/*
-          ── Sidebar / detail pages: AnimatePresence mode="wait" ────────────
-          These use the default opacity cross-fade. mode="wait" serialises
-          exit → enter so they never overlap (no absolute positioning needed).
-          These pages are not part of the tab order so direction is always 0.
+          {/* ── Sidebar / utility pages — fade + slide-up ── */}
+          {pathname === "/brokers"       && <PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp}><Brokers     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/reports"       && <PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp}><Reports     /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calendar"      && <PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp}><Calendar    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/notebook"      && <PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp}><Notebook    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/settings"      && <PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp}><Settings    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/crypto"   && <PageTransition key="/calc/crypto"  custom={dir}><StandardPageWrapper bottomPad={bp}><CalcCrypto  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/forex"    && <PageTransition key="/calc/forex"   custom={dir}><StandardPageWrapper bottomPad={bp}><CalcForex   /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/position" && <PageTransition key="/calc/position"custom={dir}><StandardPageWrapper bottomPad={bp}><CalcPosition/></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/margin"   && <PageTransition key="/calc/margin"  custom={dir}><StandardPageWrapper bottomPad={bp}><CalcMargin  /></StandardPageWrapper></PageTransition>}
+          {pathname === "/calc/risk"     && <PageTransition key="/calc/risk"    custom={dir}><StandardPageWrapper bottomPad={bp}><CalcRisk    /></StandardPageWrapper></PageTransition>}
+          {pathname === "/trade"         && <PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp}><Trade       /></StandardPageWrapper></PageTransition>}
+          {pathname === "/ctrader-test"  && <PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp}><CtraderTest /></StandardPageWrapper></PageTransition>}
 
-          NotFound renders here too — if the path is unknown AND not a tab page
-          (tab AP already renders nothing for unknown paths).
-        */}
-        <AnimatePresence mode="wait" initial={false}>
-          {!isTabPage && pathname === "/brokers"       && <PageTransition key="/brokers"       style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Brokers     /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/reports"       && <PageTransition key="/reports"       style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Reports     /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calendar"      && <PageTransition key="/calendar"      style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Calendar    /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/notebook"      && <PageTransition key="/notebook"      style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Notebook    /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/settings"      && <PageTransition key="/settings"      style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Settings    /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calc/crypto"   && <PageTransition key="/calc/crypto"   style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CalcCrypto  /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calc/forex"    && <PageTransition key="/calc/forex"    style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CalcForex   /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calc/position" && <PageTransition key="/calc/position" style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CalcPosition/></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calc/margin"   && <PageTransition key="/calc/margin"   style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CalcMargin  /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/calc/risk"     && <PageTransition key="/calc/risk"     style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CalcRisk    /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/portfolio"     && <PageTransition key="/portfolio"     style={{ height: "100%" }} variant="detail"><Portfolio /></PageTransition>}
-          {!isTabPage && pathname === "/trade"         && <PageTransition key="/trade"         style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><Trade       /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && pathname === "/ctrader-test"  && <PageTransition key="/ctrader-test"  style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><CtraderTest /></StandardPageWrapper></PageTransition>}
-          {!isTabPage && !KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"      style={{ height: "100%" }}><StandardPageWrapper bottomPad={bp}><NotFound    /></StandardPageWrapper></PageTransition>}
+          {/* ── Detail pages — fade + scale ── */}
+          {pathname === "/portfolio"     && <PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition>}
+
+          {/* ── 404 ── */}
+          {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp}><NotFound    /></StandardPageWrapper></PageTransition>}
         </AnimatePresence>
       </Suspense>
     </Layout>

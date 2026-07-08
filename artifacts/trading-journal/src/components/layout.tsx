@@ -418,25 +418,17 @@ export const Layout = memo(function Layout({
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
 
-        {/* Top Header — hidden on /charts only (gesture surface owns the full viewport).
-            All other pages, including /markets, show it so the layout height is stable
-            during horizontal slide transitions. Portfolio fades it to opacity-0 to keep
-            the stable height during its slide-in transition. */}
-        {pathname !== "/charts" && (
-          <motion.header
-            key="global-header"
-            initial={false}
-            animate={{
-              opacity: pathname === "/portfolio" ? 0 : 1,
-            }}
-            transition={{ duration: 0.15, ease: [0.4, 0, 1, 1] }}
+        {/* Top Header — hidden on /charts (gesture surface owns the full viewport)
+            and /portfolio (Portfolio renders its own full-page back-button header).
+            All other pages show the global header so layout height is stable. */}
+        {pathname !== "/charts" && pathname !== "/portfolio" && (
+          <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
               background:           "var(--surface-header)",
               backdropFilter:       "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               borderBottom:         "1px solid var(--surface-header-border)",
-              pointerEvents:        pathname === "/portfolio" ? "none" : "auto",
             }}
           >
             {/* Left: hamburger + page name */}
@@ -593,7 +585,7 @@ export const Layout = memo(function Layout({
                 )}
               </div>
             </div>
-          </motion.header>
+          </header>
         )}
 
         {/* ── Content area ─────────────────────────────────────────────────────────

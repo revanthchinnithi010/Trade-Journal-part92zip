@@ -6,13 +6,17 @@
  *
  * GPU-safe: opacity + transform (x, y, scale) only.
  *
- * variant="page"   — default opacity cross-fade (sidebar pages)
+ * All variants use position:absolute;inset:0 so every page fills the absolute
+ * container in Layout and layers correctly with the Charts keep-alive layer.
+ * With AnimatePresence mode="wait" only one page is in the DOM at a time, so
+ * there is never an overlap — but consistent absolute positioning prevents any
+ * height/flow issues regardless.
+ *
+ * variant="page"   — fade + subtle slide-up (sidebar / utility pages)
  * variant="detail" — fade + gentle zoom-in (drill-down pages, e.g. Portfolio)
  * variant="tab"    — direction-aware fade-shift (bottom-tab pages). Small x offset
  *                    (±28px) + opacity gives directional cues without full-width sliding.
  *                    Requires `custom` (direction int) forwarded from AnimatePresence.
- *                    Renders position:absolute;inset:0 so two pages can coexist
- *                    during AnimatePresence mode="sync" transitions.
  */
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
@@ -23,47 +27,40 @@ interface PageTransitionProps {
   className?: string;
   style?:     React.CSSProperties;
   variant?:   "page" | "detail" | "tab";
-  /** Direction integer for variant="tab" — forwarded from AnimatePresence custom prop. */
+  /** Direction integer — forwarded from AnimatePresence custom prop. */
   custom?:    number;
 }
+
+/** Base style applied to every variant: fills the absolute container in Layout. */
+const BASE_STYLE: React.CSSProperties = {
+  position:    "absolute",
+  inset:        0,
+  willChange:  "transform, opacity",
+};
 
 export function PageTransition({ children, className, style, variant = "page", custom }: PageTransitionProps) {
   const reduced = useReducedMotion();
 
-  // Tab variant: absolute overlay so both entering/exiting pages fit side-by-side.
-  if (variant === "tab") {
-    if (reduced) {
-      return (
-        <div className={className} style={{ position: "absolute", inset: 0, ...style }}>
-          {children}
-        </div>
-      );
-    }
+  const combinedStyle = { ...BASE_STYLE, ...style };
+
+  if (reduced) {
     return (
-      <motion.div
-        className={className}
-        custom={custom}
-        style={{ position: "absolute", inset: 0, willChange: "transform, opacity", ...style }}
-        variants={tabPageVariants}
-        initial="initial"
-        animate="enter"
-        exit="exit"
-      >
+      <div className={className} style={combinedStyle}>
         {children}
-      </motion.div>
+      </div>
     );
   }
 
-  if (reduced) {
-    return <div className={className} style={style}>{children}</div>;
-  }
-
-  const variants = variant === "detail" ? pageDetailVariants : pageVariants;
+  const variants =
+    variant === "tab"    ? tabPageVariants    :
+    variant === "detail" ? pageDetailVariants :
+                           pageVariants;
 
   return (
     <motion.div
       className={className}
-      style={{ ...style, willChange: "transform, opacity" }}
+      custom={custom}
+      style={combinedStyle}
       variants={variants}
       initial="initial"
       animate="enter"
