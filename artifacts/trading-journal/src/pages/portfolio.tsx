@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  Eye, EyeOff, TrendingUp, TrendingDown,
+  TrendingUp,
   RefreshCw, ChevronRight, Wallet, Loader2,
   Clock, CheckCircle, XCircle, AlertCircle,
 } from "lucide-react";
@@ -177,7 +177,6 @@ type Tab = "balances" | "positions" | "orders" | "stop-orders";
 
 export default function Portfolio() {
   const [tab, setTab] = useState<Tab>("balances");
-  const [masked, setMasked] = useState(false);
 
   const { data: tradeRes } = useListTrades({ limit: 200 });
 
@@ -257,21 +256,10 @@ export default function Portfolio() {
         {/* ══ BALANCES ══ */}
         {tab === "balances" && (
           <>
-            {/* Mask toggle */}
-            <div className="flex items-center justify-end px-1">
-              <button
-                onClick={() => setMasked(m => !m)}
-                className="flex items-center gap-1.5 text-[11px] font-semibold text-white/40 hover:text-white/65 transition-colors"
-              >
-                {masked ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                {masked ? "Show balances" : "Hide balances"}
-              </button>
-            </div>
-
             {/* Two broker account cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <AccountCard account={deltaAccount} masked={masked} index={0} />
-              <AccountCard account={ctraderAccount} masked={masked} index={1} />
+              <AccountCard account={deltaAccount} index={0} />
+              <AccountCard account={ctraderAccount} index={1} />
             </div>
           </>
         )}
@@ -283,7 +271,7 @@ export default function Portfolio() {
             <div className="glass-card px-4 py-3.5 flex items-center justify-between">
               <div>
                 <p className="text-[10px] font-semibold text-white/35 uppercase tracking-widest mb-1">Unrealized PnL</p>
-                <DualValue inr={upnlINR} usd={upnlUSD} masked={masked} color={upPos ? "#34d399" : "#f87171"} size="md" />
+                <DualValue inr={upnlINR} usd={upnlUSD} masked={false} color={upPos ? "#34d399" : "#f87171"} size="md" />
               </div>
               <button
                 onClick={() => refreshPositions()}
