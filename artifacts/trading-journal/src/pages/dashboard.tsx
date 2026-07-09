@@ -15,7 +15,7 @@ import {
 import AccountValueWidget from "@/components/AccountValueWidget";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
 import {
-  Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
 } from "recharts";
 import { Link } from "wouter";
@@ -438,14 +438,14 @@ export default function Dashboard() {
                 Account Balance
               </div>
             </div>
-            <div className="h-[200px] px-1 pb-3">
+            <div className="h-[220px] px-4 pb-5">
               {resolvedEquity.length === 0 ? (
                 <div className="h-full flex items-center justify-center text-[12px] text-muted-foreground/50">
                   No equity data available
                 </div>
               ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={resolvedEquity} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                <ResponsiveContainer width="100%" height="100%" style={{ border: "none", outline: "none" }}>
+                  <AreaChart data={resolvedEquity} margin={{ top: 4, right: 2, left: -20, bottom: 0 }} style={{ border: "none" }}>
                     <defs>
                       <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="0%" stopColor={PURPLE} stopOpacity={0.28} />
@@ -453,11 +453,12 @@ export default function Dashboard() {
                         <stop offset="100%" stopColor={PURPLE} stopOpacity={0} />
                       </linearGradient>
                     </defs>
-                    <XAxis dataKey="date" stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                    <XAxis dataKey="date" stroke="none" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
                       tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                    <YAxis stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                    <YAxis stroke="none" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
                       tickFormatter={axisFormatter} />
-                    <Tooltip content={<CustomEquityTooltip />} />
+                    <Tooltip content={<CustomEquityTooltip />} cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }} />
                     <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2} fill="url(#equityGrad)" dot={false}
                       activeDot={{ r: 4, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2 }}
                       isAnimationActive={false} />
