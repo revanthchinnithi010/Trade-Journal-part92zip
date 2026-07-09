@@ -34,7 +34,7 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 const Charts      = lazy(() => import("@/pages/charts"));
 const Portfolio    = lazy(() => import("@/pages/portfolio"));
 const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
-const NetPnl       = lazy(() => import("@/pages/net-pnl"));
+const NetPnl       = lazy(() => import("@/pages/NetPnLAnalytics"));
 const Trade        = lazy(() => import("@/pages/trade"));
 const NotFound      = lazy(() => import("@/pages/not-found"));
 const CtraderTest   = lazy(() => import("@/pages/ctrader-test"));
