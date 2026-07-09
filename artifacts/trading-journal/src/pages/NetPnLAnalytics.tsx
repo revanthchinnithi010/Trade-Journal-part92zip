@@ -6,12 +6,25 @@
 // source of truth also used by pnl-analytics.tsx). To switch to live data,
 // swap DEMO_EQUITY_CURVE / DEMO_STATS below for the real query hooks
 // (useGetStatsSummary / useGetEquityCurve) — no other changes needed here.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { TrendingUp, TrendingDown, Activity, BarChart2, CalendarDays, Zap } from "lucide-react";
 import { DEMO_STATS, DEMO_EQUITY_CURVE } from "@/data/demoAnalyticsData";
 import { useCurrencyFormatter } from "@/store/currencyStore";
 import { cardVariants } from "@/animations/motion";
+
+// ── Time filter chips — UI only, not yet wired to data ──────────────────────
+type TimeFilter = "today" | "7d" | "30d" | "3m" | "6m" | "1y" | "all";
+
+const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
+  { id: "today", label: "Today" },
+  { id: "7d",   label: "7D"   },
+  { id: "30d",  label: "30D"  },
+  { id: "3m",   label: "3M"   },
+  { id: "6m",   label: "6M"   },
+  { id: "1y",   label: "1Y"   },
+  { id: "all",  label: "All"  },
+];
 
 // ── Local date helpers (avoid UTC drift) ────────────────────────────────────
 function localDateStr(d: Date): string {
@@ -52,6 +65,9 @@ function KpiCard({ label, value, sub, positive, icon: Icon, index }: {
 export default function NetPnLAnalytics() {
   const fc  = useCurrencyFormatter();
   const now = useMemo(() => new Date(), []);
+
+  // UI-only state — selection is not yet wired to the cards/data above.
+  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
 
   const todayStr    = useMemo(() => localDateStr(now), [now]);
   const weekCutoff   = useMemo(() => {
@@ -109,6 +125,28 @@ export default function NetPnLAnalytics() {
           positive={yearPnl > 0 ? true : yearPnl < 0 ? false : undefined}
           sub={yearStr}
         />
+      </div>
+
+      {/* ── Time filter chips — UI only, not yet connected to data ── */}
+      <div
+        className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
+        style={{ scrollbarWidth: "none" }}
+      >
+        {TIME_FILTERS.map(f => (
+          <button
+            key={f.id}
+            type="button"
+            onClick={() => setTimeFilter(f.id)}
+            className="shrink-0 px-4 py-1.5 rounded-xl text-[12px] font-bold transition-all duration-150"
+            style={{
+              background:  timeFilter === f.id ? "hsl(var(--primary) / 0.15)" : "rgba(255,255,255,0.04)",
+              border:      timeFilter === f.id ? "1px solid hsl(var(--primary) / 0.35)" : "1px solid rgba(255,255,255,0.07)",
+              color:       timeFilter === f.id ? "hsl(var(--primary))" : "hsl(128 8% 42%)",
+            }}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
     </div>
   );
