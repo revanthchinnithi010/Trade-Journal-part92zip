@@ -76,6 +76,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.110.1",
     "animejs": "^4.5.0",
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.2.0",
