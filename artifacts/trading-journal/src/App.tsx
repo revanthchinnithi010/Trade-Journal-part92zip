@@ -34,6 +34,7 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 const Charts      = lazy(() => import("@/pages/charts"));
 const Portfolio    = lazy(() => import("@/pages/portfolio"));
 const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
+const NetPnl       = lazy(() => import("@/pages/net-pnl"));
 const Trade        = lazy(() => import("@/pages/trade"));
 const NotFound      = lazy(() => import("@/pages/not-found"));
 const CtraderTest   = lazy(() => import("@/pages/ctrader-test"));
@@ -150,7 +151,7 @@ const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
   "/calendar", "/notebook", "/settings",
   "/calc/crypto", "/calc/forex", "/calc/position", "/calc/margin", "/calc/risk",
-  "/portfolio", "/pnl", "/trade", "/ctrader-test", "/charts",
+  "/portfolio", "/pnl", "/net-pnl", "/trade", "/ctrader-test", "/charts",
 ]);
 
 /**
@@ -245,6 +246,7 @@ function Router() {
                container. */}
           {pathname === "/portfolio"     && <PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition>}
           {pathname === "/pnl"          && <PageTransition key="/pnl"       variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition>}
+          {pathname === "/net-pnl"      && <PageTransition key="/net-pnl"   variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition>}
 
           {/* ── 404 ── */}
           {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition>}

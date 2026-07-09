@@ -375,7 +375,7 @@ export default function Dashboard() {
 
       {/* ── Stat Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Link href="/pnl" className="block h-full cursor-pointer">
+        <Link href="/net-pnl" className="block h-full cursor-pointer">
           <StatCard
             index={0}
             label="Net PNL"
