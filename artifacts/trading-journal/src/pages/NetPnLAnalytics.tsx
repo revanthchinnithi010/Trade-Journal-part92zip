@@ -3,14 +3,34 @@
 // header (see components/layout.tsx, keyed on the "/net-pnl" pathname).
 //
 // Net PNL data is fetched directly from Supabase (trades table) via the
-// browser client in @/lib/supabaseClient. No charts on this page — summary
-// cards only.
+// browser client in @/lib/supabaseClient. Summary cards + Equity Curve chart.
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { TrendingUp, TrendingDown, Activity, BarChart2, CalendarDays, Zap } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useCurrencyFormatter } from "@/store/currencyStore";
 import { cardVariants } from "@/animations/motion";
+import { EquityCurveChart, type EquityCurvePoint } from "@/components/charts/EquityCurveChart";
+
+// ── Demo equity curve — shown only when there is no live trade data yet,
+// so the chart is never blank. Deterministic (seeded), not random per render. ──
+function buildDemoEquityCurve(): EquityCurvePoint[] {
+  const today = new Date();
+  const points: EquityCurvePoint[] = [];
+  let seed = 42;
+  const rng = () => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed / 4294967295;
+  };
+  for (let i = 59; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const isWin = rng() < 0.6;
+    const pnl = Math.round((isWin ? 20 + rng() * 260 : -(15 + rng() * 160)) * 100) / 100;
+    points.push({ date: localDateStr(d), pnl });
+  }
+  return points;
+}
 
 // ── Time filter chips — UI only, not yet wired to data ──────────────────────
 type TimeFilter = "today" | "7d" | "30d" | "3m" | "6m" | "1y" | "all";
@@ -134,6 +154,17 @@ export default function NetPnLAnalytics() {
   const pnlSign = (v: number) => (v > 0 ? "+" : "");
   const fmt = (v: number) => (loading ? "…" : fc(v));
 
+  // ── Equity curve data — live trades when we have them, deterministic demo
+  // curve otherwise so the chart is never blank while data is empty/loading. ──
+  const demoEquityCurve = useMemo(() => buildDemoEquityCurve(), []);
+  const hasLiveData = !loading && !error && (trades?.length ?? 0) > 0;
+  const equityCurveData: EquityCurvePoint[] = useMemo(() => {
+    if (hasLiveData) {
+      return (trades ?? []).map(t => ({ date: localDateStr(new Date(t.exit_date)), pnl: t.pnl }));
+    }
+    return demoEquityCurve;
+  }, [hasLiveData, trades, demoEquityCurve]);
+
   return (
     <div className="px-4 py-4 sm:px-6 space-y-4">
       {error && (
@@ -201,6 +232,28 @@ export default function NetPnLAnalytics() {
             {f.label}
           </button>
         ))}
+      </div>
+
+      {/* ── Equity Curve chart ── */}
+      {/* TEMP DEBUG: red border to make the chart container's box visible
+          while diagnosing visibility. Remove once confirmed stable. */}
+      <div
+        className="glass-card p-4"
+        style={{ border: "1px solid red" }}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            Equity Curve
+          </span>
+          {!hasLiveData && (
+            <span className="text-[10px] font-semibold text-muted-foreground/60">
+              Demo data — connect a broker or log trades to see your real curve
+            </span>
+          )}
+        </div>
+        <div className="h-[320px]">
+          <EquityCurveChart data={equityCurveData} startingBalance={0} height={320} />
+        </div>
       </div>
     </div>
   );
