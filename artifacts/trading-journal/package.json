@@ -45,7 +45,6 @@
     "@tailwindcss/typography": "^0.5.15",
     "@tailwindcss/vite": "catalog:",
     "@tanstack/react-query": "catalog:",
-    "@types/d3": "^7.4.3",
     "@types/node": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
@@ -79,7 +78,6 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.110.1",
     "animejs": "^4.5.0",
-    "d3": "^7.9.0",
     "html2canvas": "^1.4.1",
     "lightweight-charts": "^5.2.0",
     "motion": "^12.42.2",
