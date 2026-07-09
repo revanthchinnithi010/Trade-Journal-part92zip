@@ -1,7 +1,115 @@
 // Net PNL Analytics page.
 // Back button + "Net PNL Analytics" title are rendered by the shared Layout
 // header (see components/layout.tsx, keyed on the "/net-pnl" pathname).
-// This page intentionally has no content yet — no charts or analytics.
+//
+// Demo data — sourced from the shared demoAnalyticsData module (single
+// source of truth also used by pnl-analytics.tsx). To switch to live data,
+// swap DEMO_EQUITY_CURVE / DEMO_STATS below for the real query hooks
+// (useGetStatsSummary / useGetEquityCurve) — no other changes needed here.
+import { useMemo } from "react";
+import { motion } from "motion/react";
+import { TrendingUp, TrendingDown, Activity, BarChart2, CalendarDays, Zap } from "lucide-react";
+import { DEMO_STATS, DEMO_EQUITY_CURVE } from "@/data/demoAnalyticsData";
+import { useCurrencyFormatter } from "@/store/currencyStore";
+import { cardVariants } from "@/animations/motion";
+
+// ── Local date helpers (avoid UTC drift) ────────────────────────────────────
+function localDateStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ── Summary card — mirrors the existing KpiCard design (see pnl-analytics.tsx) ──
+function KpiCard({ label, value, sub, positive, icon: Icon, index }: {
+  label: string; value: string; sub?: string; positive?: boolean;
+  icon: React.ElementType; index: number;
+}) {
+  return (
+    <motion.div
+      variants={cardVariants} custom={index}
+      initial="hidden" animate="visible"
+      className="glass-card p-4 relative overflow-hidden group"
+    >
+      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+        <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-3.5 h-3.5 text-primary" />
+        </div>
+      </div>
+      <div className={`text-[22px] font-black leading-none tracking-tight ${
+        positive === true  ? "text-emerald-400" :
+        positive === false ? "text-red-400"     : "text-foreground"
+      }`}>
+        {value}
+      </div>
+      {sub && <p className="text-[10px] text-muted-foreground/60 mt-1.5">{sub}</p>}
+    </motion.div>
+  );
+}
+
 export default function NetPnLAnalytics() {
-  return null;
+  const fc  = useCurrencyFormatter();
+  const now = useMemo(() => new Date(), []);
+
+  const todayStr    = useMemo(() => localDateStr(now), [now]);
+  const weekCutoff   = useMemo(() => {
+    const d   = new Date(now);
+    const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return localDateStr(d);
+  }, [now]);
+  const monthCutoff = useMemo(() => todayStr.slice(0, 7), [todayStr]);
+  const yearStr     = useMemo(() => String(now.getFullYear()), [now]);
+
+  const { todayPnl, weekPnl, monthPnl, yearPnl } = useMemo(() => {
+    let todayPnl = 0, weekPnl = 0, monthPnl = 0, yearPnl = 0;
+    for (const p of DEMO_EQUITY_CURVE) {
+      if (p.date === todayStr)              todayPnl += p.pnl;
+      if (p.date >= weekCutoff)             weekPnl  += p.pnl;
+      if (p.date.startsWith(monthCutoff))   monthPnl += p.pnl;
+      if (p.date.startsWith(yearStr))       yearPnl  += p.pnl;
+    }
+    return { todayPnl, weekPnl, monthPnl, yearPnl };
+  }, [todayStr, weekCutoff, monthCutoff, yearStr]);
+
+  const netPnl   = DEMO_STATS.netPnl;
+  const pnlSign  = (v: number) => (v > 0 ? "+" : "");
+
+  return (
+    <div className="px-4 py-4 sm:px-6 space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5 gap-3">
+        <KpiCard
+          index={0} label="Net PNL" icon={netPnl >= 0 ? TrendingUp : TrendingDown}
+          value={fc(netPnl)}
+          positive={netPnl > 0 ? true : netPnl < 0 ? false : undefined}
+          sub="All time"
+        />
+        <KpiCard
+          index={1} label="Today" icon={Activity}
+          value={`${pnlSign(todayPnl)}${fc(todayPnl)}`}
+          positive={todayPnl > 0 ? true : todayPnl < 0 ? false : undefined}
+          sub={todayStr}
+        />
+        <KpiCard
+          index={2} label="This Week" icon={BarChart2}
+          value={`${pnlSign(weekPnl)}${fc(weekPnl)}`}
+          positive={weekPnl > 0 ? true : weekPnl < 0 ? false : undefined}
+        />
+        <KpiCard
+          index={3} label="This Month" icon={CalendarDays}
+          value={`${pnlSign(monthPnl)}${fc(monthPnl)}`}
+          positive={monthPnl > 0 ? true : monthPnl < 0 ? false : undefined}
+          sub={now.toLocaleDateString("en-US", { month: "long" })}
+        />
+        <KpiCard
+          index={4} label="This Year" icon={Zap}
+          value={`${pnlSign(yearPnl)}${fc(yearPnl)}`}
+          positive={yearPnl > 0 ? true : yearPnl < 0 ? false : undefined}
+          sub={yearStr}
+        />
+      </div>
+    </div>
+  );
 }
