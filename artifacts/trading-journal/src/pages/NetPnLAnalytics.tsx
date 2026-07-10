@@ -232,9 +232,10 @@ export default function NetPnLAnalytics() {
     return () => { cancelled = true; };
   }, [timeFilter]);
 
-  const chartData = useMemo(() => buildChartData(trades, timeFilter), [trades, timeFilter]);
-  const lastVal   = chartData.length > 0 ? chartData[chartData.length - 1].cumPnl : null;
-  const isEmpty   = !loading && !error && chartData.length === 0;
+  const chartData  = useMemo(() => buildChartData(trades, timeFilter), [trades, timeFilter]);
+  const lastVal    = chartData.length > 0 ? chartData[chartData.length - 1].cumPnl : null;
+  const isEmpty    = !loading && !error && chartData.length === 0;
+  const chartColor = lastVal !== null && lastVal < 0 ? "#ef4444" : "#22c55e";
 
   return (
     <div className="px-4 py-4 sm:px-6 space-y-4">
@@ -318,10 +319,10 @@ export default function NetPnLAnalytics() {
                 margin={{ top: 16, right: 20, left: 8, bottom: 12 }}
               >
                 <defs>
-                  <linearGradient id="netPnlGreenGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%"   stopColor="#22c55e" stopOpacity={0.32} />
-                    <stop offset="55%"  stopColor="#22c55e" stopOpacity={0.07} />
-                    <stop offset="100%" stopColor="#22c55e" stopOpacity={0}    />
+                  <linearGradient id="netPnlGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor={chartColor} stopOpacity={0.32} />
+                    <stop offset="55%"  stopColor={chartColor} stopOpacity={0.07} />
+                    <stop offset="100%" stopColor={chartColor} stopOpacity={0}    />
                   </linearGradient>
                 </defs>
 
@@ -358,13 +359,13 @@ export default function NetPnLAnalytics() {
                 <Area
                   type={cardinal as any}
                   dataKey="cumPnl"
-                  stroke="#22c55e"
+                  stroke={chartColor}
                   strokeWidth={2}
-                  fill="url(#netPnlGreenGrad)"
+                  fill="url(#netPnlGrad)"
                   dot={false}
                   activeDot={{
                     r: 4,
-                    fill: "#22c55e",
+                    fill: chartColor,
                     stroke: "#0a0c10",
                     strokeWidth: 2,
                   }}
