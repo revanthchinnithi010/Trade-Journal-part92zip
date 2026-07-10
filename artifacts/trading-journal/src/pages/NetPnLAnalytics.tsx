@@ -53,12 +53,14 @@ interface ChartPoint {
 
 // ── Mock data (used for all sections below the line chart) ────────────────────
 const MOCK_SUMMARY = {
-  netPnl:     2192.45,
-  netPnlPct:  219.24,
-  totalTrades: 128,
-  winRate:    62.5,
-  bestTrade:  512.32,
-  worstTrade: -215.43,
+  netPnl:           2192.45,
+  netPnlPct:        219.24,
+  totalTrades:      128,
+  winRate:          62.5,
+  bestTrade:        512.32,
+  bestTradeSymbol:  "BTCUSDT",
+  worstTrade:       -215.43,
+  worstTradeSymbol: "ETHUSDT",
 };
 
 const MOCK_DISTRIBUTION = { winning: 80, losing: 48 };
@@ -461,12 +463,13 @@ function MonthlyTooltip({
 
 /** 5-column stats summary card */
 function SummaryCard({
-  label, value, sub, valueColor,
+  label, value, sub, valueColor, subColor,
 }: {
   label: string;
   value: string;
   sub?: string;
   valueColor?: string;
+  subColor?: string;
 }) {
   return (
     <div
@@ -486,7 +489,12 @@ function SummaryCard({
         {value}
       </span>
       {sub && (
-        <span className="text-[10px] text-muted-foreground/60 tabular-nums">{sub}</span>
+        <span
+          className="text-[10px] tabular-nums"
+          style={{ color: subColor ?? "rgba(161,161,170,0.70)", fontWeight: 500 }}
+        >
+          {sub}
+        </span>
       )}
     </div>
   );
@@ -758,24 +766,25 @@ export default function NetPnLAnalytics() {
           <SummaryCard
             label="Net PNL"
             value={fmtUsd(MOCK_SUMMARY.netPnl)}
-            sub={`+${MOCK_SUMMARY.netPnlPct.toFixed(2)}%`}
+            sub={`+${MOCK_SUMMARY.netPnlPct.toFixed(2)}% ROI`}
             valueColor="#22c55e"
+            subColor="rgba(34,197,94,0.65)"
           />
           <SummaryCard
             label="Total Trades"
             value={String(MOCK_SUMMARY.totalTrades)}
-            sub="—"
+            sub={`${(MOCK_SUMMARY.totalTrades / MOCK_MONTHLY.length).toFixed(1)}/mo avg`}
           />
           <SummaryCard
             label="Best Trade"
             value={fmtUsd(MOCK_SUMMARY.bestTrade)}
-            sub="—"
+            sub={MOCK_SUMMARY.bestTradeSymbol || undefined}
             valueColor="#22c55e"
           />
           <SummaryCard
             label="Worst Trade"
             value={fmtUsd(MOCK_SUMMARY.worstTrade)}
-            sub="—"
+            sub={MOCK_SUMMARY.worstTradeSymbol || undefined}
             valueColor="#ef4444"
           />
         </div>
