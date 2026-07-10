@@ -752,7 +752,7 @@ export default function NetPnLAnalytics() {
 
         {/* stats summary row */}
         <div
-          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 sm:p-4 border-t"
+          className="grid grid-cols-2 lg:grid-cols-4 gap-2 p-3 sm:p-4 border-t"
           style={{ borderColor: "rgba(255,255,255,0.06)" }}
         >
           <SummaryCard
@@ -764,11 +764,6 @@ export default function NetPnLAnalytics() {
           <SummaryCard
             label="Total Trades"
             value={String(MOCK_SUMMARY.totalTrades)}
-            sub="—"
-          />
-          <SummaryCard
-            label="Win Rate"
-            value={`${MOCK_SUMMARY.winRate.toFixed(2)}%`}
             sub="—"
           />
           <SummaryCard
