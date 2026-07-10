@@ -294,6 +294,45 @@ function NetPnLTooltip({
   );
 }
 
+// ── Custom bar shape — rounds the outer corners only (top for +, bottom for -) ─
+function MonthlyBarShape(props: {
+  x?: number; y?: number; width?: number; height?: number; value?: number;
+}) {
+  const { x = 0, y = 0, width = 0, height = 0, value = 0 } = props;
+  if (!width || !height) return null;
+  const r = Math.min(4, Math.abs(height) / 2, width / 2);
+  const fill   = value >= 0 ? "#22c55e" : "#ef4444";
+  const opacity = 0.88;
+
+  let d: string;
+  if (value >= 0) {
+    // Positive bar: round top-left and top-right corners
+    d = [
+      `M ${x},${y + height}`,
+      `V ${y + r}`,
+      `Q ${x},${y} ${x + r},${y}`,
+      `H ${x + width - r}`,
+      `Q ${x + width},${y} ${x + width},${y + r}`,
+      `V ${y + height}`,
+      "Z",
+    ].join(" ");
+  } else {
+    // Negative bar: round bottom-left and bottom-right corners
+    d = [
+      `M ${x},${y}`,
+      `H ${x + width}`,
+      `V ${y + height - r}`,
+      `Q ${x + width},${y + height} ${x + width - r},${y + height}`,
+      `H ${x + r}`,
+      `Q ${x},${y + height} ${x},${y + height - r}`,
+      `V ${y}`,
+      "Z",
+    ].join(" ");
+  }
+
+  return <path d={d} fill={fill} fillOpacity={opacity} />;
+}
+
 // ── Tooltip — monthly bar chart ───────────────────────────────────────────────
 function MonthlyTooltip({
   active, payload, label,
@@ -527,9 +566,6 @@ export default function NetPnLAnalytics() {
   ];
   const donutColors = ["#22c55e", "#ef4444"];
 
-  // monthly bar x-axis
-  const maxAbs = Math.max(...MOCK_MONTHLY.map(d => Math.abs(d.pnl)));
-  const xDomain: [number, number] = [-Math.ceil(maxAbs / 100) * 100, Math.ceil(maxAbs / 100) * 100];
 
   return (
     <div
@@ -737,54 +773,51 @@ export default function NetPnLAnalytics() {
           </div>
         </Section>
 
-        {/* Monthly PNL — horizontal bar chart */}
+        {/* Monthly PNL — vertical column chart */}
         <Section title="Monthly PNL (USD)">
-          <div className="w-full" style={{ height: Math.max(260, MOCK_MONTHLY.length * 26) }}>
+          <div className="w-full h-[260px] sm:h-[320px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
-                layout="vertical"
                 data={MOCK_MONTHLY}
-                margin={{ top: 0, right: 56, left: 4, bottom: 0 }}
-                barCategoryGap="30%"
+                margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
+                barCategoryGap="28%"
               >
+                <CartesianGrid
+                  stroke="rgba(255,255,255,0.055)"
+                  strokeDasharray="0"
+                  horizontal
+                  vertical
+                />
                 <XAxis
-                  type="number"
-                  domain={xDomain}
-                  axisLine={false}
+                  dataKey="month"
+                  axisLine={{ stroke: "rgba(255,255,255,0.10)" }}
                   tickLine={false}
-                  tick={false}
+                  tick={{ fill: "#9ca3af", fontSize: 10, fontWeight: 500 }}
+                  interval={0}
                 />
                 <YAxis
-                  dataKey="month"
-                  type="category"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 11, fontWeight: 500 }}
-                  width={52}
+                  tick={{ fill: "#9ca3af", fontSize: 10, fontWeight: 500 }}
+                  tickFormatter={(v: number) => fmtUsdShort(v)}
+                  width={44}
                 />
-                <ReferenceLine x={0} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
+                <ReferenceLine
+                  y={0}
+                  stroke="rgba(255,255,255,0.22)"
+                  strokeWidth={1.5}
+                />
                 <Tooltip
                   content={<MonthlyTooltip />}
-                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
                 />
                 <Bar
                   dataKey="pnl"
-                  radius={[0, 3, 3, 0]}
-                  maxBarSize={14}
+                  maxBarSize={32}
                   isAnimationActive
                   animationDuration={700}
-                  label={{
-                    position: "right",
-                    formatter: (v: number) => fmtUsdShort(v),
-                    fill: "#6b7280",
-                    fontSize: 10,
-                    fontWeight: 600,
-                  }}
-                >
-                  {MOCK_MONTHLY.map((entry, i) => (
-                    <Cell key={i} fill={entry.pnl >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.85} />
-                  ))}
-                </Bar>
+                  shape={<MonthlyBarShape />}
+                />
               </BarChart>
             </ResponsiveContainer>
           </div>
