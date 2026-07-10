@@ -1,4 +1,4 @@
-// Net PNL Analytics — Net PNL Report
+// Net PNL Analytics — redesigned dashboard layout
 // Header, back button, and page title are rendered by the shared Layout
 // (see components/layout.tsx, keyed on the "/net-pnl" pathname).
 import { useState, useEffect, useMemo } from "react";
@@ -10,7 +10,22 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  ReferenceLine,
 } from "recharts";
+import {
+  TrendingUp,
+  TrendingDown,
+  BarChart2,
+  Flame,
+  Calendar,
+  Trophy,
+  Target,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -21,18 +36,12 @@ interface TradeRow {
   exit_date: string;
 }
 
-/** Raw bucket before zero-crossing split */
 interface RawPoint {
   label:   string;
   cumPnl:  number;
   sortKey: number;
 }
 
-/**
- * Final point fed to Recharts.
- * greenPnl / redPnl are null where the other series owns the value,
- * except at zero-crossing anchors where both hold 0 so the lines connect.
- */
 interface ChartPoint {
   label:    string;
   cumPnl:   number;
@@ -40,6 +49,52 @@ interface ChartPoint {
   greenPnl: number | null;
   redPnl:   number | null;
 }
+
+// ── Mock data (used for all sections below the line chart) ────────────────────
+const MOCK_SUMMARY = {
+  netPnl:     2192.45,
+  netPnlPct:  219.24,
+  totalTrades: 128,
+  winRate:    62.5,
+  bestTrade:  512.32,
+  worstTrade: -215.43,
+};
+
+const MOCK_DISTRIBUTION = { winning: 80, losing: 48 };
+
+const MOCK_MONTHLY = [
+  { month: "Jul '25", pnl: -120 },
+  { month: "Aug '25", pnl:   50 },
+  { month: "Sep '25", pnl: -380 },
+  { month: "Oct '25", pnl:  210 },
+  { month: "Nov '25", pnl:  480 },
+  { month: "Dec '25", pnl:  320 },
+  { month: "Jan '26", pnl:  640 },
+  { month: "Feb '26", pnl:  520 },
+  { month: "Mar '26", pnl:  710 },
+  { month: "Apr '26", pnl:  380 },
+  { month: "May '26", pnl:  850 },
+  { month: "Jun '26", pnl:  960 },
+  { month: "Jul '26", pnl: 1100 },
+];
+
+const MOCK_TRADING_STATS = {
+  bestTrade:          512.32,
+  worstTrade:        -215.43,
+  avgWin:             128.45,
+  avgLoss:            -68.32,
+  longestWinStreak:   7,
+  longestLossStreak:  4,
+};
+
+const MOCK_CUMULATIVE = {
+  winningDays:        46,
+  losingDays:         28,
+  breakEvenDays:       6,
+  totalTradingDays:   80,
+  longestGreenStreak:  9,
+  longestRedStreak:    6,
+};
 
 // ── Time filter config ────────────────────────────────────────────────────────
 const TIME_FILTERS: { id: TimeFilter; label: string }[] = [
@@ -89,7 +144,7 @@ function getBucketLabel(date: Date, filter: TimeFilter): string {
       tmp.setHours(0, 0, 0, 0);
       tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
       const jan4 = new Date(tmp.getFullYear(), 0, 4);
-      const wk   = 1 + Math.round(
+      const wk = 1 + Math.round(
         ((tmp.getTime() - jan4.getTime()) / 86_400_000 - 3 + ((jan4.getDay() + 6) % 7)) / 7,
       );
       return `W${wk} ${tmp.getFullYear()}`;
@@ -113,7 +168,7 @@ function getBucketSortKey(date: Date, filter: TimeFilter): number {
       tmp.setHours(0, 0, 0, 0);
       tmp.setDate(tmp.getDate() + 3 - ((tmp.getDay() + 6) % 7));
       const jan4 = new Date(tmp.getFullYear(), 0, 4);
-      const wk   = 1 + Math.round(
+      const wk = 1 + Math.round(
         ((tmp.getTime() - jan4.getTime()) / 86_400_000 - 3 + ((jan4.getDay() + 6) % 7)) / 7,
       );
       return tmp.getFullYear() * 1000 + wk;
@@ -147,34 +202,19 @@ function bucketTrades(trades: TradeRow[], filter: TimeFilter): RawPoint[] {
   });
 }
 
-/**
- * Splits raw points into green/red series so the line color changes at zero.
- *
- * Rules:
- *   cumPnl > 0  → greenPnl only, redPnl = null
- *   cumPnl < 0  → redPnl only,   greenPnl = null
- *   cumPnl === 0 → shared anchor (both = 0) — lines connect without gaps
- *   strict sign flip (+→- or -→+): inject an extra shared-zero anchor between
- *   the two adjacent points so both series meet cleanly at y = 0.
- */
 function splitAtZero(raw: RawPoint[]): ChartPoint[] {
   if (raw.length === 0) return [];
-
   const out: ChartPoint[] = [];
-
   for (let i = 0; i < raw.length; i++) {
     const curr = raw[i];
     const prev = i > 0 ? raw[i - 1] : null;
-
-    // Inject a shared zero anchor for strict sign crossings (bypassing exact-zero
-    // points, which are handled as shared anchors in the assignment below).
     if (prev !== null) {
       const pv = prev.cumPnl;
       const cv = curr.cumPnl;
       if ((pv > 0 && cv < 0) || (pv < 0 && cv > 0)) {
-        const t = pv / (pv - cv);          // fraction where value = 0
+        const t = pv / (pv - cv);
         out.push({
-          label:    "",                      // empty → hidden in tooltip / axis
+          label:    "",
           cumPnl:   0,
           sortKey:  prev.sortKey + t * (curr.sortKey - prev.sortKey),
           greenPnl: 0,
@@ -182,8 +222,6 @@ function splitAtZero(raw: RawPoint[]): ChartPoint[] {
         });
       }
     }
-
-    // Assign to the correct series; exact-zero is shared so both lines connect.
     if (curr.cumPnl === 0) {
       out.push({ ...curr, greenPnl: 0, redPnl: 0 });
     } else if (curr.cumPnl > 0) {
@@ -192,7 +230,6 @@ function splitAtZero(raw: RawPoint[]): ChartPoint[] {
       out.push({ ...curr, greenPnl: null, redPnl: curr.cumPnl });
     }
   }
-
   return out;
 }
 
@@ -211,53 +248,223 @@ function fmtUsd(v: number): string {
     Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// ── Tooltip ───────────────────────────────────────────────────────────────────
+function fmtUsdShort(v: number): string {
+  const abs = Math.abs(v);
+  const str = abs >= 1_000
+    ? (abs / 1_000).toFixed(1) + "k"
+    : abs.toFixed(0);
+  return (v >= 0 ? "+" : "−") + "$" + str;
+}
+
+// ── Tooltip — line chart ──────────────────────────────────────────────────────
 interface TooltipPayloadEntry {
-  value:    number | null;
-  dataKey:  string;
+  value:   number | null;
+  dataKey: string;
 }
 
 function NetPnLTooltip({
-  active,
-  payload,
-  label,
+  active, payload, label,
 }: {
-  active?:   boolean;
-  payload?:  TooltipPayloadEntry[];
-  label?:    string;
+  active?:  boolean;
+  payload?: TooltipPayloadEntry[];
+  label?:   string;
 }) {
   if (!active || !payload?.length) return null;
-
-  // Pick whichever series has a non-null value
-  const entry  = payload.find(p => p.value !== null && p.value !== undefined);
-  const value  = entry?.value ?? null;
+  const entry = payload.find(p => p.value !== null && p.value !== undefined);
+  const value = entry?.value ?? null;
   if (value === null) return null;
-
-  const isPos  = value >= 0;
-  const color  = isPos ? "#22c55e" : "#ef4444";
-
+  const color = value >= 0 ? "#22c55e" : "#ef4444";
   return (
-    <div
-      style={{
-        background:       "rgba(10,12,16,0.97)",
-        border:           "1px solid rgba(255,255,255,0.09)",
-        borderRadius:     10,
-        padding:          "10px 14px",
-        backdropFilter:   "blur(16px)",
-        boxShadow:        "0 8px 28px rgba(0,0,0,0.55)",
-        minWidth:         140,
-      }}
-    >
-      <p style={{ fontSize: 10, color: "#6b7280", marginBottom: 6, fontWeight: 500 }}>
-        {label}
-      </p>
+    <div style={{
+      background:     "rgba(10,12,16,0.97)",
+      border:         "1px solid rgba(255,255,255,0.09)",
+      borderRadius:   10,
+      padding:        "10px 14px",
+      backdropFilter: "blur(16px)",
+      boxShadow:      "0 8px 28px rgba(0,0,0,0.55)",
+      minWidth:       140,
+    }}>
+      <p style={{ fontSize: 10, color: "#6b7280", marginBottom: 6, fontWeight: 500 }}>{label}</p>
       <p style={{ fontSize: 11, color: "#9ca3af", marginBottom: 3 }}>Net PNL</p>
       <p style={{ fontSize: 15, fontWeight: 700, color, fontVariantNumeric: "tabular-nums" }}>
         {fmtUsd(value)}
       </p>
-      <p style={{ fontSize: 10, color: "#4b5563", marginTop: 4 }}>
-        Profit / Loss (USD)
+      <p style={{ fontSize: 10, color: "#4b5563", marginTop: 4 }}>Profit / Loss (USD)</p>
+    </div>
+  );
+}
+
+// ── Tooltip — monthly bar chart ───────────────────────────────────────────────
+function MonthlyTooltip({
+  active, payload, label,
+}: {
+  active?:  boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: any[];
+  label?:   string;
+}) {
+  if (!active || !payload?.length) return null;
+  const val = payload[0].value as number;
+  return (
+    <div style={{
+      background:   "rgba(10,12,16,0.97)",
+      border:       "1px solid rgba(255,255,255,0.09)",
+      borderRadius: 8,
+      padding:      "8px 12px",
+      fontSize:     12,
+    }}>
+      <p style={{ color: "#6b7280", marginBottom: 4 }}>{label}</p>
+      <p style={{ fontWeight: 700, color: val >= 0 ? "#22c55e" : "#ef4444" }}>
+        {val >= 0 ? "+" : "−"}${Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2 })}
       </p>
+    </div>
+  );
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+/** 5-column stats summary card */
+function SummaryCard({
+  label, value, sub, valueColor,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  valueColor?: string;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-1 px-4 py-3 rounded-xl transition-all duration-200 hover:brightness-110"
+      style={{
+        background: "rgba(255,255,255,0.03)",
+        border:     "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate">
+        {label}
+      </span>
+      <span
+        className="text-[15px] sm:text-[17px] font-black leading-none tracking-tight tabular-nums"
+        style={{ color: valueColor ?? "hsl(var(--foreground))" }}
+      >
+        {value}
+      </span>
+      {sub && (
+        <span className="text-[10px] text-muted-foreground/60 tabular-nums">{sub}</span>
+      )}
+    </div>
+  );
+}
+
+/** Trading statistics row card */
+function TradingStatCard({
+  label, value, icon: Icon, positive,
+}: {
+  label: string;
+  value: string;
+  icon: React.ElementType;
+  positive?: boolean;
+}) {
+  const valueColor =
+    positive === true  ? "#22c55e" :
+    positive === false ? "#ef4444" :
+    "hsl(var(--foreground))";
+
+  const iconBg =
+    positive === true  ? "rgba(34,197,94,0.12)"  :
+    positive === false ? "rgba(239,68,68,0.12)"  :
+    "rgba(255,255,255,0.06)";
+
+  const iconColor =
+    positive === true  ? "#22c55e" :
+    positive === false ? "#ef4444" :
+    "hsl(var(--muted-foreground))";
+
+  return (
+    <div
+      className="flex items-center justify-between p-4 rounded-xl transition-all duration-200 hover:brightness-110 group"
+      style={{
+        background: "rgba(255,255,255,0.025)",
+        border:     "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      <div className="flex flex-col gap-1 min-w-0">
+        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+          {label}
+        </span>
+        <span
+          className="text-[18px] font-black leading-none tabular-nums"
+          style={{ color: valueColor }}
+        >
+          {value}
+        </span>
+      </div>
+      <div
+        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ml-3 transition-transform duration-200 group-hover:scale-110"
+        style={{ background: iconBg }}
+      >
+        <Icon className="w-4 h-4" style={{ color: iconColor }} />
+      </div>
+    </div>
+  );
+}
+
+/** Cumulative statistics card */
+function CumulativeStatCard({
+  label, value, sub, icon: Icon, valueColor, iconColor, iconBg,
+}: {
+  label:      string;
+  value:      string;
+  sub:        string;
+  icon:       React.ElementType;
+  valueColor: string;
+  iconColor:  string;
+  iconBg:     string;
+}) {
+  return (
+    <div
+      className="flex flex-col gap-2 p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] hover:brightness-110 cursor-default"
+      style={{
+        background: "rgba(255,255,255,0.025)",
+        border:     "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center"
+        style={{ background: iconBg }}
+      >
+        <Icon className="w-4 h-4" style={{ color: iconColor }} />
+      </div>
+      <div className="flex flex-col gap-0.5">
+        <span
+          className="text-[22px] font-black leading-none tabular-nums"
+          style={{ color: valueColor }}
+        >
+          {value}
+        </span>
+        <span className="text-[10px] text-muted-foreground/70">{sub}</span>
+      </div>
+      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ── Section wrapper ───────────────────────────────────────────────────────────
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div
+      className="rounded-2xl overflow-hidden"
+      style={{
+        background: "rgba(255,255,255,0.02)",
+        border:     "1px solid rgba(255,255,255,0.07)",
+      }}
+    >
+      <div className="px-5 pt-4 pb-3 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <h2 className="text-[13px] font-bold text-foreground tracking-tight">{title}</h2>
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
     </div>
   );
 }
@@ -273,28 +480,22 @@ export default function NetPnLAnalytics() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-
     (async () => {
       try {
-        if (!supabase) {
-          setTrades([]);
-          return;
-        }
+        if (!supabase) { setTrades([]); return; }
         let q = supabase
           .from("trades")
           .select("pnl, exit_date")
           .order("exit_date", { ascending: true });
         const startIso = getStartIso(timeFilter);
         if (startIso) q = q.gte("exit_date", startIso);
-
         const { data, error: sbErr } = await q;
         if (cancelled) return;
         if (sbErr) { setError(sbErr.message); setTrades([]); return; }
         const valid = (data ?? []).filter((r: Record<string, unknown>) => {
           if (typeof r.pnl !== "number" || isNaN(r.pnl as number)) return false;
           if (!r.exit_date) return false;
-          const d = new Date(r.exit_date as string);
-          return !isNaN(d.getTime());
+          return !isNaN(new Date(r.exit_date as string).getTime());
         }) as TradeRow[];
         setTrades(valid);
       } catch (e) {
@@ -305,29 +506,39 @@ export default function NetPnLAnalytics() {
         if (!cancelled) setLoading(false);
       }
     })();
-
     return () => { cancelled = true; };
   }, [timeFilter]);
 
   const chartData = useMemo(() => buildChartData(trades, timeFilter), [trades, timeFilter]);
-  const lastVal   = chartData.length > 0 ? chartData[chartData.length - 1].cumPnl : null;
   const isEmpty   = !loading && !error && chartData.length === 0;
 
-  // ── Axis style tokens ────────────────────────────────────────────────────
-  const axisColor  = "rgba(255,255,255,0.12)";
-  const tickStyle  = { fill: "#9ca3af", fontSize: 11, fontWeight: 500 };
-  const gridColor  = "rgba(255,255,255,0.055)";
+  // axis style tokens
+  const axisColor = "rgba(255,255,255,0.12)";
+  const tickStyle = { fill: "#9ca3af", fontSize: 11, fontWeight: 500 };
+  const gridColor = "rgba(255,255,255,0.055)";
+
+  // distribution donut data
+  const total      = MOCK_DISTRIBUTION.winning + MOCK_DISTRIBUTION.losing;
+  const winPct     = ((MOCK_DISTRIBUTION.winning / total) * 100).toFixed(1);
+  const losePct    = ((MOCK_DISTRIBUTION.losing  / total) * 100).toFixed(1);
+  const donutData  = [
+    { name: "Winning", value: MOCK_DISTRIBUTION.winning },
+    { name: "Losing",  value: MOCK_DISTRIBUTION.losing  },
+  ];
+  const donutColors = ["#22c55e", "#ef4444"];
+
+  // monthly bar x-axis
+  const maxAbs = Math.max(...MOCK_MONTHLY.map(d => Math.abs(d.pnl)));
+  const xDomain: [number, number] = [-Math.ceil(maxAbs / 100) * 100, Math.ceil(maxAbs / 100) * 100];
 
   return (
-    <div className="py-4 space-y-4 w-full">
-
-      {/* ── Chips — keep inner padding ── */}
+    <div
+      className="py-4 space-y-4 w-full"
+      style={{ maxWidth: 1400, margin: "0 auto" }}
+    >
+      {/* ── Time filter chips ─────────────────────────────────────────── */}
       <div className="px-4 sm:px-6">
-        {/* ── Time filter chips ── */}
-        <div
-          className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
-          style={{ scrollbarWidth: "none" }}
-        >
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: "none" }}>
           {TIME_FILTERS.map(f => {
             const active = timeFilter === f.id;
             return (
@@ -349,93 +560,336 @@ export default function NetPnLAnalytics() {
         </div>
       </div>
 
-      {/* ── Chart — full bleed, no horizontal padding ── */}
-      <div className="h-[380px] md:h-[450px] lg:h-[520px] w-full">
-        {loading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="w-5 h-5 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
-          </div>
-        ) : error ? (
-          <div className="h-full flex items-center justify-center px-8">
-            <p className="text-[12px] text-red-400/70 text-center">{error}</p>
-          </div>
-        ) : isEmpty ? (
-          <div className="h-full flex flex-col items-center justify-center gap-2 px-8">
-            <p className="text-[13px] text-muted-foreground text-center">
-              No trades found for this period
-            </p>
-            <p className="text-[11px] text-muted-foreground/50 text-center">
-              Log trades or connect a broker to see your Net PNL
-            </p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 10, right: 8, left: 0, bottom: 10 }}
-            >
-              {/* Grid — both horizontal and vertical */}
-              <CartesianGrid
-                stroke={gridColor}
-                strokeDasharray="0"
-                horizontal={true}
-                vertical={true}
-              />
+      {/* ── Net PNL Report card ───────────────────────────────────────── */}
+      <div
+        className="mx-4 sm:mx-6 rounded-2xl overflow-hidden"
+        style={{
+          background: "rgba(255,255,255,0.02)",
+          border:     "1px solid rgba(255,255,255,0.07)",
+        }}
+      >
+        {/* chart */}
+        <div className="h-[300px] sm:h-[380px] lg:h-[440px] w-full px-1 pt-4">
+          {loading ? (
+            <div className="h-full flex items-center justify-center">
+              <div className="w-5 h-5 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
+            </div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center px-8">
+              <p className="text-[12px] text-red-400/70 text-center">{error}</p>
+            </div>
+          ) : isEmpty ? (
+            <div className="h-full flex flex-col items-center justify-center gap-2 px-8">
+              <p className="text-[13px] text-muted-foreground text-center">No trades found for this period</p>
+              <p className="text-[11px] text-muted-foreground/50 text-center">Log trades or connect a broker to see your Net PNL</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 8, left: 0, bottom: 10 }}>
+                <CartesianGrid stroke={gridColor} strokeDasharray="0" horizontal vertical />
+                <XAxis
+                  dataKey="label"
+                  axisLine={{ stroke: axisColor }}
+                  tickLine={{ stroke: axisColor }}
+                  tick={tickStyle}
+                  interval="preserveStartEnd"
+                  minTickGap={48}
+                />
+                <YAxis
+                  axisLine={{ stroke: axisColor }}
+                  tickLine={{ stroke: axisColor }}
+                  tick={tickStyle}
+                  tickFormatter={yAxisFmt}
+                  width={44}
+                />
+                <Tooltip
+                  content={<NetPnLTooltip />}
+                  cursor={{ stroke: "rgba(255,255,255,0.10)", strokeWidth: 1, strokeDasharray: "4 3" }}
+                />
+                <Line dataKey="greenPnl" stroke="#22c55e" strokeWidth={2} dot={false}
+                  activeDot={{ r: 4, fill: "#22c55e", stroke: "#0a0c10", strokeWidth: 2 }}
+                  connectNulls={false} isAnimationActive animationDuration={700} animationEasing="ease-out" />
+                <Line dataKey="redPnl" stroke="#ef4444" strokeWidth={2} dot={false}
+                  activeDot={{ r: 4, fill: "#ef4444", stroke: "#0a0c10", strokeWidth: 2 }}
+                  connectNulls={false} isAnimationActive animationDuration={700} animationEasing="ease-out" />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
+        </div>
 
-              {/* X-Axis */}
-              <XAxis
-                dataKey="label"
-                axisLine={{ stroke: axisColor }}
-                tickLine={{ stroke: axisColor }}
-                tick={tickStyle}
-                interval="preserveStartEnd"
-                minTickGap={48}
-              />
-
-              {/* Y-Axis */}
-              <YAxis
-                axisLine={{ stroke: axisColor }}
-                tickLine={{ stroke: axisColor }}
-                tick={tickStyle}
-                tickFormatter={yAxisFmt}
-                width={44}
-              />
-
-              {/* Tooltip */}
-              <Tooltip
-                content={<NetPnLTooltip />}
-                cursor={{ stroke: "rgba(255,255,255,0.10)", strokeWidth: 1, strokeDasharray: "4 3" }}
-              />
-
-              {/* Green line — cumPnl ≥ 0 segments */}
-              <Line
-                dataKey="greenPnl"
-                stroke="#22c55e"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: "#22c55e", stroke: "#0a0c10", strokeWidth: 2 }}
-                connectNulls={false}
-                isAnimationActive={true}
-                animationDuration={700}
-                animationEasing="ease-out"
-              />
-
-              {/* Red line — cumPnl < 0 segments */}
-              <Line
-                dataKey="redPnl"
-                stroke="#ef4444"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: "#ef4444", stroke: "#0a0c10", strokeWidth: 2 }}
-                connectNulls={false}
-                isAnimationActive={true}
-                animationDuration={700}
-                animationEasing="ease-out"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+        {/* stats summary row */}
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 p-3 sm:p-4 border-t"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <SummaryCard
+            label="Net PNL"
+            value={fmtUsd(MOCK_SUMMARY.netPnl)}
+            sub={`+${MOCK_SUMMARY.netPnlPct.toFixed(2)}%`}
+            valueColor="#22c55e"
+          />
+          <SummaryCard
+            label="Total Trades"
+            value={String(MOCK_SUMMARY.totalTrades)}
+            sub="—"
+          />
+          <SummaryCard
+            label="Win Rate"
+            value={`${MOCK_SUMMARY.winRate.toFixed(2)}%`}
+            sub="—"
+          />
+          <SummaryCard
+            label="Best Trade"
+            value={fmtUsd(MOCK_SUMMARY.bestTrade)}
+            sub="—"
+            valueColor="#22c55e"
+          />
+          <SummaryCard
+            label="Worst Trade"
+            value={fmtUsd(MOCK_SUMMARY.worstTrade)}
+            sub="—"
+            valueColor="#ef4444"
+          />
+        </div>
       </div>
+
+      {/* ── PNL Distribution + Monthly PNL ───────────────────────────── */}
+      <div className="mx-4 sm:mx-6 grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* PNL Distribution — doughnut */}
+        <Section title="PNL Distribution">
+          <div className="flex flex-col sm:flex-row items-center gap-6">
+            {/* donut */}
+            <div className="relative w-44 h-44 flex-shrink-0">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={donutData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={52}
+                    outerRadius={72}
+                    dataKey="value"
+                    startAngle={90}
+                    endAngle={-270}
+                    strokeWidth={0}
+                    isAnimationActive
+                    animationDuration={700}
+                    animationEasing="ease-out"
+                  >
+                    {donutData.map((_, i) => (
+                      <Cell key={i} fill={donutColors[i]} fillOpacity={0.9} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+              {/* center text */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                <span className="text-2xl font-black text-foreground tabular-nums">{total}</span>
+                <span className="text-[10px] text-muted-foreground font-medium">Trades</span>
+              </div>
+            </div>
+
+            {/* legend */}
+            <div className="flex flex-col gap-4 flex-1 w-full">
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 flex-shrink-0" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-[11px] text-muted-foreground">Winning Trades</span>
+                  <span className="text-[17px] font-black text-emerald-400 tabular-nums">
+                    {MOCK_DISTRIBUTION.winning}
+                    <span className="text-[11px] font-semibold text-emerald-500/70 ml-1.5">
+                      ({winPct}%)
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* win bar */}
+              <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <div
+                  className="h-full rounded-full bg-emerald-500"
+                  style={{ width: `${winPct}%`, opacity: 0.85 }}
+                />
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500 flex-shrink-0" />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <span className="text-[11px] text-muted-foreground">Losing Trades</span>
+                  <span className="text-[17px] font-black text-red-400 tabular-nums">
+                    {MOCK_DISTRIBUTION.losing}
+                    <span className="text-[11px] font-semibold text-red-500/70 ml-1.5">
+                      ({losePct}%)
+                    </span>
+                  </span>
+                </div>
+              </div>
+
+              {/* loss bar */}
+              <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.07)" }}>
+                <div
+                  className="h-full rounded-full bg-red-500"
+                  style={{ width: `${losePct}%`, opacity: 0.85 }}
+                />
+              </div>
+            </div>
+          </div>
+        </Section>
+
+        {/* Monthly PNL — horizontal bar chart */}
+        <Section title="Monthly PNL (USD)">
+          <div className="w-full" style={{ height: Math.max(260, MOCK_MONTHLY.length * 26) }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                layout="vertical"
+                data={MOCK_MONTHLY}
+                margin={{ top: 0, right: 56, left: 4, bottom: 0 }}
+                barCategoryGap="30%"
+              >
+                <XAxis
+                  type="number"
+                  domain={xDomain}
+                  axisLine={false}
+                  tickLine={false}
+                  tick={false}
+                />
+                <YAxis
+                  dataKey="month"
+                  type="category"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#9ca3af", fontSize: 11, fontWeight: 500 }}
+                  width={52}
+                />
+                <ReferenceLine x={0} stroke="rgba(255,255,255,0.12)" strokeWidth={1} />
+                <Tooltip
+                  content={<MonthlyTooltip />}
+                  cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                />
+                <Bar
+                  dataKey="pnl"
+                  radius={[0, 3, 3, 0]}
+                  maxBarSize={14}
+                  isAnimationActive
+                  animationDuration={700}
+                  label={{
+                    position: "right",
+                    formatter: (v: number) => fmtUsdShort(v),
+                    fill: "#6b7280",
+                    fontSize: 10,
+                    fontWeight: 600,
+                  }}
+                >
+                  {MOCK_MONTHLY.map((entry, i) => (
+                    <Cell key={i} fill={entry.pnl >= 0 ? "#22c55e" : "#ef4444"} fillOpacity={0.85} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </Section>
+      </div>
+
+      {/* ── Trading Statistics ────────────────────────────────────────── */}
+      <div className="mx-4 sm:mx-6">
+        <Section title="Trading Statistics">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TradingStatCard
+              label="Best Trade"
+              value={fmtUsd(MOCK_TRADING_STATS.bestTrade)}
+              icon={TrendingUp}
+              positive={true}
+            />
+            <TradingStatCard
+              label="Worst Trade"
+              value={fmtUsd(MOCK_TRADING_STATS.worstTrade)}
+              icon={TrendingDown}
+              positive={false}
+            />
+            <TradingStatCard
+              label="Average Win"
+              value={fmtUsd(MOCK_TRADING_STATS.avgWin)}
+              icon={BarChart2}
+              positive={true}
+            />
+            <TradingStatCard
+              label="Average Loss"
+              value={fmtUsd(MOCK_TRADING_STATS.avgLoss)}
+              icon={BarChart2}
+              positive={false}
+            />
+            <TradingStatCard
+              label="Largest Winning Streak"
+              value={String(MOCK_TRADING_STATS.longestWinStreak)}
+              icon={Flame}
+              positive={true}
+            />
+            <TradingStatCard
+              label="Largest Losing Streak"
+              value={String(MOCK_TRADING_STATS.longestLossStreak)}
+              icon={Flame}
+              positive={false}
+            />
+          </div>
+        </Section>
+      </div>
+
+      {/* ── Cumulative Statistics ─────────────────────────────────────── */}
+      <div className="mx-4 sm:mx-6">
+        <Section title="Cumulative Statistics">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <CumulativeStatCard
+              label="Winning Days"
+              value={String(MOCK_CUMULATIVE.winningDays)}
+              sub={`${((MOCK_CUMULATIVE.winningDays / MOCK_CUMULATIVE.totalTradingDays) * 100).toFixed(1)}% of trading days`}
+              icon={Calendar}
+              valueColor="#22c55e"
+              iconColor="#22c55e"
+              iconBg="rgba(34,197,94,0.12)"
+            />
+            <CumulativeStatCard
+              label="Losing Days"
+              value={String(MOCK_CUMULATIVE.losingDays)}
+              sub={`${((MOCK_CUMULATIVE.losingDays / MOCK_CUMULATIVE.totalTradingDays) * 100).toFixed(1)}% of trading days`}
+              icon={Calendar}
+              valueColor="#ef4444"
+              iconColor="#ef4444"
+              iconBg="rgba(239,68,68,0.12)"
+            />
+            <CumulativeStatCard
+              label="Break-even Days"
+              value={String(MOCK_CUMULATIVE.breakEvenDays)}
+              sub={`${((MOCK_CUMULATIVE.breakEvenDays / MOCK_CUMULATIVE.totalTradingDays) * 100).toFixed(1)}% of trading days`}
+              icon={Target}
+              valueColor="#eab308"
+              iconColor="#eab308"
+              iconBg="rgba(234,179,8,0.12)"
+            />
+            <CumulativeStatCard
+              label="Longest Green Streak"
+              value={String(MOCK_CUMULATIVE.longestGreenStreak)}
+              sub="Days"
+              icon={TrendingUp}
+              valueColor="#22c55e"
+              iconColor="#22c55e"
+              iconBg="rgba(34,197,94,0.12)"
+            />
+            <CumulativeStatCard
+              label="Longest Red Streak"
+              value={String(MOCK_CUMULATIVE.longestRedStreak)}
+              sub="Days"
+              icon={TrendingDown}
+              valueColor="#ef4444"
+              iconColor="#ef4444"
+              iconBg="rgba(239,68,68,0.12)"
+            />
+          </div>
+        </Section>
+      </div>
+
+      {/* bottom spacing */}
+      <div className="h-2" />
     </div>
   );
 }
