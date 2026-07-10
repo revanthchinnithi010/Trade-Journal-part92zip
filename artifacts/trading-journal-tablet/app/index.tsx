@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import WebView from "react-native-webview";
 
@@ -31,6 +31,14 @@ function buildOrientationScript(isLandscape: boolean): string {
 })();
 true;
 `;
+}
+
+function LoadingView() {
+  return (
+    <View style={styles.loading}>
+      <ActivityIndicator size="large" color="#22c55e" />
+    </View>
+  );
 }
 
 export default function TabletScreen() {
@@ -80,6 +88,14 @@ export default function TabletScreen() {
         overScrollMode="never"
         showsHorizontalScrollIndicator={false}
         showsVerticalScrollIndicator={false}
+        startInLoadingState
+        renderLoading={() => <LoadingView />}
+        onError={(e) =>
+          console.warn("[WebView] error", e.nativeEvent.description)
+        }
+        onHttpError={(e) =>
+          console.warn("[WebView] HTTP", e.nativeEvent.statusCode, WEB_URL)
+        }
         onContentProcessDidTerminate={() => {
           webViewRef.current?.reload();
         }}
@@ -100,6 +116,12 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: "#0d1117",
+  },
+  loading: {
+    flex: 1,
+    backgroundColor: "#0d1117",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
 
