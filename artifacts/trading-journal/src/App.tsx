@@ -166,11 +166,52 @@ function Router() {
   const isMobile   = useIsMobile();
 
   useEffect(() => {
-    // Eagerly trigger the Charts lazy-import after the initial render so the
-    // module is in the browser cache before the user taps the Charts tab.
-    // This eliminates the dynamic-import round-trip (~50-200ms) on first visit.
-    const id = setTimeout(() => { import("@/pages/charts").catch(() => {}); }, 80);
-    return () => clearTimeout(id);
+    // Eagerly preload every route's lazy chunk shortly after the initial render.
+    // Previously only Charts was preloaded — every other page stayed unresolved
+    // until its route was first visited. Navigating to an unresolved route makes
+    // its lazy import suspend *during* the navigation transition; React then keeps
+    // the previously-committed page on screen (to avoid a flash of blank content)
+    // until the new chunk resolves. That is exactly what produced the bug: the
+    // URL/active-tab already pointed at the destination page, but the old page's
+    // content kept rendering underneath until its module finished loading —
+    // looking like "Dashboard shows Alerts content" or vice versa. Preloading
+    // every chunk up front means every route's module is already resolved by the
+    // time the user navigates, so Suspense never has anything to wait on and the
+    // previous page is never left on screen past its own exit animation.
+    const modules = [
+      () => import("@/pages/charts"),
+      () => import("@/pages/dashboard"),
+      () => import("@/pages/markets"),
+      () => import("@/pages/trades"),
+      () => import("@/pages/reports"),
+      () => import("@/pages/calendar"),
+      () => import("@/pages/notebook"),
+      () => import("@/pages/settings"),
+      () => import("@/pages/brokers"),
+      () => import("@/pages/alerts"),
+      () => import("@/pages/calc-crypto"),
+      () => import("@/pages/calc-forex"),
+      () => import("@/pages/calc-position"),
+      () => import("@/pages/calc-margin"),
+      () => import("@/pages/calc-risk"),
+      () => import("@/pages/portfolio"),
+      () => import("@/pages/pnl-analytics"),
+      () => import("@/pages/NetPnLAnalytics"),
+      () => import("@/pages/trade"),
+      () => import("@/pages/ctrader-test"),
+    ];
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const id = setTimeout(() => {
+      modules.forEach((load, i) => {
+        // Stagger slightly so this never competes with the initial route's
+        // own network/render work.
+        timers.push(setTimeout(() => { load().catch(() => {}); }, i * 30));
+      });
+    }, 80);
+    return () => {
+      clearTimeout(id);
+      timers.forEach(clearTimeout);
+    };
   }, []);
 
   // Strip query-string so "/portfolio?tab=positions" matches "/portfolio".
@@ -199,59 +240,74 @@ function Router() {
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
     <Layout chartsNode={CHARTS_NODE}>
-      <Suspense fallback={<PageLoader />}>
-        {/*
-          ── Single AnimatePresence (mode="wait") ────────────────────────────
-          All pages — tab pages, sidebar pages, detail pages — live in ONE
-          AnimatePresence so only a single page is ever in the DOM at a time.
-          This prevents the cross-group stacking bug where a tab page (absolute)
-          floated on top of a sidebar page (flow) during their concurrent exit/enter.
+      {/*
+        ── Single AnimatePresence (mode="wait") ────────────────────────────
+        All pages — tab pages, sidebar pages, detail pages — live in ONE
+        AnimatePresence so only a single page is ever in the DOM at a time.
+        This prevents the cross-group stacking bug where a tab page (absolute)
+        floated on top of a sidebar page (flow) during their concurrent exit/enter.
 
-          mode="wait": current page fully exits before the next one enters.
-          With fade-shift transitions (≤220ms) this feels instant on mobile.
+        mode="wait": current page fully exits before the next one enters, so
+        the previous page is unmounted before the destination page mounts —
+        never both at once.
 
-          All PageTransitions use position:absolute;inset:0 — they fill the
-          absolute container in layout.tsx and layer correctly.
+        Each branch below carries its own <Suspense key={pathname}>, keyed by
+        the route itself. Previously a single Suspense wrapped the *entire*
+        AnimatePresence — if the destination page's lazy chunk hadn't resolved
+        yet, that one shared boundary would suspend for the whole tree. React
+        avoids flashing blank content by leaving the last *committed* tree
+        (the PREVIOUS page) on screen until the new chunk resolves. That is
+        what produced the bug: the URL/active tab already pointed at the new
+        route, but the old page's DOM (and its stale props/state) kept
+        rendering underneath it. Giving each route its own uniquely-keyed
+        Suspense boundary means a still-loading destination page suspends
+        *only its own* boundary — it can never keep the old page's boundary
+        (and therefore its component tree) alive past the exit animation.
+        Combined with eager-preloading every route's chunk on mount (see
+        above), this boundary should essentially never need to show its
+        fallback in practice — it exists purely as a correctness backstop.
 
-          `custom={dir}` at the AP level so the EXITING page reads the correct
-          direction even after pathname has changed. `initial={false}` skips
-          the enter animation on the very first load.
-        */}
-        <AnimatePresence mode="wait" custom={dir} initial={false}>
-          {/* ── Tab pages — direction-aware fade-shift ── */}
-          {pathname === "/"        && <PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/"><Dashboard /></StandardPageWrapper></PageTransition>}
-          {pathname === "/markets" && <PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition>}
-          {pathname === "/trades"  && <PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/alerts"  && <PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition>}
+        All PageTransitions use position:absolute;inset:0 — they fill the
+        absolute container in layout.tsx and layer correctly.
 
-          {/* ── Sidebar / utility pages — fade + slide-up ── */}
-          {pathname === "/brokers"       && <PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/brokers"><Brokers     /></StandardPageWrapper></PageTransition>}
-          {pathname === "/reports"       && <PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calendar"      && <PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calendar"><Calendar    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/notebook"      && <PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/notebook"><Notebook    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/settings"      && <PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/settings"><Settings    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/crypto"   && <PageTransition key="/calc/crypto"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/crypto"><CalcCrypto  /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/forex"    && <PageTransition key="/calc/forex"   custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/forex"><CalcForex   /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/position" && <PageTransition key="/calc/position"custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/position"><CalcPosition/></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/margin"   && <PageTransition key="/calc/margin"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/margin"><CalcMargin  /></StandardPageWrapper></PageTransition>}
-          {pathname === "/calc/risk"     && <PageTransition key="/calc/risk"    custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/risk"><CalcRisk    /></StandardPageWrapper></PageTransition>}
-          {pathname === "/trade"         && <PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trade"><Trade       /></StandardPageWrapper></PageTransition>}
-          {pathname === "/ctrader-test"  && <PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/ctrader-test"><CtraderTest /></StandardPageWrapper></PageTransition>}
+        `custom={dir}` at the AP level so the EXITING page reads the correct
+        direction even after pathname has changed. `initial={false}` skips
+        the enter animation on the very first load.
+      */}
+      <AnimatePresence mode="wait" custom={dir} initial={false}>
+        {/* ── Tab pages — direction-aware fade-shift ── */}
+        {pathname === "/"        && <Suspense key="/"        fallback={<PageLoader />}><PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/"><Dashboard /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/markets" && <Suspense key="/markets" fallback={<PageLoader />}><PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition></Suspense>}
+        {pathname === "/trades"  && <Suspense key="/trades"  fallback={<PageLoader />}><PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/alerts"  && <Suspense key="/alerts"  fallback={<PageLoader />}><PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition></Suspense>}
 
-          {/* ── Detail pages — fade + scale ──
-               Portfolio manages its own internal scroll region (tab content
-               area) inside a fixed-height flex column, so it is NOT wrapped in
-               StandardPageWrapper — it needs the PageTransition's absolute-fill
-               box directly as its height reference, not an outer page-scroll
-               container. */}
-          {pathname === "/portfolio"     && <PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition>}
-          {pathname === "/pnl"          && <PageTransition key="/pnl"       variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition>}
-          {pathname === "/net-pnl"      && <PageTransition key="/net-pnl"   variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition>}
+        {/* ── Sidebar / utility pages — fade + slide-up ── */}
+        {pathname === "/brokers"       && <Suspense key="/brokers"       fallback={<PageLoader />}><PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/brokers"><Brokers     /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/reports"       && <Suspense key="/reports"       fallback={<PageLoader />}><PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calendar"      && <Suspense key="/calendar"      fallback={<PageLoader />}><PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calendar"><Calendar    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/notebook"      && <Suspense key="/notebook"      fallback={<PageLoader />}><PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/notebook"><Notebook    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/settings"      && <Suspense key="/settings"      fallback={<PageLoader />}><PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/settings"><Settings    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calc/crypto"   && <Suspense key="/calc/crypto"   fallback={<PageLoader />}><PageTransition key="/calc/crypto"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/crypto"><CalcCrypto  /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calc/forex"    && <Suspense key="/calc/forex"    fallback={<PageLoader />}><PageTransition key="/calc/forex"   custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/forex"><CalcForex   /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calc/position" && <Suspense key="/calc/position" fallback={<PageLoader />}><PageTransition key="/calc/position"custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/position"><CalcPosition/></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calc/margin"   && <Suspense key="/calc/margin"   fallback={<PageLoader />}><PageTransition key="/calc/margin"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/margin"><CalcMargin  /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/calc/risk"     && <Suspense key="/calc/risk"     fallback={<PageLoader />}><PageTransition key="/calc/risk"    custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calc/risk"><CalcRisk    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/trade"         && <Suspense key="/trade"         fallback={<PageLoader />}><PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trade"><Trade       /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/ctrader-test"  && <Suspense key="/ctrader-test"  fallback={<PageLoader />}><PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/ctrader-test"><CtraderTest /></StandardPageWrapper></PageTransition></Suspense>}
 
-          {/* ── 404 ── */}
-          {!KNOWN_PATHS.has(pathname)    && <PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition>}
-        </AnimatePresence>
-      </Suspense>
+        {/* ── Detail pages — fade + scale ──
+             Portfolio manages its own internal scroll region (tab content
+             area) inside a fixed-height flex column, so it is NOT wrapped in
+             StandardPageWrapper — it needs the PageTransition's absolute-fill
+             box directly as its height reference, not an outer page-scroll
+             container. */}
+        {pathname === "/portfolio"     && <Suspense key="/portfolio" fallback={<PageLoader />}><PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition></Suspense>}
+        {pathname === "/pnl"          && <Suspense key="/pnl"       fallback={<PageLoader />}><PageTransition key="/pnl"       variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/net-pnl"      && <Suspense key="/net-pnl"   fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition></Suspense>}
+
+        {/* ── 404 ── */}
+        {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
+      </AnimatePresence>
     </Layout>
   );
 }
