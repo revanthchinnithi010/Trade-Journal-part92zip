@@ -296,19 +296,33 @@ function NetPnLTooltip({
 }
 
 // ── Custom X-axis tick — abbreviated month + year only on year-change ────────
+// Recharts passes `index` automatically; we use it to skip labels on mobile
+// so they never overlap on narrow screens (≤360 px).
 function MonthlyXTick({
-  x = 0, y = 0, payload,
+  x = 0, y = 0, payload, index = 0,
 }: {
-  x?: number; y?: number; payload?: { value: string };
+  x?: number; y?: number; payload?: { value: string }; index?: number;
 }) {
   const isMobile = useIsMobile();
-  const val       = payload?.value ?? "";
-  const [mon, shortYr] = val.split(" ");                         // "Jul", "'25"
-  const idx       = MOCK_MONTHLY.findIndex(d => d.month === val);
-  const prevYr    = idx > 0 ? MOCK_MONTHLY[idx - 1].month.split(" ")[1] : null;
-  const showYear  = !!shortYr && prevYr !== null && shortYr !== prevYr;
-  const fullYear  = shortYr ? "20" + shortYr.replace("'", "") : "";
-  const fs        = isMobile ? 11 : 13;
+  const total    = MOCK_MONTHLY.length;                        // 13
+  const val      = payload?.value ?? "";
+  const [mon, shortYr] = val.split(" ");                       // "Jul", "'25"
+
+  // Year-change detection uses index directly — no findIndex overhead
+  const prevYr   = index > 0 ? MOCK_MONTHLY[index - 1].month.split(" ")[1] : null;
+  const showYear = !!shortYr && prevYr !== null && shortYr !== prevYr;
+  const fullYear = shortYr ? "20" + shortYr.replace("'", "") : "";
+  const fs       = isMobile ? 11 : 13;
+
+  // Mobile skip-logic: show every 2nd label so 13 ticks → 7 visible labels on
+  // a 360 px screen (~39 px apart).  First + last are always forced visible.
+  const step         = isMobile ? 2 : 1;
+  const isFirst      = index === 0;
+  const isLast       = index === total - 1;
+  const shouldRender = isFirst || isLast || index % step === 0;
+
+  // Return an invisible placeholder so Recharts layout is undisturbed
+  if (!shouldRender) return <g />;
 
   return (
     <g transform={`translate(${x},${y})`}>
@@ -323,7 +337,7 @@ function MonthlyXTick({
       </text>
       {showYear && (
         <text
-          x={0} y={0} dy={isMobile ? 26 : 28}
+          x={0} y={0} dy={isMobile ? 28 : 30}
           textAnchor="middle"
           fill="#71717A"
           fontSize={isMobile ? 9 : 11}
@@ -877,7 +891,8 @@ export default function NetPnLAnalytics() {
                   tickLine={false}
                   tick={<MonthlyXTick />}
                   interval={0}
-                  height={48}
+                  tickMargin={10}
+                  height={56}
                 />
                 <YAxis
                   axisLine={false}
