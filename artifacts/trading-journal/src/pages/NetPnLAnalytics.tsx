@@ -315,40 +315,42 @@ export default function NetPnLAnalytics() {
   const gridColor  = "rgba(255,255,255,0.055)";
 
   return (
-    <div className="px-4 py-4 sm:px-6 space-y-4">
+    <div className="py-4 space-y-4 w-full">
 
-      {/* ── Title ── */}
-      <h2 style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)", letterSpacing: "0.02em" }}>
-        Net PNL Report
-      </h2>
+      {/* ── Title + chips — keep inner padding ── */}
+      <div className="px-4 sm:px-6 space-y-3">
+        <h2 style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)", letterSpacing: "0.02em" }}>
+          Net PNL Report
+        </h2>
 
-      {/* ── Time filter chips ── */}
-      <div
-        className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
-        style={{ scrollbarWidth: "none" }}
-      >
-        {TIME_FILTERS.map(f => {
-          const active = timeFilter === f.id;
-          return (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setTimeFilter(f.id)}
-              className="shrink-0 px-4 py-1.5 rounded-xl text-[12px] font-bold transition-all duration-150"
-              style={{
-                background: active ? "hsl(var(--primary) / 0.15)" : "rgba(255,255,255,0.04)",
-                border:     active ? "1px solid hsl(var(--primary) / 0.35)" : "1px solid rgba(255,255,255,0.07)",
-                color:      active ? "hsl(var(--primary))" : "#6b7280",
-              }}
-            >
-              {f.label}
-            </button>
-          );
-        })}
+        {/* ── Time filter chips ── */}
+        <div
+          className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {TIME_FILTERS.map(f => {
+            const active = timeFilter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setTimeFilter(f.id)}
+                className="shrink-0 px-4 py-1.5 rounded-xl text-[12px] font-bold transition-all duration-150"
+                style={{
+                  background: active ? "hsl(var(--primary) / 0.15)" : "rgba(255,255,255,0.04)",
+                  border:     active ? "1px solid hsl(var(--primary) / 0.35)" : "1px solid rgba(255,255,255,0.07)",
+                  color:      active ? "hsl(var(--primary))" : "#6b7280",
+                }}
+              >
+                {f.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ── Chart ── */}
-      <div className="h-[260px] sm:h-[380px] w-full">
+      {/* ── Chart — full bleed, no horizontal padding ── */}
+      <div className="h-[380px] md:h-[450px] lg:h-[520px] w-full">
         {loading ? (
           <div className="h-full flex items-center justify-center">
             <div className="w-5 h-5 rounded-full border-2 border-emerald-500/30 border-t-emerald-500 animate-spin" />
@@ -370,7 +372,7 @@ export default function NetPnLAnalytics() {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartData}
-              margin={{ top: 12, right: 16, left: 4, bottom: 4 }}
+              margin={{ top: 10, right: 8, left: 0, bottom: 10 }}
             >
               {/* Grid — both horizontal and vertical */}
               <CartesianGrid
@@ -396,7 +398,7 @@ export default function NetPnLAnalytics() {
                 tickLine={{ stroke: axisColor }}
                 tick={tickStyle}
                 tickFormatter={yAxisFmt}
-                width={62}
+                width={52}
               />
 
               {/* Tooltip */}
