@@ -1,10 +1,13 @@
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import WebView from "react-native-webview";
 
-const DOMAIN = process.env.EXPO_PUBLIC_DOMAIN ?? "";
-const WEB_URL = DOMAIN ? `https://${DOMAIN}/` : "/";
+// Guard against Metro injecting the literal string "undefined" when the env
+// var was not set at bundle time, and against an empty string.
+const _raw = process.env.EXPO_PUBLIC_DOMAIN;
+const DOMAIN = (_raw && _raw !== "undefined") ? _raw : "";
+const WEB_URL = DOMAIN ? `https://${DOMAIN}/` : "";
 
 const TABLET_UA =
   "Mozilla/5.0 (Linux; Android 13; Lenovo TB-J716F Build/TP1A.220624.014) " +
@@ -41,6 +44,20 @@ function LoadingView() {
   );
 }
 
+function MissingDomainScreen() {
+  return (
+    <View style={styles.loading}>
+      <Text style={{ color: "#ef4444", fontSize: 14, fontWeight: "bold", marginBottom: 8 }}>
+        Configuration error
+      </Text>
+      <Text style={{ color: "#9ca3af", fontSize: 12, textAlign: "center", paddingHorizontal: 32 }}>
+        EXPO_PUBLIC_DOMAIN is not set.{"\n"}
+        Restart the Expo workflow so the Replit dev domain is baked into the bundle.
+      </Text>
+    </View>
+  );
+}
+
 export default function TabletScreen() {
   const { width, height } = useWindowDimensions();
   const isLandscape = width >= height;
@@ -52,6 +69,9 @@ export default function TabletScreen() {
     prevLandscape.current = isLandscape;
     webViewRef.current?.injectJavaScript(buildOrientationScript(isLandscape));
   }, [isLandscape]);
+
+  // Show an explicit error instead of a broken WebView when the domain is missing.
+  if (!WEB_URL) return <MissingDomainScreen />;
 
   if (Platform.OS === "web") {
     return (
