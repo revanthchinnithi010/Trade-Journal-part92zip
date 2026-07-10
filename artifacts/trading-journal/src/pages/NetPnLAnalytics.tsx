@@ -311,18 +311,14 @@ export default function NetPnLAnalytics() {
 
   // ── Axis style tokens ────────────────────────────────────────────────────
   const axisColor  = "rgba(255,255,255,0.12)";
-  const tickStyle  = { fill: "#6b7280", fontSize: 11 };
+  const tickStyle  = { fill: "#9ca3af", fontSize: 11, fontWeight: 500 };
   const gridColor  = "rgba(255,255,255,0.055)";
 
   return (
     <div className="py-4 space-y-4 w-full">
 
-      {/* ── Title + chips — keep inner padding ── */}
-      <div className="px-4 sm:px-6 space-y-3">
-        <h2 style={{ fontSize: 13, fontWeight: 600, color: "rgba(255,255,255,0.6)", letterSpacing: "0.02em" }}>
-          Net PNL Report
-        </h2>
-
+      {/* ── Chips — keep inner padding ── */}
+      <div className="px-4 sm:px-6">
         {/* ── Time filter chips ── */}
         <div
           className="flex items-center gap-1.5 overflow-x-auto pb-0.5"
@@ -398,7 +394,7 @@ export default function NetPnLAnalytics() {
                 tickLine={{ stroke: axisColor }}
                 tick={tickStyle}
                 tickFormatter={yAxisFmt}
-                width={52}
+                width={44}
               />
 
               {/* Tooltip */}
