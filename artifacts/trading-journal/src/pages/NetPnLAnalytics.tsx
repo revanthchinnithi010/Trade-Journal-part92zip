@@ -276,6 +276,10 @@ export default function NetPnLAnalytics() {
 
     (async () => {
       try {
+        if (!supabase) {
+          setTrades([]);
+          return;
+        }
         let q = supabase
           .from("trades")
           .select("pnl, exit_date")
