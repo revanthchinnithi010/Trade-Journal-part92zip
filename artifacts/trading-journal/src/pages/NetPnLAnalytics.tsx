@@ -27,6 +27,7 @@ import {
   Target,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TimeFilter = "today" | "7d" | "30d" | "3m" | "1y" | "all";
@@ -294,6 +295,65 @@ function NetPnLTooltip({
   );
 }
 
+// ── Custom X-axis tick — abbreviated month + year only on year-change ────────
+function MonthlyXTick({
+  x = 0, y = 0, payload,
+}: {
+  x?: number; y?: number; payload?: { value: string };
+}) {
+  const isMobile = useIsMobile();
+  const val       = payload?.value ?? "";
+  const [mon, shortYr] = val.split(" ");                         // "Jul", "'25"
+  const idx       = MOCK_MONTHLY.findIndex(d => d.month === val);
+  const prevYr    = idx > 0 ? MOCK_MONTHLY[idx - 1].month.split(" ")[1] : null;
+  const showYear  = !!shortYr && prevYr !== null && shortYr !== prevYr;
+  const fullYear  = shortYr ? "20" + shortYr.replace("'", "") : "";
+  const fs        = isMobile ? 11 : 13;
+
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text
+        x={0} y={0} dy={14}
+        textAnchor="middle"
+        fill="#A1A1AA"
+        fontSize={fs}
+        fontWeight={500}
+      >
+        {mon}
+      </text>
+      {showYear && (
+        <text
+          x={0} y={0} dy={isMobile ? 26 : 28}
+          textAnchor="middle"
+          fill="#71717A"
+          fontSize={isMobile ? 9 : 11}
+          fontWeight={400}
+        >
+          {fullYear}
+        </text>
+      )}
+    </g>
+  );
+}
+
+// ── Thin vertical guide-line cursor ──────────────────────────────────────────
+function MonthlyCursor({
+  x = 0, y = 0, width = 0, height = 0,
+}: {
+  x?: number; y?: number; width?: number; height?: number;
+}) {
+  const cx = x + width / 2;
+  return (
+    <line
+      x1={cx} y1={y}
+      x2={cx} y2={y + height}
+      stroke="rgba(255,255,255,0.18)"
+      strokeWidth={1}
+      strokeDasharray="4 3"
+    />
+  );
+}
+
 // ── Custom bar shape — rounds the outer corners only (top for +, bottom for -) ─
 function MonthlyBarShape(props: {
   x?: number; y?: number; width?: number; height?: number; value?: number;
@@ -343,18 +403,41 @@ function MonthlyTooltip({
   label?:   string;
 }) {
   if (!active || !payload?.length) return null;
-  const val = payload[0].value as number;
+  const val   = payload[0].value as number;
+  const isPos = val >= 0;
+  // "Jul '25" → "Jul 2025"
+  const [mon, shortYr] = (label ?? "").split(" ");
+  const fullYear    = shortYr ? "20" + shortYr.replace("'", "") : "";
+  const displayLabel = fullYear ? `${mon} ${fullYear}` : mon;
+
   return (
     <div style={{
-      background:   "rgba(10,12,16,0.97)",
-      border:       "1px solid rgba(255,255,255,0.09)",
-      borderRadius: 8,
-      padding:      "8px 12px",
-      fontSize:     12,
+      background:    "#111111",
+      border:        "1px solid #2A2A2A",
+      borderRadius:  14,
+      boxShadow:     "0 8px 30px rgba(0,0,0,.45)",
+      padding:       14,
+      minWidth:      128,
+      pointerEvents: "none",
     }}>
-      <p style={{ color: "#6b7280", marginBottom: 4 }}>{label}</p>
-      <p style={{ fontWeight: 700, color: val >= 0 ? "#22c55e" : "#ef4444" }}>
-        {val >= 0 ? "+" : "−"}${Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+      <p style={{
+        color:         "#71717A",
+        fontSize:      11,
+        fontWeight:    500,
+        marginBottom:  6,
+        letterSpacing: "0.03em",
+        textTransform: "uppercase",
+      }}>
+        {displayLabel}
+      </p>
+      <p style={{
+        fontWeight:    700,
+        fontSize:      17,
+        color:         isPos ? "#22C55E" : "#EF4444",
+        letterSpacing: "-0.02em",
+        margin:        0,
+      }}>
+        {isPos ? "+" : "−"}${Math.abs(val).toLocaleString("en-US", { minimumFractionDigits: 2 })}
       </p>
     </div>
   );
@@ -775,32 +858,33 @@ export default function NetPnLAnalytics() {
 
         {/* Monthly PNL — vertical column chart */}
         <Section title="Monthly PNL (USD)">
-          <div className="w-full h-[260px] sm:h-[320px]">
+          <div className="w-full h-[300px] sm:h-[340px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={MOCK_MONTHLY}
-                margin={{ top: 8, right: 8, left: 4, bottom: 0 }}
-                barCategoryGap="28%"
+                margin={{ top: 8, right: 4, left: 0, bottom: 0 }}
+                barCategoryGap="20%"
               >
                 <CartesianGrid
-                  stroke="rgba(255,255,255,0.055)"
+                  stroke="rgba(255,255,255,0.08)"
                   strokeDasharray="0"
                   horizontal
                   vertical
                 />
                 <XAxis
                   dataKey="month"
-                  axisLine={{ stroke: "rgba(255,255,255,0.10)" }}
+                  axisLine={{ stroke: "rgba(255,255,255,0.12)" }}
                   tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 10, fontWeight: 500 }}
+                  tick={<MonthlyXTick />}
                   interval={0}
+                  height={48}
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#9ca3af", fontSize: 10, fontWeight: 500 }}
+                  tick={{ fill: "#A1A1AA", fontSize: 11, fontWeight: 500 }}
                   tickFormatter={(v: number) => fmtUsdShort(v)}
-                  width={44}
+                  width={42}
                 />
                 <ReferenceLine
                   y={0}
@@ -809,11 +893,13 @@ export default function NetPnLAnalytics() {
                 />
                 <Tooltip
                   content={<MonthlyTooltip />}
-                  cursor={{ fill: "rgba(255,255,255,0.04)" }}
+                  cursor={<MonthlyCursor />}
+                  allowEscapeViewBox={{ x: false, y: false }}
+                  offset={12}
                 />
                 <Bar
                   dataKey="pnl"
-                  maxBarSize={32}
+                  maxBarSize={36}
                   isAnimationActive
                   animationDuration={700}
                   shape={<MonthlyBarShape />}
