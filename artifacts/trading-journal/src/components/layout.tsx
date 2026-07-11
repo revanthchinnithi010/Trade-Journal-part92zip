@@ -601,14 +601,13 @@ export const Layout = memo(function Layout({
                     )}
                   />
                 </div>
-                {profileOpen && (
-                  <ProfileDropdown
-                    profile={profile}
-                    onUpdate={updateProfile}
-                    onClose={() => setProfileOpen(false)}
-                    anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
-                  />
-                )}
+                <ProfileDropdown
+                  open={profileOpen}
+                  profile={profile}
+                  onUpdate={updateProfile}
+                  onClose={() => setProfileOpen(false)}
+                  anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
+                />
               </div>
             </div>
           </header>

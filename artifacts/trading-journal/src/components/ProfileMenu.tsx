@@ -12,7 +12,7 @@ import { Label } from "@/components/ui/label";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { ThemeMode } from "@/contexts/ThemeContext";
 import { AnimatedModal, AnimatedButton } from "@/components/animations";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 
 export interface ProfileData {
   name: string;
@@ -160,37 +160,50 @@ function AppearancePanel({ onBack }: AppearancePanelProps) {
 }
 
 interface DropdownProps {
+  open: boolean;
   profile: ProfileData;
   onUpdate: (p: Partial<ProfileData>) => void;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLElement | null>;
 }
 
-export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: DropdownProps) {
+// Shared premium ease — smooth ease-out, no spring/bounce anywhere.
+const PREMIUM_EASE = [0.22, 1, 0.36, 1] as const;
+
+// Backdrop: fade only. Slightly slower on the way in than the way out,
+// matching the menu's own open/close asymmetry.
+const backdropVariants = {
+  hidden:  { opacity: 0,    transition: { duration: 0.17, ease: PREMIUM_EASE } },
+  visible: { opacity: 0.45, transition: { duration: 0.24, ease: PREMIUM_EASE } },
+};
+
+// Menu panel: fade + scale + slide down from the top-right anchor.
+const menuVariants = {
+  hidden:  { opacity: 0, scale: 0.96, y: -12, transition: { duration: 0.17, ease: PREMIUM_EASE } },
+  visible: { opacity: 1, scale: 1,    y: 0,   transition: { duration: 0.24, ease: PREMIUM_EASE } },
+};
+
+// Menu items: staggered fade + slide-in from the right, 18ms apart.
+const itemVariants = {
+  hidden: { opacity: 0, x: 8 },
+  visible: (i: number) => ({
+    opacity: 1, x: 0,
+    transition: { duration: 0.18, delay: i * 0.018, ease: PREMIUM_EASE },
+  }),
+};
+
+const tapTransition = { duration: 0.12, ease: PREMIUM_EASE };
+
+export function ProfileDropdown({ open, profile, onUpdate, onClose }: DropdownProps) {
   const [, navigate] = useLocation();
   const [showModal, setShowModal] = useState(false);
   const [panel, setPanel] = useState<"menu" | "appearance">("menu");
   const dropRef = useRef<HTMLDivElement>(null);
 
+  // Reset to menu view whenever the dropdown opens.
   useEffect(() => {
-    function onDown(e: MouseEvent) {
-      const target = e.target as Node;
-      if (showModal) return;
-      if (
-        dropRef.current  && !dropRef.current.contains(target) &&
-        anchorRef.current && !anchorRef.current.contains(target)
-      ) {
-        onClose();
-      }
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [onClose, showModal, anchorRef]);
-
-  // Reset to menu view when dropdown opens
-  useEffect(() => {
-    setPanel("menu");
-  }, []);
+    if (open) setPanel("menu");
+  }, [open]);
 
   function handleAction(action: string) {
     if (action === "settings")   { navigate("/settings"); onClose(); return; }
@@ -217,104 +230,139 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
   const initials = getInitials(profile.name);
 
   return (
-    <AnimatePresence>
-      <motion.div
-        ref={dropRef}
-        initial={{ opacity: 0, scale: 0.95, y: -10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: -10 }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
-        className="absolute top-[calc(100%+10px)] right-0 w-[276px] rounded-2xl z-50"
-        style={{
-          background:          "var(--surface-header)",
-          backdropFilter:      "blur(24px)",
-          WebkitBackdropFilter:"blur(24px)",
-          border:              "1px solid var(--surface-btn-border)",
-          boxShadow:           "0 24px 64px rgba(0,0,0,0.55), 0 1px 0 rgba(255,255,255,0.04) inset",
-          maxHeight:           "min(88vh, 700px)",
-          overflowY:           "auto",
-          overflowX:           "hidden",
-        }}
-      >
-        <AnimatePresence mode="wait">
-          {panel === "appearance" ? (
+    <>
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* ── Backdrop: fade only, blurred, click-outside-to-close ──
+                position:fixed so it covers the whole viewport regardless of
+                where the trigger sits in the header; sits below the menu
+                (z-40 vs z-50) and above everything else in the app,
+                including the always-mounted Dashboard/Charts keep-alive
+                nodes, so it never triggers a re-render of page content. */}
             <motion.div
-              key="appearance"
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <AppearancePanel onBack={() => setPanel("menu")} />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="menu"
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div
-                className="flex items-center gap-3 p-3.5"
-                style={{ borderBottom: "1px solid var(--surface-divider)" }}
-              >
-                <div
-                  className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
-                  style={{
-                    background:  "var(--surface-avatar-bg)",
-                    border:      "1.5px solid var(--surface-avatar-border)",
-                    boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
-                  }}
-                >
-                  {profile.avatarDataUrl
-                    ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
-                    : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
-                  }
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
-                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
-                </div>
-              </div>
+              key="profile-menu-backdrop"
+              className="fixed inset-0 z-40"
+              style={{
+                background:           "rgba(0,0,0,1)",
+                backdropFilter:       "blur(10px)",
+                WebkitBackdropFilter: "blur(10px)",
+              }}
+              variants={backdropVariants}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              onClick={onClose}
+            />
 
-              <div className="p-1.5 space-y-0.5">
-                {MENU_ITEMS.map((item, i) => (
-                  <div key={item.action}>
-                    {i === MENU_ITEMS.length - 1 && (
-                      <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
-                    )}
-                    <button
-                      onClick={() => handleAction(item.action)}
-                      className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-all duration-100 group"
-                      style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
-                      onMouseEnter={(e) => {
-                        e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
-                        e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
-                      }}
-                      onMouseLeave={(e) => {
-                        e.currentTarget.style.background = "transparent";
-                        e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
-                      }}
+            <motion.div
+              ref={dropRef}
+              key="profile-menu-panel"
+              variants={menuVariants}
+              initial="hidden"
+              animate="visible"
+              exit="hidden"
+              style={{
+                transformOrigin:      "top right",
+                background:           "rgba(18,18,20,0.92)",
+                backdropFilter:        "blur(24px)",
+                WebkitBackdropFilter:  "blur(24px)",
+                border:                "1px solid rgba(255,255,255,0.06)",
+                boxShadow:             "0 20px 60px rgba(0,0,0,0.45)",
+                maxHeight:             "min(88vh, 700px)",
+                overflowY:             "auto",
+                overflowX:             "hidden",
+                willChange:            "transform, opacity",
+              }}
+              className="absolute top-[calc(100%+10px)] right-0 w-[276px] rounded-[24px] z-50"
+            >
+              <AnimatePresence mode="wait">
+                {panel === "appearance" ? (
+                  <motion.div
+                    key="appearance"
+                    initial={{ opacity: 0, x: 12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 12 }}
+                    transition={{ duration: 0.18, ease: PREMIUM_EASE }}
+                  >
+                    <AppearancePanel onBack={() => setPanel("menu")} />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="menu"
+                    initial={{ opacity: 0, x: -12 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -12 }}
+                    transition={{ duration: 0.18, ease: PREMIUM_EASE }}
+                  >
+                    <div
+                      className="flex items-center gap-3 p-3.5"
+                      style={{ borderBottom: "1px solid var(--surface-divider)" }}
                     >
-                      <item.icon className="w-3.5 h-3.5 shrink-0" />
-                      <span>{item.label}</span>
-                      {!item.danger && (
-                        <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
+                      <div
+                        className="w-10 h-10 rounded-xl shrink-0 overflow-hidden flex items-center justify-center"
+                        style={{
+                          background:  "var(--surface-avatar-bg)",
+                          border:      "1.5px solid var(--surface-avatar-border)",
+                          boxShadow:   "0 4px 12px rgba(16,185,129,0.12)",
+                        }}
+                      >
+                        {profile.avatarDataUrl
+                          ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
+                          : <span className="text-[13px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
+                        }
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-semibold text-white/90 truncate leading-tight">{profile.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{profile.email}</p>
+                      </div>
+                    </div>
 
-              {/* ── System Status, Backend Info, Backup & Restore ── */}
-              <div className="px-1.5 pb-2">
-                <SidebarSystemSections open={true} />
-              </div>
+                    <div className="p-1.5 space-y-0.5">
+                      {MENU_ITEMS.map((item, i) => (
+                        <div key={item.action}>
+                          {i === MENU_ITEMS.length - 1 && (
+                            <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
+                          )}
+                          <motion.button
+                            custom={i}
+                            variants={itemVariants}
+                            initial="hidden"
+                            animate="visible"
+                            whileTap={{ scale: 0.985, transition: tapTransition }}
+                            onClick={() => handleAction(item.action)}
+                            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium transition-colors duration-150 group"
+                            style={{ color: item.danger ? "#f87171" : "hsl(var(--muted-foreground))" }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.background = item.danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
+                              e.currentTarget.style.color = item.danger ? "#fca5a5" : "hsl(var(--foreground))";
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.background = "transparent";
+                              e.currentTarget.style.color = item.danger ? "#f87171" : "hsl(var(--muted-foreground))";
+                            }}
+                          >
+                            <item.icon className="w-3.5 h-3.5 shrink-0" />
+                            <span>{item.label}</span>
+                            {!item.danger && (
+                              <ChevronRight className="w-3 h-3 ml-auto opacity-25 group-hover:opacity-50 transition-opacity" />
+                            )}
+                          </motion.button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* ── System Status, Backend Info, Backup & Restore ── */}
+                    <div className="px-1.5 pb-2">
+                      <SidebarSystemSections open={true} />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       <AnimatedModal
         open={showModal}
@@ -327,7 +375,7 @@ export function ProfileDropdown({ profile, onUpdate, onClose, anchorRef }: Dropd
           onClose={() => { setShowModal(false); onClose(); }}
         />
       </AnimatedModal>
-    </AnimatePresence>
+    </>
   );
 }
 
