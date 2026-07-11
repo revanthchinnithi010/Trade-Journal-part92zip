@@ -5,7 +5,7 @@
 import { MOCK_STATS_SUMMARY } from "./data/dashboard";
 import { MOCK_EQUITY_CURVE, MOCK_WEEKLY_PNL } from "./data/reports";
 import { MOCK_CALENDAR_DAYS } from "./data/calendar";
-import { MOCK_SYMBOL_STATS, MOCK_WATCHLIST_ROWS } from "./data/watchlist";
+import { MOCK_SYMBOL_STATS } from "./data/watchlist";
 import { MOCK_TRADES, toApiTrade } from "./data/trades";
 import { MOCK_NOTES } from "./data/notebook";
 import { MOCK_API_PRICE_ALERTS, MOCK_API_ZONE_ALERTS, MOCK_API_TRENDLINE_ALERTS } from "./data/alerts";
@@ -61,9 +61,11 @@ const routes: Route[] = [
   { test: (m, p) => m === "GET" && p === "/api/ctrader/positions", body: () => ({ ok: true, positions: MOCK_CTRADER_POSITIONS }) },
   { test: (m, p) => m === "GET" && p === "/api/ctrader/orders",    body: () => ({ ok: true, orders: MOCK_CTRADER_ORDERS }) },
 
-  { test: (m, p) => m === "GET" && p === "/api/watchlist", body: () =>
-      MOCK_WATCHLIST_ROWS.map(({ id, symbol, provider, position, isFavorite, createdAt }) =>
-        ({ id, symbol, provider, position, isFavorite, createdAt })) },
+  // NOTE: /api/watchlist is intentionally NOT mocked here. Favorites/watchlist
+  // state is mutated via real POST/PATCH/DELETE calls (brokerWatchlistStore),
+  // so GET must also hit the real API — otherwise GET would keep returning
+  // fixed mock rows with IDs that don't exist in the real DB, and every
+  // mutation against those IDs would 404 while the UI silently reverts.
 ];
 
 /** Returns a mock JSON body for the given request, or `undefined` if unmocked. */

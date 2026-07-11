@@ -1380,8 +1380,8 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
                   <div key="empty-wl">
                     <EmptyState
                       icon={TrendingUp}
-                      title={searchActive ? "No results" : "Watchlist is empty"}
-                      subtitle={!searchActive ? "Tap ★ on any symbol in Markets to add it here" : undefined}
+                      title={searchActive ? "No results" : "No favorite markets yet"}
+                      subtitle={!searchActive ? "Tap the ⭐ icon in Markets to add your favorite symbols." : undefined}
                     />
                   </div>
                 ) : (
