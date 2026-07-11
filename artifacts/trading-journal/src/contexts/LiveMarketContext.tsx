@@ -153,6 +153,7 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
     price: number,
     bid?: number,
     ask?: number,
+    extra?: { volume?: number; high?: number; low?: number; markPrice?: number },
   ) => {
     if (lastSeenPrices.current[symbol] === price) return;
     lastSeenPrices.current[symbol] = price;
@@ -183,10 +184,18 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
       ? resolvedAsk - resolvedBid
       : prev?.spread;
 
+    // Preserve existing 24h stats when a given message doesn't carry them
+    // (e.g. all_trades ticks never carry volume/high/low/markPrice).
+    const resolvedVolume    = extra?.volume    ?? prev?.volume;
+    const resolvedHigh      = extra?.high      ?? prev?.high;
+    const resolvedLow       = extra?.low       ?? prev?.low;
+    const resolvedMarkPrice = extra?.markPrice ?? prev?.markPrice;
+
     pendingTicksRef.current[symbol] = {
       price, prevPrice, openPrice, change, changePct,
       history, lastTick: Date.now(), flashDir, flashKey, tickCount,
       bid: resolvedBid, ask: resolvedAsk, spread: resolvedSpread,
+      volume: resolvedVolume, high: resolvedHigh, low: resolvedLow, markPrice: resolvedMarkPrice,
     };
 
     // Schedule one RAF flush for this frame (idempotent — noop if already scheduled)
@@ -247,6 +256,12 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
             msg.price,
             typeof msg.bid === "number" ? msg.bid : undefined,
             typeof msg.ask === "number" ? msg.ask : undefined,
+            {
+              volume:    typeof msg.volume    === "number" ? msg.volume    : undefined,
+              high:      typeof msg.high      === "number" ? msg.high      : undefined,
+              low:       typeof msg.low       === "number" ? msg.low       : undefined,
+              markPrice: typeof msg.markPrice === "number" ? msg.markPrice : undefined,
+            },
           );
           if (connectTimeRef.current > 0) {
             setLatencyMs(Date.now() - connectTimeRef.current);

@@ -13,13 +13,18 @@ export interface MockWatchlistRow {
   changePercent: number;
 }
 
+// NOTE: crypto symbols must match Delta Exchange India's real perpetual
+// product symbols (no "USDT" suffix — Delta India perpetuals are USD-quoted,
+// e.g. "BTCUSD" not "BTCUSDT") so these rows line up with the live tick feed
+// broadcast by the backend. Using invented symbols here silently breaks live
+// prices on the Markets page even when the real feed is healthy.
 const INSTRUMENTS: Array<{ symbol: string; market: MockMarket; base: number }> = [
-  { symbol: "BTCUSDT",  market: "Crypto",      base: 64842 },
-  { symbol: "ETHUSDT",  market: "Crypto",      base: 3378 },
-  { symbol: "SOLUSDT",  market: "Crypto",      base: 145.6 },
-  { symbol: "BNBUSDT",  market: "Crypto",      base: 612.4 },
-  { symbol: "XRPUSDT",  market: "Crypto",      base: 0.612 },
-  { symbol: "DOGEUSDT", market: "Crypto",      base: 0.1512 },
+  { symbol: "BTCUSD",   market: "Crypto",      base: 64842 },
+  { symbol: "ETHUSD",   market: "Crypto",      base: 3378 },
+  { symbol: "SOLUSD",   market: "Crypto",      base: 145.6 },
+  { symbol: "BNBUSD",   market: "Crypto",      base: 612.4 },
+  { symbol: "XRPUSD",   market: "Crypto",      base: 0.612 },
+  { symbol: "DOGEUSD",  market: "Crypto",      base: 0.1512 },
   { symbol: "EURUSD",   market: "Forex",       base: 1.0912 },
   { symbol: "GBPUSD",   market: "Forex",       base: 1.2718 },
   { symbol: "USDJPY",   market: "Forex",       base: 158.42 },

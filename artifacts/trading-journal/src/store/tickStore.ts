@@ -26,6 +26,10 @@ export interface TickState {
   bid?:      number;
   ask?:      number;
   spread?:   number;
+  volume?:   number;
+  high?:     number;
+  low?:      number;
+  markPrice?: number;
 }
 
 interface TickStoreState {

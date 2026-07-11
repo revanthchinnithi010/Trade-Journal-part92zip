@@ -25,19 +25,23 @@ const DELTA_INDIA_WS   = "wss://socket.india.delta.exchange";
 const PING_INTERVAL_MS = 20_000;
 
 interface DeltaFlatMsg {
-  type:           string;
-  symbol?:        string;
-  price?:         string | number;
-  mark_price?:    string | number;
-  close?:         string | number;
-  spot_price?:    string | number;
-  best_bid?:      string | number;
-  best_ask?:      string | number;
-  size?:          number | string;
-  volume?:        string | number;
-  turnover_usd?:  string | number;
-  timestamp?:     number;
-  buyer_role?:    string;
+  type:              string;
+  symbol?:           string;
+  price?:            string | number;
+  mark_price?:       string | number;
+  close?:            string | number;
+  spot_price?:       string | number;
+  best_bid?:         string | number;
+  best_ask?:         string | number;
+  size?:             number | string;
+  volume?:           string | number;
+  turnover_usd?:     string | number;
+  timestamp?:        number;
+  buyer_role?:       string;
+  high?:             string | number;
+  low?:              string | number;
+  open?:             string | number;
+  mark_change_24h?:  string | number;
 }
 
 function parsePrice(v: string | number | undefined | null): number {
@@ -207,13 +211,27 @@ export class DeltaExchangeProvider extends BaseProvider {
           const bid = parsePrice(msg.best_bid);
           const ask = parsePrice(msg.best_ask);
 
+          // 24h stats — high/low/mark price/mark change, when present on the snapshot
+          const high         = parsePrice(msg.high);
+          const low          = parsePrice(msg.low);
+          const markPrice    = parsePrice(msg.mark_price);
+          const rawChangePct = typeof msg.mark_change_24h === "string"
+            ? parseFloat(msg.mark_change_24h)
+            : msg.mark_change_24h;
+          const changePct24h = typeof rawChangePct === "number" && !isNaN(rawChangePct) ? rawChangePct : undefined;
+
           const tsMs = normToMs(msg.timestamp);
 
           logger.info(
             { provider: this.name, symbol: internalSym, price, deltaSym: msg.symbol },
             "DeltaExchangeProvider: tick",
           );
-          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, bid, ask);
+          this._emitTick(internalSym, msg.symbol, price, volume, tsMs, bid, ask, {
+            high:  !isNaN(high) ? high : undefined,
+            low:   !isNaN(low) ? low : undefined,
+            markPrice: !isNaN(markPrice) ? markPrice : undefined,
+            changePct24h,
+          });
         }
       } catch (err) {
         logger.warn({ err, provider: this.name, raw: str.slice(0, 200) }, "DeltaExchangeProvider: parse error");
@@ -290,6 +308,7 @@ export class DeltaExchangeProvider extends BaseProvider {
     tsMs: number,
     bid?: number,
     ask?: number,
+    extra?: { high?: number; low?: number; markPrice?: number; changePct24h?: number },
   ): void {
     const tick: ProviderTick = {
       symbol:          internalSym,
@@ -301,6 +320,10 @@ export class DeltaExchangeProvider extends BaseProvider {
       receivedAt:      Date.now(),
       ...(bid && !isNaN(bid) ? { bid } : {}),
       ...(ask && !isNaN(ask) ? { ask } : {}),
+      ...(extra?.high !== undefined && !isNaN(extra.high) ? { high: extra.high } : {}),
+      ...(extra?.low !== undefined && !isNaN(extra.low) ? { low: extra.low } : {}),
+      ...(extra?.markPrice !== undefined && !isNaN(extra.markPrice) ? { markPrice: extra.markPrice } : {}),
+      ...(extra?.changePct24h !== undefined && !isNaN(extra.changePct24h) ? { changePct24h: extra.changePct24h } : {}),
     };
     this.onTick(tick);
   }

@@ -11,6 +11,14 @@ export interface ProviderTick {
   volume:         number;
   timestamp:      number;
   receivedAt:     number;
+  /** 24h high — from Delta's v2/ticker snapshot, when available. */
+  high?:          number;
+  /** 24h low — from Delta's v2/ticker snapshot, when available. */
+  low?:           number;
+  /** Mark price (distinct from last-trade price) — from v2/ticker. */
+  markPrice?:     number;
+  /** 24h percentage change of mark price, as reported by Delta (mark_change_24h). */
+  changePct24h?:  number;
 }
 
 export type ProviderStatus = "connected" | "reconnecting" | "disconnected" | "error";
