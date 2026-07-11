@@ -157,7 +157,7 @@ const DELTA_ORDER_TERMINAL_STATES = new Set(["filled", "cancelled", "closed", "r
 // Computes legacy single-broker fields from the multi-broker maps so that all
 // existing consumers (Portfolio, Charts, PositionsList, etc.) keep working
 // without any changes.
-function deriveLegacy(
+export function deriveLegacy(
   connectedAccounts: Record<string, BrokerAccount>,
   brokerStatuses:   Record<string, ConnectionStatus>,
   brokerBalances:   Record<string, BrokerBalance | null>,

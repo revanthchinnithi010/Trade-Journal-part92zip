@@ -1,6 +1,13 @@
 import { createRoot } from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { installMockFetch } from "./mock/installMockFetch";
+import { installMockBrokerState } from "./mock/seedBrokerState";
+
+// Dev-only deterministic mock data layer — see src/mock/config.ts (DEV_MODE).
+// No-op (dead-code-eliminated) in production builds.
+installMockFetch();
+installMockBrokerState();
 
 // ── Disable accidental pinch-zoom & double-tap zoom on mobile/tablet ──────────
 document.addEventListener(

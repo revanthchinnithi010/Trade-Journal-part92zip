@@ -93,7 +93,7 @@ export const SAMPLE_PRICE_ALERTS: PriceAlert[] = [
   {
     id: "pa4",
     type: "price",
-    symbol: "BTCUSD",
+    symbol: "BTCUSDT",
     condition: "above",
     targetPrice: 70000,
     currentPrice: 69100,
@@ -106,7 +106,7 @@ export const SAMPLE_PRICE_ALERTS: PriceAlert[] = [
   {
     id: "pa5",
     type: "price",
-    symbol: "ETHUSD",
+    symbol: "ETHUSDT",
     condition: "below",
     targetPrice: 3000,
     currentPrice: 3280,
@@ -177,7 +177,7 @@ export const SAMPLE_ZONE_ALERTS: ZoneAlert[] = [
   {
     id: "za4",
     type: "zone",
-    symbol: "BTCUSD",
+    symbol: "BTCUSDT",
     zoneType: "order_block",
     upperPrice: 66000,
     lowerPrice: 65000,
@@ -191,7 +191,7 @@ export const SAMPLE_ZONE_ALERTS: ZoneAlert[] = [
   {
     id: "za5",
     type: "zone",
-    symbol: "ETHUSD",
+    symbol: "ETHUSDT",
     zoneType: "demand",
     upperPrice: 3100,
     lowerPrice: 2980,
@@ -205,7 +205,7 @@ export const SAMPLE_ZONE_ALERTS: ZoneAlert[] = [
   {
     id: "za6",
     type: "zone",
-    symbol: "Crude Oil",
+    symbol: "USOIL",
     zoneType: "supply",
     upperPrice: 84.5,
     lowerPrice: 83.1,
@@ -237,7 +237,7 @@ export const SAMPLE_TRENDLINE_ALERTS: TrendlineAlert[] = [
   {
     id: "ta2",
     type: "trendline",
-    symbol: "ETHUSD",
+    symbol: "ETHUSDT",
     timeframe: "4H",
     point1Price: 3400,
     point1Time: "2026-05-15T08:00:00Z",
@@ -267,7 +267,7 @@ export const SAMPLE_TRENDLINE_ALERTS: TrendlineAlert[] = [
   {
     id: "ta4",
     type: "trendline",
-    symbol: "Crude Oil",
+    symbol: "USOIL",
     timeframe: "4H",
     point1Price: 85.5,
     point1Time: "2026-05-10T10:00:00Z",
@@ -282,7 +282,7 @@ export const SAMPLE_TRENDLINE_ALERTS: TrendlineAlert[] = [
   {
     id: "ta5",
     type: "trendline",
-    symbol: "SOLUSD",
+    symbol: "SOLUSDT",
     timeframe: "1H",
     point1Price: 145,
     point1Time: "2026-05-17T08:00:00Z",
@@ -332,7 +332,7 @@ export const NOTIFICATION_HISTORY = [
   },
   {
     id: "n4",
-    symbol: "BTCUSD",
+    symbol: "BTCUSDT",
     message: "Price approaching 70000 — alert near",
     type: "price" as AlertType,
     severity: "low" as const,
@@ -351,4 +351,4 @@ export const NOTIFICATION_HISTORY = [
 ];
 
 export const TIMEFRAMES = ["1M", "5M", "15M", "30M", "1H", "4H", "1D", "1W"];
-export const SYMBOLS = ["NAS100", "US30", "XAUUSD", "BTCUSD", "ETHUSD", "EURUSD", "Crude Oil", "SOLUSD", "DOGEUSD", "PEPEUSD"];
+export const SYMBOLS = ["NAS100", "US30", "XAUUSD", "BTCUSDT", "ETHUSDT", "EURUSD", "USOIL", "SOLUSDT", "DOGEUSDT", "PEPEUSDT"];

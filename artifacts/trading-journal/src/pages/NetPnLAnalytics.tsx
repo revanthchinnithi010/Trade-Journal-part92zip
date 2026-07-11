@@ -28,6 +28,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { DEV_MODE } from "@/mock/config";
+import { MOCK_NETPNL_TRADE_ROWS } from "@/mock/data/netpnl";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 type TimeFilter = "today" | "7d" | "30d" | "3m" | "1y" | "all";
@@ -626,6 +628,14 @@ export default function NetPnLAnalytics() {
     setError(null);
     (async () => {
       try {
+        if (DEV_MODE) {
+          const startIso = getStartIso(timeFilter);
+          const rows = startIso
+            ? MOCK_NETPNL_TRADE_ROWS.filter(r => r.exit_date >= startIso)
+            : MOCK_NETPNL_TRADE_ROWS;
+          setTrades(rows);
+          return;
+        }
         if (!supabase) { setTrades([]); return; }
         let q = supabase
           .from("trades")

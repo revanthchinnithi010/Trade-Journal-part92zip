@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
+import { useBrokerStore } from "@/store/brokerStore";
 import {
   Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
   Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
@@ -261,6 +262,8 @@ export default function Dashboard() {
     = useListTrades({ limit: 10 });
 
   const combined = useCombinedPortfolio();
+  const brokerOrdersCount = useBrokerStore(s =>
+    Object.values(s.brokerOrders).reduce((sum, o) => sum + o.length, 0));
 
   useEffect(() => {
     const anyLoading = statsLoading || equityLoading || weeklyLoading || tradesLoading;
@@ -370,7 +373,7 @@ export default function Dashboard() {
         netPnlUSD={combined.usd.netPnl}
         netPnlDisplay={combined.display.netPnl}
         openPositions={openTrades.length}
-        openOrders={0}
+        openOrders={brokerOrdersCount}
       />
 
       {/* ── Stat Cards ── */}

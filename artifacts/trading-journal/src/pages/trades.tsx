@@ -671,7 +671,7 @@ export default function Trades() {
                         {new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </td>
                       <td className="px-5 py-3.5">
-                        <span className="font-black text-[13px] text-white tracking-tight">{trade.symbol}</span>
+                        <span className="font-black text-[13px] text-foreground tracking-tight">{trade.symbol}</span>
                       </td>
                       <td className="px-5 py-3.5 text-[12px] text-muted-foreground">{broker}</td>
                       <td className="px-5 py-3.5">
@@ -685,7 +685,7 @@ export default function Trades() {
                         {trade.entryPrice < 1 ? trade.entryPrice.toFixed(5) : fc(trade.entryPrice)}
                       </td>
                       <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
-                        {trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : fc(trade.exitPrice)}
+                        {trade.exitPrice == null ? "—" : trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : fc(trade.exitPrice)}
                       </td>
                       <td className={`px-5 py-3.5 text-right font-mono font-bold text-[13px] tabular-nums ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                         {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
@@ -1139,7 +1139,7 @@ export default function Trades() {
                     <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
                       {BROKER_MAP[selectedTrade.symbol] || "Broker"} · {new Date(selectedTrade.entryDate).toLocaleDateString()}
                     </p>
-                    <h2 className="text-3xl font-black tracking-tight text-white leading-none">{selectedTrade.symbol}</h2>
+                    <h2 className="text-3xl font-black tracking-tight text-foreground leading-none">{selectedTrade.symbol}</h2>
                   </div>
                   <div className="flex flex-col items-end gap-1.5 mt-1">
                     <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
@@ -1166,7 +1166,7 @@ export default function Trades() {
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
                     { label: "Entry", value: fc(selectedTrade.entryPrice), mono: true },
-                    { label: "Exit", value: fc(selectedTrade.exitPrice), mono: true },
+                    { label: "Exit", value: selectedTrade.exitPrice == null ? "—" : fc(selectedTrade.exitPrice), mono: true },
                     { label: "Risk / Reward", value: selectedTrade.riskRewardRatio ? `${selectedTrade.riskRewardRatio.toFixed(2)}R` : "—", mono: true },
                     { label: "Quantity", value: String(selectedTrade.quantity), mono: true },
                     { label: "Stop Loss", value: selectedTrade.stopLoss ? fc(selectedTrade.stopLoss) : "—", mono: true },
