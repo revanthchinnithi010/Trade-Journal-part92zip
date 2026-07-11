@@ -235,7 +235,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
   );
 });
 
-export default function Dashboard() {
+const Dashboard = memo(function Dashboard() {
   const mountTimeRef  = useRef(performance.now());
   const [timedOut,          setTimedOut]          = useState(false);
   const ticks         = useTickStore(s => s.ticks);
@@ -327,18 +327,30 @@ export default function Dashboard() {
   }, [openTrades, ticks]);
 
   if (isStillLoading) {
+    // Structurally mirrors every section of the real content below, at the
+    // same fixed heights (AccountValueWidget ≈176px, 5 stat cards ≈152px,
+    // equity/weekly row 220px/200px charts + header, pie/calendar row
+    // 190px chart + header, recent trades table). Matching heights exactly
+    // means the eventual swap to real content never shifts layout — this
+    // only ever runs once now that Dashboard is kept mounted (see
+    // DASHBOARD_NODE in App.tsx), not on every tab switch.
     return (
-      <div className="space-y-5 pb-12">
-        <div className="glass-card h-36 shimmer-loading rounded-2xl" />
+      <div className="space-y-4 pb-12">
+        <div className="glass-card shimmer-loading rounded-2xl" style={{ height: 176 }} />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {[...Array(5)].map((_, i) => (
-            <div key={i} className="h-28 rounded-2xl shimmer-loading" />
+            <div key={i} className="rounded-2xl shimmer-loading" style={{ height: 152 }} />
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 h-64 rounded-2xl shimmer-loading" />
-          <div className="h-64 rounded-2xl shimmer-loading" />
+          <div className="lg:col-span-2 rounded-2xl shimmer-loading" style={{ height: 276 }} />
+          <div className="rounded-2xl shimmer-loading" style={{ height: 256 }} />
         </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="rounded-2xl shimmer-loading" style={{ height: 302 }} />
+          <div className="lg:col-span-2 rounded-2xl shimmer-loading" style={{ height: 302 }} />
+        </div>
+        <div className="rounded-2xl shimmer-loading" style={{ height: 340 }} />
       </div>
     );
   }
@@ -683,4 +695,6 @@ export default function Dashboard() {
       </AnimatedCard>
     </PageTransition>
   );
-}
+});
+
+export default Dashboard;

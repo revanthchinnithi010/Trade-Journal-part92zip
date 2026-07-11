@@ -141,9 +141,11 @@ function ReconnectBanner() {
 export const Layout = memo(function Layout({
   children,
   chartsNode,
+  dashboardNode,
 }: {
-  children:    React.ReactNode;
-  chartsNode?: React.ReactNode;
+  children:      React.ReactNode;
+  chartsNode?:   React.ReactNode;
+  dashboardNode?: React.ReactNode;
 }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
@@ -637,10 +639,28 @@ export const Layout = memo(function Layout({
             </div>
           )}
 
+          {/* Dashboard — keep-alive, same pattern as Charts. Staying mounted
+              permanently (instead of unmount/remount via AnimatePresence)
+              means: no refetch of stats/equity/trades on every tab switch,
+              no first-frame skeleton flash, no layout jump — switching to "/"
+              is just an instant display:flex on an already fully-rendered
+              tree. See .agents/memory dashboard-keep-alive notes. */}
+          {dashboardNode && (
+            <div style={{
+              position:      "absolute",
+              inset:         0,
+              display:       pathname === "/" ? "flex" : "none",
+              flexDirection: "column",
+              overflow:      "hidden",
+            }}>
+              {dashboardNode}
+            </div>
+          )}
+
           {/* All other pages — mounted/unmounted by AnimatePresence in App.tsx.
               The paddingBottom for the mobile nav bar is applied per-page in
               App.tsx via StandardPageWrapper or the page's own layout. */}
-          {pathname !== "/charts" && (
+          {pathname !== "/charts" && pathname !== "/" && (
             <div style={{
               position:      "absolute",
               inset:         0,

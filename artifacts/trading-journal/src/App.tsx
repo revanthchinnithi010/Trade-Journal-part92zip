@@ -146,6 +146,40 @@ const CHARTS_NODE = (
   </Suspense>
 );
 
+/**
+ * Dashboard keep-alive wrapper — mirrors the Charts pattern.
+ *
+ * Previously Dashboard was rendered inside the single AnimatePresence flow
+ * like every other tab page, meaning it fully unmounted the instant you
+ * navigated away and remounted from scratch every time you came back:
+ * react-query refetched stats/equity/weekly/trades, all useMemo caches were
+ * thrown away, and the component replayed its internal loading-skeleton →
+ * ready-content swap (a full subtree replacement) on every single visit —
+ * that swap is exactly what looked like a "first-frame flash / layout jump".
+ *
+ * Keeping Dashboard permanently mounted (like Charts) means navigating to
+ * "/" is just an instant display:flex toggle on an already fully-rendered,
+ * up-to-date tree — no refetch, no remount, no skeleton replay, no jump.
+ *
+ * isMobile is read here (not in Router) so this element's identity never
+ * changes across renders — same stability guarantee as CHARTS_NODE.
+ */
+function DashboardKeepAlive() {
+  const isMobile = useIsMobile();
+  const bp = isMobile ? 80 : 40;
+  return (
+    <StandardPageWrapper bottomPad={bp} pathname="/">
+      <Dashboard />
+    </StandardPageWrapper>
+  );
+}
+
+const DASHBOARD_NODE = (
+  <Suspense fallback={<PageLoader />}>
+    <DashboardKeepAlive />
+  </Suspense>
+);
+
 // Known pathnames — used to decide whether to render NotFound.
 const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
@@ -239,7 +273,7 @@ function Router() {
   return (
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
-    <Layout chartsNode={CHARTS_NODE}>
+    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE}>
       {/*
         ── Single AnimatePresence (mode="wait") ────────────────────────────
         All pages — tab pages, sidebar pages, detail pages — live in ONE
@@ -275,8 +309,10 @@ function Router() {
         the enter animation on the very first load.
       */}
       <AnimatePresence mode="wait" custom={dir} initial={false}>
-        {/* ── Tab pages — direction-aware fade-shift ── */}
-        {pathname === "/"        && <Suspense key="/"        fallback={<PageLoader />}><PageTransition key="/"        variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/"><Dashboard /></StandardPageWrapper></PageTransition></Suspense>}
+        {/* ── Tab pages — direction-aware fade-shift ──
+             Dashboard ("/") is intentionally NOT rendered here — it is a
+             permanently-mounted keep-alive node (see DASHBOARD_NODE / Layout),
+             exactly like Charts. It never enters/exits this AnimatePresence. */}
         {pathname === "/markets" && <Suspense key="/markets" fallback={<PageLoader />}><PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition></Suspense>}
         {pathname === "/trades"  && <Suspense key="/trades"  fallback={<PageLoader />}><PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/alerts"  && <Suspense key="/alerts"  fallback={<PageLoader />}><PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition></Suspense>}

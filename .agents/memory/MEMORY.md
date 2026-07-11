@@ -56,3 +56,4 @@
 - [ProtoOASymbol real field numbers](ctrader-protoa-symbol-fields.md) — old fetchSingleSymbolSpec used unverified guessed field numbers; fixed using real spotware .proto source; PT.HEARTBEAT_EVENT(51) missing from typed PT const
 - [cTrader volume encoding — correct formula](ctrader-volume-encoding.md) — volumes (fields 9/10/11) are in 1/100 units NOT centilots; use rawVol/(100×lotSizeUnits); rawMin=100,000÷(100×100,000)=0.01 lots for EURUSD
 - [Broker-independent quantity architecture](broker-qty-independence.md) — Delta (contracts/coin) and cTrader (lots) must never share fallback defaults, precision, or step math; every order-qty UI needs two fully separate code branches keyed off resolveBroker()/broker id
+- [Dashboard keep-alive](dashboard-keep-alive.md) — Dashboard ("/") mounted permanently like Charts, toggled by CSS display, not AnimatePresence mount/unmount; fixes tab-switch flash/refetch
