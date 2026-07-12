@@ -35,6 +35,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { ThemeMode } from "@/contexts/ThemeContext";
+import { AnimatePresence, motion } from "motion/react";
 import { AnimatedModal } from "@/components/animations";
 import { compositorPanelTransition, compositorFadeTransition } from "@/animations/motion";
 
@@ -288,23 +289,32 @@ export const ProfileDropdown = memo(function ProfileDropdown({
     <>
       {/*
         ╔═══════════════════════════════════════════════════════════════════╗
-        ║ BACKDROP — always mounted, pure CSS transition.                  ║
-        ║ transition: opacity — compositor thread, zero JS per frame.      ║
+        ║ BACKDROP — Motion.dev AnimatePresence, mounted only while open.  ║
+        ║ Darker dimming (rgba 0.68) so background content reads as        ║
+        ║ clearly de-emphasized, not just slightly tinted. Tapping it      ║
+        ║ closes the menu immediately; clicks inside the panel below       ║
+        ║ never reach this element (separate sibling, not an ancestor),    ║
+        ║ so inside-menu interaction can never trigger a close here.       ║
         ╚═══════════════════════════════════════════════════════════════════╝
       */}
-      <div
-        aria-hidden
-        onClick={onClose}
-        style={{
-          position:      "fixed",
-          inset:         0,
-          zIndex:        40,
-          background:    "#000",
-          opacity:       open ? 0.45 : 0,
-          transition:    fadeTx,
-          pointerEvents: open ? "auto" : "none",
-        }}
-      />
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            aria-hidden
+            onClick={onClose}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            style={{
+              position:   "fixed",
+              inset:      0,
+              zIndex:     40,
+              background: "rgba(0,0,0,0.68)",
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/*
         ╔═══════════════════════════════════════════════════════════════════╗
