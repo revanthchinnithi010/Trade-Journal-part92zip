@@ -250,17 +250,25 @@ export const ProfileDropdown = memo(function ProfileDropdown({
     stopRef.current?.();
 
     if (open) {
-      /* Reset to starting values so re-opens feel crisp even if interrupted */
-      mvOpacity.set(0);
-      mvScale.set(0.96);
-      mvY.set(-10);
-      setPanel("menu"); // always start on the main menu
-
-      const a1 = animate(mvOpacity, 1,   OPEN_OPTS);
-      const a2 = animate(mvScale,   1,   OPEN_OPTS);
-      const a3 = animate(mvY,       0,   OPEN_OPTS);
+      /* ⚠️  Do NOT call .set() here.
+         Calling mvOpacity.set(0) / mvScale.set(0.96) / mvY.set(-10) before
+         animate() writes to the DOM synchronously, causing the element to
+         snap to its "from" state one frame before the animation starts —
+         that one-frame visual discontinuity is the intermittent stutter.
+         The MotionValues are already at their closed values (initialised
+         below, and restored by every close animation), so animate() can
+         start from the current value with zero pre-work. */
+      const a1 = animate(mvOpacity, 1, OPEN_OPTS);
+      const a2 = animate(mvScale,   1, OPEN_OPTS);
+      const a3 = animate(mvY,       0, OPEN_OPTS);
       stopRef.current = () => { a1.stop(); a2.stop(); a3.stop(); };
     } else {
+      /* Reset panel to "menu" HERE (on close) — not on open.
+         Resetting on open schedules a React re-render on the same frame
+         the opening animation starts, competing with the animation on
+         the main thread. Resetting on close happens while the menu is
+         going invisible so there is nothing visible to stutter. */
+      setPanel("menu");
       const a1 = animate(mvOpacity, 0,    CLOSE_OPTS);
       const a2 = animate(mvScale,   0.96, CLOSE_OPTS);
       const a3 = animate(mvY,       -10,  CLOSE_OPTS);
@@ -343,7 +351,13 @@ export const ProfileDropdown = memo(function ProfileDropdown({
       */}
       <div
         className="absolute top-[calc(100%+10px)] right-0 w-[276px]"
-        style={{ zIndex: 50, pointerEvents: open ? "auto" : "none" }}
+        style={{
+          zIndex:        50,
+          pointerEvents: open ? "auto" : "none",
+          /* Isolate this subtree from the page layout so internal changes
+             (panel switch, scroll) never trigger a full-page recalculation. */
+          contain: "layout style",
+        }}
       >
         {/* Layer 1: blur + background — static, CSS transition, zero RAF */}
         <div
@@ -372,6 +386,14 @@ export const ProfileDropdown = memo(function ProfileDropdown({
             y:               mvY,
             transformOrigin: "top right",
             willChange:      "transform, opacity",
+            /* backfaceVisibility: hidden forces a persistent 3D stacking
+               context. Android Chrome evicts will-change compositor layers
+               when the element is idle — this prevents that eviction, so
+               the GPU layer is always warm and the first animation frame
+               never has to re-promote (which is what causes the
+               "sometimes stutter, sometimes smooth" pattern). */
+            backfaceVisibility: "hidden",
+            WebkitBackfaceVisibility: "hidden",
             /* position: relative so it stacks above the blur layer */
             position:   "relative",
             zIndex:     1,
