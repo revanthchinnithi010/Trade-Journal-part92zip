@@ -99,23 +99,6 @@ export const pageDetailVariants: Variants = {
   exit:    { opacity: 0, scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
 };
 
-// ── Sidebar ───────────────────────────────────────────────────────────────
-export const sidebarVariants: Variants = {
-  closed: {
-    x: -280,
-    transition: { ...SPRING_PANEL, duration: 0.22 },
-  },
-  open: {
-    x: 0,
-    transition: { ...SPRING_PANEL },
-  },
-};
-
-export const sidebarBackdropVariants: Variants = {
-  closed: { opacity: 0, transition: { duration: 0.18 } },
-  open:   { opacity: 1, transition: { duration: 0.22 } },
-};
-
 /** Staggered sidebar nav items */
 export const sidebarItemVariants: Variants = {
   closed: { x: -12, opacity: 0 },
@@ -124,6 +107,40 @@ export const sidebarItemVariants: Variants = {
     transition: { ...SPRING_SMOOTH, delay: i * 0.03 },
   }),
 };
+
+// ── Compositor CSS-transition system ─────────────────────────────────────
+/**
+ * The shared full-screen-overlay animation system: pure CSS transitions on
+ * `opacity` + `transform` only, run entirely on the GPU compositor thread —
+ * NOT framer-motion's JS-driven `animate()`. Chart tick engines / RAF loops
+ * running on the main thread can never block or stutter these.
+ *
+ * Originally authored for ProfileMenu's dropdown; this is the single source
+ * of truth so every full-screen/overlay panel (Profile dropdown, Navigation
+ * Drawer, Notification sheet, …) that wants "the same feel" imports these
+ * exact values instead of re-deriving its own durations/easing.
+ *
+ * Panel:    opacity + transform · 180ms open / 120ms close · EASE_PREMIUM
+ * Backdrop: opacity only        · 140ms open / 120ms close · browser "ease"
+ */
+export const COMPOSITOR_EASE = "cubic-bezier(0.22,1,0.36,1)";
+
+export const COMPOSITOR_PANEL_DURATION_OPEN  = "0.18s";
+export const COMPOSITOR_PANEL_DURATION_CLOSE = "0.12s";
+export const COMPOSITOR_FADE_DURATION_OPEN   = "0.14s";
+export const COMPOSITOR_FADE_DURATION_CLOSE  = "0.12s";
+
+/** `transition` string for the animated opacity+transform panel layer. */
+export function compositorPanelTransition(open: boolean): string {
+  const dur = open ? COMPOSITOR_PANEL_DURATION_OPEN : COMPOSITOR_PANEL_DURATION_CLOSE;
+  return `opacity ${dur} ${COMPOSITOR_EASE}, transform ${dur} ${COMPOSITOR_EASE}`;
+}
+
+/** `transition` string for the opacity-only backdrop / static blur layer. */
+export function compositorFadeTransition(open: boolean): string {
+  const dur = open ? COMPOSITOR_FADE_DURATION_OPEN : COMPOSITOR_FADE_DURATION_CLOSE;
+  return `opacity ${dur} ease`;
+}
 
 // ── Modals / Sheets ───────────────────────────────────────────────────────
 export const backdropVariants: Variants = {

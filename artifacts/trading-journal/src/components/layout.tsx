@@ -8,8 +8,7 @@ import {
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { sidebarVariants, sidebarBackdropVariants } from "@/animations/motion";
-import { useReducedMotion } from "@/hooks/useReducedMotion";
+import { compositorPanelTransition, compositorFadeTransition } from "@/animations/motion";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
 import { useBrokerStore } from "@/store/brokerStore";
 import { cn } from "@/lib/utils";
@@ -18,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { NotificationPanel } from "./NotificationPanel";
-import { ProfileDropdown, useProfile, getInitials } from "./ProfileMenu";
+import { ProfileDropdown, useProfile, getInitials, type ProfileData } from "./ProfileMenu";
 import { ChartFocusContext } from "@/contexts/ChartFocusContext";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { SidebarSystemSections } from "./SidebarSystemSections";
@@ -112,195 +111,116 @@ const NavItem = memo(function NavItem({
   );
 });
 
-function ReconnectBanner() {
-  const { wsStatus } = useLiveMarketContext();
-  if (wsStatus === "connected" || wsStatus === "connecting") return null;
-
-  const isReconnecting = wsStatus === "reconnecting";
-  const isError        = wsStatus === "error";
-
-  return (
-    <div
-      className="flex items-center justify-center gap-2 py-1.5 px-4 text-[11px] font-semibold z-50"
-      style={{
-        background:   isError ? "rgba(239,68,68,0.12)" : "rgba(251,191,36,0.10)",
-        borderBottom: isError ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(251,191,36,0.22)",
-        color:        isError ? "#f87171" : "#fbbf24",
-      }}
-    >
-      {isReconnecting
-        ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-        : <WifiOff className="w-3 h-3 shrink-0" />}
-      {isError
-        ? "WebSocket connection failed — live data unavailable. Refresh the page to retry."
-        : "Live feed reconnecting — prices may be delayed…"}
-    </div>
-  );
-}
-
-export const Layout = memo(function Layout({
-  children,
-  chartsNode,
-  dashboardNode,
+/**
+ * NavigationDrawer — left-side hamburger menu.
+ *
+ * Uses the EXACT same compositor CSS-transition system as ProfileMenu's
+ * dropdown (see src/animations/motion.ts: compositorPanelTransition /
+ * compositorFadeTransition — opacity+transform only, 180ms open / 120ms
+ * close, cubic-bezier(0.22,1,0.36,1), running on the GPU compositor thread
+ * rather than framer-motion's JS-driven animate()). The only difference
+ * from the Profile dropdown is the transform axis: a left-edge drawer
+ * slides in on X via translate3d, where the Profile dropdown slides/scales
+ * from the top-right corner — same engine, same timing, direction adapted
+ * to the drawer's geometry.
+ *
+ * Always mounted; `open` only toggles opacity/transform/pointer-events, so
+ * re-opening never re-mounts nav items or re-triggers a Dashboard render.
+ */
+const NavigationDrawer = memo(function NavigationDrawer({
+  open, onClose, pathname, profile,
 }: {
-  children:      React.ReactNode;
-  chartsNode?:   React.ReactNode;
-  dashboardNode?: React.ReactNode;
+  open: boolean;
+  onClose: () => void;
+  pathname: string;
+  profile: ProfileData;
 }) {
-  useBrokerWs();
-  const isMobile                = useIsMobile();
-  const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
-  const [location, navigate] = useLocation();
-  // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
-  const pathname      = location.split("?")[0];
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const reducedMotion = useReducedMotion();
-  const [notifOpen,   setNotifOpen]   = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [bellShake,   setBellShake]   = useState(false);
-
-  const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
-  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
-
-  // Close sidebar on route change
-  const prevLocationRef = useRef(location);
-  useEffect(() => {
-    if (location !== prevLocationRef.current) setSidebarOpen(false);
-    prevLocationRef.current = location;
-  }, [location]);
-
-  // Close sidebar on Escape
-  useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") setSidebarOpen(false); };
-    window.addEventListener("keydown", h);
-    return () => window.removeEventListener("keydown", h);
-  }, []);
-
-  // Open sidebar from mobile bottom-nav menu button
-  useEffect(() => {
-    const h = () => setSidebarOpen(true);
-    window.addEventListener("tj:open-sidebar", h);
-    return () => window.removeEventListener("tj:open-sidebar", h);
-  }, []);
-
-  const { unreadCount } = useNotifications();
-  const { profile, update: updateProfile } = useProfile();
   const sidebarBalance          = useBrokerStore(s => s.balance);
   const sidebarConnectionStatus = useBrokerStore(s => s.connectionStatus);
   const sidebarActiveAccount    = useBrokerStore(s => s.activeAccount);
 
-  const bellBtnRef    = useRef<HTMLButtonElement>(null);
-  const profileBtnRef = useRef<HTMLDivElement>(null);
-  const prevUnreadRef = useRef(0);
+  /* `onClose` may be a fresh reference on some call sites — depend only on
+     `open` in the effects below and read the callback via a ref (same
+     pattern as NotificationPanel) so listeners never tear down/rebuild on
+     unrelated re-renders. */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
+  /* ESC (desktop) */
   useEffect(() => {
-    if (unreadCount > prevUnreadRef.current && !notifOpen) {
-      setBellShake(true);
-      const t = setTimeout(() => setBellShake(false), 700);
-      return () => clearTimeout(t);
-    }
-    prevUnreadRef.current = unreadCount;
-    return undefined;
-  }, [unreadCount, notifOpen]);
+    if (!open) return;
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [open]);
 
-  const toggleNotif = useCallback(() => {
-    setNotifOpen(v => !v);
-    setProfileOpen(false);
-  }, []);
-
-  const toggleProfile = useCallback(() => {
-    setProfileOpen(v => !v);
-    setNotifOpen(false);
-  }, []);
-
-  const closeNotif = useCallback(() => setNotifOpen(false), []);
-
-  const currentPageLabel =
-    pathname === "/portfolio"    ? "Portfolio"          :
-    pathname === "/pnl"          ? "Net PNL Analytics"  :
-    pathname === "/net-pnl"      ? "Net PNL Analytics"  :
-    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
-
-  const { theme, toggleTheme } = useTheme();
-  const { currency, setCurrency, fetchRate } = useCurrencyStore();
-
+  /* Android back button — push a history entry while open, close on
+     popstate instead of navigating away. */
   useEffect(() => {
-    const id = setTimeout(() => { fetchRate(); }, 1500);
-    return () => clearTimeout(id);
-  }, [fetchRate]);
+    if (!open) return;
+    window.history.pushState({ tjNavDrawer: true }, "");
+    const h = () => onCloseRef.current();
+    window.addEventListener("popstate", h);
+    return () => {
+      window.removeEventListener("popstate", h);
+      if (window.history.state?.tjNavDrawer) window.history.back();
+    };
+  }, [open]);
 
-  const initials   = getInitials(profile.name);
-  const badgeCount = unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;
+  const onBackdropClick = useCallback(() => onCloseRef.current(), []);
+  const stop = useCallback((e: React.SyntheticEvent) => e.stopPropagation(), []);
+
+  const panelTx = compositorPanelTransition(open);
+  const fadeTx  = compositorFadeTransition(open);
 
   return (
-    <ChartFocusContext.Provider value={{ openSidebar }}>
-    <div
-      className="h-[100dvh] w-full text-foreground overflow-hidden relative"
-      style={{ background: "var(--body-bg)" }}
-    >
-
-      {/* ── Backdrop — Motion.dev fade (or instant for reduced-motion) ── */}
-      {reducedMotion ? (
-        /* Instant show/hide — no animation */
-        sidebarOpen && (
-          <div
-            onClick={closeSidebar}
-            style={{
-              position:             "fixed",
-              inset:                0,
-              zIndex:               49,
-              background:           pathname === "/charts" ? "transparent" : "var(--surface-backdrop)",
-              backdropFilter:       pathname === "/charts" ? "none" : "blur(2px)",
-              WebkitBackdropFilter: pathname === "/charts" ? "none" : "blur(2px)",
-            }}
-          />
-        )
-      ) : (
-        <AnimatePresence>
-          {sidebarOpen && (
-            <motion.div
-              key="sidebar-backdrop"
-              variants={sidebarBackdropVariants}
-              initial="closed"
-              animate="open"
-              exit="closed"
-              onClick={closeSidebar}
-              style={{
-                position:             "fixed",
-                inset:                0,
-                zIndex:               49,
-                background:           pathname === "/charts" ? "transparent" : "var(--surface-backdrop)",
-                backdropFilter:       pathname === "/charts" ? "none" : "blur(2px)",
-                WebkitBackdropFilter: pathname === "/charts" ? "none" : "blur(2px)",
-              }}
-            />
-          )}
-        </AnimatePresence>
-      )}
-
-      {/* ── Sidebar — Motion.dev spring slide (instant for reduced-motion) ── */}
-      <motion.aside
-        variants={reducedMotion ? undefined : sidebarVariants}
-        initial={reducedMotion ? false : "closed"}
-        animate={
-          reducedMotion
-            ? { x: sidebarOpen ? 0 : -264 }
-            : sidebarOpen ? "open" : "closed"
-        }
-        transition={reducedMotion ? { duration: 0 } : undefined}
+    <>
+      {/* Backdrop — opacity-only compositor fade, identical timing to the
+          Profile Menu backdrop. */}
+      <div
+        aria-hidden
+        onClick={onBackdropClick}
         style={{
-          position:      "fixed",
-          top:           0,
-          left:          0,
-          bottom:        0,
-          width:         264,
-          zIndex:        50,
-          display:       "flex",
-          flexDirection: "column",
-          willChange:    "transform",
-          background:    "var(--surface-sidebar-bg)",
-          borderRight:   "1px solid var(--surface-sidebar-border)",
-          boxShadow:     "4px 0 32px rgba(0,0,0,0.5)",
+          position:             "fixed",
+          inset:                0,
+          zIndex:               49,
+          background:           pathname === "/charts" ? "transparent" : "rgba(0,0,0,0.45)",
+          backdropFilter:       pathname === "/charts" ? "none" : "blur(2px)",
+          WebkitBackdropFilter: pathname === "/charts" ? "none" : "blur(2px)",
+          opacity:              open ? 1 : 0,
+          transition:           fadeTx,
+          pointerEvents:        open ? "auto" : "none",
+        }}
+      />
+
+      {/* Drawer panel — GPU-composited transform + opacity only. */}
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-label="Navigation menu"
+        aria-hidden={!open}
+        onClick={stop}
+        className="transform-gpu"
+        style={{
+          position:                 "fixed",
+          top:                      0,
+          left:                     0,
+          bottom:                   0,
+          width:                    "min(82vw, 360px)",
+          zIndex:                   50,
+          display:                  "flex",
+          flexDirection:            "column",
+          background:               "#121316",
+          borderRight:              "1px solid rgba(255,255,255,0.06)",
+          opacity:                  open ? 1 : 0,
+          transform:                open ? "translate3d(0,0,0)" : "translate3d(-100%,0,0)",
+          transition:               panelTx,
+          willChange:               "transform, opacity",
+          backfaceVisibility:       "hidden",
+          WebkitBackfaceVisibility: "hidden",
+          pointerEvents:            open ? "auto" : "none",
+          paddingTop:               "env(safe-area-inset-top)",
+          paddingBottom:            "env(safe-area-inset-bottom)",
         }}
       >
         {/* Logo + close */}
@@ -331,14 +251,20 @@ export const Layout = memo(function Layout({
             variant="ghost"
             size="icon"
             className="w-8 h-8 text-muted-foreground hover:text-white shrink-0"
-            onClick={closeSidebar}
+            onClick={onClose}
           >
             <X className="w-4 h-4" />
           </Button>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-3 py-3 overflow-y-auto" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+        {/* Nav — smooth scroll if items exceed viewport height */}
+        <nav
+          className="flex-1 px-3 py-3 overflow-y-auto"
+          style={{
+            display: "flex", flexDirection: "column", gap: 20,
+            WebkitOverflowScrolling: "touch", overscrollBehavior: "contain",
+          }}
+        >
           {NAV_SECTIONS.map((section) => (
             <div key={section.label}>
               <p
@@ -355,14 +281,14 @@ export const Layout = memo(function Layout({
                     label={navItem.label}
                     icon={navItem.icon}
                     isActive={pathname === navItem.href}
-                    onClick={closeSidebar}
+                    onClick={onClose}
                     badge={BADGES[navItem.href]}
                   />
                 ))}
               </div>
             </div>
           ))}
-          <SidebarSystemSections open={sidebarOpen} />
+          <SidebarSystemSections open={open} />
         </nav>
 
         {/* Account Summary */}
@@ -419,7 +345,136 @@ export const Layout = memo(function Layout({
             })()}
           </div>
         </div>
-      </motion.aside>
+      </aside>
+    </>
+  );
+});
+
+function ReconnectBanner() {
+  const { wsStatus } = useLiveMarketContext();
+  if (wsStatus === "connected" || wsStatus === "connecting") return null;
+
+  const isReconnecting = wsStatus === "reconnecting";
+  const isError        = wsStatus === "error";
+
+  return (
+    <div
+      className="flex items-center justify-center gap-2 py-1.5 px-4 text-[11px] font-semibold z-50"
+      style={{
+        background:   isError ? "rgba(239,68,68,0.12)" : "rgba(251,191,36,0.10)",
+        borderBottom: isError ? "1px solid rgba(239,68,68,0.22)" : "1px solid rgba(251,191,36,0.22)",
+        color:        isError ? "#f87171" : "#fbbf24",
+      }}
+    >
+      {isReconnecting
+        ? <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+        : <WifiOff className="w-3 h-3 shrink-0" />}
+      {isError
+        ? "WebSocket connection failed — live data unavailable. Refresh the page to retry."
+        : "Live feed reconnecting — prices may be delayed…"}
+    </div>
+  );
+}
+
+export const Layout = memo(function Layout({
+  children,
+  chartsNode,
+  dashboardNode,
+}: {
+  children:      React.ReactNode;
+  chartsNode?:   React.ReactNode;
+  dashboardNode?: React.ReactNode;
+}) {
+  useBrokerWs();
+  const isMobile                = useIsMobile();
+  const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
+  const [location, navigate] = useLocation();
+  // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
+  const pathname      = location.split("?")[0];
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notifOpen,   setNotifOpen]   = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [bellShake,   setBellShake]   = useState(false);
+
+  const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+
+  // Close sidebar on route change
+  const prevLocationRef = useRef(location);
+  useEffect(() => {
+    if (location !== prevLocationRef.current) setSidebarOpen(false);
+    prevLocationRef.current = location;
+  }, [location]);
+
+  // Open sidebar from mobile bottom-nav menu button
+  useEffect(() => {
+    const h = () => setSidebarOpen(true);
+    window.addEventListener("tj:open-sidebar", h);
+    return () => window.removeEventListener("tj:open-sidebar", h);
+  }, []);
+
+  const { unreadCount } = useNotifications();
+  const { profile, update: updateProfile } = useProfile();
+
+  const bellBtnRef    = useRef<HTMLButtonElement>(null);
+  const profileBtnRef = useRef<HTMLDivElement>(null);
+  const prevUnreadRef = useRef(0);
+
+  useEffect(() => {
+    if (unreadCount > prevUnreadRef.current && !notifOpen) {
+      setBellShake(true);
+      const t = setTimeout(() => setBellShake(false), 700);
+      return () => clearTimeout(t);
+    }
+    prevUnreadRef.current = unreadCount;
+    return undefined;
+  }, [unreadCount, notifOpen]);
+
+  const toggleNotif = useCallback(() => {
+    setNotifOpen(v => !v);
+    setProfileOpen(false);
+  }, []);
+
+  const toggleProfile = useCallback(() => {
+    setProfileOpen(v => !v);
+    setNotifOpen(false);
+  }, []);
+
+  const closeNotif = useCallback(() => setNotifOpen(false), []);
+
+  const currentPageLabel =
+    pathname === "/portfolio"    ? "Portfolio"          :
+    pathname === "/pnl"          ? "Net PNL Analytics"  :
+    pathname === "/net-pnl"      ? "Net PNL Analytics"  :
+    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
+
+  const { theme, toggleTheme } = useTheme();
+  const { currency, setCurrency, fetchRate } = useCurrencyStore();
+
+  useEffect(() => {
+    const id = setTimeout(() => { fetchRate(); }, 1500);
+    return () => clearTimeout(id);
+  }, [fetchRate]);
+
+  const initials   = getInitials(profile.name);
+  const badgeCount = unreadCount > 99 ? "99+" : unreadCount > 0 ? String(unreadCount) : null;
+
+  return (
+    <ChartFocusContext.Provider value={{ openSidebar }}>
+    <div
+      className="h-[100dvh] w-full text-foreground overflow-hidden relative"
+      style={{ background: "var(--body-bg)" }}
+    >
+
+      {/* ── Navigation Drawer — same compositor CSS-transition system as
+          ProfileMenu's dropdown (see NavigationDrawer above). Always
+          mounted; `open` only toggles visibility. ── */}
+      <NavigationDrawer
+        open={sidebarOpen}
+        onClose={closeSidebar}
+        pathname={pathname}
+        profile={profile}
+      />
 
       {/* ── Main Content — always full width ── */}
       <main className="absolute inset-0 flex flex-col overflow-hidden">

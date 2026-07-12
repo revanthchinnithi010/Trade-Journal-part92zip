@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 import { useTheme } from "@/contexts/ThemeContext";
 import type { ThemeMode } from "@/contexts/ThemeContext";
 import { AnimatedModal } from "@/components/animations";
+import { compositorPanelTransition, compositorFadeTransition } from "@/animations/motion";
 
 /* ─── types ─────────────────────────────────────────────────────────────────── */
 
@@ -90,10 +91,6 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; sub: string; Icon: React.
   { mode: "dark",   label: "Dark",           sub: "Always use dark theme",    Icon: Moon    },
   { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor },
 ];
-
-/* ─── CSS easing ─────────────────────────────────────────────────────────────── */
-
-const EASE = "cubic-bezier(0.22,1,0.36,1)";
 
 /* ─── sub-components ─────────────────────────────────────────────────────────── */
 
@@ -276,10 +273,11 @@ export const ProfileDropdown = memo(function ProfileDropdown({
 
   const initials = getInitials(profile.name);
 
-  /* ── CSS transition values — computed once per render, not per frame ── */
-  const dur      = open ? "0.18s" : "0.12s";
-  const panelTx  = `opacity ${dur} ${EASE}, transform ${dur} ${EASE}`;
-  const fadeTx   = `opacity ${open ? "0.14s" : "0.12s"} ease`;
+  /* ── shared compositor CSS-transition system (src/animations/motion.ts) —
+     same values reused by the Navigation Drawer so both panels feel
+     identical. Computed once per render, not per frame. ── */
+  const panelTx  = compositorPanelTransition(open);
+  const fadeTx   = compositorFadeTransition(open);
 
   /* ── open ↔ closed transform string ── */
   const panelTransform = open
