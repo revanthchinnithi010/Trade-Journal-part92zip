@@ -1,5 +1,5 @@
 /**
- * ProfileSettingsPage — full-screen settings overlay pushed from the Profile page.
+ * ProfileSettingsPage — premium flat-list settings overlay.
  *
  * ANIMATION ENGINE: pure CSS transitions on `transform: translateX` only.
  * GPU compositor thread — zero JS frame budget consumed during animation.
@@ -7,64 +7,219 @@
  *   Enter: translateX(+100%) → translateX(0)   240ms cubic-bezier(0.22,1,0.36,1)
  *   Exit:  translateX(0)     → translateX(+100%) 210ms cubic-bezier(0.4,0,0.6,1)
  *
- * Mirrors the ProfilePage lifecycle (double-RAF open, timeout close, popstate back).
+ * Layout: full-screen #000000, section labels, flat list rows (64–68px),
+ * inset dividers (marginLeft 80px), no card containers.
  */
 
-import React, { memo, useEffect, useRef, useState } from "react";
-import { ArrowLeft, Sun, Moon, Monitor, Check } from "lucide-react";
+import React, { memo, useEffect, useRef, useState, useCallback } from "react";
+import {
+  ArrowLeft,
+  Palette, Bell, Database, Activity, Globe,
+  LogOut, ChevronRight, Copy, Check, RefreshCw,
+} from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import type { ThemeMode } from "@/contexts/ThemeContext";
-import { SidebarSystemSections } from "./SidebarSystemSections";
+import { AppearanceSettingsPage }    from "./AppearanceSettingsPage";
+import { NotificationsSettingsPage } from "./NotificationsSettingsPage";
 
-/* ─── animation constants ──────────────────────────────────────────────────── */
+/* ─── animation ────────────────────────────────────────────────────────────── */
 
 const EASE_OPEN  = "cubic-bezier(0.22,1,0.36,1)";
 const EASE_CLOSE = "cubic-bezier(0.4,0,0.6,1)";
 const DUR_OPEN   = 240;
 const DUR_CLOSE  = 210;
 
-/* ─── theme options ─────────────────────────────────────────────────────────── */
+const BASE = (import.meta as { env: { BASE_URL: string } }).env.BASE_URL.replace(/\/$/, "");
 
-const THEME_OPTIONS: {
-  mode: ThemeMode; label: string; sub: string; Icon: React.ElementType;
-}[] = [
-  { mode: "light",  label: "Light",          sub: "Always use light theme",   Icon: Sun     },
-  { mode: "dark",   label: "Dark",           sub: "Always use dark theme",    Icon: Moon    },
-  { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor },
-];
+/* ─── live-data types ───────────────────────────────────────────────────────── */
 
-/* ─── layout helpers ────────────────────────────────────────────────────────── */
+type DbStatus    = "connected" | "error" | "loading";
+type DeltaStatus = "connected" | "reconnecting" | "disconnected" | "loading";
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+interface LiveData {
+  db:         DbStatus;
+  dbLatency:  number | null;
+  delta:      DeltaStatus;
+  ip:         string | null;
+  ipLoading:  boolean;
+}
+
+/* ─── StatusDot ─────────────────────────────────────────────────────────────── */
+
+function StatusDot({ status }: { status: "ok" | "warn" | "error" | "loading" }) {
+  const COLOR = {
+    ok:      "#34d399",
+    warn:    "#fbbf24",
+    error:   "#f87171",
+    loading: "#94a3b8",
+  }[status];
+  const pulse = status === "ok" || status === "warn";
+  return (
+    <span style={{
+      display: "inline-block",
+      width: 7, height: 7, borderRadius: "50%",
+      background: COLOR,
+      boxShadow: pulse ? `0 0 6px ${COLOR}` : "none",
+      flexShrink: 0,
+    }} />
+  );
+}
+
+/* ─── SectionLabel ──────────────────────────────────────────────────────────── */
+
+function SectionLabel({ children, first }: { children: React.ReactNode; first?: boolean }) {
   return (
     <p style={{
-      fontSize: 10, fontWeight: 700, letterSpacing: "0.13em",
-      textTransform: "uppercase", padding: "18px 20px 8px",
-      color: "rgba(148,163,184,0.45)", lineHeight: 1,
+      fontSize: 11, fontWeight: 700, letterSpacing: "0.10em",
+      textTransform: "uppercase",
+      padding: first ? "24px 24px 10px" : "32px 24px 10px",
+      color: "rgba(148,163,184,0.40)",
+      lineHeight: 1,
     }}>
       {children}
     </p>
   );
 }
 
-function Card({
-  children, noPad, style,
-}: {
-  children: React.ReactNode;
-  noPad?: boolean;
-  style?: React.CSSProperties;
-}) {
+/* ─── Divider ───────────────────────────────────────────────────────────────── */
+
+const Divider = () => (
+  <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 80 }} />
+);
+
+/* ─── SignOutRow ────────────────────────────────────────────────────────────── */
+
+function SignOutRow({ onClick }: { onClick: () => void }) {
+  const [pressed, setPressed] = useState(false);
   return (
-    <div style={{
-      background:   "#121212",
-      border:       "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 20,
-      overflow:     "hidden",
-      ...(!noPad ? { padding: "0 0 4px" } : {}),
-      ...style,
-    }}>
-      {children}
-    </div>
+    <button
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={  () => setPressed(false)}
+      onPointerLeave={() => setPressed(false)}
+      onClick={onClick}
+      style={{
+        display: "flex", alignItems: "center",
+        padding: "0 24px", height: 68, width: "100%",
+        background: pressed ? "rgba(239,68,68,0.06)" : "transparent",
+        border: "none", cursor: "pointer", gap: 16,
+        transition: "background 60ms",
+      }}
+    >
+      <div style={{
+        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        background: "rgba(239,68,68,0.10)",
+      }}>
+        <LogOut style={{ width: 18, height: 18, color: "#f87171" }} />
+      </div>
+      <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "#f87171" }}>
+        Sign Out
+      </span>
+    </button>
+  );
+}
+
+/* ─── NavRow ────────────────────────────────────────────────────────────────── */
+
+function NavRow({
+  icon: Icon, iconBg, iconColor,
+  label, rightContent, onClick, last,
+}: {
+  icon: React.ElementType;
+  iconBg: string; iconColor: string;
+  label: string;
+  rightContent?: React.ReactNode;
+  onClick: () => void;
+  last?: boolean;
+}) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <>
+      <button
+        onPointerDown={() => setPressed(true)}
+        onPointerUp={  () => setPressed(false)}
+        onPointerLeave={() => setPressed(false)}
+        onClick={onClick}
+        style={{
+          display: "flex", alignItems: "center",
+          padding: "0 24px", height: 68, width: "100%",
+          background: pressed ? "rgba(255,255,255,0.04)" : "transparent",
+          border: "none", cursor: "pointer", gap: 16,
+          transition: "background 60ms",
+        }}
+      >
+        {/* Icon container */}
+        <div style={{
+          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: iconBg,
+        }}>
+          <Icon style={{ width: 18, height: 18, color: iconColor }} />
+        </div>
+
+        {/* Label */}
+        <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
+          {label}
+        </span>
+
+        {/* Right side */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {rightContent}
+          <ChevronRight style={{ width: 16, height: 16, color: "rgba(148,163,184,0.30)" }} />
+        </div>
+      </button>
+      {!last && <Divider />}
+    </>
+  );
+}
+
+/* ─── InfoRow (no chevron, no navigation) ───────────────────────────────────── */
+
+function InfoRow({
+  icon: Icon, iconBg, iconColor,
+  label, rightContent, onClick, last,
+}: {
+  icon: React.ElementType;
+  iconBg: string; iconColor: string;
+  label: string;
+  rightContent?: React.ReactNode;
+  onClick?: () => void;
+  last?: boolean;
+}) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <>
+      <div
+        onPointerDown={() => onClick && setPressed(true)}
+        onPointerUp={  () => setPressed(false)}
+        onPointerLeave={() => setPressed(false)}
+        onClick={onClick}
+        style={{
+          display: "flex", alignItems: "center",
+          padding: "0 24px", height: 68, width: "100%",
+          background: pressed ? "rgba(255,255,255,0.04)" : "transparent",
+          cursor: onClick ? "pointer" : "default",
+          gap: 16,
+          transition: "background 60ms",
+        }}
+      >
+        <div style={{
+          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          background: iconBg,
+        }}>
+          <Icon style={{ width: 18, height: 18, color: iconColor }} />
+        </div>
+
+        <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
+          {label}
+        </span>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+          {rightContent}
+        </div>
+      </div>
+      {!last && <Divider />}
+    </>
   );
 }
 
@@ -80,45 +235,100 @@ export interface ProfileSettingsPageProps {
 export const ProfileSettingsPage = memo(function ProfileSettingsPage({
   open, onClose,
 }: ProfileSettingsPageProps) {
-  const [rendered, setRendered] = useState(open);
-  const [visible,  setVisible]  = useState(false);
+  const [rendered,   setRendered]   = useState(open);
+  const [visible,    setVisible]    = useState(false);
+  const [subPage,    setSubPage]    = useState<"appearance" | "notifications" | null>(null);
 
-  const { themeMode, setThemeMode } = useTheme();
+  const { themeMode } = useTheme();
 
-  /* keep latest onClose in a ref so effects never stale-close */
-  const onCloseRef = useRef(onClose);
+  /* live data */
+  const [live, setLive] = useState<LiveData>({
+    db: "loading", dbLatency: null,
+    delta: "loading",
+    ip: null, ipLoading: true,
+  });
+  const [copied, setCopied] = useState(false);
+
+  const mountedRef  = useRef(true);
+  const onCloseRef  = useRef(onClose);
+  const pollRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
 
-  /* ── mount/unmount lifecycle ──────────────────────────────────────────────── */
+  /* ── fetch live status ──────────────────────────────────────────────────── */
+  const fetchStatus = useCallback(async () => {
+    try {
+      const [health, delta] = await Promise.all([
+        fetch(`${BASE}/api/health`).then(r => r.ok ? r.json() : null).catch(() => null) as Promise<{
+          database?: { connected: boolean; latencyMs: number | null };
+        } | null>,
+        fetch(`${BASE}/api/delta/status`).then(r => r.ok ? r.json() : null).catch(() => null) as Promise<{
+          connected?: boolean; status?: string;
+        } | null>,
+      ]);
+      if (!mountedRef.current) return;
+      setLive(p => ({
+        ...p,
+        db:        health?.database?.connected ? "connected" : "error",
+        dbLatency: health?.database?.latencyMs ?? null,
+        delta:     delta?.connected ? "connected"
+                 : delta?.status === "reconnecting" ? "reconnecting"
+                 : "disconnected",
+      }));
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchIp = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE}/api/my-ip`).then(r => r.ok ? r.json() : null).catch(() => null) as {
+        ip?: string;
+      } | null;
+      if (!mountedRef.current) return;
+      setLive(p => ({ ...p, ip: res?.ip ?? null, ipLoading: false }));
+    } catch {
+      if (mountedRef.current) setLive(p => ({ ...p, ipLoading: false }));
+    }
+  }, []);
+
+  /* ── mount/unmount lifecycle ────────────────────────────────────────────── */
   useEffect(() => {
     if (open) {
       setRendered(true);
-      /* Double-RAF: let browser paint the initial off-screen position first,
-         then trigger the CSS transition from translateX(100%) → 0. */
-      const id = requestAnimationFrame(() =>
-        requestAnimationFrame(() => setVisible(true))
-      );
-      return () => cancelAnimationFrame(id);
+      const id = requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)));
+      fetchStatus();
+      fetchIp();
+      pollRef.current = setInterval(fetchStatus, 15_000);
+      return () => {
+        cancelAnimationFrame(id);
+        if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      };
     } else {
       setVisible(false);
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
       const id = setTimeout(() => setRendered(false), DUR_CLOSE + 40);
       return () => clearTimeout(id);
     }
-  }, [open]);
+  }, [open, fetchStatus, fetchIp]);
 
-  /* ── Android hardware back ────────────────────────────────────────────────── */
+  /* ── Android back ───────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!open) return;
     window.history.pushState({ tjProfileSettings: true }, "");
-    const h = () => onCloseRef.current();
+    const h = (e: PopStateEvent) => {
+      /* If we arrived at our own entry (e.g. a sub-page just closed),
+         do NOT close Settings. Only close when we've gone past our entry. */
+      if ((e.state as Record<string, unknown> | null)?.tjProfileSettings) return;
+      onCloseRef.current();
+    };
     window.addEventListener("popstate", h);
     return () => {
       window.removeEventListener("popstate", h);
-      if (window.history.state?.tjProfileSettings) window.history.back();
+      if ((window.history.state as Record<string, unknown> | null)?.tjProfileSettings)
+        window.history.back();
     };
   }, [open]);
 
-  /* ── ESC ──────────────────────────────────────────────────────────────────── */
+  /* ── ESC ────────────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
@@ -126,156 +336,203 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
     return () => window.removeEventListener("keydown", h);
   }, [open]);
 
+  /* ── copy IP ────────────────────────────────────────────────────────────── */
+  const copyIp = useCallback(async () => {
+    if (!live.ip) return;
+    try {
+      await navigator.clipboard.writeText(live.ip);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch { /* ignore */ }
+  }, [live.ip]);
+
+  /* ── derived display values ─────────────────────────────────────────────── */
+  const themeName = themeMode === "light" ? "Light" : themeMode === "system" ? "System" : "Dark";
+
+  const dbDot: "ok" | "error" | "loading" =
+    live.db === "connected" ? "ok" : live.db === "loading" ? "loading" : "error";
+  const dbLabel =
+    live.db === "connected" ? `Connected${live.dbLatency != null ? ` · ${live.dbLatency}ms` : ""}`
+    : live.db === "loading"  ? "Checking…"
+    : "Unavailable";
+
+  const deltaDot: "ok" | "warn" | "error" | "loading" =
+    live.delta === "connected"    ? "ok"
+    : live.delta === "reconnecting" ? "warn"
+    : live.delta === "loading"      ? "loading"
+    : "error";
+  const deltaLabel =
+    live.delta === "connected"     ? "Live"
+    : live.delta === "reconnecting" ? "Reconnecting…"
+    : live.delta === "loading"      ? "Checking…"
+    : "Offline";
+
   if (!rendered) return null;
 
   return (
-    <div
-      style={{
-        /* ── fixed overlay — sits on top of ProfilePage ── */
-        position:                 "fixed",
-        inset:                    0,
-        zIndex:                   201,           /* one above ProfilePage's 200 */
-
-        /* ── AMOLED black — identical to ProfilePage ── */
-        background:               "#000000",
-
-        /* ── GPU compositor transition: slide from right ── */
-        transform:                visible ? "translateX(0)" : "translateX(100%)",
-        transition:               visible
+    <>
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 201,
+        background: "#000000",
+        transform:  visible ? "translateX(0)" : "translateX(100%)",
+        transition: visible
           ? `transform ${DUR_OPEN}ms ${EASE_OPEN}`
           : `transform ${DUR_CLOSE}ms ${EASE_CLOSE}`,
-        willChange:               "transform",
-        backfaceVisibility:       "hidden",
+        willChange: "transform",
+        backfaceVisibility: "hidden",
         WebkitBackfaceVisibility: "hidden",
-
-        /* ── layout ── */
-        display:                  "flex",
-        flexDirection:            "column",
-        overflow:                 "hidden",
-        paddingBottom:            "env(safe-area-inset-bottom)",
-      }}
-    >
-      {/* ── Sticky header ───────────────────────────────────────────────────── */}
-      <header
-        style={{
-          height:         60,
-          flexShrink:     0,
-          display:        "flex",
-          alignItems:     "center",
-          justifyContent: "space-between",
-          padding:        "0 12px",
-          background:     "#000000",
-          borderBottom:   "1px solid rgba(255,255,255,0.06)",
-        }}
-      >
-        {/* Back */}
-        <button
-          onClick={onClose}
-          aria-label="Back"
-          style={{
-            width: 40, height: 40, borderRadius: "50%",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(255,255,255,0.06)",
-            border:     "1px solid rgba(255,255,255,0.09)",
-            color:      "rgba(255,255,255,0.72)",
-            cursor:     "pointer",
-          }}
-        >
-          <ArrowLeft style={{ width: 18, height: 18 }} />
-        </button>
-
-        {/* Title */}
-        <span style={{
-          fontSize: 16, fontWeight: 700,
-          color: "rgba(255,255,255,0.92)",
-          letterSpacing: "-0.02em",
+        display: "flex", flexDirection: "column", overflow: "hidden",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}>
+        {/* ── Header ──────────────────────────────────────────────────────── */}
+        <header style={{
+          height: 60, flexShrink: 0,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 12px",
+          background: "#000000",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
         }}>
-          Settings
-        </span>
+          <button
+            onClick={onClose}
+            aria-label="Back"
+            style={{
+              width: 40, height: 40, borderRadius: "50%",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.09)",
+              color: "rgba(255,255,255,0.72)",
+              cursor: "pointer",
+            }}
+          >
+            <ArrowLeft style={{ width: 18, height: 18 }} />
+          </button>
+          <span style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.02em" }}>
+            Settings
+          </span>
+          <div style={{ width: 40 }} />
+        </header>
 
-        {/* Right placeholder — keeps title visually centered */}
-        <div style={{ width: 40 }} />
-      </header>
-
-      {/* ── Scrollable content ──────────────────────────────────────────────── */}
-      <div
-        style={{
-          flex:                    1,
-          overflowY:               "auto",
+        {/* ── Scrollable list ──────────────────────────────────────────────── */}
+        <div style={{
+          flex: 1,
+          overflowY: "auto",
           WebkitOverflowScrolling: "touch",
-          overscrollBehavior:      "contain",
-        }}
-      >
-        <div
-          style={{
-            maxWidth:      480,
-            margin:        "0 auto",
-            padding:       "0 16px 32px",
-            display:       "flex",
-            flexDirection: "column",
-            gap:           16,
-          }}
-        >
-          {/* ── Appearance ──────────────────────────────────────────────────── */}
-          <Card>
-            <SectionLabel>Appearance</SectionLabel>
-            <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-              {THEME_OPTIONS.map(({ mode, label, sub, Icon }) => {
-                const active = themeMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    onClick={() => setThemeMode(mode)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 13,
-                      padding: "11px 12px", borderRadius: 14,
-                      background: active ? "rgba(165,180,252,0.10)" : "transparent",
-                      border:     active ? "1px solid rgba(165,180,252,0.22)" : "1px solid transparent",
-                      cursor: "pointer", transition: "background 100ms",
-                      textAlign: "left", width: "100%",
-                    }}
-                  >
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 11, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: active ? "rgba(165,180,252,0.18)" : "rgba(255,255,255,0.06)",
-                      border:     active ? "1px solid rgba(165,180,252,0.30)" : "1px solid rgba(255,255,255,0.09)",
-                    }}>
-                      <Icon style={{ width: 15, height: 15, color: active ? "#a5b4fc" : "rgba(148,163,184,0.70)" }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: active ? "#e0e7ff" : "rgba(255,255,255,0.80)" }}>
-                        {label}
-                      </p>
-                      <p style={{ fontSize: 11, color: "rgba(148,163,184,0.55)", marginTop: 2 }}>
-                        {sub}
-                      </p>
-                    </div>
-                    {active && (
-                      <div style={{
-                        width: 22, height: 22, borderRadius: "50%",
-                        background: "#a5b4fc", flexShrink: 0,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <Check style={{ width: 11, height: 11, color: "#1e1b4b", strokeWidth: 3 }} />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
+          overscrollBehavior: "contain",
+        }}>
 
-          {/* ── System Status + Backup ───────────────────────────────────────── */}
-          <Card>
-            <SectionLabel>System</SectionLabel>
-            <div style={{ paddingBottom: 8 }}>
-              <SidebarSystemSections open={open} />
-            </div>
-          </Card>
+          {/* ── GENERAL ─────────────────────────────────────────────────────── */}
+          <SectionLabel first>General</SectionLabel>
 
+          <NavRow
+            icon={Palette}
+            iconBg="rgba(139,92,246,0.14)"
+            iconColor="#a78bfa"
+            label="Appearance"
+            rightContent={
+              <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{themeName}</span>
+            }
+            onClick={() => setSubPage("appearance")}
+          />
+
+          <NavRow
+            icon={Bell}
+            iconBg="rgba(245,158,11,0.14)"
+            iconColor="#fbbf24"
+            label="Notifications"
+            onClick={() => setSubPage("notifications")}
+            last
+          />
+
+          {/* ── CONNECTIONS ──────────────────────────────────────────────────── */}
+          <SectionLabel>Connections</SectionLabel>
+
+          {/* Database Status */}
+          <InfoRow
+            icon={Database}
+            iconBg="rgba(59,130,246,0.14)"
+            iconColor="#60a5fa"
+            label="Database"
+            rightContent={
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <StatusDot status={dbDot} />
+                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{dbLabel}</span>
+                <button
+                  onClick={e => { e.stopPropagation(); fetchStatus(); }}
+                  style={{
+                    background: "none", border: "none", cursor: "pointer", padding: 2,
+                    color: "rgba(148,163,184,0.35)", display: "flex", alignItems: "center",
+                  }}
+                  aria-label="Refresh"
+                >
+                  <RefreshCw style={{ width: 12, height: 12 }} />
+                </button>
+              </div>
+            }
+          />
+
+          {/* Delta Exchange Status */}
+          <InfoRow
+            icon={Activity}
+            iconBg="rgba(16,185,129,0.14)"
+            iconColor="#34d399"
+            label="Delta Exchange"
+            rightContent={
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <StatusDot status={deltaDot} />
+                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{deltaLabel}</span>
+              </div>
+            }
+          />
+
+          {/* Backend Server IP */}
+          <InfoRow
+            icon={Globe}
+            iconBg="rgba(234,179,8,0.14)"
+            iconColor="#fde047"
+            label="Server IP"
+            onClick={live.ip ? copyIp : undefined}
+            rightContent={
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {live.ipLoading ? (
+                  <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Loading…</span>
+                ) : live.ip ? (
+                  <>
+                    <span style={{ fontSize: 12, color: "rgba(148,163,184,0.65)", fontFamily: "monospace" }}>
+                      {live.ip}
+                    </span>
+                    {copied
+                      ? <Check style={{ width: 14, height: 14, color: "#34d399" }} />
+                      : <Copy  style={{ width: 14, height: 14, color: "rgba(148,163,184,0.40)" }} />
+                    }
+                  </>
+                ) : (
+                  <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Unavailable</span>
+                )}
+              </div>
+            }
+            last
+          />
+
+          {/* ── ACCOUNT ──────────────────────────────────────────────────────── */}
+          <SectionLabel>Account</SectionLabel>
+
+          {/* Sign Out */}
+          <SignOutRow onClick={onClose} />
+
+          {/* Bottom breathing room */}
+          <div style={{ height: 40 }} />
         </div>
       </div>
-    </div>
+
+      {/* ── Sub-pages ────────────────────────────────────────────────────────── */}
+      <AppearanceSettingsPage
+        open={subPage === "appearance"}
+        onClose={() => setSubPage(null)}
+      />
+      <NotificationsSettingsPage
+        open={subPage === "notifications"}
+        onClose={() => setSubPage(null)}
+      />
+    </>
   );
 });
