@@ -13,6 +13,7 @@ import {
   TrendingDown, Briefcase, DollarSign,
 } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
+import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import {
@@ -374,6 +375,11 @@ const Dashboard = memo(function Dashboard() {
           </p>
         </div>
       )}
+
+      {/* ── Segmented control — Dashboard / Reports ──
+          Selection is derived from the current route, not local state, so
+          it self-corrects when the user navigates back from Reports. */}
+      <DashboardSegmentedControl />
 
       {/* ── Account Value Widget ──
           accountValue/upnl/pnl are sourced ONLY from combinedPortfolio
