@@ -208,23 +208,35 @@ function ReportsKeepAlive() {
 }
 
 /**
- * Gates when the Reports keep-alive subtree actually mounts. Rendering
- * `null` until `ready` flips means React never even calls the lazy import
- * for Reports' chunk until this timer fires — the two Suspense boundaries
- * (Dashboard's and this one) never contend for the same tick of work.
+ * Gates when the Reports keep-alive subtree actually mounts in the
+ * background. Rendering `null` until `ready` flips means React never even
+ * calls the lazy import for Reports' chunk until this timer fires — the two
+ * Suspense boundaries (Dashboard's and this one) never contend for the same
+ * tick of work.
+ *
+ * Critical: if the user actually navigates to /reports before that timer
+ * fires, we must NOT keep waiting — Layout already flips the wrapper div to
+ * display:flex the instant pathname === "/reports", so returning `null` past
+ * that point would show a blank, seemingly-stuck panel. Checking the live
+ * pathname here means a real navigation always short-circuits straight to
+ * mounting, and only the *background* pre-mount (while still on "/") is
+ * deferred.
  */
 function ReportsPreload() {
-  const [ready, setReady] = useState(false);
+  const [location] = useLocation();
+  const onReportsRoute = location.split("?")[0] === "/reports";
+  const [ready, setReady] = useState(onReportsRoute);
   useEffect(() => {
+    if (ready) return;
     const id = setTimeout(() => setReady(true), 400);
     return () => clearTimeout(id);
-  }, []);
-  if (!ready) return null;
+  }, [ready]);
+  if (!ready && !onReportsRoute) return null;
   return <ReportsKeepAlive />;
 }
 
 const REPORTS_NODE = (
-  <Suspense fallback={null}>
+  <Suspense fallback={<PageLoader />}>
     <ReportsPreload />
   </Suspense>
 );
