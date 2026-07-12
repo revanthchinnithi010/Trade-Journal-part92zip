@@ -713,18 +713,32 @@ export const Layout = memo(function Layout({
 
           {/* All other pages — mounted/unmounted by AnimatePresence in App.tsx.
               The paddingBottom for the mobile nav bar is applied per-page in
-              App.tsx via StandardPageWrapper or the page's own layout. */}
-          {pathname !== "/charts" && pathname !== "/" && (
-            <div style={{
-              position:      "absolute",
-              inset:         0,
-              display:       "flex",
-              flexDirection: "column",
-              overflow:      "hidden",
-            }}>
-              {children}
-            </div>
-          )}
+              App.tsx via StandardPageWrapper or the page's own layout.
+
+              This wrapper must stay mounted UNCONDITIONALLY — it hosts the
+              single AnimatePresence from App.tsx, which decides on its own
+              when a page is actually in the DOM (nothing renders here while
+              pathname is "/" or "/charts", since those routes are excluded
+              from the AnimatePresence branches and rendered via the
+              keep-alive nodes above instead). Gating this div on
+              `pathname !== "/"` used to unmount the whole AnimatePresence
+              tree the instant you navigated back to Dashboard — before it
+              ever got to run the outgoing page's exit animation — which is
+              why the Reports → Dashboard transition appeared to have no
+              animation at all. It sits after chartsNode/dashboardNode in
+              DOM order, so it still paints on top of them while a page is
+              genuinely present (entering/exiting), and is visually a no-op
+              once AnimatePresence unmounts its child. */}
+          <div style={{
+            position:      "absolute",
+            inset:         0,
+            display:       "flex",
+            flexDirection: "column",
+            overflow:      "hidden",
+            pointerEvents: (pathname === "/" || pathname === "/charts") ? "none" : "auto",
+          }}>
+            {children}
+          </div>
         </div>
       </main>
 
