@@ -23,15 +23,15 @@
  *
  * Opening / closing
  *   Bell click  → open fullscreen directly (no half-sheet state).
- *   No header/title bar — close only via: backdrop tap, ESC key, Android
- *   back button.
+ *   Header has a back button + "Notifications" title. Close via: back
+ *   button, backdrop tap, ESC key, Android hardware back button.
  */
 
 import React, { useEffect, useRef, useState, memo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import {
   TrendingUp, Layers, GitBranch, Wifi, WifiOff, Link2,
-  Send, Activity, Info, Bell,
+  Send, Activity, Info, Bell, ArrowLeft, CheckCheck, Trash2,
 } from "lucide-react";
 import {
   useNotifications,
@@ -138,7 +138,7 @@ const NotifList = memo(function NotifList({
 interface Props { open: boolean; onClose: () => void; }
 
 export const NotificationPanel = memo(function NotificationPanel({ open, onClose }: Props) {
-  const { notifications, markRead } = useNotifications();
+  const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
 
   const hasOpenedRef = useRef(open);
   if (open) hasOpenedRef.current = true;
@@ -253,12 +253,51 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
         }}
         className="transform-gpu"
       >
-        {/* No header — per product decision the sheet has no title bar/close
-            button row. Close remains available via backdrop tap, ESC, and
-            the Android back button (see effects above). */}
+        {/* Header — back button + title, sits directly below the status bar
+            (safe-area padding is on the sheet itself, nothing extra here). */}
+        <div
+          className="flex items-center justify-between px-2 shrink-0 select-none"
+          style={{ height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex items-center gap-1">
+            <button onClick={onClose}
+              className="w-9 h-9 flex items-center justify-center rounded-lg"
+              style={{ color: "rgba(255,255,255,0.85)" }}
+              aria-label="Back"
+              title="Back">
+              <ArrowLeft className="w-4.5 h-4.5" />
+            </button>
+            <span className="text-[15px] font-semibold" style={{ color: "#fff" }}>Notifications</span>
+            {unreadCount > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white leading-none"
+                style={{ background: "#EF4444" }}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </div>
 
-        {/* Notification list — the only scrollable region; fills the entire
-            sheet from the (safe-area-padded) top edge. */}
+          <div className="flex items-center gap-1.5 pr-2">
+            {unreadCount > 0 && (
+              <button onClick={markAllRead}
+                className="w-8 h-8 flex items-center justify-center rounded-lg"
+                style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
+                title="Mark all read">
+                <CheckCheck className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button onClick={clearAll}
+                className="w-8 h-8 flex items-center justify-center rounded-lg"
+                style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
+                title="Clear all">
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Notification list — the only scrollable region; fills all
+            remaining height below the header. */}
         <div
           className="flex-1 flex flex-col"
           style={{
