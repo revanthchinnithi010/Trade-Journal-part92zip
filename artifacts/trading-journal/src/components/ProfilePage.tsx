@@ -22,16 +22,12 @@ import React, {
 } from "react";
 import {
   ArrowLeft, Settings, Camera,
-  Sun, Moon, Monitor, Check,
   Download, LogOut, ChevronRight,
   Save,
 } from "lucide-react";
-import { useLocation } from "wouter";
-import { SidebarSystemSections } from "./SidebarSystemSections";
-import { useTheme } from "@/contexts/ThemeContext";
-import type { ThemeMode } from "@/contexts/ThemeContext";
 import type { ProfileData } from "./ProfileMenu";
 import { getInitials } from "./ProfileMenu";
+import { ProfileSettingsPage } from "./ProfileSettingsPage";
 
 /* ─── animation constants ──────────────────────────────────────────────────── */
 
@@ -39,16 +35,6 @@ const EASE_OPEN  = "cubic-bezier(0.22,1,0.36,1)";
 const EASE_CLOSE = "cubic-bezier(0.4,0,0.6,1)";
 const DUR_OPEN   = 230;
 const DUR_CLOSE  = 210;
-
-/* ─── theme options ─────────────────────────────────────────────────────────── */
-
-const THEME_OPTIONS: {
-  mode: ThemeMode; label: string; sub: string; Icon: React.ElementType;
-}[] = [
-  { mode: "light",  label: "Light",          sub: "Always use light theme",   Icon: Sun     },
-  { mode: "dark",   label: "Dark",           sub: "Always use dark theme",    Icon: Moon    },
-  { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor },
-];
 
 /* ─── small layout helpers ──────────────────────────────────────────────────── */
 
@@ -112,9 +98,9 @@ export interface ProfilePageProps {
 export const ProfilePage = memo(function ProfilePage({
   open, onClose, profile, onUpdate,
 }: ProfilePageProps) {
-  const [, navigate]   = useLocation();
   const [rendered, setRendered] = useState(open);
   const [visible,  setVisible]  = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   /* local edit state */
   const [name,    setName]    = useState(profile.name);
@@ -122,8 +108,6 @@ export const ProfilePage = memo(function ProfilePage({
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const { themeMode, setThemeMode } = useTheme();
 
   /* keep latest onClose in a ref so effects never stale-close */
   const onCloseRef = useRef(onClose);
@@ -217,6 +201,7 @@ export const ProfilePage = memo(function ProfilePage({
   if (!rendered) return null;
 
   return (
+    <>
     <div
       style={{
         /* ── fixed overlay covering the entire viewport ── */
@@ -288,9 +273,9 @@ export const ProfilePage = memo(function ProfilePage({
           Profile
         </span>
 
-        {/* Settings shortcut */}
+        {/* Settings — opens dedicated Settings page sliding in from right */}
         <button
-          onClick={() => { onClose(); setTimeout(() => navigate("/settings"), DUR_CLOSE + 10); }}
+          onClick={() => setSettingsOpen(true)}
           aria-label="Settings"
           style={{
             width: 40, height: 40, borderRadius: "50%",
@@ -462,56 +447,6 @@ export const ProfilePage = memo(function ProfilePage({
             </div>
           </Card>
 
-          {/* ── Appearance ─────────────────────────────────────────────────── */}
-          <Card>
-            <SectionLabel>Appearance</SectionLabel>
-            <div style={{ padding: "0 8px 8px", display: "flex", flexDirection: "column", gap: 2 }}>
-              {THEME_OPTIONS.map(({ mode, label, sub, Icon }) => {
-                const active = themeMode === mode;
-                return (
-                  <button
-                    key={mode}
-                    onClick={() => setThemeMode(mode)}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 13,
-                      padding: "11px 12px", borderRadius: 14,
-                      background: active ? "rgba(165,180,252,0.10)" : "transparent",
-                      border:     active ? "1px solid rgba(165,180,252,0.22)" : "1px solid transparent",
-                      cursor: "pointer", transition: "background 100ms",
-                      textAlign: "left", width: "100%",
-                    }}
-                  >
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 11, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      background: active ? "rgba(165,180,252,0.18)" : "rgba(255,255,255,0.06)",
-                      border:     active ? "1px solid rgba(165,180,252,0.30)" : "1px solid rgba(255,255,255,0.09)",
-                    }}>
-                      <Icon style={{ width: 15, height: 15, color: active ? "#a5b4fc" : "rgba(148,163,184,0.70)" }} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.3, color: active ? "#e0e7ff" : "rgba(255,255,255,0.80)" }}>
-                        {label}
-                      </p>
-                      <p style={{ fontSize: 11, color: "rgba(148,163,184,0.55)", marginTop: 2 }}>
-                        {sub}
-                      </p>
-                    </div>
-                    {active && (
-                      <div style={{
-                        width: 22, height: 22, borderRadius: "50%",
-                        background: "#a5b4fc", flexShrink: 0,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        <Check style={{ width: 11, height: 11, color: "#1e1b4b", strokeWidth: 3 }} />
-                      </div>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-
           {/* ── Export Data ─────────────────────────────────────────────────── */}
           <Card noPad>
             <button
@@ -543,17 +478,6 @@ export const ProfilePage = memo(function ProfilePage({
             </button>
           </Card>
 
-          {/* ── System Status + Backup ─────────────────────────────────────── */}
-          <Card>
-            <SectionLabel>System</SectionLabel>
-            {/* Reuse the exact same SidebarSystemSections used in the nav drawer
-                and the old popup — all status, server IP, and backup/restore
-                functionality is preserved without any duplication. */}
-            <div style={{ paddingBottom: 8 }}>
-              <SidebarSystemSections open={open} />
-            </div>
-          </Card>
-
           {/* ── Sign Out ────────────────────────────────────────────────────── */}
           <Card noPad style={{ marginBottom: 8 }}>
             <button
@@ -582,5 +506,12 @@ export const ProfilePage = memo(function ProfilePage({
         </div>
       </div>
     </div>
+
+    {/* ── Settings overlay — slides in from the right over this page ── */}
+    <ProfileSettingsPage
+      open={settingsOpen}
+      onClose={() => setSettingsOpen(false)}
+    />
+  </>
   );
 });
