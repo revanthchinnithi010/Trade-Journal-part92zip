@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard, LineChart, BarChart2, Calendar as CalendarIcon,
-  BookOpen, Settings, Menu, X, Zap, Search, Bell, ChevronDown,
+  BookOpen, Settings, Menu, X, Search, Bell, ChevronDown,
   TrendingUp, Link2, BellRing, Bitcoin, Globe, Crosshair,
   Layers, ShieldCheck, CandlestickChart, WifiOff, Loader2,
   Sun, Moon, FlaskConical, ArrowLeft,
@@ -25,6 +25,7 @@ import { SidebarSystemSections } from "./SidebarSystemSections";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useChartStore } from "@/store/chartStore";
 import { useCurrencyStore, CURRENCY_META } from "@/store/currencyStore";
+import { AreaLabLogo } from "./AreaLabLogo";
 
 const NAV_SECTIONS = [
   {
@@ -229,20 +230,10 @@ const NavigationDrawer = memo(function NavigationDrawer({
           className="flex h-[70px] shrink-0 items-center px-4 gap-3"
           style={{ borderBottom: "1px solid var(--surface-sidebar-logo-border)" }}
         >
-          <div
-            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-            style={{
-              background: "linear-gradient(135deg, rgba(255,255,255,0.10) 0%, rgba(5,7,10,0.88) 100%)",
-              boxShadow:  "0 4px 18px rgba(0,0,0,0.40), 0 1px 0 rgba(255,255,255,0.06) inset",
-              border:     "1px solid rgba(255,255,255,0.10)",
-            }}
-          >
-            <Zap className="w-[18px] h-[18px] text-foreground/80" fill="currentColor" />
-          </div>
           <div className="flex-1 min-w-0">
-            <p className="text-[15px] font-bold tracking-tight text-foreground leading-none">TradeVault</p>
+            <AreaLabLogo height={26} />
             <p
-              className="signature-shimmer text-[13px] leading-none mt-[5px] truncate"
+              className="signature-shimmer text-[13px] leading-none mt-[6px] truncate"
               style={{ color: "rgba(148,163,184,0.72)" }}
             >
               {profile.name}
@@ -446,12 +437,6 @@ export const Layout = memo(function Layout({
 
   const closeNotif = useCallback(() => setNotifOpen(false), []);
 
-  const currentPageLabel =
-    pathname === "/portfolio"    ? "Portfolio"          :
-    pathname === "/pnl"          ? "Net PNL Analytics"  :
-    pathname === "/net-pnl"      ? "Net PNL Analytics"  :
-    NAV_SECTIONS.flatMap(s => s.items).find(item => item.href === pathname)?.label || "TradeVault";
-
   const { theme, toggleTheme } = useTheme();
   const { currency, setCurrency, fetchRate } = useCurrencyStore();
 
@@ -510,14 +495,28 @@ export const Layout = memo(function Layout({
           <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
+              position:             "relative",
               background:           "var(--surface-header)",
               backdropFilter:       "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
               borderBottom:         "1px solid var(--surface-header-border)",
             }}
           >
-            {/* Left: hamburger (or back-arrow on detail pages) + page name */}
-            <div className="flex items-center gap-3 shrink-0">
+            {/* Center: Area.lab wordmark — absolutely centered on the header so it
+                stays perfectly centered no matter how wide the left (menu/back)
+                or right (currency/bell/profile) groups are. Imported directly
+                from the official SVG asset (never redrawn/rasterized) so the
+                purple→pink "area" gradient, white ".lab", and transparency are
+                preserved exactly, at full vector crispness on any DPI. */}
+            <div
+              className="absolute left-1/2 top-1/2 flex items-center justify-center pointer-events-none"
+              style={{ transform: "translate(-50%, -50%)" }}
+            >
+              <AreaLabLogo height={isMobile ? 32 : 40} />
+            </div>
+
+            {/* Left: hamburger (or back-arrow on detail pages) */}
+            <div className="flex items-center gap-3 shrink-0 z-10">
               {(pathname === "/portfolio" || pathname === "/pnl" || pathname === "/net-pnl") ? (
                 <button
                   onClick={() => navigate("/")}
@@ -566,20 +565,20 @@ export const Layout = memo(function Layout({
                   <Menu className="w-[17px] h-[17px]" />
                 </button>
               )}
-              <h1 className="text-[15px] font-semibold text-foreground tracking-tight">
-                {currentPageLabel}
-              </h1>
             </div>
 
-            {/* Center: Search — desktop only */}
-            {!isMobile && (
-              <div className="flex-1 flex items-center justify-center px-4 max-w-sm mx-auto">
-                <div className="relative w-full">
+            {/* Right: Search (desktop only) + Theme Toggle (desktop only) + Currency + Bell + Profile.
+                Search used to occupy the header's center column, but that column now
+                belongs exclusively to the centered Area.lab logo, so it moved here as
+                a compact field. */}
+            <div className="flex items-center gap-2 shrink-0 z-10">
+              {!isMobile && (
+                <div className="relative hidden lg:block w-40 xl:w-48">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
                   <input
                     type="text"
                     placeholder="Search trades, symbols..."
-                    className="w-full h-9 pl-9 pr-4 rounded-xl text-xs transition-all text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
+                    className="w-full h-9 pl-9 pr-3 rounded-xl text-xs transition-all text-foreground placeholder:text-muted-foreground/50 focus:outline-none"
                     style={{
                       background: "var(--surface-input-bg)",
                       border:     "1px solid var(--surface-input-border)",
@@ -589,11 +588,7 @@ export const Layout = memo(function Layout({
                     onBlur={e  => { e.currentTarget.style.border = "1px solid var(--surface-input-border)"; }}
                   />
                 </div>
-              </div>
-            )}
-
-            {/* Right: Theme Toggle (desktop only) + Bell + Profile */}
-            <div className="flex items-center gap-2 shrink-0">
+              )}
 
               {/* Theme Toggle — hidden on mobile (use Profile → Appearance instead) */}
               {!isMobile && (
