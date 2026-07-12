@@ -563,25 +563,25 @@ function AddAlertPillButton({ label, onClick }: { label: string; onClick: () => 
   );
 }
 
-// ─── Shared modal wrapper (motion.dev, responsive) ─────────────────────────────
+// Renders children on the SECOND animation frame so the modal shell paints first.
+function DeferredContent({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+  return ready ? <>{children}</> : null;
+}
+
+// ─── Shared modal wrapper ───────────────────────────────────────────────────────
 function ModalWrapper({ title, icon, onClose, children }: {
   title: string; icon: React.ReactNode; onClose: () => void; children: React.ReactNode;
 }) {
-  useEffect(() => {
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    document.body.classList.add("tj-modal-open");
-    return () => {
-      document.body.style.overflow = prev;
-      document.body.classList.remove("tj-modal-open");
-    };
-  }, []);
-
   const modal = (
     <>
-      {/* Backdrop — CSS fade, compositor thread */}
+      {/* Backdrop — NO animation. Instant black overlay so the GPU only
+          composites a flat colour layer, not an animating opacity over blurs. */}
       <div
-        className="alert-modal-backdrop"
         onClick={onClose}
         style={{ position: "fixed", inset: 0, zIndex: 9998, background: "rgba(0,0,0,0.72)" }}
       />
@@ -612,7 +612,7 @@ function ModalWrapper({ title, icon, onClose, children }: {
           </button>
         </div>
         <div style={{ padding: 20, overflowY: "auto", flex: 1, WebkitOverflowScrolling: "touch" } as React.CSSProperties}>
-          {children}
+          <DeferredContent>{children}</DeferredContent>
         </div>
         <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 12px)", flexShrink: 0 }} />
       </div>
@@ -643,7 +643,7 @@ function ModalWrapper({ title, icon, onClose, children }: {
             </button>
           </div>
           <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
-            {children}
+            <DeferredContent>{children}</DeferredContent>
           </div>
         </div>
       </div>
@@ -1083,25 +1083,36 @@ const AlertModalController = forwardRef<AlertModalControllerHandle, {
   const [createModal, setCreateModal] = useState<CreateModal | null>(null);
 
   useImperativeHandle(ref, () => ({
-    open: (type) => setCreateModal(type),
+    open: (type) => {
+      // Synchronous DOM mutations BEFORE React schedules the render.
+      // Disables all glass-card backdrop-filters on the alerts page so the
+      // GPU isn't compositing 17+ blur layers during the first animation frames.
+      document.body.style.overflow = "hidden";
+      document.body.classList.add("tj-modal-open");
+      setCreateModal(type);
+    },
   }), []);
 
-  const handleClose = useCallback(() => setCreateModal(null), []);
+  const handleClose = useCallback(() => {
+    document.body.style.overflow = "";
+    document.body.classList.remove("tj-modal-open");
+    setCreateModal(null);
+  }, []);
 
   const handleSavePrice = useCallback((a: PriceAlert) => {
-    setCreateModal(null);
+    handleClose();
     onSavePriceAlert(a);
-  }, [onSavePriceAlert]);
+  }, [handleClose, onSavePriceAlert]);
 
   const handleSaveZone = useCallback((a: ZoneAlert) => {
-    setCreateModal(null);
+    handleClose();
     onSaveZoneAlert(a);
-  }, [onSaveZoneAlert]);
+  }, [handleClose, onSaveZoneAlert]);
 
   const handleSaveTrendline = useCallback((a: TrendlineAlert) => {
-    setCreateModal(null);
+    handleClose();
     onSaveTrendlineAlert(a);
-  }, [onSaveTrendlineAlert]);
+  }, [handleClose, onSaveTrendlineAlert]);
 
   return (
     <>

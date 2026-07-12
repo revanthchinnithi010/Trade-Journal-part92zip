@@ -431,6 +431,10 @@ body.tj-modal-open .glass-card-elevated {
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
+/* Pause all pulse animations while a modal is open — frees compositor budget */
+body.tj-modal-open .animate-pulse {
+  animation-play-state: paused !important;
+}
 
 /* ── Alert modal CSS animations — compositor-thread, zero JS overhead ── */
 @keyframes _modalBdIn  { from { opacity: 0 } to { opacity: 1 } }
