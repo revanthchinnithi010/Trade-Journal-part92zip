@@ -28,7 +28,6 @@ import {
   AnimatedListItem,
   AnimatedButton,
   AnimatedIconButton,
-  AnimatedModal,
   NumberCounter,
 } from "@/components/animations";
 
@@ -263,12 +262,8 @@ const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onS
   };
 
   return (
-    <AnimatedModal open={true} onClose={onClose} title="Create Price Alert">
+    <ModalWrapper onClose={onClose} title="Create Price Alert" icon={<Target className="w-4 h-4 text-blue-400" />}>
       <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <Target className="w-4 h-4 text-blue-400" />
-          <h3 className="text-sm font-semibold text-white">Create Price Alert</h3>
-        </div>
         <FieldRow label="Symbol">
           <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
         </FieldRow>
@@ -307,7 +302,7 @@ const CreatePriceAlertModal = memo(function CreatePriceAlertModal({ onClose, onS
           <AnimatedButton className="flex-1 h-9 bg-primary hover:bg-primary/90 text-white text-xs font-semibold" onClick={handleSave}>Create Alert</AnimatedButton>
         </div>
       </div>
-    </AnimatedModal>
+    </ModalWrapper>
   );
 });
 
@@ -338,12 +333,8 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
   ] as const;
 
   return (
-    <AnimatedModal open={true} onClose={onClose} title="Create Zone Alert">
+    <ModalWrapper onClose={onClose} title="Create Zone Alert" icon={<Layers className="w-4 h-4 text-orange-400" />}>
       <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <Layers className="w-4 h-4 text-orange-400" />
-          <h3 className="text-sm font-semibold text-white">Create Zone Alert</h3>
-        </div>
         <div className="grid grid-cols-2 gap-3">
           <FieldRow label="Symbol">
             <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
@@ -401,10 +392,10 @@ const CreateZoneAlertModal = memo(function CreateZoneAlertModal({ onClose, onSav
         </FieldRow>
         <div className="flex gap-2 pt-1">
           <AnimatedButton variant="ghost" className="flex-1 h-9 text-muted-foreground hover:text-white" onClick={onClose}>Cancel</AnimatedButton>
-          <AnimatedButton className="flex-1 h-9 bg-orange-500 hover:bg-orange-500/90 text-white text-xs font-semibold" onClick={handleSave}>Create Zone</AnimatedButton>
+          <AnimatedButton className="flex-1 h-9 bg-primary hover:bg-primary/90 text-white text-xs font-semibold" onClick={handleSave}>Create Zone</AnimatedButton>
         </div>
       </div>
-    </AnimatedModal>
+    </ModalWrapper>
   );
 });
 
@@ -437,12 +428,8 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
     : null;
 
   return (
-    <AnimatedModal open={true} onClose={onClose} title="Create Trendline Alert">
+    <ModalWrapper onClose={onClose} title="Create Trendline Alert" icon={<GitBranch className="w-4 h-4 text-primary" />}>
       <div className="space-y-4">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <GitBranch className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-semibold text-white">Create Trendline Alert</h3>
-        </div>
         <div className="grid grid-cols-2 gap-3">
           <FieldRow label="Symbol">
             <Select value={form.symbol} onChange={v => setForm(f => ({ ...f, symbol: v }))} options={SYMBOLS} />
@@ -541,17 +528,47 @@ const CreateTrendlineAlertModal = memo(function CreateTrendlineAlertModal({ onCl
           </AnimatedButton>
         </div>
       </div>
-    </AnimatedModal>
+    </ModalWrapper>
   );
 });
 
-// ─── Shared modal helpers ──────────────────────────────────────────────────────
+// ─── Unified Add Alert pill button ────────────────────────────────────────────
+function AddAlertPillButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={onClick}
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 7,
+        height: 44,
+        paddingLeft: 20,
+        paddingRight: 20,
+        borderRadius: 9999,
+        background: "#FFFFFF",
+        color: "#111111",
+        fontSize: 13,
+        fontWeight: 600,
+        border: "none",
+        cursor: "pointer",
+        willChange: "transform",
+        WebkitTapHighlightColor: "transparent",
+        flexShrink: 0,
+      } as React.CSSProperties}
+    >
+      <Plus style={{ width: 15, height: 15, strokeWidth: 2.5 }} />
+      {label}
+    </motion.button>
+  );
+}
+
+// ─── Shared modal wrapper (motion.dev, responsive) ─────────────────────────────
 function ModalWrapper({ title, icon, onClose, children }: {
   title: string; icon: React.ReactNode; onClose: () => void; children: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
 
-  // Lock scroll + disable glass-card backdrop-filter (prevents GPU thrash)
   useEffect(() => {
     document.body.style.overflow = "hidden";
     document.body.classList.add("tj-modal-open");
@@ -561,29 +578,33 @@ function ModalWrapper({ title, icon, onClose, children }: {
     };
   }, []);
 
-  // Rendered via portal into document.body so it is OUTSIDE the Alerts
-  // component tree — live tick re-renders never touch the modal DOM.
   const modal = (
-    /* Plain div overlay — no blur, no framer on the scrim itself */
-    <div
-      style={{
-        position: "fixed", inset: 0, zIndex: 9999,
-        background: "rgba(0,0,0,0.72)",
-        display: "flex",
-        alignItems: isMobile ? "flex-end" : "center",
-        justifyContent: "center",
-      }}
-      onClick={onClose}
-    >
+    <>
+      {/* Backdrop — fade in */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, zIndex: 9998,
+          background: "rgba(0,0,0,0.72)",
+          willChange: "opacity",
+        }}
+      />
+
       {isMobile ? (
-        /* ── Mobile: bottom sheet ── */
-        <div
-          className="alert-sheet-in"
+        /* ── Mobile: bottom sheet (slide up + fade) ── */
+        <motion.div
+          initial={{ y: 48, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onClick={e => e.stopPropagation()}
           style={{
-            width: "100%",
+            position: "fixed", bottom: 0, left: 0, right: 0,
+            zIndex: 9999,
             maxHeight: "90dvh",
-            display: "flex",
-            flexDirection: "column",
+            display: "flex", flexDirection: "column",
             background: "hsl(var(--popover))",
             borderTop:   "1px solid rgba(255,255,255,0.12)",
             borderLeft:  "1px solid rgba(255,255,255,0.07)",
@@ -591,8 +612,8 @@ function ModalWrapper({ title, icon, onClose, children }: {
             borderTopLeftRadius:  24,
             borderTopRightRadius: 24,
             boxShadow: "0 -8px 48px rgba(0,0,0,0.65)",
+            willChange: "transform, opacity",
           }}
-          onClick={e => e.stopPropagation()}
         >
           {/* Drag handle */}
           <div style={{ display: "flex", justifyContent: "center", paddingTop: 12, paddingBottom: 4, flexShrink: 0 }}>
@@ -602,10 +623,7 @@ function ModalWrapper({ title, icon, onClose, children }: {
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
             {icon}
             <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>{title}</h2>
-            <button
-              onClick={onClose}
-              style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}
-            >
+            <button onClick={onClose} style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}>
               <X style={{ width: 14, height: 14 }} />
             </button>
           </div>
@@ -615,43 +633,51 @@ function ModalWrapper({ title, icon, onClose, children }: {
           </div>
           {/* Safe-area bottom */}
           <div style={{ height: "max(env(safe-area-inset-bottom, 0px), 12px)", flexShrink: 0 }} />
-        </div>
+        </motion.div>
       ) : (
-        /* ── Desktop: scrollable centered dialog ── */
+        /* ── Desktop: centered dialog (scale + fade) ── */
         <div
-          className="alert-dialog-in"
+          onClick={onClose}
           style={{
-            width: "calc(100% - 32px)",
-            maxWidth: 480,
-            maxHeight: "90vh",
-            display: "flex",
-            flexDirection: "column",
-            borderRadius: 20,
-            background: "hsl(var(--popover))",
-            border: "1px solid rgba(255,255,255,0.10)",
-            borderTopColor: "rgba(255,255,255,0.18)",
-            boxShadow: "0 24px 64px rgba(7,17,13,0.75), 0 0 0 1px rgba(255,255,255,0.04)",
+            position: "fixed", inset: 0, zIndex: 9999,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            padding: 16,
           }}
-          onClick={e => e.stopPropagation()}
         >
-          {/* Header */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
-            {icon}
-            <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>{title}</h2>
-            <button
-              onClick={onClose}
-              style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}
-            >
-              <X style={{ width: 14, height: 14 }} />
-            </button>
-          </div>
-          {/* Scrollable body */}
-          <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
-            {children}
-          </div>
+          <motion.div
+            initial={{ scale: 0.96, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            onClick={e => e.stopPropagation()}
+            style={{
+              width: "100%",
+              maxWidth: 520,
+              maxHeight: "90vh",
+              display: "flex", flexDirection: "column",
+              borderRadius: 20,
+              background: "hsl(var(--popover))",
+              border: "1px solid rgba(255,255,255,0.10)",
+              borderTopColor: "rgba(255,255,255,0.18)",
+              boxShadow: "0 24px 64px rgba(7,17,13,0.75), 0 0 0 1px rgba(255,255,255,0.04)",
+              willChange: "transform, opacity",
+            }}
+          >
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+              {icon}
+              <h2 style={{ fontSize: 14, fontWeight: 600, color: "#fff", margin: 0 }}>{title}</h2>
+              <button onClick={onClose} style={{ marginLeft: "auto", width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", borderRadius: 8, background: "transparent", border: "none", cursor: "pointer", color: "rgba(148,163,184,0.8)" }}>
+                <X style={{ width: 14, height: 14 }} />
+              </button>
+            </div>
+            {/* Scrollable body */}
+            <div style={{ padding: 20, overflowY: "auto", flex: 1 }}>
+              {children}
+            </div>
+          </motion.div>
         </div>
       )}
-    </div>
+    </>
   );
 
   return createPortal(modal, document.body);
@@ -1203,17 +1229,10 @@ export default function Alerts() {
             )}
           </AnimatedIconButton>
           {createBtnLabel && (
-            <AnimatedButton
+            <AddAlertPillButton
+              label={createBtnLabel}
               onClick={() => setCreateModal(tab as "price" | "zone" | "trendline")}
-              className={
-                isMobile && (tab === "trendline" || tab === "zone")
-                  ? "h-9 bg-white hover:bg-white/90 text-black border-2 border-white text-xs font-semibold gap-2"
-                  : "h-9 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/25 text-xs font-semibold gap-2"
-              }
-            >
-              <Plus className="w-3.5 h-3.5" />
-              New {createBtnLabel}
-            </AnimatedButton>
+            />
           )}
         </div>
       </div>
@@ -1278,11 +1297,9 @@ export default function Alerts() {
               <motion.div key="price" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {priceAlerts.map(a => <PriceAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  <button onClick={() => setCreateModal("price")}
-                    className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
-                    <Plus className="w-5 h-5" />
-                    <span className="text-xs font-medium">Add Price Alert</span>
-                  </button>
+                  <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
+                    <AddAlertPillButton label="Price Alert" onClick={() => setCreateModal("price")} />
+                  </div>
                 </AnimatedPresenceList>
               </motion.div>
             )}
@@ -1292,11 +1309,9 @@ export default function Alerts() {
               <motion.div key="zone" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {zoneAlerts.map(a => <ZoneAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  <button onClick={() => setCreateModal("zone")}
-                    className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
-                    <Plus className="w-5 h-5" />
-                    <span className="text-xs font-medium">Add Zone Alert</span>
-                  </button>
+                  <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
+                    <AddAlertPillButton label="Zone Alert" onClick={() => setCreateModal("zone")} />
+                  </div>
                 </AnimatedPresenceList>
               </motion.div>
             )}
@@ -1306,11 +1321,9 @@ export default function Alerts() {
               <motion.div key="trendline" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }}>
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {trendlineAlerts.map(a => <TrendlineAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
-                  <button onClick={() => setCreateModal("trendline")}
-                    className="rounded-xl border border-dashed border-white/[0.1] p-4 flex flex-col items-center justify-center gap-2 text-muted-foreground/50 hover:text-white/60 hover:border-white/[0.2] transition-all min-h-[120px]">
-                    <Plus className="w-5 h-5" />
-                    <span className="text-xs font-medium">Add Trendline Alert</span>
-                  </button>
+                  <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
+                    <AddAlertPillButton label="Trendline Alert" onClick={() => setCreateModal("trendline")} />
+                  </div>
                 </AnimatedPresenceList>
               </motion.div>
             )}
