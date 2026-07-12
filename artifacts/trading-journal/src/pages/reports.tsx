@@ -18,6 +18,7 @@ import {
 import { useMemo } from "react";
 import { PROVIDER_MAP } from "@/data/sampleData";
 import { PageTransition, AnimatedCard, AnimatedList, AnimatedListItem } from "@/components/animations";
+import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 
 const GREEN  = "hsl(145 58% 52%)";
 const RED    = "hsl(0 68% 58%)";
@@ -246,6 +247,12 @@ export default function Reports() {
 
   return (
     <PageTransition className="space-y-5 pb-12" fill={false}>
+
+      {/* ── Segmented control — Dashboard / Reports ──
+          Same shared control as the Dashboard page, so it's visible no
+          matter which of the two pages the user lands on; its selection
+          reflects the current route automatically. */}
+      <DashboardSegmentedControl />
 
       {/* ── Page header ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between flex-wrap gap-2">

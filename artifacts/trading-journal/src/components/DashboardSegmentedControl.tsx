@@ -70,13 +70,24 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
             onClick={() => {
               if (tab.href !== pathname) navigate(tab.href);
             }}
-            className="relative z-10 flex items-center justify-center text-[14px] transition-colors duration-150"
-            style={{
-              fontWeight: selected ? 600 : 500,
-              color:      selected ? "#FFFFFF" : "#B5B5B5",
-            }}
+            className="relative z-10 flex items-center justify-center text-[14px]"
           >
-            {tab.label}
+            {/* Label animates color + a tiny scale pop on the switch itself
+                (not just a passive CSS color fade), so the tab you land on
+                visibly "arrives" in sync with the pill sliding under it.
+                fontWeight stays fixed at 600 always — animating it would
+                reflow text width every frame and fight the GPU-only pill. */}
+            <motion.span
+              initial={false}
+              animate={{
+                color: selected ? "#FFFFFF" : "#B5B5B5",
+                scale: selected ? 1 : 0.97,
+              }}
+              transition={PILL_TRANSITION}
+              style={{ fontWeight: 600, display: "inline-block" }}
+            >
+              {tab.label}
+            </motion.span>
           </button>
         );
       })}
