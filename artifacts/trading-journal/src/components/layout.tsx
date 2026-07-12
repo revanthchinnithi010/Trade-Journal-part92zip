@@ -745,17 +745,26 @@ export const Layout = memo(function Layout({
               tree the instant you navigated back to Dashboard — before it
               ever got to run the outgoing page's exit animation — which is
               why the Reports → Dashboard transition appeared to have no
-              animation at all. It sits after chartsNode/dashboardNode in
-              DOM order, so it still paints on top of them while a page is
+              animation at all. It sits after chartsNode/dashboardNode/reportsNode
+              in DOM order, so it still paints on top of them while a page is
               genuinely present (entering/exiting), and is visually a no-op
-              once AnimatePresence unmounts its child. */}
+              once AnimatePresence unmounts its child.
+
+              pointerEvents must be "none" for every keep-alive route (/, /charts,
+              /reports) — this div is unconditionally mounted and empty on those
+              routes, but still sits on top in DOM order. Leaving pointerEvents
+              "auto" there makes it an invisible full-viewport overlay that
+              swallows every click/scroll aimed at the keep-alive content
+              underneath — this is exactly what caused Reports to look "stuck"
+              (unscrollable, unclickable) after it was converted to a keep-alive
+              route without updating this list. */}
           <div style={{
             position:      "absolute",
             inset:         0,
             display:       "flex",
             flexDirection: "column",
             overflow:      "hidden",
-            pointerEvents: (pathname === "/" || pathname === "/charts") ? "none" : "auto",
+            pointerEvents: (pathname === "/" || pathname === "/charts" || pathname === "/reports") ? "none" : "auto",
           }}>
             {children}
           </div>
