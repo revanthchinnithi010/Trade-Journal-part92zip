@@ -174,13 +174,12 @@ export function NotificationPanel({ open, onClose }: Props) {
   const y         = useMotionValue(CLOSED_Y);
   const yVelocity = useVelocity(y);
 
-  /* ── derived MotionValue chains (zero React renders on change) ── */
+  /* ── backdrop dark-tint opacity — MotionValue chain, NO blur on this layer ── */
   const backdropOpacity = useTransform(
     y,
     [CLOSED_Y, HALF_Y, FULL_Y],
     [0,       0.55,    0.72],
   );
-  const borderRadius = useTransform(y, [0, windowH * 0.06], [0, 28]);
 
   /* ── snap state — React state only for scroll-mode toggling ── */
   const [snap, setSnap]   = useState<SheetSnap>("closed");
@@ -353,17 +352,30 @@ export function NotificationPanel({ open, onClose }: Props) {
   ── */
   return createPortal(
     <>
-      {/* ── Backdrop ── */}
-      <motion.div
-        className="fixed inset-0"
+      {/* ── Backdrop layer 1: static blur — CSS transition only, never RAF ── */}
+      <div
         style={{
+          position:             "fixed",
+          inset:                0,
           zIndex:               55,
-          background:           "rgba(0,0,0,0.6)",
           backdropFilter:       "blur(12px)",
           WebkitBackdropFilter: "blur(12px)",
-          opacity:              backdropOpacity,
-          pointerEvents:        isOpen ? "auto" : "none",
-          willChange:           "opacity",
+          opacity:              isOpen ? 1 : 0,
+          transition:           "opacity 0.18s ease",
+          pointerEvents:        "none",   // clicks fall through to layer 2
+        }}
+      />
+
+      {/* ── Backdrop layer 2: dark tint — RAF-driven opacity, zero blur cost ── */}
+      <motion.div
+        style={{
+          position:      "fixed",
+          inset:         0,
+          zIndex:        55,
+          background:    "rgba(0,0,0,0.55)",
+          opacity:       backdropOpacity,
+          pointerEvents: isOpen ? "auto" : "none",
+          willChange:    "opacity",
         }}
         onClick={() => { if (isOpen) closeSheet(); }}
       />
@@ -379,8 +391,12 @@ export function NotificationPanel({ open, onClose }: Props) {
           top:                  0,
           height:               "100dvh",
           y,
-          borderTopLeftRadius:  borderRadius,
-          borderTopRightRadius: borderRadius,
+          /* Static radius — never changes during animation.
+             When fully expanded the rounded corners sit above the viewport
+             so they're invisible anyway. Animating border-radius costs a
+             CSS repaint every RAF tick — that's the primary lag source. */
+          borderTopLeftRadius:  28,
+          borderTopRightRadius: 28,
           zIndex:               56,
           background:           "#121316",
           borderTop:            "1px solid rgba(255,255,255,0.07)",
