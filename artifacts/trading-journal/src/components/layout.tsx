@@ -18,6 +18,7 @@ import { useLiveMarketContext } from "@/contexts/LiveMarketContext";
 import { useNotifications } from "@/contexts/NotificationsContext";
 import { NotificationPanel } from "./NotificationPanel";
 import { ProfileDropdown, useProfile, getInitials, type ProfileData } from "./ProfileMenu";
+import { ProfilePage } from "./ProfilePage";
 import { ChartFocusContext } from "@/contexts/ChartFocusContext";
 import { MobileBottomNav } from "./MobileBottomNav";
 import { SidebarSystemSections } from "./SidebarSystemSections";
@@ -393,10 +394,11 @@ export const Layout = memo(function Layout({
   const [location, navigate] = useLocation();
   // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
   const pathname      = location.split("?")[0];
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notifOpen,   setNotifOpen]   = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [bellShake,   setBellShake]   = useState(false);
+  const [sidebarOpen,     setSidebarOpen]     = useState(false);
+  const [notifOpen,       setNotifOpen]       = useState(false);
+  const [profileOpen,     setProfileOpen]     = useState(false);
+  const [profilePageOpen, setProfilePageOpen] = useState(false);
+  const [bellShake,       setBellShake]       = useState(false);
 
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -418,10 +420,8 @@ export const Layout = memo(function Layout({
   const { unreadCount } = useNotifications();
   const { profile, update: updateProfile } = useProfile();
 
-  const bellBtnRef         = useRef<HTMLButtonElement>(null);
-  const profileBtnRef      = useRef<HTMLDivElement>(null);
-  /** Circular avatar on the top-left — mobile only. */
-  const mobileProfileBtnRef = useRef<HTMLDivElement>(null);
+  const bellBtnRef    = useRef<HTMLButtonElement>(null);
+  const profileBtnRef = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef(0);
 
   useEffect(() => {
@@ -480,6 +480,17 @@ export const Layout = memo(function Layout({
         profile={profile}
       />
 
+      {/* ── Profile Page — mobile full-screen overlay. position:fixed z-index:200
+          covers the entire viewport (header + content) with solid #0B0B0B so the
+          dashboard never bleeds through. GPU compositor CSS transition only —
+          same pattern as NavigationDrawer. Desktop leaves this always-hidden. ── */}
+      <ProfilePage
+        open={profilePageOpen}
+        onClose={() => setProfilePageOpen(false)}
+        profile={profile}
+        onUpdate={updateProfile}
+      />
+
       {/* ── Main Content — always full width ── */}
       <main className="absolute inset-0 flex flex-col overflow-hidden">
         <ReconnectBanner />
@@ -519,27 +530,23 @@ export const Layout = memo(function Layout({
                   <ArrowLeft className="w-[17px] h-[17px]" />
                 </button>
               ) : isMobile ? (
-                /* ── Mobile: circular profile avatar (top-left) ── */
+                /* ── Mobile: circular profile avatar → opens full-screen ProfilePage ── */
                 <div
-                  ref={mobileProfileBtnRef}
-                  onClick={toggleProfile}
+                  onClick={() => { setProfilePageOpen(true); setNotifOpen(false); }}
                   className="shrink-0 cursor-pointer select-none"
                   style={{
-                    width:        46,
-                    height:       46,
-                    borderRadius: "50%",
-                    overflow:     "hidden",
-                    display:      "flex",
-                    alignItems:   "center",
+                    width:          46,
+                    height:         46,
+                    borderRadius:   "50%",
+                    overflow:       "hidden",
+                    display:        "flex",
+                    alignItems:     "center",
                     justifyContent: "center",
-                    background:   "var(--surface-avatar-bg)",
-                    border:       profileOpen
+                    background:     "var(--surface-avatar-bg)",
+                    border:         profilePageOpen
                       ? "1.5px solid var(--surface-btn-active-border)"
                       : "1.5px solid var(--surface-btn-border)",
-                    boxShadow:    profileOpen
-                      ? "0 0 0 3px rgba(165,180,252,0.15)"
-                      : "none",
-                    transition:   "border-color 150ms, box-shadow 150ms",
+                    transition:     "border-color 150ms",
                   }}
                 >
                   {profile.avatarDataUrl
@@ -696,19 +703,16 @@ export const Layout = memo(function Layout({
               )}
             </div>
 
-            {/* ProfileDropdown — portaled to body; anchor switches between
-                left mobile avatar and right desktop button depending on
-                viewport. Side prop controls transform origin + positioning. */}
-            <ProfileDropdown
-              open={profileOpen}
-              profile={profile}
-              onUpdate={updateProfile}
-              onClose={() => setProfileOpen(false)}
-              anchorRef={
-                (isMobile ? mobileProfileBtnRef : profileBtnRef) as React.RefObject<HTMLElement | null>
-              }
-              side={isMobile ? "left" : "right"}
-            />
+            {/* ProfileDropdown — desktop only; mobile uses full-screen ProfilePage */}
+            {!isMobile && (
+              <ProfileDropdown
+                open={profileOpen}
+                profile={profile}
+                onUpdate={updateProfile}
+                onClose={() => setProfileOpen(false)}
+                anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
+              />
+            )}
           </header>
         )}
 
