@@ -575,7 +575,7 @@ export const Layout = memo(function Layout({
                     color:         "rgba(255,255,255,0.45)",
                   }}
                 >
-                  by Revanth
+                  by Revanth chinnithi
                 </span>
               </div>
             </div>
