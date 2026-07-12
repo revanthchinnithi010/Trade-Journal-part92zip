@@ -23,6 +23,7 @@
 import React, {
   useRef, useEffect, useState, useCallback, memo,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   User, Settings, Palette, Download, LogOut,
   X, Camera, Eye, EyeOff, ChevronRight, ChevronLeft,
@@ -217,11 +218,40 @@ interface DropdownProps {
 }
 
 export const ProfileDropdown = memo(function ProfileDropdown({
-  open, profile, onUpdate, onClose,
+  open, profile, onUpdate, onClose, anchorRef,
 }: DropdownProps) {
   const [, navigate]      = useLocation();
   const [showModal, setShowModal] = useState(false);
   const [panel, setPanel] = useState<"menu" | "appearance">("menu");
+
+  /* ── portal anchor coordinates ──────────────────────────────────────────
+     The header this button lives in has `backdrop-filter: blur(...)`, which
+     per spec makes the header the *containing block* for any `position:
+     fixed` descendant — so a naive `position:fixed` backdrop rendered in
+     place would be clipped to the header's own box (a 60px strip) instead
+     of covering the viewport, and clicks anywhere below the header would
+     never reach it. Portaling backdrop + panel to document.body escapes
+     that containing block entirely; we compute the panel's on-screen
+     position from the anchor button's rect since it can no longer rely on
+     `position:absolute` relative to a wrapper inside the header. */
+  const [anchorRect, setAnchorRect] = useState<{ top: number; right: number } | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const measure = () => {
+      const el = anchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setAnchorRect({ top: r.bottom + 10, right: window.innerWidth - r.right });
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+    };
+  }, [open, anchorRef]);
 
   /* Reset panel to "menu" after the close animation finishes (120 ms).
      Doing it on open would schedule a React setState during the opening
@@ -285,7 +315,12 @@ export const ProfileDropdown = memo(function ProfileDropdown({
     ? "scale(1) translateY(0px)"
     : "scale(0.96) translateY(-10px)";
 
-  return (
+  /* Both the backdrop and the panel are portaled to document.body together
+     so they share one stacking context — see anchorRect comment above for
+     why. Rendering them separately (backdrop portaled, panel left inside
+     the header) would let the backdrop's z-index paint over the header's
+     entire stacking context, including the panel itself. */
+  const overlay = (
     <>
       {/*
         ╔═══════════════════════════════════════════════════════════════════╗
@@ -318,16 +353,21 @@ export const ProfileDropdown = memo(function ProfileDropdown({
 
       {/*
         ╔═══════════════════════════════════════════════════════════════════╗
-        ║ MENU CONTAINER — absolute, always mounted.                       ║
+        ║ MENU CONTAINER — fixed, positioned from the anchor button's      ║
+        ║ live rect (see anchorRect above). Always mounted so its own      ║
+        ║ CSS opacity/transform transition can run on close.               ║
         ║ contain: layout style → changes inside can't cause page reflow.  ║
         ╚═══════════════════════════════════════════════════════════════════╝
       */}
       <div
-        className="absolute top-[calc(100%+10px)] right-0 w-[276px]"
+        className="fixed w-[276px]"
         style={{
+          top:           anchorRect?.top ?? -9999,
+          right:         anchorRect?.right ?? -9999,
           zIndex:        50,
           pointerEvents: open ? "auto" : "none",
           contain:       "layout style",
+          visibility:    anchorRect ? "visible" : "hidden",
         }}
       >
         {/*
@@ -441,6 +481,12 @@ export const ProfileDropdown = memo(function ProfileDropdown({
           </div>
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <>
+      {createPortal(overlay, document.body)}
 
       {/* Profile edit modal */}
       <AnimatedModal
