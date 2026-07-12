@@ -87,7 +87,7 @@ function Card({
   return (
     <div
       style={{
-        background:   "rgba(255,255,255,0.03)",
+        background:   "#121212",
         border:       "1px solid rgba(255,255,255,0.07)",
         borderRadius: 20,
         overflow:     "hidden",
@@ -225,7 +225,7 @@ export const ProfilePage = memo(function ProfilePage({
         zIndex:                   200,
 
         /* ── solid background — dashboard never bleeds through ── */
-        background:               "#0B0B0B",
+        background:               "#000000",
 
         /* ── GPU compositor transition: transform only ── */
         transform:                visible ? "translateX(0)" : "translateX(-100%)",
@@ -259,7 +259,7 @@ export const ProfilePage = memo(function ProfilePage({
           alignItems:    "center",
           justifyContent:"space-between",
           padding:       "0 12px",
-          background:    "#0B0B0B",
+          background:    "#000000",
           borderBottom:  "1px solid rgba(255,255,255,0.06)",
         }}
       >
@@ -357,7 +357,7 @@ export const ProfilePage = memo(function ProfilePage({
                 position:  "absolute", bottom: 2, right: 2,
                 width:     28, height: 28, borderRadius: "50%",
                 background: "rgba(165,180,252,0.88)",
-                border:     "2px solid #0B0B0B",
+                border:     "2px solid #000000",
                 display:    "flex", alignItems: "center", justifyContent: "center",
               }}>
                 <Camera style={{ width: 13, height: 13, color: "#1e1b4b" }} />
@@ -407,7 +407,7 @@ export const ProfilePage = memo(function ProfilePage({
                   placeholder="Your name"
                   style={{
                     width: "100%", boxSizing: "border-box",
-                    background: "rgba(255,255,255,0.05)",
+                    background: "#1A1A1A",
                     border: "1px solid rgba(255,255,255,0.09)",
                     borderRadius: 12, padding: "10px 14px",
                     fontSize: 14, color: "rgba(255,255,255,0.88)",
@@ -426,7 +426,7 @@ export const ProfilePage = memo(function ProfilePage({
                   placeholder="your@email.com"
                   style={{
                     width: "100%", boxSizing: "border-box",
-                    background: "rgba(255,255,255,0.05)",
+                    background: "#1A1A1A",
                     border: "1px solid rgba(255,255,255,0.09)",
                     borderRadius: 12, padding: "10px 14px",
                     fontSize: 14, color: "rgba(255,255,255,0.88)",
