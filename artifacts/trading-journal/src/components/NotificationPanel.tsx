@@ -1,35 +1,23 @@
 /**
- * NotificationPanel — native iOS/Android-style bottom sheet.
+ * NotificationPanel — fullscreen modal (no drag, no snap points).
  *
- * Performance contract (half → full must hit 60 fps):
- *   • Only `transform: translateY` is animated on the RAF hot path.
- *   • React state (`snap`) is NEVER updated while an animation is running —
- *     only after it settles. This prevents the main-thread layout
- *     recalculation that the overflow/touchAction flip would otherwise
- *     trigger in the middle of the spring.
- *   • No useVelocity / useTransform subscribers on `y` — all derivative
- *     values are either static or CSS-transition-driven.
- *   • Backdrop blur is a static CSS layer; the dark tint is a plain CSS
- *     transition. No MotionValue drives the backdrop at all.
+ * Performance contract:
+ *   • Only `opacity` + `transform` (translateY/scale) are animated — never
+ *     width/height/top/left/border-radius/box-shadow/backdrop-filter.
+ *   • No drag logic, no MotionValues, no pointermove handlers anywhere.
+ *   • The component stays mounted at all times (parent renders it
+ *     unconditionally); `open` only toggles visibility so re-opening never
+ *     re-triggers mount work or a Dashboard re-render.
+ *   • Sub-rows are memoised so toggling `open` never re-renders the list.
  *
- * Snap states
- *   closed  y = windowH + 20   off-screen
- *   half    y = windowH × 0.55  45 % visible
- *   full    y = 0              100 % visible
- *
- * Transition rules
- *   bell → half
- *   half + drag-up   → full
- *   full + drag-down → half
- *   half + drag-down → closed
- *   X / backdrop / ESC → closed
+ * Opening / closing
+ *   Bell click  → open fullscreen directly (no half-sheet state).
+ *   Close only via: X button, backdrop tap, ESC key, Android back button.
  */
 
-import React, {
-  useRef, useEffect, useState, useCallback, memo,
-} from "react";
+import React, { useEffect, useRef, memo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { motion, useMotionValue, animate } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   TrendingUp, Layers, GitBranch, Wifi, WifiOff, Link2,
   Send, Activity, Info, CheckCheck, Trash2, X, Bell,
@@ -64,13 +52,18 @@ const TYPE_CFG: Record<NotifType, { icon: React.ElementType; color: string; bg: 
   system:          { icon: Info,       color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
 };
 
-/* ─── animation constants ─────────────────────────────────────────────────── */
+/* ─── animation constants ────────────────────────────────────────────────────
+   Only `opacity` + `transform` (y, scale) are ever animated. Nothing else. */
 
-const EASE_OPEN  = [0.22, 1, 0.36, 1] as const;
-const SPRING_MID = { type: "spring", stiffness: 340, damping: 34, mass: 0.8 } as const;
+const EASE = [0.22, 1, 0.36, 1] as const;
 
-const RESIST_TOP = 0.08;
-const RESIST_BOT = 0.22;
+const VARIANTS = {
+  hidden:  { opacity: 0, y: 24, scale: 0.98 },
+  visible: { opacity: 1, y: 0,  scale: 1 },
+} as const;
+
+const OPEN_TRANSITION  = { duration: 0.18, ease: EASE } as const;
+const CLOSE_TRANSITION = { duration: 0.14, ease: EASE } as const;
 
 /* ─── memoised sub-components ─────────────────────────────────────────────── */
 
@@ -126,93 +119,25 @@ const EmptyState = memo(function EmptyState() {
   );
 });
 
-/* ─── snap state ──────────────────────────────────────────────────────────── */
-
-type Snap = "closed" | "half" | "full";
+const NotifList = memo(function NotifList({
+  notifications, onRead,
+}: { notifications: AppNotification[]; onRead: (id: string) => void }) {
+  return notifications.length === 0
+    ? <EmptyState />
+    : <>{notifications.map(n => <NotifItem key={n.id} n={n} onRead={onRead} />)}</>;
+});
 
 /* ─── component ───────────────────────────────────────────────────────────── */
 
 interface Props { open: boolean; onClose: () => void; }
 
-export function NotificationPanel({ open, onClose }: Props) {
+export const NotificationPanel = memo(function NotificationPanel({ open, onClose }: Props) {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
 
-  /* window height */
-  const [windowH, setWindowH] = useState(() =>
-    typeof window !== "undefined" ? window.innerHeight : 800);
-  useEffect(() => {
-    const h = () => setWindowH(window.innerHeight);
-    window.addEventListener("resize", h);
-    return () => window.removeEventListener("resize", h);
-  }, []);
+  const hasOpenedRef = useRef(open);
+  if (open) hasOpenedRef.current = true;
 
-  /* snap Y positions */
-  const HALF_Y   = windowH * 0.55;
-  const FULL_Y   = 0;
-  const CLOSED_Y = windowH + 20;
-
-  /* ── y MotionValue — the ONLY thing on the RAF hot path ── */
-  const y = useMotionValue(CLOSED_Y);
-
-  /* ── snap state:
-        snapRef  = updated immediately (controls drag logic, no re-render)
-        snap     = React state, updated ONLY after animation settles
-                   (controls overflow/touchAction — changing it mid-spring
-                    triggers a layout recalc that drops frames)
-  ── */
-  const snapRef = useRef<Snap>("closed");
-  const [snap, setSnap] = useState<Snap>("closed");
-
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const animRef   = useRef<{ stop: () => void } | null>(null);
-
-  /* ── animate to a y target, settle snap state when done ── */
-  function goTo(
-    targetY:    number,
-    opts:       object,
-    nextSnap?:  Snap,      // if provided, setSnap fires after animation
-    onDone?:    () => void,
-  ) {
-    animRef.current?.stop();
-    const anim = animate(y, targetY, opts);
-    animRef.current = anim;
-    anim.then(() => {
-      if (nextSnap !== undefined) setSnap(nextSnap);
-      onDone?.();
-    });
-  }
-
-  /* ── user-initiated close ── */
-  const closeSheet = useCallback((vel = 0) => {
-    // Close: update both ref AND state immediately so pointer-events go to
-    // none right away — prevents accidental re-trigger during exit animation.
-    snapRef.current = "closed";
-    setSnap("closed");
-    goTo(CLOSED_Y, { duration: 0.18, ease: EASE_OPEN, velocity: vel }, undefined, onClose);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, CLOSED_Y]);
-
-  /* ── open / external-close ── */
-  const openRef = useRef(open);
-  useEffect(() => {
-    const was = openRef.current;
-    openRef.current = open;
-    if (open && !was) {
-      animRef.current?.stop();
-      y.set(CLOSED_Y);
-      snapRef.current = "half";
-      setSnap("half");
-      goTo(HALF_Y, { duration: 0.22, ease: EASE_OPEN });
-    } else if (!open && was) {
-      animRef.current?.stop();
-      y.set(CLOSED_Y);
-      snapRef.current = "closed";
-      setSnap("closed");
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
-
-  /* body scroll lock */
+  /* body scroll lock — background page must never scroll while open */
   useEffect(() => {
     if (!open) return;
     const prev = document.body.style.overflow;
@@ -221,155 +146,80 @@ export function NotificationPanel({ open, onClose }: Props) {
     return () => { document.body.style.overflow = prev; document.body.classList.remove("tj-modal-open"); };
   }, [open]);
 
-  /* ESC */
+  /* ESC (desktop) */
   useEffect(() => {
     if (!open) return;
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") closeSheet(); };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [open, closeSheet]);
+  }, [open, onClose]);
 
-  /* ── raw pointer drag ─────────────────────────────────────────────────────
-     Every pointermove calls y.set() directly — no framer event system,
-     no React, zero overhead. Velocity is tracked manually (no useVelocity
-     subscriber) so there are zero derived MotionValues on the hot path.
-  ── */
-  const startDrag = useCallback((e: React.PointerEvent | PointerEvent) => {
-    if ((e as PointerEvent).button > 0) return;
-    animRef.current?.stop();
+  /* Android back button — push a history entry while open, close on popstate
+     instead of navigating away. */
+  useEffect(() => {
+    if (!open) return;
+    window.history.pushState({ tjNotifPanel: true }, "");
+    const h = () => onClose();
+    window.addEventListener("popstate", h);
+    return () => {
+      window.removeEventListener("popstate", h);
+      if (window.history.state?.tjNotifPanel) window.history.back();
+    };
+  }, [open, onClose]);
 
-    const startClientY = e.clientY;
-    const startY       = y.get();
-    const fromSnap     = snapRef.current;
+  const onBackdropClick = useCallback(() => onClose(), [onClose]);
+  const stop = useCallback((e: React.SyntheticEvent) => e.stopPropagation(), []);
 
-    /* manual velocity tracking — no useVelocity subscriber */
-    let lastY    = e.clientY;
-    let lastT    = performance.now();
-    let velocity = 0;
+  /* Never mount the heavy list DOM until first opened; after that it stays
+     mounted (per contract) and only visibility toggles. */
+  if (!hasOpenedRef.current) return null;
 
-    function clamp(raw: number): number {
-      if (raw < FULL_Y) return FULL_Y + (raw - FULL_Y) * RESIST_TOP;
-      if (fromSnap === "full"  && raw > HALF_Y + 60) return HALF_Y + 60 + (raw - HALF_Y - 60) * RESIST_BOT;
-      if (fromSnap === "half"  && raw > HALF_Y + 80) return HALF_Y + 80 + (raw - HALF_Y - 80) * RESIST_BOT;
-      return raw;
-    }
-
-    function onMove(ev: PointerEvent) {
-      const now = performance.now();
-      const dt  = now - lastT;
-      if (dt > 0) velocity = (ev.clientY - lastY) / dt * 1000;
-      lastT = now; lastY = ev.clientY;
-      y.set(clamp(startY + (ev.clientY - startClientY)));
-    }
-
-    function onUp() {
-      document.removeEventListener("pointermove",   onMove);
-      document.removeEventListener("pointerup",     onUp);
-      document.removeEventListener("pointercancel", onUp);
-
-      const curY = y.get();
-
-      if (fromSnap === "full") {
-        /* Full → Half */
-        if (velocity > 600 || curY > HALF_Y * 0.4) {
-          snapRef.current = "half";
-          goTo(HALF_Y, { ...SPRING_MID, velocity }, "half");
-        } else {
-          goTo(FULL_Y, { ...SPRING_MID, velocity });   // bounce back to full
-        }
-      } else if (fromSnap === "half") {
-        /* Half → Full */
-        if (velocity < -500 || curY < HALF_Y * 0.6) {
-          snapRef.current = "full";
-          goTo(FULL_Y, { ...SPRING_MID, velocity }, "full");
-        /* Half → Closed */
-        } else if (velocity > 500 || curY > HALF_Y + windowH * 0.10) {
-          closeSheet(velocity);
-        /* Stay half */
-        } else {
-          goTo(HALF_Y, { ...SPRING_MID, velocity });
-        }
-      }
-    }
-
-    document.addEventListener("pointermove",   onMove,  { passive: true });
-    document.addEventListener("pointerup",     onUp);
-    document.addEventListener("pointercancel", onUp);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [y, HALF_Y, FULL_Y, CLOSED_Y, closeSheet]);
-
-  /* content area drag interlock */
-  function onContentPointerDown(e: React.PointerEvent) {
-    if (snapRef.current === "half") { startDrag(e); return; }
-    if (snapRef.current === "full" && (scrollRef.current?.scrollTop ?? 0) < 2) startDrag(e);
-  }
-
-  const isOpen = snap !== "closed";
-
-  /* ── render ───────────────────────────────────────────────────────────────
-     No MotionValues on the backdrop at all.
-     - Blur layer:      static CSS, opacity CSS-transitioned on open/close only
-     - Dark tint layer: CSS-transitioned, no RAF involvement
-     Sheet: only `y` (transform) is RAF-driven. Nothing else changes per frame.
-  ── */
   return createPortal(
-    <>
-      {/* ── Blur layer: always static, CSS transition on open/close only ── */}
-      <div style={{
+    <div
+      aria-hidden={!open}
+      style={{
         position: "fixed", inset: 0, zIndex: 55,
-        backdropFilter:       "blur(10px)",
-        WebkitBackdropFilter: "blur(10px)",
-        opacity:    isOpen ? 1 : 0,
-        transition: `opacity ${isOpen ? "0.22s" : "0.18s"} ease`,
-        pointerEvents: "none",
-      }} />
-
-      {/* ── Dark tint: CSS transition, no MotionValue ── */}
+        visibility: open ? "visible" : "hidden",
+        pointerEvents: open ? "auto" : "none",
+      }}
+    >
+      {/* Backdrop — plain CSS opacity transition, no MotionValue */}
       <div
-        onClick={() => { if (isOpen) closeSheet(); }}
+        onClick={onBackdropClick}
         style={{
-          position: "fixed", inset: 0, zIndex: 55,
-          background: "rgba(0,0,0,0.55)",
-          opacity:    isOpen ? 1 : 0,
-          transition: `opacity ${isOpen ? "0.22s" : "0.18s"} ease`,
-          pointerEvents: isOpen ? "auto" : "none",
+          position: "absolute", inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          backdropFilter: "blur(10px)",
+          WebkitBackdropFilter: "blur(10px)",
+          opacity: open ? 1 : 0,
+          transition: `opacity ${open ? "0.18s" : "0.14s"} ease`,
         }}
       />
 
-      {/* ── Sheet ─────────────────────────────────────────────────────────
-          One animated property: `y` (transform: translateY).
-          Everything else is static — no per-frame paints or layouts.
-      ── */}
+      {/* Fullscreen sheet — only opacity + transform animate */}
       <motion.div
-        className="fixed left-0 right-0 flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Notifications"
+        onClick={stop}
+        initial={false}
+        animate={open ? "visible" : "hidden"}
+        variants={VARIANTS}
+        transition={open ? OPEN_TRANSITION : CLOSE_TRANSITION}
+        className="absolute inset-0 flex flex-col"
         style={{
-          top: 0, height: "100dvh",
-          y,
-          borderTopLeftRadius:  28,
-          borderTopRightRadius: 28,
-          zIndex:     56,
           background: "#121316",
-          borderTop:  "1px solid rgba(255,255,255,0.07)",
-          boxShadow:  "0 -8px 32px rgba(0,0,0,0.5)",
-          willChange: "transform",
-          touchAction: "none",
-          pointerEvents: isOpen ? "auto" : "none",
+          willChange: "transform, opacity",
+          paddingTop:    "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+          paddingLeft:   "env(safe-area-inset-left)",
+          paddingRight:  "env(safe-area-inset-right)",
         }}
       >
-        {/* Handle */}
-        <div
-          onPointerDown={startDrag}
-          className="w-full flex items-center justify-center shrink-0 select-none"
-          style={{ height: 24, paddingTop: 10, cursor: "grab" }}
-        >
-          <div style={{ width: 42, height: 5, borderRadius: 999, background: "rgba(255,255,255,0.18)" }} />
-        </div>
-
         {/* Header */}
         <div
-          onPointerDown={startDrag}
-          className="flex items-center justify-between px-4 pb-3 shrink-0 select-none"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "grab" }}
+          className="flex items-center justify-between px-4 shrink-0 select-none"
+          style={{ height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
         >
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg flex items-center justify-center"
@@ -385,7 +235,7 @@ export function NotificationPanel({ open, onClose }: Props) {
             )}
           </div>
 
-          <div className="flex items-center gap-1.5" onPointerDown={e => e.stopPropagation()}>
+          <div className="flex items-center gap-1.5">
             {unreadCount > 0 && (
               <button onClick={markAllRead}
                 className="w-8 h-8 flex items-center justify-center rounded-lg"
@@ -402,7 +252,7 @@ export function NotificationPanel({ open, onClose }: Props) {
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             )}
-            <button onClick={() => closeSheet()}
+            <button onClick={onClose}
               className="w-8 h-8 flex items-center justify-center rounded-lg"
               style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.72)" }}>
               <X className="w-4 h-4" />
@@ -410,31 +260,23 @@ export function NotificationPanel({ open, onClose }: Props) {
           </div>
         </div>
 
-        {/* Notification list
-            overflow and touchAction only flip AFTER the animation settles
-            (driven by React `snap` state which is set in anim.then()),
-            so no layout recalculation fires during the spring. */}
+        {/* Notification list — the only scrollable region */}
         <div
-          ref={scrollRef}
-          onPointerDown={onContentPointerDown}
           className="flex-1 flex flex-col"
           style={{
             minHeight: 0,
-            overflowY: snap === "full" ? "auto" : "hidden",
+            overflowY: "auto",
             overflowX: "hidden",
             WebkitOverflowScrolling: "touch",
-            touchAction: snap === "full" ? "pan-y" : "none",
-            padding: notifications.length === 0 ? 0 : "10px 12px 96px",
+            overscrollBehavior: "contain",
+            padding: notifications.length === 0 ? 0 : "10px 12px 24px",
             gap: 6, display: "flex", flexDirection: "column",
           }}
         >
-          {notifications.length === 0
-            ? <EmptyState />
-            : notifications.map(n => <NotifItem key={n.id} n={n} onRead={markRead} />)
-          }
+          <NotifList notifications={notifications} onRead={markRead} />
         </div>
       </motion.div>
-    </>,
+    </div>,
     document.body,
   );
-}
+});
