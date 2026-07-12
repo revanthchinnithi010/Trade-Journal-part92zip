@@ -67,9 +67,10 @@ const TYPE_CFG: Record<NotifType, { icon: React.ElementType; color: string; bg: 
    Only `opacity` + `transform: translate3d(...)` are ever animated — plain
    CSS transitions, compositor-only, no framer-motion / layout animation. */
 
-const EASE = "cubic-bezier(0.22,1,0.36,1)";
-const OPEN_MS  = 160;
-const CLOSE_MS = 120;
+const EASE_OPEN  = "cubic-bezier(0.22,1,0.36,1)";
+const EASE_CLOSE = "cubic-bezier(0.4,0,0.6,1)";
+const OPEN_MS    = 230;
+const CLOSE_MS   = 210;
 
 /* ─── memoised sub-components ─────────────────────────────────────────────── */
 
@@ -227,7 +228,7 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
           opacity: open ? 1 : 0,
-          transition: `opacity ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}`,
+          transition: `opacity ${open ? OPEN_MS : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
         }}
       />
 
@@ -244,10 +245,9 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           height: "100%",
           display: "flex", flexDirection: "column",
           background: "#121316",
-          transform: open ? "translate3d(0,0,0)" : "translate3d(0,16px,0)",
-          opacity: open ? 1 : 0,
-          transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}, opacity ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}`,
-          willChange: "transform, opacity",
+          transform: open ? "translateX(0)" : "translateX(100%)",
+          transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
+          willChange: "transform",
           /* Top inset consumed once by native spacer in index.tsx — no CSS env() needed.
              Bottom inset not consumed natively, so kept here. */
           paddingBottom: "env(safe-area-inset-bottom)",
