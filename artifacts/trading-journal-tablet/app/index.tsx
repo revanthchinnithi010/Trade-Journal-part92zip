@@ -25,7 +25,7 @@ function buildOrientationScript(isLandscape: boolean): string {
     meta.name = 'viewport';
     document.head.appendChild(meta);
   }
-  meta.content = 'width=${vpWidth}, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+  meta.content = 'width=${vpWidth}, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover';
   requestAnimationFrame(function() {
     setTimeout(function() {
       window.dispatchEvent(new Event('orientationchange'));
