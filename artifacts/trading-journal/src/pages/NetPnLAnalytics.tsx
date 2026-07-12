@@ -475,13 +475,10 @@ function SummaryCard({
 }) {
   return (
     <div
-      className="flex flex-col gap-1 px-4 py-3 rounded-xl transition-all duration-200 hover:brightness-110"
-      style={{
-        background: "rgba(255,255,255,0.03)",
-        border:     "1px solid rgba(255,255,255,0.07)",
-      }}
+      className="stat-card-neutral flex flex-col gap-1 px-4 py-3 transition-all duration-200"
+      style={{ borderRadius: 16 }}
     >
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground truncate">
+      <span className="text-[10px] font-semibold uppercase tracking-widest truncate" style={{ color: "var(--stat-title)" }}>
         {label}
       </span>
       <span
@@ -528,14 +525,11 @@ function TradingStatCard({
 
   return (
     <div
-      className="flex items-center justify-between p-4 rounded-xl transition-all duration-200 hover:brightness-110 group"
-      style={{
-        background: "rgba(255,255,255,0.025)",
-        border:     "1px solid rgba(255,255,255,0.07)",
-      }}
+      className="stat-card-neutral flex items-center justify-between p-4 transition-all duration-200 group"
+      style={{ borderRadius: 16 }}
     >
       <div className="flex flex-col gap-1 min-w-0">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>
           {label}
         </span>
         <span
@@ -546,8 +540,7 @@ function TradingStatCard({
         </span>
       </div>
       <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ml-3 transition-transform duration-200 group-hover:scale-110"
-        style={{ background: iconBg }}
+        className="stat-icon-neutral w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ml-3 transition-transform duration-200 group-hover:scale-110"
       >
         <Icon className="w-4 h-4" style={{ color: iconColor }} />
       </div>
@@ -569,15 +562,11 @@ function CumulativeStatCard({
 }) {
   return (
     <div
-      className="flex flex-col gap-2 p-4 rounded-xl transition-all duration-200 hover:scale-[1.02] hover:brightness-110 cursor-default"
-      style={{
-        background: "rgba(255,255,255,0.025)",
-        border:     "1px solid rgba(255,255,255,0.07)",
-      }}
+      className="stat-card-neutral flex flex-col gap-2 p-4 transition-all duration-200 hover:scale-[1.02] cursor-default"
+      style={{ borderRadius: 16 }}
     >
       <div
-        className="w-8 h-8 rounded-lg flex items-center justify-center"
-        style={{ background: iconBg }}
+        className="stat-icon-neutral w-8 h-8 rounded-lg flex items-center justify-center"
       >
         <Icon className="w-4 h-4" style={{ color: iconColor }} />
       </div>
@@ -588,9 +577,9 @@ function CumulativeStatCard({
         >
           {value}
         </span>
-        <span className="text-[10px] text-muted-foreground/70">{sub}</span>
+        <span className="text-[10px]" style={{ color: "var(--stat-sub)" }}>{sub}</span>
       </div>
-      <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+      <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>
         {label}
       </span>
     </div>

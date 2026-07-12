@@ -52,30 +52,36 @@ function ProviderBadge({ symbol }: { symbol: string }) {
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
 function MetricCard({
-  label, value, sub, icon: Icon, color = "text-white", iconBg = "bg-primary/15", iconColor = "text-primary", bar, index = 0,
+  label, value, sub, icon: Icon, color = "text-white", iconBg, iconColor, bar, index = 0,
 }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
   color?: string; iconBg?: string; iconColor?: string; bar?: number; index?: number;
 }) {
   return (
-    <AnimatedCard index={index} className="glass-card p-5 h-full relative overflow-hidden group transition-all duration-300">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+    <AnimatedCard index={index} className="stat-card-neutral p-5 h-full relative overflow-hidden transition-all duration-300">
       <div className="flex items-center justify-between mb-4">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>
-        <div className={`p-1.5 rounded-lg ${iconBg} border border-white/[0.06]`}>
-          <Icon className={`w-3.5 h-3.5 ${iconColor}`} />
+        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>{label}</p>
+        <div className={`stat-icon-neutral p-1.5 rounded-lg ${iconBg ?? ""}`}>
+          <Icon className={`w-3.5 h-3.5 ${iconColor ?? ""}`} style={iconColor ? undefined : { color: "var(--stat-icon)" }} />
         </div>
       </div>
       <div className={`text-2xl font-black tracking-tight mb-1 ${color}`}>{value}</div>
       {bar !== undefined && (
         <div className="my-2 h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-primary/70 to-primary transition-all duration-700"
-            style={{ width: `${Math.min(bar, 100)}%` }}
+            className="h-full rounded-full transition-all duration-700"
+            style={{
+              width: `${Math.min(bar, 100)}%`,
+              background: bar >= 60
+                ? "linear-gradient(90deg, #22C55E99, #22C55E)"
+                : bar >= 50
+                ? "linear-gradient(90deg, #F59E0B99, #F59E0B)"
+                : "linear-gradient(90deg, #EF444499, #EF4444)",
+            }}
           />
         </div>
       )}
-      {sub && <p className="text-[11px] text-muted-foreground/70">{sub}</p>}
+      {sub && <p className="text-[11px]" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
     </AnimatedCard>
   );
 }
@@ -307,7 +313,7 @@ export default function Reports() {
           index={7}
           label="Kelly %" value={`${kellyCrit.toFixed(1)}%`}
           sub="Optimal position size" icon={Award}
-          color="text-primary" iconBg="bg-primary/10" iconColor="text-primary"
+          color="text-white"
         />
       </div>
 
@@ -607,7 +613,7 @@ export default function Reports() {
           { label: "Largest Win",  value: fc(stats.largestWin),  color: "text-emerald-400", icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
           { label: "Largest Loss", value: fc(stats.largestLoss), color: "text-red-400",     icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400" },
           { label: "Current Streak", value: `${Math.abs(stats.currentStreak)}${stats.currentStreak >= 0 ? "W" : "L"}`,
-            color: stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400", icon: Zap, iconBg: "bg-primary/10", iconColor: "text-primary",
+            color: stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400", icon: Zap,
             sub: stats.currentStreak >= 0 ? "Winning streak" : "Losing streak" },
           { label: "Total Volume", value: `${stats.totalTrades}`, color: "text-white", icon: Layers, sub: `${stats.winCount + stats.lossCount} decisive` },
         ].map((c, i) => (

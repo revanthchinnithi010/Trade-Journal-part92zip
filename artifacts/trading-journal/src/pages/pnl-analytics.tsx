@@ -121,24 +121,25 @@ function KpiCard({ label, value, sub, positive, icon: Icon, index }: {
     <motion.div
       variants={cardVariants} custom={index}
       initial="hidden" animate="visible"
-      className="glass-card p-4 relative overflow-hidden group"
+      className="stat-card-neutral p-4 relative overflow-hidden"
     >
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+        <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>
           {label}
         </span>
-        <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center flex-shrink-0">
-          <Icon className="w-3.5 h-3.5 text-primary" />
+        <div className="stat-icon-neutral w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0">
+          <Icon className="w-3.5 h-3.5" style={{ color: "var(--stat-icon)" }} />
         </div>
       </div>
-      <div className={`text-[22px] font-black leading-none tracking-tight ${
-        positive === true  ? "text-emerald-400" :
-        positive === false ? "text-red-400"     : "text-foreground"
-      }`}>
+      <div
+        className="text-[22px] font-black leading-none tracking-tight"
+        style={{
+          color: positive === true ? "#22C55E" : positive === false ? "#EF4444" : "var(--stat-value)",
+        }}
+      >
         {value}
       </div>
-      {sub && <p className="text-[10px] text-muted-foreground/60 mt-1.5">{sub}</p>}
+      {sub && <p className="text-[10px] mt-1.5" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
     </motion.div>
   );
 }

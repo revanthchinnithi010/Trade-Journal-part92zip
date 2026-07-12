@@ -205,6 +205,17 @@ export function ProfileDropdown({ open, profile, onUpdate, onClose }: DropdownPr
     if (open) setPanel("menu");
   }, [open]);
 
+  // Suppress every .glass-card's backdrop-filter blur elsewhere in the app
+  // while the menu is open/animating (same "tj-modal-open" convention used
+  // by the alert modals) — animating a small motion panel is cheap, but
+  // Chrome recomputing dozens of blurred glass cards behind it every frame,
+  // on top of the live tick/candle RAF loop, is what actually caused the lag.
+  useEffect(() => {
+    if (!open) return;
+    document.body.classList.add("tj-modal-open");
+    return () => document.body.classList.remove("tj-modal-open");
+  }, [open]);
+
   function handleAction(action: string) {
     if (action === "settings")   { navigate("/settings"); onClose(); return; }
     if (action === "profile")    { setShowModal(true); return; }
@@ -240,14 +251,15 @@ export function ProfileDropdown({ open, profile, onUpdate, onClose }: DropdownPr
                 (z-40 vs z-50) and above everything else in the app,
                 including the always-mounted Dashboard/Charts keep-alive
                 nodes, so it never triggers a re-render of page content. */}
+            {/* No backdrop-filter here on purpose: blurring the full,
+                live-ticking viewport every animation frame (charts +
+                price RAF loops running underneath) was the source of the
+                jank. A flat opacity dim reads as "premium dimmed backdrop"
+                just as well and is essentially free to animate. */}
             <motion.div
               key="profile-menu-backdrop"
               className="fixed inset-0 z-40"
-              style={{
-                background:           "rgba(0,0,0,1)",
-                backdropFilter:       "blur(10px)",
-                WebkitBackdropFilter: "blur(10px)",
-              }}
+              style={{ background: "rgba(0,0,0,1)", willChange: "opacity" }}
               variants={backdropVariants}
               initial="hidden"
               animate="visible"

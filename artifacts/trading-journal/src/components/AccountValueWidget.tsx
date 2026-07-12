@@ -76,7 +76,7 @@ export default function AccountValueWidget({
   const showUSD    = currency === "INR"; // dual display only in INR mode
 
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="stat-card-neutral overflow-hidden">
       {/* ── Main section ── */}
       <div className="px-4 pt-4 pb-3">
         {/* Header row */}

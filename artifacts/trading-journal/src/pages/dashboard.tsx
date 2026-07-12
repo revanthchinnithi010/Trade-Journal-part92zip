@@ -37,6 +37,12 @@ const RED   = "hsl(0 68% 58%)";
 const PURPLE = "#60a5fa";
 const MUTED_CLR = "hsl(128 8% 38%)";
 
+// Neutral trading-terminal stat-card palette — value text only, never the
+// card shell. No blue/teal anywhere.
+const VALUE_GREEN  = "#22C55E";
+const VALUE_RED    = "#EF4444";
+const VALUE_ORANGE = "#F59E0B";
+
 const DEFAULT_STATS = {
   netPnl: 0, winRate: 0, profitFactor: 0, averageRR: 0,
   totalTrades: 0, winCount: 0, lossCount: 0, breakevenCount: 0,
@@ -92,23 +98,23 @@ const StatCard = memo(function StatCard({
   positive?: boolean; accent?: boolean; bar?: number; trend?: string; index?: number;
 }) {
   return (
-    <AnimatedCard index={index} className="glass-card stat-card-glow h-full relative overflow-hidden group transition-colors duration-200 p-5">
-      <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.04] via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-      <div className="absolute -top-8 -right-8 w-24 h-24 rounded-full bg-primary/[0.04] pointer-events-none" />
-
+    <AnimatedCard index={index} className="stat-card-neutral h-full relative overflow-hidden transition-colors duration-200 p-5">
       <div className="relative flex items-start justify-between mb-4">
-        <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">{label}</p>
-        <div className="p-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06] group-hover:bg-primary/10 group-hover:border-primary/20 transition-colors duration-200">
-          <Icon className="w-3.5 h-3.5 text-muted-foreground group-hover:text-primary transition-colors duration-200" />
+        <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>{label}</p>
+        <div className="stat-icon-neutral p-1.5 rounded-lg">
+          <Icon className="w-3.5 h-3.5" style={{ color: "var(--stat-icon)" }} />
         </div>
       </div>
 
-      <div className={`relative text-[26px] font-black tracking-tight mb-1.5 leading-none ${
-        accent ? "text-foreground" :
-        positive === true ? "text-emerald-400" :
-        positive === false ? "text-red-400" :
-        "text-foreground"
-      }`}>
+      <div
+        className="relative text-[26px] font-black tracking-tight mb-1.5 leading-none"
+        style={{
+          color: accent ? "var(--stat-value)" :
+                 positive === true  ? VALUE_GREEN :
+                 positive === false ? VALUE_RED :
+                 "var(--stat-value)",
+        }}
+      >
         {value}
       </div>
 
@@ -119,17 +125,17 @@ const StatCard = memo(function StatCard({
             style={{
               width: `${Math.min(bar, 100)}%`,
               background: bar >= 55
-                ? "linear-gradient(90deg, hsl(145 58% 38%), hsl(145 58% 54%))"
+                ? `linear-gradient(90deg, ${VALUE_GREEN}99, ${VALUE_GREEN})`
                 : bar >= 40
-                ? `linear-gradient(90deg, ${PURPLE}, hsl(161 72% 72%))`
-                : "linear-gradient(90deg, hsl(0 68% 44%), hsl(0 68% 60%))",
+                ? `linear-gradient(90deg, ${VALUE_ORANGE}99, ${VALUE_ORANGE})`
+                : `linear-gradient(90deg, ${VALUE_RED}99, ${VALUE_RED})`,
             }}
           />
         </div>
       )}
 
-      {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
-      {trend && <p className="text-[11px] text-foreground/60 font-medium mt-0.5">{trend}</p>}
+      {sub && <p className="text-[11px]" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
+      {trend && <p className="text-[11px] font-medium mt-0.5" style={{ color: "var(--stat-sub)" }}>{trend}</p>}
     </AnimatedCard>
   );
 });
