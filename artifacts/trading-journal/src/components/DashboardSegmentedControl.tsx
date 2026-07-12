@@ -36,16 +36,20 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
         borderRadius: 16,
         background:   "#2A2A2F",
         padding:       4,
+        // Isolate this node's paint/layout from the rest of the (heavy,
+        // constantly-ticking) dashboard tree — without this, the browser's
+        // paint-invalidation region for our animation can balloon to
+        // whatever ancestor established the last containing block, which is
+        // what caused the frame drops.
+        contain:       "layout paint",
       }}
     >
-      {/* Sliding pill indicator — a single persistent layer (never
-          conditionally unmounted) that animates its `x` transform between
-          the two slots. GPU-only: left/width/top/bottom are fixed at mount,
-          only `transform: translateX()` ever changes, so this never
-          triggers layout/paint on the surrounding grid — no layout shift,
-          no dropped frames. translateX(100%) shifts by exactly the pill's
-          own width, which lands it flush in the second slot regardless of
-          the container's actual pixel width (the 4px inset cancels out). */}
+      {/* Sliding pill indicator — the ONLY animated node here, and the only
+          property that ever changes is `transform` (via `x`), which is
+          GPU-compositable and never triggers layout or paint on siblings.
+          `willChange: transform` promotes it to its own compositor layer
+          up front instead of on first animation frame, avoiding a layer-
+          promotion stall right as the slide starts. */}
       <motion.div
         className="absolute top-1 left-1"
         style={{
@@ -53,6 +57,7 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
           height:       "calc(100% - 8px)",
           borderRadius: 15,
           background:   "#050505",
+          willChange:   "transform",
         }}
         initial={false}
         animate={{ x: activeKey === "reports" ? "100%" : "0%" }}
@@ -70,24 +75,17 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
             onClick={() => {
               if (tab.href !== pathname) navigate(tab.href);
             }}
-            className="relative z-10 flex items-center justify-center text-[14px]"
+            className="relative z-10 flex items-center justify-center text-[14px] font-semibold transition-colors duration-150 ease-out"
+            style={{ color: selected ? "#FFFFFF" : "#B5B5B5" }}
           >
-            {/* Label animates color + a tiny scale pop on the switch itself
-                (not just a passive CSS color fade), so the tab you land on
-                visibly "arrives" in sync with the pill sliding under it.
-                fontWeight stays fixed at 600 always — animating it would
-                reflow text width every frame and fight the GPU-only pill. */}
-            <motion.span
-              initial={false}
-              animate={{
-                color: selected ? "#FFFFFF" : "#B5B5B5",
-                scale: selected ? 1 : 0.97,
-              }}
-              transition={PILL_TRANSITION}
-              style={{ fontWeight: 600, display: "inline-block" }}
-            >
-              {tab.label}
-            </motion.span>
+            {/* Plain CSS color transition, not a per-frame JS-driven one —
+                `color` isn't GPU-compositable, so animating it through
+                Motion.dev meant restyling on every rAF tick, which competed
+                with the dashboard's own live-tick/chart RAF loops and was
+                the actual source of the dropped frames. A native CSS
+                transition is cheap: the browser interpolates it without
+                round-tripping through React/JS at all. */}
+            {tab.label}
           </button>
         );
       })}
