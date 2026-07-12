@@ -1,8 +1,26 @@
-import { useRef, useEffect, useState, useCallback } from "react";
+/**
+ * NotificationPanel — native iOS/Android-style bottom sheet.
+ *
+ * Three snap states:
+ *   closed  → y = windowH + 20   (off-screen below)
+ *   half    → y = windowH * 0.55  (45 % of screen visible)
+ *   full    → y = 0              (100 % visible, safe-area respected)
+ *
+ * Transition rules:
+ *   bell click           → half
+ *   half  + drag up      → full
+ *   full  + drag down    → half
+ *   half  + drag down    → closed
+ *   backdrop / X / ESC   → closed
+ *
+ * Always mounted — visibility is driven by the y MotionValue, never by
+ * React conditional rendering. No layout shifts, no Dashboard re-renders.
+ */
+
+import React, { useRef, useEffect, useState, useCallback, memo } from "react";
 import { createPortal } from "react-dom";
 import {
   motion,
-  AnimatePresence,
   useMotionValue,
   useTransform,
   useVelocity,
@@ -18,19 +36,19 @@ import {
   type NotifType,
 } from "@/contexts/NotificationsContext";
 
-/* ─── time helper ─────────────────────────────────────────────────────────── */
+/* ─── helpers ──────────────────────────────────────────────────────────────── */
 
 function fmtRelTime(d: Date): string {
   const secs = Math.floor((Date.now() - d.getTime()) / 1000);
   if (secs < 60)  return "just now";
   const mins = Math.floor(secs / 60);
   if (mins < 60)  return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24)   return `${hrs}h ago`;
+  const hrs  = Math.floor(mins / 60);
+  if (hrs  < 24)  return `${hrs}h ago`;
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-/* ─── type config ─────────────────────────────────────────────────────────── */
+/* ─── type config ──────────────────────────────────────────────────────────── */
 
 const TYPE_CONFIG: Record<NotifType, { icon: React.ElementType; color: string; bg: string }> = {
   price_alert:     { icon: TrendingUp, color: "#60a5fa", bg: "rgba(96,165,250,0.12)"  },
@@ -44,37 +62,32 @@ const TYPE_CONFIG: Record<NotifType, { icon: React.ElementType; color: string; b
   system:          { icon: Info,       color: "#94a3b8", bg: "rgba(148,163,184,0.12)" },
 };
 
-/* ─── snap configuration ──────────────────────────────────────────────────── */
+/* ─── animation constants ──────────────────────────────────────────────────── */
 
-// y = distance from top of screen to top of sheet (sheet is 100dvh, fixed at top:0)
-// visible height = windowH − y
-//   collapsed → y = 62 % · wH  →  38 % visible
-//   half       → y = 30 % · wH  →  70 % visible
-//   full       → y = 0           → 100 % visible
-const SNAP_FRACS    = [0.62, 0.30, 0.0] as const;
-const IDX_COLLAPSED = 0;
-const IDX_HALF      = 1;
-const IDX_FULL      = 2;
+// cubic-bezier(0.22, 1, 0.36, 1) — premium deceleration used by iOS
+const EASE_PREMIUM = [0.22, 1, 0.36, 1] as const;
 
-const SPRING_OPEN  = { type: "spring", stiffness: 320, damping: 34, mass: 1 } as const;
-const SPRING_SNAP  = { type: "spring", stiffness: 340, damping: 36, mass: 1 } as const;
-const SPRING_CLOSE = { type: "spring", stiffness: 380, damping: 40, mass: 1 } as const;
+// Spring for half↔full transitions
+const SPRING_MID = { type: "spring", stiffness: 340, damping: 34, mass: 0.8 } as const;
 
-// Rubber-band resistance factor beyond limits
-const RESISTANCE = 0.18;
+// Rubber-band resistance when dragging past hard limits
+const RESISTANCE_TOP    = 0.08;  // very stiff above full-screen
+const RESISTANCE_BOTTOM = 0.22;  // moderate below half (gives close-feedback feel)
 
-/* ─── sub-components ──────────────────────────────────────────────────────── */
+/* ─── sub-components (memoised) ────────────────────────────────────────────── */
 
-function NotifItem({ n, onRead }: { n: AppNotification; onRead: (id: string) => void }) {
+const NotifItem = memo(function NotifItem({
+  n, onRead,
+}: { n: AppNotification; onRead: (id: string) => void }) {
   const cfg  = TYPE_CONFIG[n.type];
   const Icon = cfg.icon;
   return (
     <div
       onClick={() => onRead(n.id)}
-      className="flex gap-3 p-3 cursor-pointer transition-colors duration-150"
-      style={{ background: "rgba(255,255,255,0.03)", borderRadius: 18 }}
+      className="flex gap-3 p-3 cursor-pointer"
+      style={{ background: "rgba(255,255,255,0.03)", borderRadius: 18, transition: "background 120ms" }}
       onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.055)"; }}
-      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.03)";  }}
     >
       <div
         className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
@@ -87,9 +100,7 @@ function NotifItem({ n, onRead }: { n: AppNotification; onRead: (id: string) => 
           <span className="text-[13px] font-semibold leading-tight truncate" style={{ color: "rgba(255,255,255,0.92)" }}>
             {n.title}
           </span>
-          {!n.read && (
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#22C55E" }} />
-          )}
+          {!n.read && <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "#22C55E" }} />}
         </div>
         <p className="text-[12px] leading-snug line-clamp-2 mt-0.5" style={{ color: "rgba(255,255,255,0.55)" }}>
           {n.description}
@@ -100,28 +111,18 @@ function NotifItem({ n, onRead }: { n: AppNotification; onRead: (id: string) => 
       </div>
     </div>
   );
-}
+});
 
-function EmptyState() {
+const EmptyState = memo(function EmptyState() {
   return (
-    <div
-      className="flex-1 flex flex-col items-center justify-center text-center"
-      style={{ padding: "20px 32px 32px" }}
-    >
-      <div
-        style={{
-          width: 72,
-          height: 72,
-          borderRadius: "50%",
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.06)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          marginBottom: 14,
-          flexShrink: 0,
-        }}
-      >
+    <div className="flex-1 flex flex-col items-center justify-center text-center" style={{ padding: "20px 32px 32px" }}>
+      <div style={{
+        width: 72, height: 72, borderRadius: "50%",
+        background: "rgba(255,255,255,0.04)",
+        border: "1px solid rgba(255,255,255,0.06)",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        marginBottom: 14, flexShrink: 0,
+      }}>
         <Bell style={{ width: 28, height: 28, color: "rgba(255,255,255,0.28)" }} strokeWidth={1.5} />
       </div>
       <p className="text-[15px] font-semibold" style={{ color: "rgba(255,255,255,0.85)" }}>
@@ -132,9 +133,13 @@ function EmptyState() {
       </p>
     </div>
   );
-}
+});
 
-/* ─── main component ──────────────────────────────────────────────────────── */
+/* ─── snap state ───────────────────────────────────────────────────────────── */
+
+type SheetSnap = "closed" | "half" | "full";
+
+/* ─── main component ───────────────────────────────────────────────────────── */
 
 interface Props {
   open: boolean;
@@ -144,74 +149,93 @@ interface Props {
 export function NotificationPanel({ open, onClose }: Props) {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
 
-  // ── window height (refresh on resize)
+  /* ── window height ── */
   const [windowH, setWindowH] = useState(() =>
     typeof window !== "undefined" ? window.innerHeight : 800,
   );
   useEffect(() => {
-    function onResize() { setWindowH(window.innerHeight); }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    const h = () => setWindowH(window.innerHeight);
+    window.addEventListener("resize", h);
+    return () => window.removeEventListener("resize", h);
   }, []);
 
-  const snapPoints = SNAP_FRACS.map((f) => windowH * f);
+  /* ── snap positions (y = distance from top of screen to top of sheet) ──
+     Sheet is 100dvh tall, positioned at top:0.
+     Visible height  =  windowH − y
+       half   →  y = 0.55 × windowH  →  45 % visible
+       full   →  y = 0               → 100 % visible
+       closed →  y = windowH + 20    →   0 % visible (off-screen)
+  ── */
+  const HALF_Y   = windowH * 0.55;
+  const FULL_Y   = 0;
+  const CLOSED_Y = windowH + 20;
 
-  // ── y MotionValue — the ONLY thing we animate; no React state during drag
-  const y         = useMotionValue(windowH);
+  /* ── motion values ── */
+  const y         = useMotionValue(CLOSED_Y);
   const yVelocity = useVelocity(y);
 
-  // ── derived transforms (MotionValue chain — zero React renders)
-  const borderRadiusValue = useTransform(y, [0, windowH * 0.08], [0, 28]);
-  const backdropOpacity   = useTransform(
+  /* ── derived MotionValue chains (zero React renders on change) ── */
+  const backdropOpacity = useTransform(
     y,
-    [snapPoints[IDX_COLLAPSED] + 120, snapPoints[IDX_COLLAPSED]],
-    [0, 1],
+    [CLOSED_Y, HALF_Y, FULL_Y],
+    [0,       0.55,    0.72],
   );
+  const borderRadius = useTransform(y, [0, windowH * 0.06], [0, 28]);
 
-  // ── snap index (React state only for scroll-enable / CSS toggling)
-  const [snapIdx, setSnapIdx]   = useState(IDX_COLLAPSED);
-  const snapIdxRef              = useRef(IDX_COLLAPSED);
+  /* ── snap state — React state only for scroll-mode toggling ── */
+  const [snap, setSnap]   = useState<SheetSnap>("closed");
+  const snapRef           = useRef<SheetSnap>("closed");
 
-  // ── scroll container
+  /* ── scroll container ── */
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // ── animation handle so we can stop in-flight springs when drag starts
+  /* ── animation handle ── */
   const animRef = useRef<{ stop: () => void } | null>(null);
 
-  /* ── snap helper ── */
-  const snapTo = useCallback(
-    (idx: number, vel = 0) => {
-      animRef.current?.stop();
-      snapIdxRef.current = idx;
-      setSnapIdx(idx);
-      animRef.current = animate(y, snapPoints[idx], { ...SPRING_SNAP, velocity: vel });
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapPoints, y],
-  );
+  /* ── helpers ── */
 
-  /* ── close helper ── */
-  const closeSheet = useCallback(
-    (vel = 0) => {
-      animRef.current?.stop();
-      animRef.current = animate(y, windowH + 40, { ...SPRING_CLOSE, velocity: vel });
-      // call onClose once the spring settles
-      animRef.current.then(onClose);
-    },
-    [y, windowH, onClose],
-  );
+  function commitSnap(s: SheetSnap) {
+    snapRef.current = s;
+    setSnap(s);
+  }
 
-  /* ── open / close effect ── */
+  function animateTo(targetY: number, opts: object, onDone?: () => void) {
+    animRef.current?.stop();
+    const anim = animate(y, targetY, opts);
+    animRef.current = anim;
+    if (onDone) anim.then(onDone);
+  }
+
+  /* ── open / external-close driven by prop ── */
+  const openRef = useRef(open);
   useEffect(() => {
-    if (open) {
+    const wasOpen = openRef.current;
+    openRef.current = open;
+
+    if (open && !wasOpen) {
+      // Closed → Half  (tween, 0.22 s)
+      y.set(CLOSED_Y);
+      commitSnap("half");
+      animateTo(HALF_Y, { duration: 0.22, ease: EASE_PREMIUM });
+    } else if (!open && wasOpen) {
+      // External close (navigation, prop forced to false) — instant hide
       animRef.current?.stop();
-      y.set(windowH + 40);
-      snapIdxRef.current = IDX_COLLAPSED;
-      setSnapIdx(IDX_COLLAPSED);
-      animRef.current = animate(y, snapPoints[IDX_COLLAPSED], SPRING_OPEN);
+      y.set(CLOSED_Y);
+      commitSnap("closed");
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
+
+  /* ── user-initiated close (drag / X / backdrop / ESC) ── */
+  const closeSheet = useCallback((vel = 0) => {
+    commitSnap("closed");
+    animateTo(
+      CLOSED_Y,
+      { duration: 0.18, ease: EASE_PREMIUM, velocity: vel },
+      onClose,
+    );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, CLOSED_Y]);
 
   /* ── body scroll lock ── */
   useEffect(() => {
@@ -225,248 +249,246 @@ export function NotificationPanel({ open, onClose }: Props) {
     };
   }, [open]);
 
-  /* ── ESC closes ── */
+  /* ── ESC ── */
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") closeSheet(); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") closeSheet(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
   }, [open, closeSheet]);
 
-  /* ── raw pointer drag ────────────────────────────────────────────────────
-     Direct MotionValue mutation — no framer drag machinery, zero latency.
+  /* ── raw pointer drag ─────────────────────────────────────────────────────
+     Direct y.set() on every pointermove — zero framer-motion overhead,
+     guaranteed 60 fps. Springs fire only on pointerup.
   ── */
-  const startDrag = useCallback(
-    (e: React.PointerEvent | PointerEvent) => {
-      // Only primary pointer (left mouse / first touch)
-      if ((e as PointerEvent).button > 0) return;
+  const startDrag = useCallback((e: React.PointerEvent | PointerEvent) => {
+    if ((e as PointerEvent).button > 0) return;
 
-      // Stop any in-flight spring immediately
-      animRef.current?.stop();
+    animRef.current?.stop();
 
-      const startClientY   = e.clientY;
-      const startMotionY   = y.get();
-      const topLimit       = snapPoints[IDX_FULL];       // 0 — can't go above full screen
-      const bottomSoftStop = snapPoints[IDX_COLLAPSED];  // rubber-band kicks in here
+    const startClientY = e.clientY;
+    const startY       = y.get();
+    const fromSnap     = snapRef.current;
 
-      function applyRubberBand(raw: number): number {
-        if (raw < topLimit) {
-          // above full: very stiff resistance
-          return topLimit + (raw - topLimit) * RESISTANCE;
-        }
-        if (raw > bottomSoftStop) {
-          // below collapsed: moderate resistance (pre-close feedback)
-          const excess = raw - bottomSoftStop;
-          return bottomSoftStop + excess * (RESISTANCE * 2);
-        }
-        return raw;
+    /* resistance: clamp y so it can't overshoot hard limits */
+    function clamp(raw: number): number {
+      if (raw < FULL_Y) {
+        // Dragging above full-screen edge
+        return FULL_Y + (raw - FULL_Y) * RESISTANCE_TOP;
       }
-
-      function onMove(ev: PointerEvent) {
-        const delta = ev.clientY - startClientY;
-        y.set(applyRubberBand(startMotionY + delta));
+      if (fromSnap === "full" && raw > HALF_Y + 60) {
+        // At full, dragging toward half and beyond — light resistance
+        const excess = raw - (HALF_Y + 60);
+        return HALF_Y + 60 + excess * RESISTANCE_BOTTOM;
       }
+      if (fromSnap === "half" && raw > HALF_Y + 80) {
+        // At half, dragging toward close — moderate resistance
+        const excess = raw - (HALF_Y + 80);
+        return HALF_Y + 80 + excess * RESISTANCE_BOTTOM;
+      }
+      return raw;
+    }
 
-      function onUp(_ev: PointerEvent) {
-        document.removeEventListener("pointermove", onMove);
-        document.removeEventListener("pointerup",   onUp);
-        document.removeEventListener("pointercancel", onUp);
+    function onMove(ev: PointerEvent) {
+      y.set(clamp(startY + (ev.clientY - startClientY)));
+    }
 
-        const currentY = y.get();
-        const vel      = yVelocity.get();
+    function onUp() {
+      document.removeEventListener("pointermove",   onMove);
+      document.removeEventListener("pointerup",     onUp);
+      document.removeEventListener("pointercancel", onUp);
 
-        // Fast swipe-down at or below half → close
-        if (vel > 700 && currentY > snapPoints[IDX_HALF]) {
+      const curY = y.get();
+      const vel  = yVelocity.get(); // px/s; positive = moving down
+
+      if (fromSnap === "full") {
+        /* Full → Half  (drag down past midpoint or fast swipe down) */
+        const threshold = HALF_Y * 0.4;            // 40 % of the way to half
+        if (vel > 600 || curY > threshold) {
+          commitSnap("half");
+          animateTo(HALF_Y, { ...SPRING_MID, velocity: vel });
+        } else {
+          animateTo(FULL_Y, { ...SPRING_MID, velocity: vel });
+        }
+      } else if (fromSnap === "half") {
+        /* Half → Full  (drag up past midpoint or fast swipe up) */
+        const upThreshold   = HALF_Y * 0.6;        // still 60 % of half-y remaining
+        /* Half → Closed (drag down far or fast swipe down) */
+        const downThreshold = HALF_Y + windowH * 0.10;
+
+        if (vel < -500 || curY < upThreshold) {
+          commitSnap("full");
+          animateTo(FULL_Y, { ...SPRING_MID, velocity: vel });
+        } else if (vel > 500 || curY > downThreshold) {
           closeSheet(vel);
-          return;
+        } else {
+          animateTo(HALF_Y, { ...SPRING_MID, velocity: vel });
         }
-        // Dragged well below collapsed → close
-        if (currentY > bottomSoftStop + 80) {
-          closeSheet(vel);
-          return;
-        }
-
-        // Find nearest snap point (bias toward velocity direction)
-        let bestIdx = IDX_COLLAPSED;
-        snapPoints.forEach((sp, i) => {
-          if (Math.abs(currentY - sp) < Math.abs(currentY - snapPoints[bestIdx])) {
-            bestIdx = i;
-          }
-        });
-
-        snapTo(bestIdx, vel);
       }
+    }
 
-      document.addEventListener("pointermove",   onMove,  { passive: true });
-      document.addEventListener("pointerup",     onUp);
-      document.addEventListener("pointercancel", onUp);
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [snapPoints, y, yVelocity, closeSheet, snapTo],
-  );
+    document.addEventListener("pointermove",   onMove,  { passive: true });
+    document.addEventListener("pointerup",     onUp);
+    document.addEventListener("pointercancel", onUp);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [y, yVelocity, HALF_Y, FULL_Y, closeSheet]);
 
-  /* ── content area: only initiate drag when not fully expanded or at scroll top ── */
+  /* content area: propagate drag only when appropriate */
   function onContentPointerDown(e: React.PointerEvent) {
-    const scrollTop = scrollRef.current?.scrollTop ?? 0;
-    if (snapIdxRef.current < IDX_FULL || scrollTop === 0) {
+    if (snapRef.current === "half") {
+      // Half: content doesn't scroll → always start drag
       startDrag(e);
+    } else if (snapRef.current === "full") {
+      // Full: only start drag when list is scrolled to very top
+      if ((scrollRef.current?.scrollTop ?? 0) < 2) startDrag(e);
     }
   }
 
-  const isFullyExpanded = snapIdx === IDX_FULL;
+  /* ── backdrop pointer-events: none when sheet is off-screen ── */
+  const isOpen = snap !== "closed";
 
-  /* ── render ── */
+  /* ── render ───────────────────────────────────────────────────────────────
+     Both backdrop and sheet are ALWAYS in the DOM.
+     Visibility is driven purely by y (MotionValue) — no mount/unmount.
+  ── */
   return createPortal(
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* ── Backdrop ── */}
-          <motion.div
-            key="notif-backdrop"
-            className="fixed inset-0"
-            style={{
-              zIndex:               55,
-              background:           "rgba(0,0,0,0.55)",
-              backdropFilter:       "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              willChange:           "opacity",
-              opacity:              backdropOpacity,
-            }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            onClick={() => closeSheet()}
-          />
+    <>
+      {/* ── Backdrop ── */}
+      <motion.div
+        className="fixed inset-0"
+        style={{
+          zIndex:               55,
+          background:           "rgba(0,0,0,0.6)",
+          backdropFilter:       "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+          opacity:              backdropOpacity,
+          pointerEvents:        isOpen ? "auto" : "none",
+          willChange:           "opacity",
+        }}
+        onClick={() => { if (isOpen) closeSheet(); }}
+      />
 
-          {/* ── Bottom sheet ──
-              Position: fixed top:0, full height.
-              Transform y shifts it down so only the bottom portion is visible.
-              No framer-motion drag — raw pointer events write to y directly.
-          ── */}
-          <motion.div
-            key="notif-sheet"
-            className="fixed left-0 right-0 flex flex-col"
-            style={{
-              top:                  0,
-              height:               "100dvh",
-              y,
-              borderTopLeftRadius:  borderRadiusValue,
-              borderTopRightRadius: borderRadiusValue,
-              zIndex:               56,
-              background:           "#121316",
-              borderTop:            "1px solid rgba(255,255,255,0.06)",
-              boxShadow:            "0 -20px 60px rgba(0,0,0,0.55)",
-              willChange:           "transform",
-              // touchAction none so pointer events fire without 300ms tap delay
-              touchAction:          "none",
-            }}
-          >
-            {/* ── Drag handle ── */}
+      {/* ── Sheet ──────────────────────────────────────────────────────────
+          Fixed at top:0, full dvh height.
+          The y MotionValue pushes it below the viewport when closed.
+          Only transform is animated — no height / top / bottom changes.
+      ── */}
+      <motion.div
+        className="fixed left-0 right-0 flex flex-col"
+        style={{
+          top:                  0,
+          height:               "100dvh",
+          y,
+          borderTopLeftRadius:  borderRadius,
+          borderTopRightRadius: borderRadius,
+          zIndex:               56,
+          background:           "#121316",
+          borderTop:            "1px solid rgba(255,255,255,0.07)",
+          boxShadow:            "0 -24px 64px rgba(0,0,0,0.6)",
+          willChange:           "transform",
+          touchAction:          "none",
+          pointerEvents:        isOpen ? "auto" : "none",
+        }}
+      >
+        {/* ── Handle bar ── */}
+        <div
+          onPointerDown={startDrag}
+          className="w-full flex items-center justify-center shrink-0 select-none"
+          style={{ height: 24, paddingTop: 10, cursor: "grab" }}
+        >
+          <div style={{
+            width: 42, height: 5,
+            borderRadius: 999,
+            background: "rgba(255,255,255,0.18)",
+          }} />
+        </div>
+
+        {/* ── Header ── */}
+        <div
+          onPointerDown={startDrag}
+          className="flex items-center justify-between px-4 pb-3 shrink-0 select-none"
+          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)", cursor: "grab" }}
+        >
+          <div className="flex items-center gap-2">
             <div
-              onPointerDown={startDrag}
-              className="w-full flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing select-none"
-              style={{ height: 22, paddingTop: 8 }}
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)" }}
             >
-              <div
-                style={{
-                  width:        44,
-                  height:       5,
-                  borderRadius: 999,
-                  background:   "rgba(255,255,255,0.18)",
-                }}
-              />
+              <Bell className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.72)" }} />
             </div>
-
-            {/* ── Header ── */}
-            <div
-              onPointerDown={startDrag}
-              className="flex items-center justify-between px-4 pb-3 shrink-0 cursor-grab active:cursor-grabbing select-none"
-              style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-            >
-              <div className="flex items-center gap-2">
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center"
-                  style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.05)" }}
-                >
-                  <Bell className="w-3.5 h-3.5" style={{ color: "rgba(255,255,255,0.72)" }} />
-                </div>
-                <span className="text-[15px] font-semibold" style={{ color: "#FFFFFF" }}>Notifications</span>
-                {unreadCount > 0 && (
-                  <span
-                    className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white leading-none"
-                    style={{ background: "#EF4444" }}
-                  >
-                    {unreadCount > 99 ? "99+" : unreadCount}
-                  </span>
-                )}
-              </div>
-
-              {/* Buttons — stop propagation so taps don't initiate drag */}
-              <div
-                className="flex items-center gap-1.5"
-                onPointerDown={(e) => e.stopPropagation()}
+            <span className="text-[15px] font-semibold" style={{ color: "#fff" }}>Notifications</span>
+            {unreadCount > 0 && (
+              <span
+                className="px-1.5 py-0.5 rounded-full text-[10px] font-bold text-white leading-none"
+                style={{ background: "#EF4444" }}
               >
-                {unreadCount > 0 && (
-                  <button
-                    onClick={markAllRead}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
-                    title="Mark all read"
-                  >
-                    <CheckCheck className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                {notifications.length > 0 && (
-                  <button
-                    onClick={clearAll}
-                    className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-                    style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
-                    title="Clear all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-                <button
-                  onClick={() => closeSheet()}
-                  className="w-8 h-8 flex items-center justify-center rounded-lg transition-colors"
-                  style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.72)" }}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </div>
 
-            {/* ── Scroll content ── */}
-            <div
-              ref={scrollRef}
-              onPointerDown={onContentPointerDown}
-              className="flex-1 flex flex-col"
-              style={{
-                minHeight:               0,
-                overflowY:               isFullyExpanded ? "auto" : "hidden",
-                overflowX:               "hidden",
-                WebkitOverflowScrolling: "touch",
-                // pan-y lets the browser scroll the list; drag handled above
-                touchAction:             isFullyExpanded ? "pan-y" : "none",
-                padding:                 notifications.length === 0 ? 0 : "10px 12px 96px",
-                gap:                     6,
-                display:                 "flex",
-                flexDirection:           "column",
-              }}
+          {/* Action buttons — stop propagation so taps don't start a drag */}
+          <div className="flex items-center gap-1.5" onPointerDown={(e) => e.stopPropagation()}>
+            {unreadCount > 0 && (
+              <button
+                onClick={markAllRead}
+                className="w-8 h-8 flex items-center justify-center rounded-lg"
+                style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
+                title="Mark all read"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {notifications.length > 0 && (
+              <button
+                onClick={clearAll}
+                className="w-8 h-8 flex items-center justify-center rounded-lg"
+                style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.55)" }}
+                title="Clear all"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={() => closeSheet()}
+              className="w-8 h-8 flex items-center justify-center rounded-lg"
+              style={{ background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.72)" }}
             >
-              {notifications.length === 0 ? (
-                <EmptyState />
-              ) : (
-                notifications.map((n) => (
-                  <NotifItem key={n.id} n={n} onRead={markRead} />
-                ))
-              )}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* ── Notification list ───────────────────────────────────────────
+            At half:  overflow hidden, touch-action none → list doesn't scroll,
+                      drag travels through to the sheet.
+            At full:  overflow auto, touch-action pan-y → list scrolls normally.
+        ── */}
+        <div
+          ref={scrollRef}
+          onPointerDown={onContentPointerDown}
+          className="flex-1 flex flex-col"
+          style={{
+            minHeight:               0,
+            overflowY:               snap === "full" ? "auto" : "hidden",
+            overflowX:               "hidden",
+            WebkitOverflowScrolling: "touch",
+            touchAction:             snap === "full" ? "pan-y" : "none",
+            padding:                 notifications.length === 0 ? 0 : "10px 12px 96px",
+            gap:                     6,
+            display:                 "flex",
+            flexDirection:           "column",
+          }}
+        >
+          {notifications.length === 0
+            ? <EmptyState />
+            : notifications.map((n) => (
+                <NotifItem key={n.id} n={n} onRead={markRead} />
+              ))
+          }
+        </div>
+      </motion.div>
+    </>,
     document.body,
   );
 }
