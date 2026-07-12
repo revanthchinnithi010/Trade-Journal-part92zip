@@ -2,22 +2,32 @@
  * NotificationPanel — fullscreen modal (no drag, no snap points).
  *
  * Performance contract:
- *   • Only `opacity` + `transform` (translateY/scale) are animated — never
- *     width/height/top/left/border-radius/box-shadow/backdrop-filter.
+ *   • Only `opacity` + `transform` (translate3d) are animated — never
+ *     width/height/top/left/border-radius/box-shadow/filter/backdrop-filter.
+ *   • Plain CSS transitions, not framer-motion — no layout animations, no
+ *     shared-layout animations, no AnimatePresence. Nothing to schedule off
+ *     the main thread, nothing but a compositor-only transform+opacity tween.
  *   • No drag logic, no MotionValues, no pointermove handlers anywhere.
  *   • The component stays mounted at all times (parent renders it
  *     unconditionally); `open` only toggles visibility so re-opening never
  *     re-triggers mount work or a Dashboard re-render.
  *   • Sub-rows are memoised so toggling `open` never re-renders the list.
+ *   • The (already-in-memory) notification list is rendered one frame after
+ *     `open` flips, via requestAnimationFrame, so the opening transform never
+ *     shares a frame with list layout/paint work.
+ *
+ * Fullscreen contract:
+ *   • 100dvh, not 100vh — avoids the Android URL-bar collapse/expand gap.
+ *   • Only top/bottom safe-area insets are respected; no extra margin,
+ *     padding, or translateY offset above the header.
  *
  * Opening / closing
  *   Bell click  → open fullscreen directly (no half-sheet state).
  *   Close only via: X button, backdrop tap, ESC key, Android back button.
  */
 
-import React, { useEffect, useRef, memo, useCallback } from "react";
+import React, { useEffect, useRef, useState, memo, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { motion } from "framer-motion";
 import {
   TrendingUp, Layers, GitBranch, Wifi, WifiOff, Link2,
   Send, Activity, Info, CheckCheck, Trash2, X, Bell,
@@ -53,17 +63,12 @@ const TYPE_CFG: Record<NotifType, { icon: React.ElementType; color: string; bg: 
 };
 
 /* ─── animation constants ────────────────────────────────────────────────────
-   Only `opacity` + `transform` (y, scale) are ever animated. Nothing else. */
+   Only `opacity` + `transform: translate3d(...)` are ever animated — plain
+   CSS transitions, compositor-only, no framer-motion / layout animation. */
 
-const EASE = [0.22, 1, 0.36, 1] as const;
-
-const VARIANTS = {
-  hidden:  { opacity: 0, y: 24, scale: 0.98 },
-  visible: { opacity: 1, y: 0,  scale: 1 },
-} as const;
-
-const OPEN_TRANSITION  = { duration: 0.18, ease: EASE } as const;
-const CLOSE_TRANSITION = { duration: 0.14, ease: EASE } as const;
+const EASE = "cubic-bezier(0.22,1,0.36,1)";
+const OPEN_MS  = 160;
+const CLOSE_MS = 120;
 
 /* ─── memoised sub-components ─────────────────────────────────────────────── */
 
@@ -137,6 +142,18 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
   const hasOpenedRef = useRef(open);
   if (open) hasOpenedRef.current = true;
 
+  /* Lazy-render the (potentially long) notification list one frame after
+     `open` flips true, so the transform+opacity tween gets a clean first
+     frame with nothing else competing for layout/paint. The data itself is
+     already in memory (context), so this only defers list DOM work, not a
+     network fetch. */
+  const [listReady, setListReady] = useState(false);
+  useEffect(() => {
+    if (!open) { setListReady(false); return; }
+    const id = requestAnimationFrame(() => setListReady(true));
+    return () => cancelAnimationFrame(id);
+  }, [open]);
+
   /* `onClose` is a fresh arrow function on every parent re-render (which
      happens on every live price tick). Effects below must depend ONLY on
      `open` — depending on `onClose` too would tear the listeners down and
@@ -188,12 +205,19 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
     <div
       aria-hidden={!open}
       style={{
-        position: "fixed", inset: 0, zIndex: 55,
+        position: "fixed",
+        top: 0, left: 0, right: 0, bottom: 0,
+        height: "100dvh", width: "100vw",
+        /* Above MobileBottomNav (z-index 60) so the sheet is truly
+           fullscreen — nothing (including the bottom nav bar) may render
+           above it while open. */
+        zIndex: 70,
         visibility: open ? "visible" : "hidden",
         pointerEvents: open ? "auto" : "none",
       }}
     >
-      {/* Backdrop — plain CSS opacity transition, no MotionValue */}
+      {/* Backdrop — opacity-only CSS transition. blur is a static, non-animated
+          value (never transitioned) so it never triggers per-frame repaint cost. */}
       <div
         onClick={onBackdropClick}
         style={{
@@ -202,31 +226,34 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
           opacity: open ? 1 : 0,
-          transition: `opacity ${open ? "0.18s" : "0.14s"} ease`,
+          transition: `opacity ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}`,
         }}
       />
 
-      {/* Fullscreen sheet — only opacity + transform animate */}
-      <motion.div
+      {/* Fullscreen sheet — GPU-composited transform + opacity only.
+          No inset padding beyond top/bottom safe-area; no top margin/offset. */}
+      <div
         role="dialog"
         aria-modal="true"
         aria-label="Notifications"
         onClick={stop}
-        initial={false}
-        animate={open ? "visible" : "hidden"}
-        variants={VARIANTS}
-        transition={open ? OPEN_TRANSITION : CLOSE_TRANSITION}
-        className="absolute inset-0 flex flex-col"
         style={{
+          position: "absolute",
+          top: 0, left: 0, right: 0, bottom: 0,
+          height: "100%",
+          display: "flex", flexDirection: "column",
           background: "#121316",
+          transform: open ? "translate3d(0,0,0)" : "translate3d(0,16px,0)",
+          opacity: open ? 1 : 0,
+          transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}, opacity ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}`,
           willChange: "transform, opacity",
           paddingTop:    "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
-          paddingLeft:   "env(safe-area-inset-left)",
-          paddingRight:  "env(safe-area-inset-right)",
         }}
+        className="transform-gpu"
       >
-        {/* Header */}
+        {/* Header — sits directly below the status bar (safe-area padding is
+            on the sheet itself, nothing extra here). */}
         <div
           className="flex items-center justify-between px-4 shrink-0 select-none"
           style={{ height: 56, borderBottom: "1px solid rgba(255,255,255,0.06)" }}
@@ -270,7 +297,8 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           </div>
         </div>
 
-        {/* Notification list — the only scrollable region */}
+        {/* Notification list — the only scrollable region; fills all
+            remaining height below the header. */}
         <div
           className="flex-1 flex flex-col"
           style={{
@@ -283,9 +311,9 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
             gap: 6, display: "flex", flexDirection: "column",
           }}
         >
-          <NotifList notifications={notifications} onRead={markRead} />
+          {listReady && <NotifList notifications={notifications} onRead={markRead} />}
         </div>
-      </motion.div>
+      </div>
     </div>,
     document.body,
   );
