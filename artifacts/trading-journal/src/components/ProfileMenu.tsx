@@ -1,27 +1,28 @@
 /**
- * ProfileMenu — 60 FPS profile dropdown for mobile + desktop.
+ * ProfileMenu — compositor-thread animated profile dropdown.
  *
- * Performance contract:
- *   RAF hot path animates ONLY: opacity, scale, translateY on ONE motion.div.
- *   Everything else (blur, border, shadow, border-radius) is static — never
- *   touched during an animation frame.
+ * WHY CSS TRANSITIONS INSTEAD OF FRAMER-MOTION animate():
+ *   framer-motion's animate() is JS-driven: it fires requestAnimationFrame
+ *   callbacks on the main thread and writes style values from JS each frame.
+ *   When the chart tick engine, LivePriceBox RAF loop, or candle WS updates
+ *   are running concurrently, they block those RAF callbacks → frame drops.
  *
- * Architecture:
- *   • Always mounted — no AnimatePresence, no DOM insertion/removal.
- *   • Backdrop: plain <div>, opacity controlled via CSS transition (not RAF).
- *   • Blur layer: static <div> sibling behind the animated panel — blur is
- *     never inside the composited animation layer, so no recomposite per frame.
- *   • Panel content: one <motion.div> driven by three useMotionValue instances
- *     (opacity, scale, y). animate() writes to the DOM directly; zero React
- *     re-renders during the animation.
- *   • No per-item animations. No stagger. Panel fades/scales as a unit.
- *   • No whileTap gesture subscriptions. Plain CSS active states.
+ *   CSS transitions for `opacity` and `transform` run on the GPU compositor
+ *   thread, completely independent of JavaScript. The chart can do whatever
+ *   it wants on the main thread — the menu animation is unaffected.
+ *
+ * Transition properties animated (compositor-thread only):
+ *   opacity   → open: 0→1 over 180ms | close: 1→0 over 120ms
+ *   transform → open: scale(0.96) translateY(-10px) → identity over 180ms
+ *               close: identity → scale(0.96) translateY(-10px) over 120ms
+ *
+ * Everything else (blur, shadow, border, border-radius) is static — never
+ * touched during animation.
  */
 
 import React, {
   useRef, useEffect, useState, useCallback, memo,
 } from "react";
-import { motion, useMotionValue, animate } from "motion/react";
 import {
   User, Settings, Palette, Download, LogOut,
   X, Camera, Eye, EyeOff, ChevronRight, ChevronLeft,
@@ -90,15 +91,11 @@ const THEME_OPTIONS: { mode: ThemeMode; label: string; sub: string; Icon: React.
   { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor },
 ];
 
-/* ─── animation constants ────────────────────────────────────────────────────── */
+/* ─── CSS easing ─────────────────────────────────────────────────────────────── */
 
-// Premium deceleration — same curve used across all app animations.
-const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const EASE = "cubic-bezier(0.22,1,0.36,1)";
 
-const OPEN_OPTS  = { duration: 0.18, ease: EASE } as const;
-const CLOSE_OPTS = { duration: 0.12, ease: EASE } as const;
-
-/* ─── sub-components (memoised — render only when their own props change) ────── */
+/* ─── sub-components ─────────────────────────────────────────────────────────── */
 
 interface ThemeRowProps {
   mode: ThemeMode; label: string; sub: string;
@@ -114,7 +111,7 @@ const ThemeRow = memo(function ThemeRow({ mode, label, sub, Icon, active, onSele
       style={{
         background: active ? "rgba(165,180,252,0.10)" : "transparent",
         border:     active ? "1px solid rgba(165,180,252,0.22)" : "1px solid transparent",
-        transition: "background 100ms, border-color 100ms",
+        transition: "background 100ms",
       }}
       onMouseEnter={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
       onMouseLeave={e => { if (!active) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
@@ -128,9 +125,7 @@ const ThemeRow = memo(function ThemeRow({ mode, label, sub, Icon, active, onSele
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-[12px] font-medium leading-tight"
-          style={{ color: active ? "#e0e7ff" : "hsl(var(--foreground))" }}>
-          {label}
-        </p>
+          style={{ color: active ? "#e0e7ff" : "hsl(var(--foreground))" }}>{label}</p>
         <p className="text-[10px] text-muted-foreground/60 leading-tight mt-0.5">{sub}</p>
       </div>
       {active && (
@@ -149,8 +144,7 @@ const AppearancePanel = memo(function AppearancePanel({ onBack }: { onBack: () =
     <div>
       <div className="flex items-center gap-2 px-3 py-3"
         style={{ borderBottom: "1px solid var(--surface-divider)" }}>
-        <button
-          onClick={onBack}
+        <button onClick={onBack}
           className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-white transition-colors"
           style={{ background: "var(--surface-btn-hover)" }}>
           <ChevronLeft className="w-3.5 h-3.5" />
@@ -165,9 +159,7 @@ const AppearancePanel = memo(function AppearancePanel({ onBack }: { onBack: () =
       </div>
       <div className="p-2">
         <p className="text-[9px] font-bold uppercase tracking-[0.12em] px-2 pt-1 pb-2"
-          style={{ color: "rgba(148,163,184,0.45)" }}>
-          Theme Mode
-        </p>
+          style={{ color: "rgba(148,163,184,0.45)" }}>Theme Mode</p>
         <div className="space-y-0.5">
           {THEME_OPTIONS.map(o => (
             <ThemeRow key={o.mode} {...o} active={themeMode === o.mode} onSelect={setThemeMode} />
@@ -187,20 +179,16 @@ interface MenuItemRowProps {
   onClick: (action: string) => void;
 }
 
-const MenuItemRow = memo(function MenuItemRow({ icon: Icon, label, action, danger, isLast, onClick }: MenuItemRowProps) {
+const MenuItemRow = memo(function MenuItemRow({
+  icon: Icon, label, action, danger, isLast, onClick,
+}: MenuItemRowProps) {
   return (
     <div>
-      {isLast && (
-        <div className="my-1.5 mx-2" style={{ height: "1px", background: "var(--surface-divider)" }} />
-      )}
+      {isLast && <div className="my-1.5 mx-2" style={{ height: 1, background: "var(--surface-divider)" }} />}
       <button
         onClick={() => onClick(action)}
         className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-[12px] font-medium"
-        style={{
-          color:      danger ? "#f87171" : "hsl(var(--muted-foreground))",
-          background: "transparent",
-          transition: "background 100ms, color 100ms",
-        }}
+        style={{ color: danger ? "#f87171" : "hsl(var(--muted-foreground))", background: "transparent", transition: "background 100ms, color 100ms" }}
         onMouseEnter={e => {
           const el = e.currentTarget as HTMLElement;
           el.style.background = danger ? "rgba(248,113,113,0.09)" : "var(--surface-btn-hover)";
@@ -233,61 +221,33 @@ interface DropdownProps {
 export const ProfileDropdown = memo(function ProfileDropdown({
   open, profile, onUpdate, onClose,
 }: DropdownProps) {
-  const [, navigate] = useLocation();
+  const [, navigate]      = useLocation();
   const [showModal, setShowModal] = useState(false);
-  const [panel, setPanel]         = useState<"menu" | "appearance">("menu");
+  const [panel, setPanel] = useState<"menu" | "appearance">("menu");
 
-  /* ── MotionValues — ONLY things on the RAF hot path ── */
-  const mvOpacity = useMotionValue(0);
-  const mvScale   = useMotionValue(0.96);
-  const mvY       = useMotionValue(-10);
-
-  /* stop handle to cancel in-flight animation before starting the reverse */
-  const stopRef = useRef<(() => void) | null>(null);
-
-  /* ── animate on open/close prop change ── */
+  /* Reset panel to "menu" after the close animation finishes (120 ms).
+     Doing it on open would schedule a React setState during the opening
+     animation — this way the reset happens while the menu is invisible. */
+  const prevOpenRef = useRef(open);
   useEffect(() => {
-    stopRef.current?.();
-
-    if (open) {
-      /* ⚠️  Do NOT call .set() here.
-         Calling mvOpacity.set(0) / mvScale.set(0.96) / mvY.set(-10) before
-         animate() writes to the DOM synchronously, causing the element to
-         snap to its "from" state one frame before the animation starts —
-         that one-frame visual discontinuity is the intermittent stutter.
-         The MotionValues are already at their closed values (initialised
-         below, and restored by every close animation), so animate() can
-         start from the current value with zero pre-work. */
-      const a1 = animate(mvOpacity, 1, OPEN_OPTS);
-      const a2 = animate(mvScale,   1, OPEN_OPTS);
-      const a3 = animate(mvY,       0, OPEN_OPTS);
-      stopRef.current = () => { a1.stop(); a2.stop(); a3.stop(); };
-    } else {
-      /* Reset panel to "menu" HERE (on close) — not on open.
-         Resetting on open schedules a React re-render on the same frame
-         the opening animation starts, competing with the animation on
-         the main thread. Resetting on close happens while the menu is
-         going invisible so there is nothing visible to stutter. */
-      setPanel("menu");
-      const a1 = animate(mvOpacity, 0,    CLOSE_OPTS);
-      const a2 = animate(mvScale,   0.96, CLOSE_OPTS);
-      const a3 = animate(mvY,       -10,  CLOSE_OPTS);
-      stopRef.current = () => { a1.stop(); a2.stop(); a3.stop(); };
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (wasOpen && !open) {
+      const t = setTimeout(() => setPanel("menu"), 130);
+      return () => clearTimeout(t);
     }
+  }, [open]);
 
-    return () => stopRef.current?.();
-  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* ── suppress glass-card blurs elsewhere while open (same convention as
-     NotificationPanel) — prevents the live-tick RAF loop from fighting
-     backdrop-filter recomposites across the whole page ── */
+  /* Suppress glass-card blurs in the rest of the app while open — prevents
+     the chart's backdrop-filter elements from being recomposited alongside
+     our transition. */
   useEffect(() => {
     if (!open) return;
     document.body.classList.add("tj-modal-open");
     return () => document.body.classList.remove("tj-modal-open");
   }, [open]);
 
-  /* ── ESC ── */
+  /* ESC */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -295,7 +255,7 @@ export const ProfileDropdown = memo(function ProfileDropdown({
     return () => window.removeEventListener("keydown", h);
   }, [open, onClose]);
 
-  /* ── actions ── */
+  /* Actions */
   const handleAction = useCallback((action: string) => {
     if (action === "settings")   { navigate("/settings"); onClose(); return; }
     if (action === "profile")    { setShowModal(true); return; }
@@ -316,13 +276,23 @@ export const ProfileDropdown = memo(function ProfileDropdown({
 
   const initials = getInitials(profile.name);
 
+  /* ── CSS transition values — computed once per render, not per frame ── */
+  const dur      = open ? "0.18s" : "0.12s";
+  const panelTx  = `opacity ${dur} ${EASE}, transform ${dur} ${EASE}`;
+  const fadeTx   = `opacity ${open ? "0.14s" : "0.12s"} ease`;
+
+  /* ── open ↔ closed transform string ── */
+  const panelTransform = open
+    ? "scale(1) translateY(0px)"
+    : "scale(0.96) translateY(-10px)";
+
   return (
     <>
       {/*
-        ╔══════════════════════════════════════════════════════════════════╗
-        ║ BACKDROP — always mounted, pure CSS transition, zero RAF cost.  ║
-        ║ opacity: 0 → 0.45 over 140 ms on open; reverse on close.       ║
-        ╚══════════════════════════════════════════════════════════════════╝
+        ╔═══════════════════════════════════════════════════════════════════╗
+        ║ BACKDROP — always mounted, pure CSS transition.                  ║
+        ║ transition: opacity — compositor thread, zero JS per frame.      ║
+        ╚═══════════════════════════════════════════════════════════════════╝
       */}
       <div
         aria-hidden
@@ -333,33 +303,33 @@ export const ProfileDropdown = memo(function ProfileDropdown({
           zIndex:        40,
           background:    "#000",
           opacity:       open ? 0.45 : 0,
-          transition:    open ? "opacity 0.14s ease" : "opacity 0.12s ease",
+          transition:    fadeTx,
           pointerEvents: open ? "auto" : "none",
         }}
       />
 
       {/*
-        ╔══════════════════════════════════════════════════════════════════╗
-        ║ MENU CONTAINER — absolute, always mounted.                      ║
-        ║ Two layers:                                                     ║
-        ║   1. Blur layer  — static div, CSS transition opacity only.     ║
-        ║      Blur is NEVER inside the composited animation layer, so    ║
-        ║      the GPU never recomputes it during the scale animation.    ║
-        ║   2. Content layer — motion.div, RAF-driven opacity/scale/y.    ║
-        ║      Only GPU-composited props change per frame.                ║
-        ╚══════════════════════════════════════════════════════════════════╝
+        ╔═══════════════════════════════════════════════════════════════════╗
+        ║ MENU CONTAINER — absolute, always mounted.                       ║
+        ║ contain: layout style → changes inside can't cause page reflow.  ║
+        ╚═══════════════════════════════════════════════════════════════════╝
       */}
       <div
         className="absolute top-[calc(100%+10px)] right-0 w-[276px]"
         style={{
           zIndex:        50,
           pointerEvents: open ? "auto" : "none",
-          /* Isolate this subtree from the page layout so internal changes
-             (panel switch, scroll) never trigger a full-page recalculation. */
-          contain: "layout style",
+          contain:       "layout style",
         }}
       >
-        {/* Layer 1: blur + background — static, CSS transition, zero RAF */}
+        {/*
+          Layer 1: blur + background — static div, CSS fade on open/close only.
+          The blur is NEVER inside the element whose transform is transitioning.
+          A backdrop-filter on an element with an animating transform forces the
+          browser to re-rasterize the blur every frame — this is the #1 source
+          of GPU frame drops on Android. Separating them means the blur is
+          rasterized ONCE and cached.
+        */}
         <div
           aria-hidden
           style={{
@@ -371,46 +341,50 @@ export const ProfileDropdown = memo(function ProfileDropdown({
             WebkitBackdropFilter: "blur(20px)",
             border:               "1px solid rgba(255,255,255,0.06)",
             boxShadow:            "0 20px 60px rgba(0,0,0,0.45)",
-            /* CSS transition — fires once per open/close, never per frame */
             opacity:              open ? 1 : 0,
-            transition:           open ? "opacity 0.14s ease" : "opacity 0.12s ease",
+            transition:           fadeTx,
             pointerEvents:        "none",
           }}
         />
 
-        {/* Layer 2: content — one motion.div, only opacity/scale/y animate */}
-        <motion.div
+        {/*
+          Layer 2: animated panel.
+
+          ★ PURE CSS TRANSITION — no framer-motion, no JS RAF, no main-thread
+            work per frame. Runs entirely on the GPU compositor thread.
+
+          The two animated properties:
+            opacity   → compositor layer opacity (zero cost)
+            transform → GPU matrix multiplication (zero cost)
+
+          Properties that never change (set once, cached by GPU):
+            border-radius, overflow, position, z-index, background (none here —
+            background comes from the blur layer behind it)
+
+          backfaceVisibility: hidden → forces a persistent 3D context so the
+          GPU layer is NEVER evicted between opens (eviction = cold-start stutter).
+        */}
+        <div
           style={{
-            opacity:         mvOpacity,
-            scale:           mvScale,
-            y:               mvY,
-            transformOrigin: "top right",
-            willChange:      "transform, opacity",
-            /* backfaceVisibility: hidden forces a persistent 3D stacking
-               context. Android Chrome evicts will-change compositor layers
-               when the element is idle — this prevents that eviction, so
-               the GPU layer is always warm and the first animation frame
-               never has to re-promote (which is what causes the
-               "sometimes stutter, sometimes smooth" pattern). */
-            backfaceVisibility: "hidden",
+            position:                 "relative",
+            zIndex:                   1,
+            borderRadius:             24,
+            overflow:                 "hidden",
+            transformOrigin:          "top right",
+            willChange:               "transform, opacity",
+            backfaceVisibility:       "hidden",
             WebkitBackfaceVisibility: "hidden",
-            /* position: relative so it stacks above the blur layer */
-            position:   "relative",
-            zIndex:     1,
-            borderRadius: 24,
-            /* overflow:hidden clips the rounded-corner shape;
-               inner scroll div handles maxHeight / overflowY */
-            overflow:   "hidden",
+            opacity:                  open ? 1 : 0,
+            transform:                panelTransform,
+            transition:               panelTx,
           }}
         >
           <div style={{ maxHeight: "min(88vh, 700px)", overflowY: "auto", overflowX: "hidden" }}>
 
-            {/* ── Appearance sub-panel ── */}
             {panel === "appearance" && (
               <AppearancePanel onBack={() => setPanel("menu")} />
             )}
 
-            {/* ── Main menu ── */}
             {panel === "menu" && (
               <>
                 {/* Profile header */}
@@ -435,7 +409,7 @@ export const ProfileDropdown = memo(function ProfileDropdown({
                   </div>
                 </div>
 
-                {/* Menu items — no individual animations, no stagger */}
+                {/* Items — no individual animations, no stagger */}
                 <div className="p-1.5 space-y-0.5">
                   {MENU_ITEMS.map((item, i) => (
                     <MenuItemRow
@@ -450,14 +424,14 @@ export const ProfileDropdown = memo(function ProfileDropdown({
                   ))}
                 </div>
 
-                {/* System status / backend info */}
+                {/* System status */}
                 <div className="px-1.5 pb-2">
                   <SidebarSystemSections open={true} />
                 </div>
               </>
             )}
           </div>
-        </motion.div>
+        </div>
       </div>
 
       {/* Profile edit modal */}
