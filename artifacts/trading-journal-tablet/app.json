@@ -20,7 +20,9 @@
     },
     "android": {
       "softwareKeyboardLayoutMode": "pan",
-      "package": "com.tradevault.app"
+      "package": "com.tradevault.app",
+      "edgeToEdgeEnabled": true,
+      "navigationBarColor": "#0d1117"
     },
     "web": {
       "favicon": "./assets/images/icon.png",

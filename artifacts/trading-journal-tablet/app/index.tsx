@@ -1,7 +1,7 @@
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import WebView from "react-native-webview";
 
 // Guard against Metro injecting the literal string "undefined" when the env
@@ -64,6 +64,7 @@ export default function TabletScreen() {
   const isLandscape = width >= height;
   const webViewRef = useRef<WebView>(null);
   const prevLandscape = useRef<boolean | null>(null);
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (prevLandscape.current === isLandscape) return;
@@ -87,17 +88,27 @@ export default function TabletScreen() {
     );
   }
 
+  // Edge-to-edge on Android (Expo SDK 54+) is mandatory and cannot be opted
+  // out of — the app always draws behind the status bar and navigation bar.
+  // Fighting that with a translucent={false} StatusBar or a SafeAreaView
+  // that consumes ALL edges around the WebView is what caused the status
+  // bar to intermittently vanish and a stray bottom gap to appear: the
+  // native side was reserving inset space *and* the web page's own CSS
+  // (env(safe-area-inset-*)) was racing it, so depending on which insets
+  // arrived first the two would over- or under-compensate.
+  //
+  // Correct approach: let the WebView itself be truly edge-to-edge (no
+  // SafeAreaView wrapping it) so `viewport-fit=cover` + `env()` inside the
+  // web app can size its own header/bottom-nav against the real device
+  // insets. The only inset consumed natively here is `insets.top`, applied
+  // as a simple spacer above the WebView so the page's sticky header never
+  // renders underneath the status bar. No inset is subtracted from the
+  // screen height anywhere — the WebView is `flex: 1` and fills whatever
+  // space remains.
   return (
-    <>
-      <StatusBar
-        translucent={false}
-        backgroundColor="#0d1117"
-        style="light"
-      />
-      <SafeAreaView
-        style={styles.safeArea}
-        edges={["top", "bottom", "left", "right"]}
-      >
+    <View style={styles.container}>
+      <StatusBar style="light" />
+      <View style={{ height: insets.top, backgroundColor: "#0d1117" }} />
       <WebView
         ref={webViewRef}
         source={{ uri: WEB_URL }}
@@ -127,16 +138,11 @@ export default function TabletScreen() {
           webViewRef.current?.reload();
         }}
       />
-    </SafeAreaView>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: "#0d1117",
-  },
   container: {
     flex: 1,
     backgroundColor: "#0d1117",
