@@ -1,6 +1,14 @@
 /**
  * NotificationsSettingsPage — alert sound, ringtone, and duration settings.
- * Slides in from the right. Same GPU-only animation as sibling pages.
+ *
+ * NAVIGATION: pure controlled component. No pushState, no popstate listeners.
+ * ProfilePage owns the history stack. This component:
+ *   - Renders when open=true
+ *   - Calls onClose() for its Back button (= ProfilePage's popPage = history.back())
+ *   - Calls onOpenPicker(name) to push a picker page onto the stack
+ *   - Receives pickerPage ("picker_sound" | "picker_duration" | null) from ProfilePage
+ *   - Calls onClosePicker() from picker's Back button (= ProfilePage's popPage)
+ *
  * All preferences persisted to localStorage under "tj_notification_prefs".
  */
 
@@ -16,7 +24,7 @@ const DUR_CLOSE  = 210;
 
 const LS_KEY = "tj_notification_prefs";
 
-const SOUNDS   = ["Default", "Chime", "Ping", "Bell", "Ding"] as const;
+const SOUNDS    = ["Default", "Chime", "Ping", "Bell", "Ding"] as const;
 const DURATIONS = ["3 seconds", "5 seconds", "10 seconds", "30 seconds"] as const;
 type SoundType    = typeof SOUNDS[number];
 type DurationType = typeof DURATIONS[number];
@@ -39,7 +47,9 @@ function savePrefs(p: NotifPrefs) {
   try { localStorage.setItem(LS_KEY, JSON.stringify(p)); } catch { /* ignore */ }
 }
 
-/* ── subpage for choosing from a list ────────────────────────────────────── */
+/* ── PickerPage — pure controlled list picker ────────────────────────────────
+   No history manipulation — open/close is driven entirely by ProfilePage's
+   navStack via the pickerPage prop.                                           */
 
 function PickerPage<T extends string>({
   open, onClose, title, options, selected, onSelect,
@@ -57,8 +67,6 @@ function PickerPage<T extends string>({
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  const histKey = `tjPicker_${title.replace(/\s+/g, "")}`;
-
   useEffect(() => {
     if (open) {
       setRendered(true);
@@ -71,21 +79,7 @@ function PickerPage<T extends string>({
     }
   }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    window.history.pushState({ [histKey]: true }, "");
-    const h = (e: PopStateEvent) => {
-      if ((e.state as Record<string, unknown> | null)?.[histKey]) return;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", h);
-    return () => {
-      window.removeEventListener("popstate", h);
-      if ((window.history.state as Record<string, unknown> | null)?.[histKey])
-        window.history.back();
-    };
-  }, [open, histKey]);
-
+  /* ESC → go back (calls onClose = ProfilePage's popPage) */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
@@ -142,7 +136,7 @@ function PickerPage<T extends string>({
         </p>
 
         {options.map((opt, i) => {
-          const active = selected === opt;
+          const active    = selected === opt;
           const isPressed = pressed === opt;
           return (
             <React.Fragment key={opt}>
@@ -213,15 +207,12 @@ function ToggleRow({
           <p style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)", lineHeight: 1.3 }}>{label}</p>
           {sub && <p style={{ fontSize: 12, color: "rgba(148,163,184,0.55)", marginTop: 2 }}>{sub}</p>}
         </div>
-        {/* Toggle pill */}
-        <div
-          style={{
-            width: 46, height: 26, borderRadius: 13, flexShrink: 0,
-            background: value ? "#a5b4fc" : "rgba(255,255,255,0.12)",
-            position: "relative",
-            transition: "background 200ms",
-          }}
-        >
+        <div style={{
+          width: 46, height: 26, borderRadius: 13, flexShrink: 0,
+          background: value ? "#a5b4fc" : "rgba(255,255,255,0.12)",
+          position: "relative",
+          transition: "background 200ms",
+        }}>
           <div style={{
             position: "absolute",
             top: 3, left: value ? 23 : 3,
@@ -285,17 +276,20 @@ function NavRow({
 /* ── Main component ─────────────────────────────────────────────────────── */
 
 export interface NotificationsSettingsPageProps {
-  open:    boolean;
-  onClose: () => void;
+  open:          boolean;
+  onClose:       () => void;
+  /** The navStack entry for the active picker, e.g. "picker_sound" or null */
+  pickerPage:    string | null;
+  onOpenPicker:  (name: string) => void;
+  onClosePicker: () => void;
 }
 
 export const NotificationsSettingsPage = memo(function NotificationsSettingsPage({
-  open, onClose,
+  open, onClose, pickerPage, onOpenPicker, onClosePicker,
 }: NotificationsSettingsPageProps) {
   const [rendered, setRendered] = useState(open);
   const [visible,  setVisible]  = useState(false);
   const [prefs, setPrefs]       = useState<NotifPrefs>(loadPrefs);
-  const [pickerOpen, setPickerOpen] = useState<"sound" | "duration" | null>(null);
 
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
@@ -308,7 +302,7 @@ export const NotificationsSettingsPage = memo(function NotificationsSettingsPage
     });
   }, []);
 
-  /* ── lifecycle ──────────────────────────────────────────────────────────── */
+  /* ── Lifecycle ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (open) {
       setRendered(true);
@@ -321,23 +315,7 @@ export const NotificationsSettingsPage = memo(function NotificationsSettingsPage
     }
   }, [open]);
 
-  /* ── Android back ───────────────────────────────────────────────────────── */
-  useEffect(() => {
-    if (!open) return;
-    window.history.pushState({ tjNotificationsPage: true }, "");
-    const h = (e: PopStateEvent) => {
-      if ((e.state as Record<string, unknown> | null)?.tjNotificationsPage) return;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", h);
-    return () => {
-      window.removeEventListener("popstate", h);
-      if ((window.history.state as Record<string, unknown> | null)?.tjNotificationsPage)
-        window.history.back();
-    };
-  }, [open]);
-
-  /* ── ESC ────────────────────────────────────────────────────────────────── */
+  /* ── ESC → go back ──────────────────────────────────────────────────────── */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
@@ -388,7 +366,6 @@ export const NotificationsSettingsPage = memo(function NotificationsSettingsPage
         {/* ── Scrollable content ───────────────────────────────────────────── */}
         <div style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch", overscrollBehavior: "contain" }}>
 
-          {/* Section: ALERTS */}
           <p style={{
             fontSize: 11, fontWeight: 700, letterSpacing: "0.10em",
             textTransform: "uppercase", padding: "24px 24px 10px",
@@ -412,7 +389,7 @@ export const NotificationsSettingsPage = memo(function NotificationsSettingsPage
             iconBg="rgba(139,92,246,0.14)"
             label="Alert Ringtone"
             value={prefs.sound}
-            onClick={() => setPickerOpen("sound")}
+            onClick={() => onOpenPicker("picker_sound")}
             showDivider
             disabled={!prefs.soundEnabled}
           />
@@ -423,31 +400,33 @@ export const NotificationsSettingsPage = memo(function NotificationsSettingsPage
             iconBg="rgba(245,158,11,0.14)"
             label="Alert Duration"
             value={prefs.duration}
-            onClick={() => setPickerOpen("duration")}
+            onClick={() => onOpenPicker("picker_duration")}
             showDivider={false}
           />
 
         </div>
       </div>
 
-      {/* ── Ringtone picker sub-page ─────────────────────────────────────────── */}
+      {/* ── Picker sub-pages ─────────────────────────────────────────────────
+          Controlled by ProfilePage's navStack via pickerPage prop.
+          Back button calls onClosePicker = ProfilePage's popPage = history.back(). */}
+
       <PickerPage
-        open={pickerOpen === "sound"}
-        onClose={() => setPickerOpen(null)}
+        open={pickerPage === "picker_sound"}
+        onClose={onClosePicker}
         title="Alert Ringtone"
         options={SOUNDS}
         selected={prefs.sound}
-        onSelect={v => updatePrefs({ sound: v })}
+        onSelect={v => updatePrefs({ sound: v as SoundType })}
       />
 
-      {/* ── Duration picker sub-page ─────────────────────────────────────────── */}
       <PickerPage
-        open={pickerOpen === "duration"}
-        onClose={() => setPickerOpen(null)}
+        open={pickerPage === "picker_duration"}
+        onClose={onClosePicker}
         title="Alert Duration"
         options={DURATIONS}
         selected={prefs.duration}
-        onSelect={v => updatePrefs({ duration: v })}
+        onSelect={v => updatePrefs({ duration: v as DurationType })}
       />
     </>
   );

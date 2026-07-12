@@ -1,7 +1,13 @@
 /**
  * AppearanceSettingsPage — theme picker sub-page.
- * Slides in from the right on top of the Settings list.
- * Same GPU-only CSS transition as ProfilePage / ProfileSettingsPage.
+ *
+ * NAVIGATION: pure controlled component. No pushState, no popstate listeners.
+ * ProfilePage owns the history stack. This component just:
+ *   - Renders when open=true
+ *   - Calls onClose() when the Back button is pressed
+ *     (onClose = ProfilePage's popPage = history.back() → ProfilePage handles)
+ *
+ * ANIMATION: GPU-only CSS translateX transition, same as sibling pages.
  */
 
 import React, { memo, useEffect, useRef, useState } from "react";
@@ -14,10 +20,13 @@ const EASE_CLOSE = "cubic-bezier(0.4,0,0.6,1)";
 const DUR_OPEN   = 240;
 const DUR_CLOSE  = 210;
 
-const OPTIONS: { mode: ThemeMode; label: string; sub: string; Icon: React.ElementType; iconColor: string; iconBg: string }[] = [
-  { mode: "light",  label: "Light",          sub: "Always use light theme",    Icon: Sun,     iconColor: "#fbbf24", iconBg: "rgba(245,158,11,0.14)"   },
-  { mode: "dark",   label: "Dark",           sub: "Always use dark theme",     Icon: Moon,    iconColor: "#a78bfa", iconBg: "rgba(139,92,246,0.14)"   },
-  { mode: "system", label: "System Default", sub: "Follow device preference",  Icon: Monitor, iconColor: "#60a5fa", iconBg: "rgba(59,130,246,0.14)"   },
+const OPTIONS: {
+  mode: ThemeMode; label: string; sub: string;
+  Icon: React.ElementType; iconColor: string; iconBg: string;
+}[] = [
+  { mode: "light",  label: "Light",          sub: "Always use light theme",   Icon: Sun,     iconColor: "#fbbf24", iconBg: "rgba(245,158,11,0.14)"  },
+  { mode: "dark",   label: "Dark",           sub: "Always use dark theme",    Icon: Moon,    iconColor: "#a78bfa", iconBg: "rgba(139,92,246,0.14)"  },
+  { mode: "system", label: "System Default", sub: "Follow device preference", Icon: Monitor, iconColor: "#60a5fa", iconBg: "rgba(59,130,246,0.14)"  },
 ];
 
 export interface AppearanceSettingsPageProps {
@@ -36,7 +45,7 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
-  /* ── lifecycle ──────────────────────────────────────────────────────────── */
+  /* ── Lifecycle ──────────────────────────────────────────────────────────── */
   useEffect(() => {
     if (open) {
       setRendered(true);
@@ -49,23 +58,7 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
     }
   }, [open]);
 
-  /* ── Android back ───────────────────────────────────────────────────────── */
-  useEffect(() => {
-    if (!open) return;
-    window.history.pushState({ tjAppearancePage: true }, "");
-    const h = (e: PopStateEvent) => {
-      if ((e.state as Record<string, unknown> | null)?.tjAppearancePage) return;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", h);
-    return () => {
-      window.removeEventListener("popstate", h);
-      if ((window.history.state as Record<string, unknown> | null)?.tjAppearancePage)
-        window.history.back();
-    };
-  }, [open]);
-
-  /* ── ESC ────────────────────────────────────────────────────────────────── */
+  /* ── ESC → go back (calls onClose = ProfilePage's popPage) ─────────────── */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
@@ -151,7 +144,6 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
                 transition: "background 60ms",
               }}
             >
-              {/* Icon */}
               <div style={{
                 width: 40, height: 40, borderRadius: 12, flexShrink: 0,
                 display: "flex", alignItems: "center", justifyContent: "center",
@@ -160,7 +152,6 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
                 <Icon style={{ width: 18, height: 18, color: iconColor }} />
               </div>
 
-              {/* Label */}
               <div style={{ flex: 1, textAlign: "left" }}>
                 <p style={{ fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)", lineHeight: 1.3 }}>
                   {label}
@@ -170,7 +161,6 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
                 </p>
               </div>
 
-              {/* Radio check */}
               <div style={{
                 width: 22, height: 22, borderRadius: "50%",
                 border: active ? "none" : "2px solid rgba(255,255,255,0.20)",
@@ -183,7 +173,6 @@ export const AppearanceSettingsPage = memo(function AppearanceSettingsPage({
               </div>
             </button>
 
-            {/* Divider — skip after last row */}
             {i < OPTIONS.length - 1 && (
               <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 80 }} />
             )}

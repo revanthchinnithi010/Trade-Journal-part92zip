@@ -1,14 +1,18 @@
 /**
  * ProfileSettingsPage — premium flat-list settings overlay.
  *
+ * NAVIGATION: pure controlled component. No pushState, no popstate listeners.
+ * ProfilePage (the parent) owns the entire navigation stack for the profile
+ * session. This component just renders when open=true and calls:
+ *   onClose()             → to go back to Profile (ProfilePage calls history.back())
+ *   onOpenAppearance()    → to push Appearance onto the stack
+ *   onOpenNotifications() → to push Notifications onto the stack
+ *
  * ANIMATION ENGINE: pure CSS transitions on `transform: translateX` only.
  * GPU compositor thread — zero JS frame budget consumed during animation.
  *
  *   Enter: translateX(+100%) → translateX(0)   240ms cubic-bezier(0.22,1,0.36,1)
  *   Exit:  translateX(0)     → translateX(+100%) 210ms cubic-bezier(0.4,0,0.6,1)
- *
- * Layout: full-screen #000000, section labels, flat list rows (64–68px),
- * inset dividers (marginLeft 80px), no card containers.
  */
 
 import React, { memo, useEffect, useRef, useState, useCallback } from "react";
@@ -18,8 +22,6 @@ import {
   LogOut, ChevronRight, Copy, Check, RefreshCw,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
-import { AppearanceSettingsPage }    from "./AppearanceSettingsPage";
-import { NotificationsSettingsPage } from "./NotificationsSettingsPage";
 
 /* ─── animation ────────────────────────────────────────────────────────────── */
 
@@ -147,7 +149,6 @@ function NavRow({
           transition: "background 60ms",
         }}
       >
-        {/* Icon container */}
         <div style={{
           width: 40, height: 40, borderRadius: 12, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
@@ -155,13 +156,9 @@ function NavRow({
         }}>
           <Icon style={{ width: 18, height: 18, color: iconColor }} />
         </div>
-
-        {/* Label */}
         <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
           {label}
         </span>
-
-        {/* Right side */}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {rightContent}
           <ChevronRight style={{ width: 16, height: 16, color: "rgba(148,163,184,0.30)" }} />
@@ -209,11 +206,9 @@ function InfoRow({
         }}>
           <Icon style={{ width: 18, height: 18, color: iconColor }} />
         </div>
-
         <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
           {label}
         </span>
-
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {rightContent}
         </div>
@@ -226,18 +221,19 @@ function InfoRow({
 /* ─── props ─────────────────────────────────────────────────────────────────── */
 
 export interface ProfileSettingsPageProps {
-  open:    boolean;
-  onClose: () => void;
+  open:                boolean;
+  onClose:             () => void;
+  onOpenAppearance:    () => void;
+  onOpenNotifications: () => void;
 }
 
 /* ─── main component ─────────────────────────────────────────────────────────── */
 
 export const ProfileSettingsPage = memo(function ProfileSettingsPage({
-  open, onClose,
+  open, onClose, onOpenAppearance, onOpenNotifications,
 }: ProfileSettingsPageProps) {
-  const [rendered,   setRendered]   = useState(open);
-  const [visible,    setVisible]    = useState(false);
-  const [subPage,    setSubPage]    = useState<"appearance" | "notifications" | null>(null);
+  const [rendered, setRendered] = useState(open);
+  const [visible,  setVisible]  = useState(false);
 
   const { themeMode } = useTheme();
 
@@ -310,25 +306,7 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
     }
   }, [open, fetchStatus, fetchIp]);
 
-  /* ── Android back ───────────────────────────────────────────────────────── */
-  useEffect(() => {
-    if (!open) return;
-    window.history.pushState({ tjProfileSettings: true }, "");
-    const h = (e: PopStateEvent) => {
-      /* If we arrived at our own entry (e.g. a sub-page just closed),
-         do NOT close Settings. Only close when we've gone past our entry. */
-      if ((e.state as Record<string, unknown> | null)?.tjProfileSettings) return;
-      onCloseRef.current();
-    };
-    window.addEventListener("popstate", h);
-    return () => {
-      window.removeEventListener("popstate", h);
-      if ((window.history.state as Record<string, unknown> | null)?.tjProfileSettings)
-        window.history.back();
-    };
-  }, [open]);
-
-  /* ── ESC ────────────────────────────────────────────────────────────────── */
+  /* ── ESC → go back (calls onClose which is ProfilePage's popPage) ───────── */
   useEffect(() => {
     if (!open) return;
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
@@ -370,169 +348,156 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
   if (!rendered) return null;
 
   return (
-    <>
-      <div style={{
-        position: "fixed", inset: 0, zIndex: 201,
+    <div style={{
+      position: "fixed", inset: 0, zIndex: 201,
+      background: "#000000",
+      transform:  visible ? "translateX(0)" : "translateX(100%)",
+      transition: visible
+        ? `transform ${DUR_OPEN}ms ${EASE_OPEN}`
+        : `transform ${DUR_CLOSE}ms ${EASE_CLOSE}`,
+      willChange: "transform",
+      backfaceVisibility: "hidden",
+      WebkitBackfaceVisibility: "hidden",
+      display: "flex", flexDirection: "column", overflow: "hidden",
+      paddingBottom: "env(safe-area-inset-bottom)",
+    }}>
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header style={{
+        height: 60, flexShrink: 0,
+        display: "flex", alignItems: "center", justifyContent: "space-between",
+        padding: "0 12px",
         background: "#000000",
-        transform:  visible ? "translateX(0)" : "translateX(100%)",
-        transition: visible
-          ? `transform ${DUR_OPEN}ms ${EASE_OPEN}`
-          : `transform ${DUR_CLOSE}ms ${EASE_CLOSE}`,
-        willChange: "transform",
-        backfaceVisibility: "hidden",
-        WebkitBackfaceVisibility: "hidden",
-        display: "flex", flexDirection: "column", overflow: "hidden",
-        paddingBottom: "env(safe-area-inset-bottom)",
+        borderBottom: "1px solid rgba(255,255,255,0.06)",
       }}>
-        {/* ── Header ──────────────────────────────────────────────────────── */}
-        <header style={{
-          height: 60, flexShrink: 0,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 12px",
-          background: "#000000",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-        }}>
-          <button
-            onClick={onClose}
-            aria-label="Back"
-            style={{
-              width: 40, height: 40, borderRadius: "50%",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.09)",
-              color: "rgba(255,255,255,0.72)",
-              cursor: "pointer",
-            }}
-          >
-            <ArrowLeft style={{ width: 18, height: 18 }} />
-          </button>
-          <span style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.02em" }}>
-            Settings
-          </span>
-          <div style={{ width: 40 }} />
-        </header>
+        <button
+          onClick={onClose}
+          aria-label="Back"
+          style={{
+            width: 40, height: 40, borderRadius: "50%",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.09)",
+            color: "rgba(255,255,255,0.72)",
+            cursor: "pointer",
+          }}
+        >
+          <ArrowLeft style={{ width: 18, height: 18 }} />
+        </button>
+        <span style={{ fontSize: 16, fontWeight: 700, color: "rgba(255,255,255,0.92)", letterSpacing: "-0.02em" }}>
+          Settings
+        </span>
+        <div style={{ width: 40 }} />
+      </header>
 
-        {/* ── Scrollable list ──────────────────────────────────────────────── */}
-        <div style={{
-          flex: 1,
-          overflowY: "auto",
-          WebkitOverflowScrolling: "touch",
-          overscrollBehavior: "contain",
-        }}>
+      {/* ── Scrollable list ──────────────────────────────────────────────── */}
+      <div style={{
+        flex: 1,
+        overflowY: "auto",
+        WebkitOverflowScrolling: "touch",
+        overscrollBehavior: "contain",
+      }}>
 
-          {/* ── GENERAL ─────────────────────────────────────────────────────── */}
-          <SectionLabel first>General</SectionLabel>
+        {/* ── GENERAL ─────────────────────────────────────────────────────── */}
+        <SectionLabel first>General</SectionLabel>
 
-          <NavRow
-            icon={Palette}
-            iconBg="rgba(139,92,246,0.14)"
-            iconColor="#a78bfa"
-            label="Appearance"
-            rightContent={
-              <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{themeName}</span>
-            }
-            onClick={() => setSubPage("appearance")}
-          />
+        <NavRow
+          icon={Palette}
+          iconBg="rgba(139,92,246,0.14)"
+          iconColor="#a78bfa"
+          label="Appearance"
+          rightContent={
+            <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{themeName}</span>
+          }
+          onClick={onOpenAppearance}
+        />
 
-          <NavRow
-            icon={Bell}
-            iconBg="rgba(245,158,11,0.14)"
-            iconColor="#fbbf24"
-            label="Notifications"
-            onClick={() => setSubPage("notifications")}
-            last
-          />
+        <NavRow
+          icon={Bell}
+          iconBg="rgba(245,158,11,0.14)"
+          iconColor="#fbbf24"
+          label="Notifications"
+          onClick={onOpenNotifications}
+          last
+        />
 
-          {/* ── CONNECTIONS ──────────────────────────────────────────────────── */}
-          <SectionLabel>Connections</SectionLabel>
+        {/* ── CONNECTIONS ──────────────────────────────────────────────────── */}
+        <SectionLabel>Connections</SectionLabel>
 
-          {/* Database Status */}
-          <InfoRow
-            icon={Database}
-            iconBg="rgba(59,130,246,0.14)"
-            iconColor="#60a5fa"
-            label="Database"
-            rightContent={
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <StatusDot status={dbDot} />
-                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{dbLabel}</span>
-                <button
-                  onClick={e => { e.stopPropagation(); fetchStatus(); }}
-                  style={{
-                    background: "none", border: "none", cursor: "pointer", padding: 2,
-                    color: "rgba(148,163,184,0.35)", display: "flex", alignItems: "center",
-                  }}
-                  aria-label="Refresh"
-                >
-                  <RefreshCw style={{ width: 12, height: 12 }} />
-                </button>
-              </div>
-            }
-          />
+        {/* Database Status */}
+        <InfoRow
+          icon={Database}
+          iconBg="rgba(59,130,246,0.14)"
+          iconColor="#60a5fa"
+          label="Database"
+          rightContent={
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <StatusDot status={dbDot} />
+              <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{dbLabel}</span>
+              <button
+                onClick={e => { e.stopPropagation(); fetchStatus(); }}
+                style={{
+                  background: "none", border: "none", cursor: "pointer", padding: 2,
+                  color: "rgba(148,163,184,0.35)", display: "flex", alignItems: "center",
+                }}
+                aria-label="Refresh"
+              >
+                <RefreshCw style={{ width: 12, height: 12 }} />
+              </button>
+            </div>
+          }
+        />
 
-          {/* Delta Exchange Status */}
-          <InfoRow
-            icon={Activity}
-            iconBg="rgba(16,185,129,0.14)"
-            iconColor="#34d399"
-            label="Delta Exchange"
-            rightContent={
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <StatusDot status={deltaDot} />
-                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{deltaLabel}</span>
-              </div>
-            }
-          />
+        {/* Delta Exchange Status */}
+        <InfoRow
+          icon={Activity}
+          iconBg="rgba(16,185,129,0.14)"
+          iconColor="#34d399"
+          label="Delta Exchange"
+          rightContent={
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <StatusDot status={deltaDot} />
+              <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{deltaLabel}</span>
+            </div>
+          }
+        />
 
-          {/* Backend Server IP */}
-          <InfoRow
-            icon={Globe}
-            iconBg="rgba(234,179,8,0.14)"
-            iconColor="#fde047"
-            label="Server IP"
-            onClick={live.ip ? copyIp : undefined}
-            rightContent={
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                {live.ipLoading ? (
-                  <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Loading…</span>
-                ) : live.ip ? (
-                  <>
-                    <span style={{ fontSize: 12, color: "rgba(148,163,184,0.65)", fontFamily: "monospace" }}>
-                      {live.ip}
-                    </span>
-                    {copied
-                      ? <Check style={{ width: 14, height: 14, color: "#34d399" }} />
-                      : <Copy  style={{ width: 14, height: 14, color: "rgba(148,163,184,0.40)" }} />
-                    }
-                  </>
-                ) : (
-                  <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Unavailable</span>
-                )}
-              </div>
-            }
-            last
-          />
+        {/* Backend Server IP */}
+        <InfoRow
+          icon={Globe}
+          iconBg="rgba(234,179,8,0.14)"
+          iconColor="#fde047"
+          label="Server IP"
+          onClick={live.ip ? copyIp : undefined}
+          rightContent={
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {live.ipLoading ? (
+                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Loading…</span>
+              ) : live.ip ? (
+                <>
+                  <span style={{ fontSize: 12, color: "rgba(148,163,184,0.65)", fontFamily: "monospace" }}>
+                    {live.ip}
+                  </span>
+                  {copied
+                    ? <Check style={{ width: 14, height: 14, color: "#34d399" }} />
+                    : <Copy  style={{ width: 14, height: 14, color: "rgba(148,163,184,0.40)" }} />
+                  }
+                </>
+              ) : (
+                <span style={{ fontSize: 13, color: "rgba(148,163,184,0.40)" }}>Unavailable</span>
+              )}
+            </div>
+          }
+          last
+        />
 
-          {/* ── ACCOUNT ──────────────────────────────────────────────────────── */}
-          <SectionLabel>Account</SectionLabel>
+        {/* ── ACCOUNT ──────────────────────────────────────────────────────── */}
+        <SectionLabel>Account</SectionLabel>
 
-          {/* Sign Out */}
-          <SignOutRow onClick={onClose} />
+        <SignOutRow onClick={onClose} />
 
-          {/* Bottom breathing room */}
-          <div style={{ height: 40 }} />
-        </div>
+        {/* Bottom breathing room */}
+        <div style={{ height: 40 }} />
       </div>
-
-      {/* ── Sub-pages ────────────────────────────────────────────────────────── */}
-      <AppearanceSettingsPage
-        open={subPage === "appearance"}
-        onClose={() => setSubPage(null)}
-      />
-      <NotificationsSettingsPage
-        open={subPage === "notifications"}
-        onClose={() => setSubPage(null)}
-      />
-    </>
+    </div>
   );
 });
