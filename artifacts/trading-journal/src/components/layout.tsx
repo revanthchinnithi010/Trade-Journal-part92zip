@@ -559,17 +559,19 @@ export const Layout = memo(function Layout({
                 </button>
               )}
 
-              <div className="flex flex-col justify-center min-w-0">
+              <div className="flex flex-col items-start justify-center min-w-0">
                 <AreaLabLogo height={isMobile ? 18 : 20} />
                 <span
                   className="truncate"
                   style={{
                     marginTop:     2,
-                    fontSize:      10.5,
-                    fontWeight:    500,
-                    letterSpacing: "0.5px",
+                    fontFamily:    "'Dancing Script', 'Brush Script MT', cursive",
+                    fontSize:      11,
+                    fontWeight:    400,
+                    fontStyle:     "italic",
+                    letterSpacing: "0px",
+                    lineHeight:    "12px",
                     color:         "rgba(255,255,255,0.45)",
-                    lineHeight:    1,
                   }}
                 >
                   by Revanth
