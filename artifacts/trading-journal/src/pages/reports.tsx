@@ -15,7 +15,7 @@ import {
   BarChart2, Activity, Layers, Flame, ArrowUpRight, ArrowDownRight,
   Shield, Clock,
 } from "lucide-react";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { PROVIDER_MAP } from "@/data/sampleData";
 import { PageTransition, AnimatedCard, AnimatedList, AnimatedListItem } from "@/components/animations";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
@@ -37,7 +37,7 @@ const tooltipStyle = {
 };
 
 // ── Provider badge ────────────────────────────────────────────────────────────
-function ProviderBadge({ symbol }: { symbol: string }) {
+const ProviderBadge = memo(function ProviderBadge({ symbol }: { symbol: string }) {
   const provider = PROVIDER_MAP[symbol];
   if (!provider) return null;
   return provider === "Delta Exchange" ? (
@@ -49,14 +49,17 @@ function ProviderBadge({ symbol }: { symbol: string }) {
       ⊕ cTrader
     </span>
   );
-}
+});
 
 // ── Metric Card ───────────────────────────────────────────────────────────────
-function MetricCard({
-  label, value, sub, icon: Icon, color = "text-white", iconBg, iconColor, bar, index = 0,
+// `loading` keeps the card shell (label + icon) visible and swaps ONLY the
+// value/sub/bar region for a shimmer placeholder — the card itself, and the
+// grid it sits in, never disappears while the underlying stat is pending.
+const MetricCard = memo(function MetricCard({
+  label, value, sub, icon: Icon, color = "text-white", iconBg, iconColor, bar, index = 0, loading = false,
 }: {
   label: string; value: string; sub?: string; icon: React.ElementType;
-  color?: string; iconBg?: string; iconColor?: string; bar?: number; index?: number;
+  color?: string; iconBg?: string; iconColor?: string; bar?: number; index?: number; loading?: boolean;
 }) {
   return (
     <AnimatedCard index={index} className="stat-card-neutral p-5 h-full relative overflow-hidden transition-all duration-300">
@@ -66,8 +69,12 @@ function MetricCard({
           <Icon className={`w-3.5 h-3.5 ${iconColor ?? ""}`} style={iconColor ? undefined : { color: "var(--stat-icon)" }} />
         </div>
       </div>
-      <div className={`text-2xl font-black tracking-tight mb-1 ${color}`}>{value}</div>
-      {bar !== undefined && (
+      {loading ? (
+        <div className="h-7 w-20 rounded-md shimmer-loading mb-2" />
+      ) : (
+        <div className={`text-2xl font-black tracking-tight mb-1 ${color}`}>{value}</div>
+      )}
+      {!loading && bar !== undefined && (
         <div className="my-2 h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
           <div
             className="h-full rounded-full transition-all duration-700"
@@ -82,28 +89,42 @@ function MetricCard({
           />
         </div>
       )}
-      {sub && <p className="text-[11px]" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
+      {loading ? (
+        <div className="h-3 w-24 rounded shimmer-loading" />
+      ) : (
+        sub && <p className="text-[11px]" style={{ color: "var(--stat-sub)" }}>{sub}</p>
+      )}
     </AnimatedCard>
   );
+});
+
+// ── Chart placeholder ─────────────────────────────────────────────────────────
+// Fills the same footprint as the chart it stands in for, so swapping the
+// real chart in never shifts layout.
+function ChartSkeleton({ height = 190 }: { height?: number }) {
+  return <div className="rounded-xl shimmer-loading" style={{ height }} />;
 }
 
 // ── RR Histogram ──────────────────────────────────────────────────────────────
-function RRHistogram({ symbolStats }: { symbolStats: Array<{ symbol: string; winRate: number; trades: number; pnl: number }> }) {
-  const bins = [
-    { label: "0–1R",  count: 0, color: RED },
-    { label: "1–2R",  count: 0, color: ORANGE },
-    { label: "2–3R",  count: 0, color: PURPLE },
-    { label: "3–4R",  count: 0, color: GREEN },
-    { label: "4R+",   count: 0, color: BLUE },
-  ];
-  symbolStats.forEach(s => {
-    const rr = s.winRate / 25;
-    if (rr < 1) bins[0].count += s.trades;
-    else if (rr < 2) bins[1].count += s.trades;
-    else if (rr < 3) bins[2].count += s.trades;
-    else if (rr < 4) bins[3].count += s.trades;
-    else bins[4].count += s.trades;
-  });
+const RRHistogram = memo(function RRHistogram({ symbolStats }: { symbolStats: Array<{ symbol: string; winRate: number; trades: number; pnl: number }> }) {
+  const bins = useMemo(() => {
+    const b = [
+      { label: "0–1R",  count: 0, color: RED },
+      { label: "1–2R",  count: 0, color: ORANGE },
+      { label: "2–3R",  count: 0, color: PURPLE },
+      { label: "3–4R",  count: 0, color: GREEN },
+      { label: "4R+",   count: 0, color: BLUE },
+    ];
+    symbolStats.forEach(s => {
+      const rr = s.winRate / 25;
+      if (rr < 1) b[0].count += s.trades;
+      else if (rr < 2) b[1].count += s.trades;
+      else if (rr < 3) b[2].count += s.trades;
+      else if (rr < 4) b[3].count += s.trades;
+      else b[4].count += s.trades;
+    });
+    return b;
+  }, [symbolStats]);
   return (
     <ResponsiveContainer width="100%" height={200}>
       <BarChart data={bins} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
@@ -116,19 +137,18 @@ function RRHistogram({ symbolStats }: { symbolStats: Array<{ symbol: string; win
       </BarChart>
     </ResponsiveContainer>
   );
-}
+});
 
 // ── Radar Chart ───────────────────────────────────────────────────────────────
-function PerformanceRadar({ stats }: { stats: ReturnType<typeof useGetStatsSummary>["data"] }) {
-  if (!stats) return null;
-  const data = [
+const PerformanceRadar = memo(function PerformanceRadar({ stats }: { stats: NonNullable<ReturnType<typeof useGetStatsSummary>["data"]> }) {
+  const data = useMemo(() => [
     { metric: "Win Rate",      score: Math.min(stats.winRate, 100) },
     { metric: "Profit Factor", score: Math.min(stats.profitFactor * 20, 100) },
     { metric: "Avg RR",        score: Math.min(stats.averageRR * 25, 100) },
     { metric: "Consistency",   score: Math.min((stats.winCount / Math.max(stats.totalTrades, 1)) * 110, 100) },
     { metric: "Risk Mgmt",     score: stats.averageLoss > 0 ? Math.min(100 - (stats.averageLoss / Math.max(stats.averageWin, 1)) * 50, 100) : 70 },
     { metric: "Volume",        score: Math.min(stats.totalTrades * 2.5, 100) },
-  ];
+  ], [stats]);
   return (
     <ResponsiveContainer width="100%" height={200}>
       <RadarChart data={data}>
@@ -139,7 +159,7 @@ function PerformanceRadar({ stats }: { stats: ReturnType<typeof useGetStatsSumma
       </RadarChart>
     </ResponsiveContainer>
   );
-}
+});
 
 // ── Equity Tooltip ────────────────────────────────────────────────────────────
 function EqTooltip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
@@ -175,10 +195,18 @@ const SESSIONS = [
 ];
 
 export default function Reports() {
+  // Every hook below resolves from the shared react-query cache instantly on
+  // repeat visits (staleTime keeps stats/equity/weekly warm from Dashboard,
+  // and symbol-breakdown is prefetched in the background — see App.tsx's
+  // preload effect). On a genuinely cold cache these simply stay `undefined`
+  // for a beat; nothing here blocks the page shell from rendering.
   const { data: stats }       = useGetStatsSummary();
   const { data: symbolStats } = useGetSymbolBreakdown();
   const { data: equity }      = useGetEquityCurve();
   const { data: weeklyPnl }   = useGetWeeklyPnl();
+
+  const hasStats  = !!stats;
+  const hasSymbol = !!symbolStats;
 
   const weeklyLabels = useMemo(() =>
     (weeklyPnl ?? []).map(w => ({
@@ -222,29 +250,34 @@ export default function Reports() {
       }));
   }, [symbolStats]);
 
+  // Derived scalar stats — expensive-ish (sorts + arithmetic over the full
+  // symbol list) so they're memoized and only recomputed when their inputs
+  // actually change, not on every render (e.g. currency-formatter re-renders).
+  const derived = useMemo(() => {
+    if (!stats) {
+      return { expectancy: 0, kellyCrit: 0, topSymbol: undefined, worstSymbol: undefined };
+    }
+    const expectancy = stats.winRate / 100 * stats.averageWin - (1 - stats.winRate / 100) * stats.averageLoss;
+    const kellyCrit  = stats.averageLoss > 0
+      ? ((stats.winRate / 100) - (1 - stats.winRate / 100) / (stats.averageWin / stats.averageLoss)) * 100
+      : 0;
+    const topSymbol   = symbolStats ? [...symbolStats].sort((a, b) => b.pnl - a.pnl)[0] : undefined;
+    const worstSymbol = symbolStats ? [...symbolStats].sort((a, b) => a.pnl - b.pnl)[0] : undefined;
+    return { expectancy, kellyCrit, topSymbol, worstSymbol };
+  }, [stats, symbolStats]);
+
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
 
-  if (!stats || !symbolStats) {
-    return (
-      <div className="space-y-5 pb-12">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[...Array(8)].map((_, i) => <div key={i} className="h-28 rounded-2xl shimmer-loading" />)}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {[...Array(3)].map((_, i) => <div key={i} className="h-64 rounded-2xl shimmer-loading" />)}
-        </div>
-      </div>
-    );
-  }
-  const expectancy = stats.winRate / 100 * stats.averageWin - (1 - stats.winRate / 100) * stats.averageLoss;
-  const kellyCrit  = stats.averageLoss > 0
-    ? ((stats.winRate / 100) - (1 - stats.winRate / 100) / (stats.averageWin / stats.averageLoss)) * 100
-    : 0;
-
-  const topSymbol = [...(symbolStats ?? [])].sort((a, b) => b.pnl - a.pnl)[0];
-  const worstSymbol = [...(symbolStats ?? [])].sort((a, b) => a.pnl - b.pnl)[0];
-
+  // ── Page shell renders unconditionally ──────────────────────────────────
+  // Previously this component returned an entirely different tree (a bare
+  // skeleton grid, no header, no segmented control) while `stats`/
+  // `symbolStats` were pending — that swap-in-place of the WHOLE page is
+  // exactly what looked like a blank/invisible flash on first open. Now the
+  // header, segmented control, and every card shell mount immediately; only
+  // the value/chart regions that genuinely depend on network data fall back
+  // to a shimmer placeholder sized to match the eventual content, so nothing
+  // shifts layout when the real data arrives.
   return (
     <PageTransition className="space-y-5 pb-12" fill={false}>
 
@@ -263,7 +296,7 @@ export default function Reports() {
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-white/[0.04] rounded-lg px-3 py-1.5 border border-white/[0.06]">
             <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            Live data · {stats.totalTrades} trades
+            Live data · {hasStats ? stats.totalTrades : "…"} trades
           </span>
         </div>
       </div>
@@ -271,54 +304,54 @@ export default function Reports() {
       {/* ── Top-level stat cards ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MetricCard
-          index={0}
-          label="Net PNL" value={fc(stats.netPnl)}
-          sub="All-time realized" icon={stats.netPnl >= 0 ? TrendingUp : TrendingDown}
-          color={stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
-          iconBg={stats.netPnl >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}
-          iconColor={stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
+          index={0} loading={!hasStats}
+          label="Net PNL" value={hasStats ? fc(stats.netPnl) : ""}
+          sub="All-time realized" icon={hasStats && stats.netPnl < 0 ? TrendingDown : TrendingUp}
+          color={hasStats && stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
+          iconBg={hasStats && stats.netPnl >= 0 ? "bg-emerald-500/10" : "bg-red-500/10"}
+          iconColor={hasStats && stats.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}
         />
         <MetricCard
-          index={1}
-          label="Win Rate" value={`${stats.winRate.toFixed(1)}%`}
-          sub={`${stats.winCount}W · ${stats.lossCount}L · ${stats.breakevenCount}BE`}
-          icon={Percent} bar={stats.winRate}
-          color={stats.winRate >= 60 ? "text-emerald-400" : stats.winRate >= 50 ? "text-white" : "text-red-400"}
+          index={1} loading={!hasStats}
+          label="Win Rate" value={hasStats ? `${stats.winRate.toFixed(1)}%` : ""}
+          sub={hasStats ? `${stats.winCount}W · ${stats.lossCount}L · ${stats.breakevenCount}BE` : ""}
+          icon={Percent} bar={hasStats ? stats.winRate : undefined}
+          color={hasStats && stats.winRate >= 60 ? "text-emerald-400" : hasStats && stats.winRate >= 50 ? "text-white" : "text-red-400"}
         />
         <MetricCard
-          index={2}
-          label="Profit Factor" value={stats.profitFactor.toFixed(2)}
+          index={2} loading={!hasStats}
+          label="Profit Factor" value={hasStats ? stats.profitFactor.toFixed(2) : ""}
           sub="Gross wins / gross losses" icon={Shield}
-          color={stats.profitFactor >= 2 ? "text-emerald-400" : stats.profitFactor >= 1 ? "text-white" : "text-red-400"}
+          color={hasStats && stats.profitFactor >= 2 ? "text-emerald-400" : hasStats && stats.profitFactor >= 1 ? "text-white" : "text-red-400"}
           iconBg="bg-emerald-500/10" iconColor="text-emerald-400"
         />
         <MetricCard
-          index={3}
-          label="Avg RR" value={`${stats.averageRR.toFixed(2)}R`}
+          index={3} loading={!hasStats}
+          label="Avg RR" value={hasStats ? `${stats.averageRR.toFixed(2)}R` : ""}
           sub="Reward / risk ratio" icon={Target}
-          color={stats.averageRR >= 2 ? "text-emerald-400" : "text-white"}
+          color={hasStats && stats.averageRR >= 2 ? "text-emerald-400" : "text-white"}
         />
         <MetricCard
-          index={4}
-          label="Avg Win" value={fc(stats.averageWin)}
+          index={4} loading={!hasStats}
+          label="Avg Win" value={hasStats ? fc(stats.averageWin) : ""}
           sub="Per winning trade" icon={ArrowUpRight}
           color="text-emerald-400" iconBg="bg-emerald-500/10" iconColor="text-emerald-400"
         />
         <MetricCard
-          index={5}
-          label="Avg Loss" value={fc(stats.averageLoss)}
+          index={5} loading={!hasStats}
+          label="Avg Loss" value={hasStats ? fc(stats.averageLoss) : ""}
           sub="Per losing trade" icon={ArrowDownRight}
           color="text-red-400" iconBg="bg-red-500/10" iconColor="text-red-400"
         />
         <MetricCard
-          index={6}
-          label="Expectancy" value={fc(expectancy)}
+          index={6} loading={!hasStats}
+          label="Expectancy" value={hasStats ? fc(derived.expectancy) : ""}
           sub="Per trade expected" icon={Zap}
-          color={expectancy >= 0 ? "text-emerald-400" : "text-red-400"}
+          color={derived.expectancy >= 0 ? "text-emerald-400" : "text-red-400"}
         />
         <MetricCard
-          index={7}
-          label="Kelly %" value={`${kellyCrit.toFixed(1)}%`}
+          index={7} loading={!hasStats}
+          label="Kelly %" value={hasStats ? `${derived.kellyCrit.toFixed(1)}%` : ""}
           sub="Optimal position size" icon={Award}
           color="text-white"
         />
@@ -346,24 +379,26 @@ export default function Reports() {
               )}
             </div>
             <div className="h-[220px] px-1 pb-3">
-              <ResponsiveContainer width="100%" height={190}>
-                <AreaChart data={equity ?? []} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%"   stopColor={PURPLE} stopOpacity={0.28} />
-                      <stop offset="60%"  stopColor={PURPLE} stopOpacity={0.04} />
-                      <stop offset="100%" stopColor={PURPLE} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis dataKey="date" stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                  <YAxis stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={axisFormatter} />
-                  <Tooltip content={<EqTooltip />} />
-                  <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2.5} fill="url(#eqGrad)" dot={false}
-                    activeDot={{ r: 5, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2.5 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {equity ? (
+                <ResponsiveContainer width="100%" height={190}>
+                  <AreaChart data={equity} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="eqGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%"   stopColor={PURPLE} stopOpacity={0.28} />
+                        <stop offset="60%"  stopColor={PURPLE} stopOpacity={0.04} />
+                        <stop offset="100%" stopColor={PURPLE} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis dataKey="date" stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={v => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
+                    <YAxis stroke="transparent" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={axisFormatter} />
+                    <Tooltip content={<EqTooltip />} />
+                    <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2.5} fill="url(#eqGrad)" dot={false}
+                      activeDot={{ r: 5, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2.5 }} />
+                  </AreaChart>
+                </ResponsiveContainer>
+              ) : <ChartSkeleton />}
             </div>
           </AnimatedCard>
         </div>
@@ -377,29 +412,31 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Win / Loss Split</span>
             </div>
             <div className="h-[170px]">
-              <ResponsiveContainer width="100%" height={165}>
-                <PieChart>
-                  <Pie data={winLossData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={4} dataKey="value" strokeWidth={0}>
-                    {winLossData.map((e, i) => <Cell key={i} fill={e.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#fff" }} formatter={(v: number, n: string) => [`${v} trades`, n]} />
-                  <Legend iconType="circle" iconSize={7} formatter={v => <span style={{ fontSize: 10, color: "hsl(220 10% 55%)" }}>{v}</span>} />
-                </PieChart>
-              </ResponsiveContainer>
+              {hasStats ? (
+                <ResponsiveContainer width="100%" height={165}>
+                  <PieChart>
+                    <Pie data={winLossData} cx="50%" cy="50%" innerRadius={50} outerRadius={72} paddingAngle={4} dataKey="value" strokeWidth={0}>
+                      {winLossData.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "#fff" }} formatter={(v: number, n: string) => [`${v} trades`, n]} />
+                    <Legend iconType="circle" iconSize={7} formatter={v => <span style={{ fontSize: 10, color: "hsl(220 10% 55%)" }}>{v}</span>} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : <ChartSkeleton height={165} />}
             </div>
             <div className="flex justify-around text-center mx-5 mb-5 border-t border-white/[0.06] pt-3">
               <div>
-                <p className="text-base font-bold text-emerald-400">{stats.winCount}</p>
+                <p className="text-base font-bold text-emerald-400">{hasStats ? stats.winCount : "—"}</p>
                 <p className="text-[10px] text-muted-foreground">Wins</p>
               </div>
               <div className="w-px bg-white/[0.06]" />
               <div>
-                <p className="text-base font-bold text-red-400">{stats.lossCount}</p>
+                <p className="text-base font-bold text-red-400">{hasStats ? stats.lossCount : "—"}</p>
                 <p className="text-[10px] text-muted-foreground">Losses</p>
               </div>
               <div className="w-px bg-white/[0.06]" />
               <div>
-                <p className="text-base font-bold text-white">{stats.largestWin > 0 ? fc(stats.largestWin) : "—"}</p>
+                <p className="text-base font-bold text-white">{hasStats ? (stats.largestWin > 0 ? fc(stats.largestWin) : "—") : "—"}</p>
                 <p className="text-[10px] text-muted-foreground">Best</p>
               </div>
             </div>
@@ -418,18 +455,20 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Weekly PNL</span>
             </div>
             <div className="h-[220px] px-1 pb-3">
-              <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={weeklyLabels} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="label" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false} />
-                  <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={axisFormatter} />
-                  <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
-                  <Tooltip content={<WkTooltip />} cursor={{ fill: "rgba(255,255,255,0.025)" }} />
-                  <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={28}>
-                    {weeklyLabels.map((e, i) => <Cell key={i} fill={e.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {weeklyPnl ? (
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={weeklyLabels} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="label" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false} />
+                    <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={axisFormatter} />
+                    <ReferenceLine y={0} stroke="rgba(255,255,255,0.08)" strokeWidth={1} />
+                    <Tooltip content={<WkTooltip />} cursor={{ fill: "rgba(255,255,255,0.025)" }} />
+                    <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={28}>
+                      {weeklyLabels.map((e, i) => <Cell key={i} fill={e.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <ChartSkeleton />}
             </div>
           </AnimatedCard>
         </div>
@@ -443,19 +482,21 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Symbol PNL</span>
             </div>
             <div className="h-[220px] px-1 pb-3">
-              <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={symbolStats} layout="vertical" margin={{ top: 4, right: 16, left: 32, bottom: 4 }}>
-                  <XAxis type="number" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={axisFormatter} />
-                  <YAxis type="category" dataKey="symbol" stroke="transparent" tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
-                  <ReferenceLine x={0} stroke="rgba(255,255,255,0.08)" />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.03)" }}
-                    formatter={(v: number) => [fc(v), "PNL"]} />
-                  <Bar dataKey="pnl" radius={[0, 4, 4, 0]} maxBarSize={14}>
-                    {symbolStats.map((e, i) => <Cell key={i} fill={e.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {hasSymbol ? (
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={symbolStats} layout="vertical" margin={{ top: 4, right: 16, left: 32, bottom: 4 }}>
+                    <XAxis type="number" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={axisFormatter} />
+                    <YAxis type="category" dataKey="symbol" stroke="transparent" tick={{ fill: "hsl(220 10% 55%)", fontSize: 10 }} tickLine={false} axisLine={false} width={52} />
+                    <ReferenceLine x={0} stroke="rgba(255,255,255,0.08)" />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                      formatter={(v: number) => [fc(v), "PNL"]} />
+                    <Bar dataKey="pnl" radius={[0, 4, 4, 0]} maxBarSize={14}>
+                      {symbolStats.map((e, i) => <Cell key={i} fill={e.pnl >= 0 ? GREEN : RED} fillOpacity={0.85} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <ChartSkeleton />}
             </div>
           </AnimatedCard>
         </div>
@@ -472,7 +513,7 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Performance Score</span>
             </div>
             <div className="h-[220px]">
-              <PerformanceRadar stats={stats} />
+              {hasStats ? <PerformanceRadar stats={stats} /> : <ChartSkeleton height={200} />}
             </div>
           </AnimatedCard>
         </div>
@@ -486,7 +527,7 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">RR Distribution</span>
             </div>
             <div className="h-[220px] px-1 pb-3">
-              <RRHistogram symbolStats={symbolStats} />
+              {hasSymbol ? <RRHistogram symbolStats={symbolStats} /> : <ChartSkeleton />}
             </div>
           </AnimatedCard>
         </div>
@@ -500,21 +541,23 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Broker PNL</span>
             </div>
             <div className="h-[220px] px-1 pb-3">
-              <ResponsiveContainer width="100%" height={190}>
-                <BarChart data={brokerPerf} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="name" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 9 }} tickLine={false} axisLine={false}
-                    tickFormatter={v => v === "Delta Exchange" ? "Delta" : v === "FusionMarkets" ? "Fusion" : v} />
-                  <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                    tickFormatter={axisFormatter} />
-                  <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.025)" }}
-                    formatter={(v: number, n: string) => [n === "pnl" ? fc(v) : v, n === "pnl" ? "PNL" : n]} />
-                  <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={36}>
-                    {brokerPerf.map((e, i) => (
-                      <Cell key={i} fill={i === 0 ? PURPLE : i === 1 ? BLUE : ORANGE} fillOpacity={0.85} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              {hasSymbol ? (
+                <ResponsiveContainer width="100%" height={190}>
+                  <BarChart data={brokerPerf} margin={{ top: 8, right: 12, left: -20, bottom: 0 }}>
+                    <XAxis dataKey="name" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 9 }} tickLine={false} axisLine={false}
+                      tickFormatter={v => v === "Delta Exchange" ? "Delta" : v === "FusionMarkets" ? "Fusion" : v} />
+                    <YAxis stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
+                      tickFormatter={axisFormatter} />
+                    <Tooltip contentStyle={tooltipStyle} cursor={{ fill: "rgba(255,255,255,0.025)" }}
+                      formatter={(v: number, n: string) => [n === "pnl" ? fc(v) : v, n === "pnl" ? "PNL" : n]} />
+                    <Bar dataKey="pnl" radius={[5, 5, 2, 2]} maxBarSize={36}>
+                      {brokerPerf.map((e, i) => (
+                        <Cell key={i} fill={i === 0 ? PURPLE : i === 1 ? BLUE : ORANGE} fillOpacity={0.85} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <ChartSkeleton />}
             </div>
           </AnimatedCard>
         </div>
@@ -558,73 +601,84 @@ export default function Reports() {
               <span className="text-[13px] font-semibold text-white">Symbol Details</span>
             </div>
             <div className="flex items-center gap-3 text-[10px]">
-              {topSymbol && (
+              {derived.topSymbol && (
                 <span className="flex items-center gap-1.5 text-foreground/50">
-                  <TrendingUp className="w-3 h-3" /> Best: {topSymbol.symbol}
+                  <TrendingUp className="w-3 h-3" /> Best: {derived.topSymbol.symbol}
                 </span>
               )}
-              {worstSymbol && worstSymbol.pnl < 0 && (
+              {derived.worstSymbol && derived.worstSymbol.pnl < 0 && (
                 <span className="flex items-center gap-1.5 text-red-400/80">
-                  <TrendingDown className="w-3 h-3" /> Worst: {worstSymbol.symbol}
+                  <TrendingDown className="w-3 h-3" /> Worst: {derived.worstSymbol.symbol}
                 </span>
               )}
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-y border-white/[0.05] bg-white/[0.015]">
-                  {["Symbol", "Provider", "Trades", "Win Rate", "Net PNL", "Avg PNL/Trade"].map(h => (
-                    <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest ${["Trades","Win Rate","Net PNL","Avg PNL/Trade"].includes(h) ? "text-right" : ""}`}>
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {symbolStats.map(s => {
-                  const avgPnl = s.trades > 0 ? s.pnl / s.trades : 0;
-                  return (
-                    <tr key={s.symbol} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors group">
-                      <td className="px-4 py-3 font-bold text-white text-xs">{s.symbol}</td>
-                      <td className="px-4 py-3"><ProviderBadge symbol={s.symbol} /></td>
-                      <td className="px-4 py-3 text-right font-mono text-[11px] text-muted-foreground">{s.trades}</td>
-                      <td className="px-4 py-3 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <div className="w-12 h-1 rounded-full bg-white/[0.06] overflow-hidden hidden sm:block">
-                            <div className="h-full rounded-full bg-emerald-400/60" style={{ width: `${s.winRate}%` }} />
+          {hasSymbol ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-y border-white/[0.05] bg-white/[0.015]">
+                    {["Symbol", "Provider", "Trades", "Win Rate", "Net PNL", "Avg PNL/Trade"].map(h => (
+                      <th key={h} className={`px-4 py-2.5 text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-widest ${["Trades","Win Rate","Net PNL","Avg PNL/Trade"].includes(h) ? "text-right" : ""}`}>
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {symbolStats.map(s => {
+                    const avgPnl = s.trades > 0 ? s.pnl / s.trades : 0;
+                    return (
+                      <tr key={s.symbol} className="border-b border-white/[0.04] hover:bg-white/[0.02] transition-colors group">
+                        <td className="px-4 py-3 font-bold text-white text-xs">{s.symbol}</td>
+                        <td className="px-4 py-3"><ProviderBadge symbol={s.symbol} /></td>
+                        <td className="px-4 py-3 text-right font-mono text-[11px] text-muted-foreground">{s.trades}</td>
+                        <td className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <div className="w-12 h-1 rounded-full bg-white/[0.06] overflow-hidden hidden sm:block">
+                              <div className="h-full rounded-full bg-emerald-400/60" style={{ width: `${s.winRate}%` }} />
+                            </div>
+                            <span className={`font-mono text-[11px] font-semibold ${s.winRate >= 60 ? "text-emerald-400" : s.winRate >= 50 ? "text-white" : "text-red-400"}`}>
+                              {s.winRate.toFixed(0)}%
+                            </span>
                           </div>
-                          <span className={`font-mono text-[11px] font-semibold ${s.winRate >= 60 ? "text-emerald-400" : s.winRate >= 50 ? "text-white" : "text-red-400"}`}>
-                            {s.winRate.toFixed(0)}%
-                          </span>
-                        </div>
-                      </td>
-                      <td className={`px-4 py-3 text-right font-mono text-xs font-bold ${s.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {fc(s.pnl)}
-                      </td>
-                      <td className={`px-4 py-3 text-right font-mono text-[11px] ${avgPnl >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}>
-                        {fc(avgPnl)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono text-xs font-bold ${s.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {fc(s.pnl)}
+                        </td>
+                        <td className={`px-4 py-3 text-right font-mono text-[11px] ${avgPnl >= 0 ? "text-emerald-400/80" : "text-red-400/80"}`}>
+                          {fc(avgPnl)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="px-5 pb-5 space-y-2">
+              {[...Array(4)].map((_, i) => <div key={i} className="h-9 rounded-lg shimmer-loading" />)}
+            </div>
+          )}
         </div>
       </AnimatedCard>
 
       {/* ── Best/Worst + Advanced Stats ──────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        {[
-          { label: "Largest Win",  value: fc(stats.largestWin),  color: "text-emerald-400", icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400" },
-          { label: "Largest Loss", value: fc(stats.largestLoss), color: "text-red-400",     icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400" },
+        {(hasStats ? [
+          { label: "Largest Win",  value: fc(stats.largestWin),  color: "text-emerald-400" as string | undefined, icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400", sub: undefined as string | undefined },
+          { label: "Largest Loss", value: fc(stats.largestLoss), color: "text-red-400" as string | undefined,     icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400", sub: undefined as string | undefined },
           { label: "Current Streak", value: `${Math.abs(stats.currentStreak)}${stats.currentStreak >= 0 ? "W" : "L"}`,
-            color: stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400", icon: Zap,
-            sub: stats.currentStreak >= 0 ? "Winning streak" : "Losing streak" },
-          { label: "Total Volume", value: `${stats.totalTrades}`, color: "text-white", icon: Layers, sub: `${stats.winCount + stats.lossCount} decisive` },
-        ].map((c, i) => (
-          <MetricCard key={c.label} index={17 + i} label={c.label} value={c.value} sub={c.sub}
+            color: (stats.currentStreak >= 0 ? "text-emerald-400" : "text-red-400") as string | undefined, icon: Zap, iconBg: undefined as string | undefined, iconColor: undefined as string | undefined,
+            sub: (stats.currentStreak >= 0 ? "Winning streak" : "Losing streak") as string | undefined },
+          { label: "Total Volume", value: `${stats.totalTrades}`, color: "text-white" as string | undefined, icon: Layers, iconBg: undefined as string | undefined, iconColor: undefined as string | undefined, sub: `${stats.winCount + stats.lossCount} decisive` as string | undefined },
+        ] : [
+          { label: "Largest Win",    value: "", color: undefined as string | undefined, icon: ArrowUpRight,   iconBg: "bg-emerald-500/10", iconColor: "text-emerald-400", sub: undefined as string | undefined },
+          { label: "Largest Loss",   value: "", color: undefined as string | undefined, icon: ArrowDownRight, iconBg: "bg-red-500/10",     iconColor: "text-red-400", sub: undefined as string | undefined },
+          { label: "Current Streak", value: "", color: undefined as string | undefined, icon: Zap, iconBg: undefined as string | undefined, iconColor: undefined as string | undefined, sub: undefined as string | undefined },
+          { label: "Total Volume",   value: "", color: undefined as string | undefined, icon: Layers, iconBg: undefined as string | undefined, iconColor: undefined as string | undefined, sub: undefined as string | undefined },
+        ]).map((c, i) => (
+          <MetricCard key={c.label} index={17 + i} loading={!hasStats} label={c.label} value={c.value} sub={c.sub}
             icon={c.icon} color={c.color} iconBg={c.iconBg} iconColor={c.iconColor} />
         ))}
       </div>

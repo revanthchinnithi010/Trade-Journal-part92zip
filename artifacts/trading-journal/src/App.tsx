@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { popupManager } from "@/lib/popupManager";
@@ -13,6 +13,7 @@ import { NotificationsProvider } from "@/contexts/NotificationsContext";
 import { AnimatePresence } from "motion/react";
 import { PageTransition } from "@/components/animations/PageTransition";
 import { SplashScreen } from "@/components/animations/SplashScreen";
+import { getSymbolBreakdown, getGetSymbolBreakdownQueryKey } from "@workspace/api-client-react";
 
 const Dashboard   = lazy(() => import("@/pages/dashboard"));
 const Markets     = lazy(() => import("@/pages/markets"));
@@ -180,6 +181,54 @@ const DASHBOARD_NODE = (
   </Suspense>
 );
 
+/**
+ * Reports keep-alive wrapper — same pattern as DashboardKeepAlive.
+ *
+ * Reports previously mounted fresh on every navigation (via AnimatePresence,
+ * like most other pages): its lazy chunk had to resolve, then its four
+ * react-query hooks had to fetch, and until both settled the component's own
+ * early-return replaced the ENTIRE tree — header, segmented control, and all
+ * — with a bare shimmer grid. On a cold cache that produced exactly the
+ * "blank/full-page loader on first open" symptom. Keeping Reports mounted
+ * permanently (like Dashboard/Charts) means the first real navigation to
+ * /reports is just a display:flex toggle on an already-rendered tree.
+ *
+ * Mounting is deliberately delayed a beat past initial paint (see
+ * `ReportsPreload` below) so Reports' own chunk fetch + queries don't compete
+ * with Dashboard's critical first-load network/render work.
+ */
+function ReportsKeepAlive() {
+  const isMobile = useIsMobile();
+  const bp = isMobile ? 80 : 40;
+  return (
+    <StandardPageWrapper bottomPad={bp} pathname="/reports">
+      <Reports />
+    </StandardPageWrapper>
+  );
+}
+
+/**
+ * Gates when the Reports keep-alive subtree actually mounts. Rendering
+ * `null` until `ready` flips means React never even calls the lazy import
+ * for Reports' chunk until this timer fires — the two Suspense boundaries
+ * (Dashboard's and this one) never contend for the same tick of work.
+ */
+function ReportsPreload() {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const id = setTimeout(() => setReady(true), 400);
+    return () => clearTimeout(id);
+  }, []);
+  if (!ready) return null;
+  return <ReportsKeepAlive />;
+}
+
+const REPORTS_NODE = (
+  <Suspense fallback={null}>
+    <ReportsPreload />
+  </Suspense>
+);
+
 // Known pathnames — used to decide whether to render NotFound.
 const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
@@ -201,6 +250,21 @@ const TAB_ORDER: string[] = ["/", "/markets", "/charts", "/trades", "/alerts"];
 function Router() {
   const [location] = useLocation();
   const isMobile   = useIsMobile();
+
+  useEffect(() => {
+    // Prefetch Reports' one unique query (stats/equity/weekly are already
+    // shared with — and kept warm by — the always-mounted Dashboard). Timed
+    // to land just after ReportsPreload mounts the keep-alive subtree, so by
+    // the time a user actually taps the Reports card the cache is populated
+    // and Reports renders with real data on the very first paint.
+    const id = setTimeout(() => {
+      queryClient.prefetchQuery({
+        queryKey: getGetSymbolBreakdownQueryKey(),
+        queryFn: () => getSymbolBreakdown(),
+      }).catch(() => {});
+    }, 500);
+    return () => clearTimeout(id);
+  }, []);
 
   useEffect(() => {
     // Eagerly preload every route's lazy chunk shortly after the initial render.
@@ -276,7 +340,7 @@ function Router() {
   return (
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
-    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE}>
+    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE} reportsNode={REPORTS_NODE}>
       {/*
         ── Single AnimatePresence (mode="wait") ────────────────────────────
         All pages — tab pages, sidebar pages, detail pages — live in ONE
@@ -320,9 +384,13 @@ function Router() {
         {pathname === "/trades"  && <Suspense key="/trades"  fallback={<PageLoader />}><PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/alerts"  && <Suspense key="/alerts"  fallback={<PageLoader />}><PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition></Suspense>}
 
-        {/* ── Sidebar / utility pages — fade + slide-up ── */}
+        {/* ── Sidebar / utility pages — fade + slide-up ──
+             /reports is intentionally NOT branched here — it is a
+             permanently-mounted keep-alive node (REPORTS_NODE / Layout),
+             exactly like Dashboard and Charts. It never enters/exits this
+             AnimatePresence; switching to/from it is an instant
+             display:flex toggle driven by DashboardSegmentedControl. */}
         {pathname === "/brokers"       && <Suspense key="/brokers"       fallback={<PageLoader />}><PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/brokers"><Brokers     /></StandardPageWrapper></PageTransition></Suspense>}
-        {pathname === "/reports"       && <Suspense key="/reports"       fallback={<PageLoader />}><PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/calendar"      && <Suspense key="/calendar"      fallback={<PageLoader />}><PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calendar"><Calendar    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/notebook"      && <Suspense key="/notebook"      fallback={<PageLoader />}><PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/notebook"><Notebook    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/settings"      && <Suspense key="/settings"      fallback={<PageLoader />}><PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/settings"><Settings    /></StandardPageWrapper></PageTransition></Suspense>}

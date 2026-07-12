@@ -380,10 +380,12 @@ export const Layout = memo(function Layout({
   children,
   chartsNode,
   dashboardNode,
+  reportsNode,
 }: {
   children:      React.ReactNode;
   chartsNode?:   React.ReactNode;
   dashboardNode?: React.ReactNode;
+  reportsNode?:   React.ReactNode;
 }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
@@ -708,6 +710,24 @@ export const Layout = memo(function Layout({
               overflow:      "hidden",
             }}>
               {dashboardNode}
+            </div>
+          )}
+
+          {/* Reports — keep-alive, same pattern as Dashboard/Charts. Staying
+              mounted (instead of unmount/remount via AnimatePresence) means:
+              no re-fetch of stats/symbol-breakdown on every tab switch, no
+              first-frame skeleton replay, no blank-page flash on first open
+              — switching to "/reports" is just an instant display:flex on an
+              already fully-rendered tree. See .agents/memory reports notes. */}
+          {reportsNode && (
+            <div style={{
+              position:      "absolute",
+              inset:         0,
+              display:       pathname === "/reports" ? "flex" : "none",
+              flexDirection: "column",
+              overflow:      "hidden",
+            }}>
+              {reportsNode}
             </div>
           )}
 
