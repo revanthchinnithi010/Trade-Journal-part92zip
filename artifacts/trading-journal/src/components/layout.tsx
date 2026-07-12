@@ -418,8 +418,10 @@ export const Layout = memo(function Layout({
   const { unreadCount } = useNotifications();
   const { profile, update: updateProfile } = useProfile();
 
-  const bellBtnRef    = useRef<HTMLButtonElement>(null);
-  const profileBtnRef = useRef<HTMLDivElement>(null);
+  const bellBtnRef         = useRef<HTMLButtonElement>(null);
+  const profileBtnRef      = useRef<HTMLDivElement>(null);
+  /** Circular avatar on the top-left — mobile only. */
+  const mobileProfileBtnRef = useRef<HTMLDivElement>(null);
   const prevUnreadRef = useRef(0);
 
   useEffect(() => {
@@ -516,7 +518,37 @@ export const Layout = memo(function Layout({
                 >
                   <ArrowLeft className="w-[17px] h-[17px]" />
                 </button>
+              ) : isMobile ? (
+                /* ── Mobile: circular profile avatar (top-left) ── */
+                <div
+                  ref={mobileProfileBtnRef}
+                  onClick={toggleProfile}
+                  className="shrink-0 cursor-pointer select-none"
+                  style={{
+                    width:        46,
+                    height:       46,
+                    borderRadius: "50%",
+                    overflow:     "hidden",
+                    display:      "flex",
+                    alignItems:   "center",
+                    justifyContent: "center",
+                    background:   "var(--surface-avatar-bg)",
+                    border:       profileOpen
+                      ? "1.5px solid var(--surface-btn-active-border)"
+                      : "1.5px solid var(--surface-btn-border)",
+                    boxShadow:    profileOpen
+                      ? "0 0 0 3px rgba(165,180,252,0.15)"
+                      : "none",
+                    transition:   "border-color 150ms, box-shadow 150ms",
+                  }}
+                >
+                  {profile.avatarDataUrl
+                    ? <img src={profile.avatarDataUrl} alt={profile.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <span className="text-[14px] font-bold leading-none" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
+                  }
+                </div>
               ) : (
+                /* ── Desktop: hamburger opens nav drawer ── */
                 <button
                   onClick={openSidebar}
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
@@ -619,54 +651,64 @@ export const Layout = memo(function Layout({
                 />
               </div>
 
-              <div className="w-px h-5" style={{ background: "var(--surface-divider)" }} />
+              {/* Desktop only: divider + profile button */}
+              {!isMobile && (
+                <>
+                  <div className="w-px h-5" style={{ background: "var(--surface-divider)" }} />
 
-              <div className="relative">
-                <div
-                  ref={profileBtnRef}
-                  className="flex items-center gap-2 cursor-pointer select-none group px-1 py-1 rounded-xl transition-all duration-150"
-                  style={{
-                    border:     profileOpen ? "1px solid var(--surface-btn-active-border)" : "1px solid transparent",
-                    background: profileOpen ? "var(--surface-btn-active-bg)" : "transparent",
-                  }}
-                  onClick={toggleProfile}
-                  onMouseEnter={e => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
-                  onMouseLeave={e => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = profileOpen ? "var(--surface-btn-active-bg)" : "transparent"; }}
-                >
                   <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                    ref={profileBtnRef}
+                    className="flex items-center gap-2 cursor-pointer select-none group px-1 py-1 rounded-xl transition-all duration-150"
                     style={{
-                      background: "var(--surface-avatar-bg)",
-                      border:     "1px solid var(--surface-avatar-border)",
+                      border:     profileOpen ? "1px solid var(--surface-btn-active-border)" : "1px solid transparent",
+                      background: profileOpen ? "var(--surface-btn-active-bg)" : "transparent",
                     }}
+                    onClick={toggleProfile}
+                    onMouseEnter={e => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
+                    onMouseLeave={e => { if (!profileOpen) (e.currentTarget as HTMLElement).style.background = profileOpen ? "var(--surface-btn-active-bg)" : "transparent"; }}
                   >
-                    {profile.avatarDataUrl
-                      ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
-                      : <span className="text-[11px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
-                    }
+                    <div
+                      className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 overflow-hidden"
+                      style={{
+                        background: "var(--surface-avatar-bg)",
+                        border:     "1px solid var(--surface-avatar-border)",
+                      }}
+                    >
+                      {profile.avatarDataUrl
+                        ? <img src={profile.avatarDataUrl} alt={profile.name} className="w-full h-full object-cover" />
+                        : <span className="text-[11px] font-bold" style={{ color: "var(--surface-avatar-text)" }}>{initials}</span>
+                      }
+                    </div>
+                    <div className="hidden sm:block">
+                      <p className="text-[12px] font-semibold text-foreground/85 leading-tight group-hover:text-foreground transition-colors">
+                        {profile.name.split(" ")[0]}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground/60 leading-none">{profile.email.split("@")[0]}</p>
+                    </div>
+                    <ChevronDown
+                      className={cn(
+                        "w-3.5 h-3.5 text-muted-foreground/60 hidden sm:block transition-transform duration-200",
+                        profileOpen && "rotate-180"
+                      )}
+                    />
                   </div>
-                  <div className="hidden sm:block">
-                    <p className="text-[12px] font-semibold text-foreground/85 leading-tight group-hover:text-foreground transition-colors">
-                      {profile.name.split(" ")[0]}
-                    </p>
-                    <p className="text-[9px] text-muted-foreground/60 leading-none">{profile.email.split("@")[0]}</p>
-                  </div>
-                  <ChevronDown
-                    className={cn(
-                      "w-3.5 h-3.5 text-muted-foreground/60 hidden sm:block transition-transform duration-200",
-                      profileOpen && "rotate-180"
-                    )}
-                  />
-                </div>
-                <ProfileDropdown
-                  open={profileOpen}
-                  profile={profile}
-                  onUpdate={updateProfile}
-                  onClose={() => setProfileOpen(false)}
-                  anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
-                />
-              </div>
+                </>
+              )}
             </div>
+
+            {/* ProfileDropdown — portaled to body; anchor switches between
+                left mobile avatar and right desktop button depending on
+                viewport. Side prop controls transform origin + positioning. */}
+            <ProfileDropdown
+              open={profileOpen}
+              profile={profile}
+              onUpdate={updateProfile}
+              onClose={() => setProfileOpen(false)}
+              anchorRef={
+                (isMobile ? mobileProfileBtnRef : profileBtnRef) as React.RefObject<HTMLElement | null>
+              }
+              side={isMobile ? "left" : "right"}
+            />
           </header>
         )}
 

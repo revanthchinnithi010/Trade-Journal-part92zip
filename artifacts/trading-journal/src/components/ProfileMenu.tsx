@@ -215,10 +215,12 @@ interface DropdownProps {
   onUpdate: (p: Partial<ProfileData>) => void;
   onClose: () => void;
   anchorRef: React.RefObject<HTMLElement | null>;
+  /** Which edge of the anchor button the panel aligns to. Default "right". */
+  side?: "left" | "right";
 }
 
 export const ProfileDropdown = memo(function ProfileDropdown({
-  open, profile, onUpdate, onClose, anchorRef,
+  open, profile, onUpdate, onClose, anchorRef, side = "right",
 }: DropdownProps) {
   const [, navigate]      = useLocation();
   const [showModal, setShowModal] = useState(false);
@@ -233,8 +235,14 @@ export const ProfileDropdown = memo(function ProfileDropdown({
      never reach it. Portaling backdrop + panel to document.body escapes
      that containing block entirely; we compute the panel's on-screen
      position from the anchor button's rect since it can no longer rely on
-     `position:absolute` relative to a wrapper inside the header. */
-  const [anchorRect, setAnchorRect] = useState<{ top: number; right: number } | null>(null);
+     `position:absolute` relative to a wrapper inside the header.
+
+     When side="left" the panel's left edge aligns with the avatar's left
+     edge (dropdown opens rightward). When side="right" (default / desktop)
+     the panel's right edge aligns with the button's right edge. */
+  const [anchorRect, setAnchorRect] = useState<{
+    top: number; left?: number; right?: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -242,7 +250,11 @@ export const ProfileDropdown = memo(function ProfileDropdown({
       const el = anchorRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setAnchorRect({ top: r.bottom + 10, right: window.innerWidth - r.right });
+      if (side === "left") {
+        setAnchorRect({ top: r.bottom + 10, left: r.left });
+      } else {
+        setAnchorRect({ top: r.bottom + 10, right: window.innerWidth - r.right });
+      }
     };
     measure();
     window.addEventListener("resize", measure);
@@ -251,7 +263,7 @@ export const ProfileDropdown = memo(function ProfileDropdown({
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [open, anchorRef]);
+  }, [open, anchorRef, side]);
 
   /* Reset panel to "menu" after the close animation finishes (120 ms).
      Doing it on open would schedule a React setState during the opening
@@ -315,6 +327,10 @@ export const ProfileDropdown = memo(function ProfileDropdown({
     ? "scale(1) translateY(0px)"
     : "scale(0.96) translateY(-10px)";
 
+  /* Transform origin differs by side: left-anchored panel scales from
+     the top-left corner, right-anchored from the top-right corner. */
+  const transformOrigin = side === "left" ? "top left" : "top right";
+
   /* Both the backdrop and the panel are portaled to document.body together
      so they share one stacking context — see anchorRect comment above for
      why. Rendering them separately (backdrop portaled, panel left inside
@@ -363,7 +379,9 @@ export const ProfileDropdown = memo(function ProfileDropdown({
         className="fixed w-[276px]"
         style={{
           top:           anchorRect?.top ?? -9999,
-          right:         anchorRect?.right ?? -9999,
+          ...(side === "left"
+            ? { left:  anchorRect?.left  ?? -9999 }
+            : { right: anchorRect?.right ?? -9999 }),
           zIndex:        50,
           pointerEvents: open ? "auto" : "none",
           contain:       "layout style",
@@ -418,7 +436,7 @@ export const ProfileDropdown = memo(function ProfileDropdown({
             zIndex:                   1,
             borderRadius:             24,
             overflow:                 "hidden",
-            transformOrigin:          "top right",
+            transformOrigin:          transformOrigin,
             willChange:               "transform, opacity",
             backfaceVisibility:       "hidden",
             WebkitBackfaceVisibility: "hidden",
