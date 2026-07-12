@@ -508,12 +508,6 @@ export const Layout = memo(function Layout({
                 from the official SVG asset (never redrawn/rasterized) so the
                 purple→pink "area" gradient, white ".lab", and transparency are
                 preserved exactly, at full vector crispness on any DPI. */}
-            <div
-              className="absolute left-1/2 top-1/2 flex items-center justify-center pointer-events-none"
-              style={{ transform: "translate(-50%, -50%)" }}
-            >
-              <AreaLabLogo height={isMobile ? 32 : 40} />
-            </div>
 
             {/* Left: hamburger (or back-arrow on detail pages) */}
             <div className="flex items-center gap-3 shrink-0 z-10">
@@ -567,11 +561,13 @@ export const Layout = memo(function Layout({
               )}
             </div>
 
-            {/* Right: Search (desktop only) + Theme Toggle (desktop only) + Currency + Bell + Profile.
-                Search used to occupy the header's center column, but that column now
-                belongs exclusively to the centered Area.lab logo, so it moved here as
-                a compact field. */}
+            {/* Right: Area.lab wordmark (small, next to the profile avatar) + Search
+                (desktop only) + Theme Toggle (desktop only) + Currency + Bell + Profile.
+                Search used to occupy the header's center column; that column is now
+                empty, so search moved here as a compact field. */}
             <div className="flex items-center gap-2 shrink-0 z-10">
+              <AreaLabLogo height={16} className="shrink-0" />
+
               {!isMobile && (
                 <div className="relative hidden lg:block w-40 xl:w-48">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
