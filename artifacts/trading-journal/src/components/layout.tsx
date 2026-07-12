@@ -565,6 +565,7 @@ export const Layout = memo(function Layout({
                   className="truncate"
                   style={{
                     marginTop:     2,
+                    marginLeft:    7,
                     fontFamily:    "'Dancing Script', 'Brush Script MT', cursive",
                     fontSize:      11,
                     fontWeight:    400,
