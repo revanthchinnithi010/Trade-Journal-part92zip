@@ -144,7 +144,13 @@ export const ProfilePage = memo(function ProfilePage({
   useEffect(() => {
     if (!open) return;
     window.history.pushState({ tjProfilePage: true }, "");
-    const h = () => onCloseRef.current();
+    const h = (e: PopStateEvent) => {
+      // If state carries our own marker, we navigated TO this entry
+      // (e.g. Settings just closed and we're back at the Profile entry).
+      // Don't close Profile — only close when we've gone past our entry.
+      if ((e.state as Record<string, unknown> | null)?.tjProfilePage) return;
+      onCloseRef.current();
+    };
     window.addEventListener("popstate", h);
     return () => {
       window.removeEventListener("popstate", h);
