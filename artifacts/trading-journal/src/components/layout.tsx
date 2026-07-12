@@ -554,12 +554,10 @@ export const Layout = memo(function Layout({
                     </span>
                   )}
                 </button>
-                {notifOpen && (
-                  <NotificationPanel
-                    onClose={() => setNotifOpen(false)}
-                    anchorRef={bellBtnRef as React.RefObject<HTMLElement | null>}
-                  />
-                )}
+                <NotificationPanel
+                  open={notifOpen}
+                  onClose={() => setNotifOpen(false)}
+                />
               </div>
 
               <div className="w-px h-5" style={{ background: "var(--surface-divider)" }} />
