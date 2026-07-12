@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useEffect } from "react";
 import { useLocation } from "wouter";
 
 /**
@@ -29,6 +29,20 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
   const [location, navigate] = useLocation();
   const pathname = location.split("?")[0];
   const activeKey = pathname === "/reports" ? "reports" : "dashboard";
+
+  // Warm both tabs' lazy chunks the instant this control exists — it is only
+  // ever rendered on Dashboard or Reports, so whichever one ISN'T current is
+  // exactly one click away. The app-wide preloader (App.tsx) staggers every
+  // route's import by ~30ms starting 80ms after mount, so Reports could still
+  // be unresolved ~200ms in; clicking before that made Suspense fall back to
+  // <PageLoader/> — a blank flash that looked like a full page refresh, plus
+  // a layout jump once the real content swapped in. Importing directly here,
+  // with no delay, means both chunks are already resolved (or resolving)
+  // well before the user can realistically click.
+  useEffect(() => {
+    import("@/pages/dashboard").catch(() => {});
+    import("@/pages/reports").catch(() => {});
+  }, []);
 
   return (
     <div
@@ -78,16 +92,20 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
             onClick={() => {
               if (tab.href !== pathname) navigate(tab.href);
             }}
-            className="relative z-10 flex items-center justify-center text-[14px] font-semibold transition-colors duration-150 ease-out"
-            style={{ color: selected ? "#FFFFFF" : "#B5B5B5" }}
+            className="relative z-10 flex items-center justify-center text-[14px] font-semibold transition-[color,transform] duration-150 ease-out active:scale-[0.96]"
+            style={{ color: selected ? "#FFFFFF" : "#B5B5B5", willChange: "transform" }}
           >
-            {/* Plain CSS color transition, not a per-frame JS-driven one —
-                `color` isn't GPU-compositable, so animating it through
-                Motion.dev meant restyling on every rAF tick, which competed
-                with the dashboard's own live-tick/chart RAF loops and was
-                the actual source of the dropped frames. A native CSS
-                transition is cheap: the browser interpolates it without
-                round-tripping through React/JS at all. */}
+            {/* Plain CSS transitions, not per-frame JS-driven ones — `color`
+                isn't GPU-compositable, so animating it through Motion.dev
+                meant restyling on every rAF tick, which competed with the
+                dashboard's own live-tick/chart RAF loops and was the actual
+                source of the dropped frames. A native CSS transition is
+                cheap: the browser interpolates it without round-tripping
+                through React/JS at all. `active:scale-[0.96]` is the click
+                feedback the user asked for — it lives on the card itself
+                (not a page transition), is a `transform` so it stays on the
+                compositor, and resolves on `:active`/`:focus` release with
+                zero JS involvement. */}
             {tab.label}
           </button>
         );

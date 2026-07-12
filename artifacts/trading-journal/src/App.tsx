@@ -192,12 +192,11 @@ const KNOWN_PATHS = new Set([
  * Bottom-tab order. The delta between prev and next index determines horizontal
  * slide direction: positive = navigate right (enter from right), negative = navigate left.
  * /charts is intentionally in the list so crossing it counts as a tab transition.
- * /reports sits right after "/" so the Dashboard ↔ Reports segmented control
- * (DashboardSegmentedControl) gets the same direction-aware horizontal slide
- * as the bottom tabs — Reports enters from the right, and returning to
- * Dashboard exits back the same way it came.
+ * /reports is NOT in this list — Dashboard ↔ Reports switching is driven by
+ * DashboardSegmentedControl's own click animation (the pill + press feedback),
+ * not a page-level slide, so /reports uses the plain "page" transition below.
  */
-const TAB_ORDER: string[] = ["/", "/reports", "/markets", "/charts", "/trades", "/alerts"];
+const TAB_ORDER: string[] = ["/", "/markets", "/charts", "/trades", "/alerts"];
 
 function Router() {
   const [location] = useLocation();
@@ -323,7 +322,7 @@ function Router() {
 
         {/* ── Sidebar / utility pages — fade + slide-up ── */}
         {pathname === "/brokers"       && <Suspense key="/brokers"       fallback={<PageLoader />}><PageTransition key="/brokers"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/brokers"><Brokers     /></StandardPageWrapper></PageTransition></Suspense>}
-        {pathname === "/reports"       && <Suspense key="/reports"       fallback={<PageLoader />}><PageTransition key="/reports"      variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/reports"       && <Suspense key="/reports"       fallback={<PageLoader />}><PageTransition key="/reports"      custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/reports"><Reports     /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/calendar"      && <Suspense key="/calendar"      fallback={<PageLoader />}><PageTransition key="/calendar"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/calendar"><Calendar    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/notebook"      && <Suspense key="/notebook"      fallback={<PageLoader />}><PageTransition key="/notebook"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/notebook"><Notebook    /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/settings"      && <Suspense key="/settings"      fallback={<PageLoader />}><PageTransition key="/settings"     custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/settings"><Settings    /></StandardPageWrapper></PageTransition></Suspense>}
