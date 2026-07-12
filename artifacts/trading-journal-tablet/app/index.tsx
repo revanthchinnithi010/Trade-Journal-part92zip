@@ -1,3 +1,4 @@
+import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useRef } from "react";
 import { ActivityIndicator, Platform, StyleSheet, Text, View, useWindowDimensions } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -87,10 +88,12 @@ export default function TabletScreen() {
   }
 
   return (
-    <SafeAreaView
-      style={styles.safeArea}
-      edges={["top", "bottom", "left", "right"]}
-    >
+    <>
+      <StatusBar translucent backgroundColor="transparent" style="light" />
+      <SafeAreaView
+        style={styles.safeArea}
+        edges={["bottom", "left", "right"]}
+      >
       <WebView
         ref={webViewRef}
         source={{ uri: WEB_URL }}
@@ -121,6 +124,7 @@ export default function TabletScreen() {
         }}
       />
     </SafeAreaView>
+    </>
   );
 }
 
