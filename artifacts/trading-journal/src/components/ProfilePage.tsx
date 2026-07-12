@@ -241,8 +241,12 @@ export const ProfilePage = memo(function ProfilePage({
         flexDirection:            "column",
         overflow:                 "hidden",
 
-        /* ── safe areas ── */
-        paddingTop:               "env(safe-area-inset-top)",
+        /* ── safe areas ──
+           Top inset: consumed ONCE by the native <View style={{height:insets.top}}/>
+           spacer above the WebView in trading-journal-tablet/app/index.tsx.
+           The WebView frame already starts below the status bar, so position:fixed
+           top:0 lands at the correct position — no CSS env(safe-area-inset-top) needed.
+           Bottom inset: NOT consumed natively, so the web page handles it here. */
         paddingBottom:            "env(safe-area-inset-bottom)",
       }}
     >
