@@ -87,9 +87,18 @@ export default function TabletScreen() {
   }
 
   return (
+    // `top` is deliberately excluded here. The web page loaded inside the
+    // WebView already reserves the status-bar height itself via
+    // `padding-top: env(safe-area-inset-top)` (see NotificationPanel.tsx and
+    // other mobile pages). If this SafeAreaView also padded for the top
+    // edge, the status-bar height would be reserved TWICE — once natively
+    // by this View, once again inside the WebView's own CSS — producing a
+    // blank band between the status bar and the page header. Only one
+    // layer may own the top inset; the web CSS is the single source of
+    // truth for it, so the native shell must render edge-to-edge on top.
     <SafeAreaView
       style={styles.safeArea}
-      edges={["top", "bottom", "left", "right"]}
+      edges={["bottom", "left", "right"]}
     >
       <WebView
         ref={webViewRef}
