@@ -213,6 +213,8 @@ export const Layout = memo(function Layout({
     setNotifOpen(false);
   }, []);
 
+  const closeNotif = useCallback(() => setNotifOpen(false), []);
+
   const currentPageLabel =
     pathname === "/portfolio"    ? "Portfolio"          :
     pathname === "/pnl"          ? "Net PNL Analytics"  :
@@ -556,7 +558,7 @@ export const Layout = memo(function Layout({
                 </button>
                 <NotificationPanel
                   open={notifOpen}
-                  onClose={() => setNotifOpen(false)}
+                  onClose={closeNotif}
                 />
               </div>
 

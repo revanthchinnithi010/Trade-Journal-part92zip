@@ -137,6 +137,16 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
   const hasOpenedRef = useRef(open);
   if (open) hasOpenedRef.current = true;
 
+  /* `onClose` is a fresh arrow function on every parent re-render (which
+     happens on every live price tick). Effects below must depend ONLY on
+     `open` — depending on `onClose` too would tear the listeners down and
+     rebuild them dozens of times a second, and (for the back-button effect)
+     would spuriously call history.back()/re-push on every tick, closing the
+     sheet almost immediately after it opens. A ref keeps the callback fresh
+     without making it a dependency. */
+  const onCloseRef = useRef(onClose);
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
   /* body scroll lock — background page must never scroll while open */
   useEffect(() => {
     if (!open) return;
@@ -149,25 +159,25 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
   /* ESC (desktop) */
   useEffect(() => {
     if (!open) return;
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") onCloseRef.current(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [open, onClose]);
+  }, [open]);
 
   /* Android back button — push a history entry while open, close on popstate
-     instead of navigating away. */
+     instead of navigating away. Depends ONLY on `open` (see note above). */
   useEffect(() => {
     if (!open) return;
     window.history.pushState({ tjNotifPanel: true }, "");
-    const h = () => onClose();
+    const h = () => onCloseRef.current();
     window.addEventListener("popstate", h);
     return () => {
       window.removeEventListener("popstate", h);
       if (window.history.state?.tjNotifPanel) window.history.back();
     };
-  }, [open, onClose]);
+  }, [open]);
 
-  const onBackdropClick = useCallback(() => onClose(), [onClose]);
+  const onBackdropClick = useCallback(() => onCloseRef.current(), []);
   const stop = useCallback((e: React.SyntheticEvent) => e.stopPropagation(), []);
 
   /* Never mount the heavy list DOM until first opened; after that it stays
