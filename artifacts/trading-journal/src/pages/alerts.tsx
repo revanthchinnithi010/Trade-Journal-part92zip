@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, memo } from "react";
+import { useState, useCallback, useEffect, memo, useRef, useImperativeHandle, forwardRef } from "react";
 import { createPortal } from "react-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { AnimatePresence, motion } from "framer-motion";
@@ -1099,13 +1099,60 @@ async function loadAllAlerts() {
 
 // ─── Main Page ─────────────────────────────────────────────────────────────────
 type Tab = "price" | "zone" | "trendline" | "table";
-type CreateModal = null | "price" | "zone" | "trendline";
+type CreateModal = "price" | "zone" | "trendline";
+
+interface AlertModalControllerHandle {
+  open: (type: CreateModal) => void;
+}
+
+const AlertModalController = forwardRef<AlertModalControllerHandle, {
+  onSavePriceAlert: (a: PriceAlert) => void;
+  onSaveZoneAlert: (a: ZoneAlert) => void;
+  onSaveTrendlineAlert: (a: TrendlineAlert) => void;
+}>(function AlertModalController({ onSavePriceAlert, onSaveZoneAlert, onSaveTrendlineAlert }, ref) {
+  const [createModal, setCreateModal] = useState<CreateModal | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    open: (type) => setCreateModal(type),
+  }), []);
+
+  const handleClose = useCallback(() => setCreateModal(null), []);
+
+  const handleSavePrice = useCallback((a: PriceAlert) => {
+    setCreateModal(null);
+    onSavePriceAlert(a);
+  }, [onSavePriceAlert]);
+
+  const handleSaveZone = useCallback((a: ZoneAlert) => {
+    setCreateModal(null);
+    onSaveZoneAlert(a);
+  }, [onSaveZoneAlert]);
+
+  const handleSaveTrendline = useCallback((a: TrendlineAlert) => {
+    setCreateModal(null);
+    onSaveTrendlineAlert(a);
+  }, [onSaveTrendlineAlert]);
+
+  return (
+    <>
+      {createModal === "price" && (
+        <CreatePriceAlertModal onClose={handleClose} onSave={handleSavePrice} />
+      )}
+      {createModal === "zone" && (
+        <CreateZoneAlertModal onClose={handleClose} onSave={handleSaveZone} />
+      )}
+      {createModal === "trendline" && (
+        <CreateTrendlineAlertModal onClose={handleClose} onSave={handleSaveTrendline} />
+      )}
+    </>
+  );
+});
 
 export default function Alerts() {
   const isMobile = useIsMobile();
   const [tab, setTab]               = useState<Tab>("price");
-  const [createModal, setCreateModal] = useState<CreateModal>(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const modalRef = useRef<AlertModalControllerHandle>(null);
   const [filterStatus, setFilterStatus]           = useState<AlertStatus | "all">("all");
 
   const { alerts, addAlert, updateAlert, deleteAlert: storeDeleteAlert } = useAlertStore();
@@ -1140,10 +1187,7 @@ export default function Alerts() {
     fetch(`${endpoint}/${numId}`, { method: "DELETE" }).catch(() => {});
   }, [storeDeleteAlert]);
 
-  const handleCloseModal = useCallback(() => setCreateModal(null), []);
-
   const handleSavePriceAlert = useCallback(async (a: PriceAlert) => {
-    setCreateModal(null);
     try {
       const res = await fetch("/api/alerts", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1161,7 +1205,6 @@ export default function Alerts() {
   }, [addAlert]);
 
   const handleSaveZoneAlert = useCallback(async (a: ZoneAlert) => {
-    setCreateModal(null);
     try {
       const res = await fetch("/api/zones", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1177,7 +1220,6 @@ export default function Alerts() {
   }, [addAlert]);
 
   const handleSaveTrendlineAlert = useCallback(async (a: TrendlineAlert) => {
-    setCreateModal(null);
     try {
       const res = await fetch("/api/trendlines", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1231,7 +1273,7 @@ export default function Alerts() {
           {createBtnLabel && (
             <AddAlertPillButton
               label={createBtnLabel}
-              onClick={() => setCreateModal(tab as "price" | "zone" | "trendline")}
+              onClick={() => modalRef.current?.open(tab as CreateModal)}
             />
           )}
         </div>
@@ -1298,7 +1340,7 @@ export default function Alerts() {
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {priceAlerts.map(a => <PriceAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
-                    <AddAlertPillButton label="Price Alert" onClick={() => setCreateModal("price")} />
+                    <AddAlertPillButton label="Price Alert" onClick={() => modalRef.current?.open("price")} />
                   </div>
                 </AnimatedPresenceList>
               </motion.div>
@@ -1310,7 +1352,7 @@ export default function Alerts() {
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {zoneAlerts.map(a => <ZoneAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
-                    <AddAlertPillButton label="Zone Alert" onClick={() => setCreateModal("zone")} />
+                    <AddAlertPillButton label="Zone Alert" onClick={() => modalRef.current?.open("zone")} />
                   </div>
                 </AnimatedPresenceList>
               </motion.div>
@@ -1322,7 +1364,7 @@ export default function Alerts() {
                 <AnimatedPresenceList className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {trendlineAlerts.map(a => <TrendlineAlertCard key={a.id} alert={a} onTogglePause={togglePause} onDelete={deleteAlert} />)}
                   <div className="rounded-xl border border-dashed border-white/[0.1] flex items-center justify-center min-h-[120px]">
-                    <AddAlertPillButton label="Trendline Alert" onClick={() => setCreateModal("trendline")} />
+                    <AddAlertPillButton label="Trendline Alert" onClick={() => modalRef.current?.open("trendline")} />
                   </div>
                 </AnimatedPresenceList>
               </motion.div>
@@ -1439,16 +1481,12 @@ export default function Alerts() {
         </div>
       </div>
 
-      {/* ── Create Modals ────────────────────────────────────────────────────── */}
-      {createModal === "price" && (
-        <CreatePriceAlertModal onClose={handleCloseModal} onSave={handleSavePriceAlert} />
-      )}
-      {createModal === "zone" && (
-        <CreateZoneAlertModal onClose={handleCloseModal} onSave={handleSaveZoneAlert} />
-      )}
-      {createModal === "trendline" && (
-        <CreateTrendlineAlertModal onClose={handleCloseModal} onSave={handleSaveTrendlineAlert} />
-      )}
+      <AlertModalController
+        ref={modalRef}
+        onSavePriceAlert={handleSavePriceAlert}
+        onSaveZoneAlert={handleSaveZoneAlert}
+        onSaveTrendlineAlert={handleSaveTrendlineAlert}
+      />
     </div>
     </PageTransition>
   );
