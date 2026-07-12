@@ -89,10 +89,14 @@ export default function TabletScreen() {
 
   return (
     <>
-      <StatusBar translucent backgroundColor="transparent" style="light" />
+      <StatusBar
+        translucent={false}
+        backgroundColor="#0d1117"
+        style="light"
+      />
       <SafeAreaView
         style={styles.safeArea}
-        edges={["bottom", "left", "right"]}
+        edges={["top", "bottom", "left", "right"]}
       >
       <WebView
         ref={webViewRef}
