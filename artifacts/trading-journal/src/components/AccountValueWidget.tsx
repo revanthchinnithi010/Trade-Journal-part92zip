@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Eye, EyeOff, ChevronRight, Plus } from "lucide-react";
+import { Eye, EyeOff, ChevronRight, Layers } from "lucide-react";
+import { motion } from "framer-motion";
 import { useCurrencyStore, formatAmount } from "@/store/currencyStore";
 import type { Currency } from "@/store/currencyStore";
 import { useLocation } from "wouter";
@@ -87,17 +88,21 @@ export default function AccountValueWidget({
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/60 transition-colors" />
           </button>
-          <button
-            className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-[12px] font-bold transition-all active:scale-[0.97]"
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            onClick={() => navigate("/portfolio?tab=positions")}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px]"
             style={{
+              fontWeight: 600,
               background: "linear-gradient(135deg, #f97316 0%, #ea580c 100%)",
               color: "#fff",
               boxShadow: "0 2px 10px rgba(249,115,22,0.35)",
             }}
           >
-            <Plus className="w-3 h-3" />
-            Add Funds
-          </button>
+            <Layers className="w-3 h-3" />
+            Show Positions
+          </motion.button>
         </div>
 
         {/* Value row — uses pre-converted display value, no extra conversion */}

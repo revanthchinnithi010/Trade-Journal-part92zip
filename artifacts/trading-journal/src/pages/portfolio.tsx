@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearch } from "wouter";
 import {
   TrendingUp,
   RefreshCw, ChevronRight, Wallet, Loader2,
@@ -174,9 +175,21 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
 }
 
 type Tab = "balances" | "positions" | "orders" | "stop-orders";
+const VALID_TABS: Tab[] = ["balances", "positions", "orders", "stop-orders"];
 
 export default function Portfolio() {
-  const [tab, setTab] = useState<Tab>("balances");
+  const search = useSearch();
+  const [tab, setTab] = useState<Tab>(() => {
+    const t = new URLSearchParams(search).get("tab") as Tab | null;
+    return t && VALID_TABS.includes(t) ? t : "balances";
+  });
+
+  // React to URL changes (e.g. navigating from Dashboard "Show Positions"
+  // while the page is already mounted in the background).
+  useEffect(() => {
+    const t = new URLSearchParams(search).get("tab") as Tab | null;
+    if (t && VALID_TABS.includes(t)) setTab(t);
+  }, [search]);
 
   const { data: tradeRes } = useListTrades({ limit: 200 });
 
@@ -321,10 +334,10 @@ export default function Portfolio() {
                 })}
               </div>
             ) : (
-              <div className="glass-card flex flex-col items-center justify-center py-12 gap-2">
-                <TrendingUp className="w-8 h-8 text-white/15" />
-                <p className="text-[13px] font-semibold text-white/30">No open positions</p>
-                <p className="text-[11px] text-white/20">Connect a broker to see live positions</p>
+              <div className="glass-card flex flex-col items-center justify-center py-14 gap-1.5">
+                <TrendingUp className="w-8 h-8 text-white/15 mb-1" />
+                <p className="text-[13px] font-semibold text-white/35">No Open Positions</p>
+                <p className="text-[11px] text-white/20">Your active trades will appear here.</p>
               </div>
             )}
           </>
