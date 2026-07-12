@@ -248,7 +248,8 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           opacity: open ? 1 : 0,
           transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}, opacity ${open ? OPEN_MS : CLOSE_MS}ms ${EASE}`,
           willChange: "transform, opacity",
-          paddingTop:    "env(safe-area-inset-top)",
+          /* Top inset consumed once by native spacer in index.tsx — no CSS env() needed.
+             Bottom inset not consumed natively, so kept here. */
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
         className="transform-gpu"
