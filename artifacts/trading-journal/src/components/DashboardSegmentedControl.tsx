@@ -32,8 +32,8 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
       aria-label="Dashboard sections"
       className="relative w-full grid grid-cols-2"
       style={{
-        height:       54,
-        borderRadius: 19,
+        height:       46,
+        borderRadius: 16,
         background:   "#2A2A2F",
         padding:       4,
       }}
