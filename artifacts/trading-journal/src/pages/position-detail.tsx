@@ -271,7 +271,6 @@ export default function PositionDetail() {
               </span>
               <Badge color={sideColor}>{position.side === "Long" ? "LONG" : "SHORT"}</Badge>
               {position.leverage && <Badge>{position.leverage}x</Badge>}
-              <Badge>{brokerLabel}</Badge>
             </div>
 
             {/* Row 2: label */}
@@ -280,7 +279,7 @@ export default function PositionDetail() {
             </p>
 
             {/* Row 3: P&L value */}
-            <p className="font-bold leading-none" style={{ color: pnlColor, fontSize: 44 }}>
+            <p className="font-bold leading-none" style={{ color: pnlColor, fontSize: 26 }}>
               {fUSD(pnlUsd, true)}
             </p>
 
@@ -337,8 +336,8 @@ export default function PositionDetail() {
                     {row.label}
                   </span>
                   <span
-                    className="font-semibold"
-                    style={{ color: row.valueColor ?? VALUE, fontSize: 17 }}
+                    className="font-medium"
+                    style={{ color: row.valueColor ?? "#C7C7C7", fontSize: 14 }}
                   >
                     {row.value}
                   </span>
