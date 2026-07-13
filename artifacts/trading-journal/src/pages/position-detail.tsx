@@ -93,6 +93,55 @@ function Badge({ children, color }: { children: React.ReactNode; color?: string 
   );
 }
 
+function Segmented({
+  value, onChange, accent,
+}: { value: "Market" | "Limit"; onChange: (v: "Market" | "Limit") => void; accent: string }) {
+  return (
+    <div
+      className="inline-flex items-center"
+      style={{ background: "#1A1A1A", border: `1px solid #2B2B2B`, borderRadius: 10, padding: 2 }}
+    >
+      {(["Market", "Limit"] as const).map(opt => (
+        <button
+          key={opt}
+          onClick={() => onChange(opt)}
+          className="font-semibold transition-colors"
+          style={{
+            fontSize: 11,
+            padding: "5px 10px",
+            borderRadius: 8,
+            background: value === opt ? accent + "20" : "transparent",
+            color:      value === opt ? accent : "#8A8A8A",
+          }}
+        >
+          {opt}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PctChip({ label, onClick, accent }: { label: string; onClick: () => void; accent: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className="font-semibold active:scale-95 transition-transform"
+      style={{
+        fontSize: 11,
+        height: 26,
+        padding: "0 10px",
+        borderRadius: 14,
+        background: "#1A1A1A",
+        border: `1px solid #2B2B2B`,
+        color: "#B8B8B8",
+      }}
+      onMouseDown={e => e.preventDefault()}
+    >
+      {label}
+    </button>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function PositionDetail() {
   const [, navigate] = useLocation();
@@ -114,6 +163,8 @@ export default function PositionDetail() {
   const [updating, setUpdating] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [tpOrderType, setTpOrderType] = useState<"Market" | "Limit">("Limit");
+  const [slOrderType, setSlOrderType] = useState<"Market" | "Limit">("Limit");
 
   useEffect(() => {
     if (!position) return;
@@ -174,6 +225,26 @@ export default function PositionDetail() {
 
   const canUpdate = (!!tpValue || !!slValue) && !updating;
   const canClose  = !closing && connectionStatus === "connected";
+
+  // ─── Bracket order helpers ────────────────────────────────────────────────
+  const pctChips = [0.25, 0.5, 1, 2];
+  function pnlAtPrice(price: number) {
+    return position.side === "Long"
+      ? (price - position.entryPrice) * position.size
+      : (position.entryPrice - price) * position.size;
+  }
+  function tpPriceForPct(pct: number) {
+    return position.side === "Long"
+      ? position.entryPrice * (1 + pct / 100)
+      : position.entryPrice * (1 - pct / 100);
+  }
+  function slPriceForPct(pct: number) {
+    return position.side === "Long"
+      ? position.entryPrice * (1 - pct / 100)
+      : position.entryPrice * (1 + pct / 100);
+  }
+  const tpPnlPreview = tpValue ? pnlAtPrice(parseFloat(tpValue)) : null;
+  const slPnlPreview = slValue ? pnlAtPrice(parseFloat(slValue)) : null;
 
   // ─── Handlers ───────────────────────────────────────────────────────────────
   async function handleClose() {
@@ -365,6 +436,110 @@ export default function PositionDetail() {
             )}
           </div>
 
+          {/* ──────────────────── BRACKET ORDER CARD ─────────────────────── */}
+          <div
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "15px 20px", boxShadow: CARD_SHADOW }}
+          >
+            <p className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11, marginBottom: 12 }}>
+              Bracket Order
+            </p>
+
+            {/* Take Profit */}
+            <div style={{ marginBottom: 9 }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 9 }}>
+                <span className="font-semibold" style={{ color: GREEN, fontSize: 12 }}>Take Profit</span>
+                <Segmented value={tpOrderType} onChange={setTpOrderType} accent={GREEN} />
+              </div>
+
+              <div
+                className="flex items-center"
+                style={{ height: 42, borderRadius: 12, border: "1px solid #2B2B2B", background: "#1A1A1A", padding: "0 12px" }}
+              >
+                <input
+                  type="number"
+                  step="any"
+                  value={tpValue}
+                  onChange={e => setTpValue(e.target.value)}
+                  placeholder="Trigger Price"
+                  className="flex-1 bg-transparent outline-none font-semibold"
+                  style={{ color: tpValue ? VALUE : "#6E6E6E", fontSize: 14 }}
+                />
+                <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
+              </div>
+
+              <div className="flex gap-2" style={{ marginTop: 9 }}>
+                {pctChips.map(p => (
+                  <PctChip key={p} label={`${p}%`} accent={GREEN} onClick={() => setTpValue(tpPriceForPct(p).toFixed(2))} />
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
+                <span className="font-normal" style={{ color: "#797979", fontSize: 12 }}>Estimated Exit PnL</span>
+                <span className="font-semibold" style={{ color: tpPnlPreview === null ? MUTED : (tpPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
+                  {tpPnlPreview === null ? "—" : fUSD(tpPnlPreview, true)}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: DIVIDER, marginTop: 3, marginBottom: 12 }} />
+
+            {/* Stop Loss */}
+            <div>
+              <div className="flex items-center justify-between" style={{ marginBottom: 9 }}>
+                <span className="font-semibold" style={{ color: RED, fontSize: 12 }}>Stop Loss</span>
+                <Segmented value={slOrderType} onChange={setSlOrderType} accent={RED} />
+              </div>
+
+              <div
+                className="flex items-center"
+                style={{ height: 42, borderRadius: 12, border: "1px solid #2B2B2B", background: "#1A1A1A", padding: "0 12px" }}
+              >
+                <input
+                  type="number"
+                  step="any"
+                  value={slValue}
+                  onChange={e => setSlValue(e.target.value)}
+                  placeholder="Trigger Price"
+                  className="flex-1 bg-transparent outline-none font-semibold"
+                  style={{ color: slValue ? VALUE : "#6E6E6E", fontSize: 14 }}
+                />
+                <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
+              </div>
+
+              <div className="flex gap-2" style={{ marginTop: 9 }}>
+                {pctChips.map(p => (
+                  <PctChip key={p} label={`${p}%`} accent={RED} onClick={() => setSlValue(slPriceForPct(p).toFixed(2))} />
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
+                <span className="font-normal" style={{ color: "#797979", fontSize: 12 }}>Estimated Stop PnL</span>
+                <span className="font-semibold" style={{ color: slPnlPreview === null ? MUTED : (slPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
+                  {slPnlPreview === null ? "—" : fUSD(slPnlPreview, true)}
+                </span>
+              </div>
+            </div>
+
+            {/* Update TP/SL button */}
+            <button
+              onClick={handleUpdateTpSl}
+              disabled={!canUpdate}
+              className="w-full rounded-2xl font-semibold active:scale-[0.98] transition-transform"
+              style={{
+                marginTop: 15,
+                height: 54,
+                fontSize: 14,
+                borderRadius: 16,
+                background: canUpdate ? "#202020" : "#181818",
+                color:      canUpdate ? "#F2F2F2" : MUTED,
+                border:     `1px solid ${BORDER}`,
+                cursor: canUpdate ? "pointer" : "not-allowed",
+              }}
+            >
+              {updating ? "Updating…" : "Update TP / SL"}
+            </button>
+          </div>
+
           {/* ──────────────────── CLOSE POSITION BUTTON ──────────────────── */}
           <button
             onClick={() => setShowCloseConfirm(true)}
@@ -373,9 +548,9 @@ export default function PositionDetail() {
             style={{
               height: 54,
               fontSize: 15,
-              background: canClose ? "#3B1114" : "#221012",
-              color:      canClose ? "#FF6767" : MUTED,
-              border:     `1px solid ${canClose ? "#6C2A30" : BORDER}`,
+              background: canClose ? "#3A1114" : "#201012",
+              color:      canClose ? "#FF6A6A" : MUTED,
+              border:     `1px solid ${canClose ? "#61242B" : BORDER}`,
               cursor: canClose ? "pointer" : "not-allowed",
             }}
           >
