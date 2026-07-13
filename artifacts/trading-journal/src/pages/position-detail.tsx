@@ -1,13 +1,22 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, TrendingUp, TrendingDown, AlertTriangle } from "lucide-react";
+import { ArrowLeft, RefreshCw, AlertTriangle, Pencil } from "lucide-react";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
 import { useCurrencyStore } from "@/store/currencyStore";
 
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const BG      = "#050505";
+const SURFACE = "#101113";
+const BORDER  = "#232323";
+const MUTED   = "#4b4b54";
+const DIM     = "#707078";
+const PRIMARY = "#e2e2e8";
+
 const USD_TO_INR_FALLBACK = 85;
 
+// ─── Formatters ───────────────────────────────────────────────────────────────
 function fmt(v: number, decimals = 2) {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: decimals,
@@ -34,97 +43,53 @@ function fINR(v: number, sign = false) {
   return str;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p
-      className="text-[10px] font-black uppercase tracking-[0.12em] mb-3"
-      style={{ color: "rgba(255,255,255,0.25)" }}
-    >
-      {children}
-    </p>
-  );
+function formatDate(ts: string | number | undefined): string {
+  if (!ts) return "—";
+  try {
+    const d = new Date(typeof ts === "number" ? ts * 1000 : ts);
+    const mo = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const ti = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+    return `${mo}, ${ti}`;
+  } catch { return "—"; }
 }
 
-function DetailRow({
-  label, value, valueColor, sub,
-}: {
-  label: string;
-  value: string;
-  valueColor?: string;
-  sub?: string;
-}) {
-  return (
-    <div
-      className="flex items-center justify-between py-3.5"
-      style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
-    >
-      <span className="text-[13px] font-medium" style={{ color: "rgba(255,255,255,0.45)" }}>
-        {label}
-      </span>
-      <div className="text-right">
-        <span
-          className="text-[14px] font-bold"
-          style={{ color: valueColor ?? "rgba(255,255,255,0.88)" }}
-        >
-          {value}
-        </span>
-        {sub && (
-          <p className="text-[11px] font-medium mt-0.5" style={{ color: "rgba(255,255,255,0.28)" }}>
-            {sub}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
-function EditableField({
-  label, value, onChange, placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
+/** Section header inside a card */
+function CardHeader({ label }: { label: string }) {
   return (
-    <div className="flex-1">
-      <p className="text-[10px] font-black uppercase tracking-[0.1em] mb-2" style={{ color: "rgba(255,255,255,0.28)" }}>
+    <div className="px-4 pt-4 pb-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+      <p
+        className="text-[10px] font-semibold uppercase tracking-[0.10em]"
+        style={{ color: MUTED }}
+      >
         {label}
       </p>
-      <input
-        type="number"
-        step="any"
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder ?? "—"}
-        className="w-full bg-transparent outline-none text-[15px] font-bold"
-        style={{
-          color: "rgba(255,255,255,0.85)",
-          borderBottom: "1.5px solid rgba(255,255,255,0.12)",
-          paddingBottom: 6,
-          caretColor: "#a78bfa",
-        }}
-      />
     </div>
   );
 }
 
+// ─── Main component ───────────────────────────────────────────────────────────
 export default function PositionDetail() {
   const [, navigate] = useLocation();
+
   const position    = useSelectedPositionStore(s => s.position);
   const setPosition = useSelectedPositionStore(s => s.setPosition);
 
   const closePosition    = useBrokerStore(s => s.closePosition);
   const placeOrder       = useBrokerStore(s => s.placeOrder);
   const connectionStatus = useBrokerStore(s => s.connectionStatus);
+  const activeBrokerId   = useBrokerStore(s => s.activeAccount?.brokerId ?? "");
 
   const ticks = useTickStore(s => s.ticks);
   const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
 
-  const [tpValue, setTpValue] = useState("");
-  const [slValue, setSlValue] = useState("");
-  const [closing,  setClosing]  = useState(false);
-  const [updating, setUpdating] = useState(false);
+  const [tpValue,    setTpValue]    = useState("");
+  const [slValue,    setSlValue]    = useState("");
+  const [closing,    setClosing]    = useState(false);
+  const [updating,   setUpdating]   = useState(false);
+  const [tpFocused,  setTpFocused]  = useState(false);
+  const [slFocused,  setSlFocused]  = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -133,45 +98,61 @@ export default function PositionDetail() {
     setSlValue(raw?.stop_loss   ? String(raw.stop_loss)   : "");
   }, [position?.id]);
 
+  // ─── Empty state ────────────────────────────────────────────────────────────
   if (!position) {
     return (
       <div
-        className="flex flex-col items-center justify-center h-full gap-3"
-        style={{ background: "#000000" }}
+        className="flex flex-col items-center justify-center h-full gap-4"
+        style={{ background: BG }}
       >
-        <AlertTriangle className="w-8 h-8" style={{ color: "rgba(255,255,255,0.18)" }} />
-        <p className="text-[14px] font-semibold" style={{ color: "rgba(255,255,255,0.35)" }}>
+        <AlertTriangle className="w-8 h-8" style={{ color: MUTED }} />
+        <p className="text-[14px] font-semibold" style={{ color: DIM }}>
           No position selected
         </p>
         <button
           onClick={() => navigate("/portfolio?tab=positions")}
-          className="text-[13px] font-bold mt-1"
-          style={{ color: "#a78bfa" }}
+          className="text-[13px] font-bold px-4 py-2 rounded-xl active:scale-95 transition-transform"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: PRIMARY }}
         >
-          Back to Portfolio
+          ← Back to Portfolio
         </button>
       </div>
     );
   }
 
-  const symKey     = position.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
-  const livePrice  = ticks[symKey]?.price ?? position.markPrice;
-  const pnlUsd     = position.side === "Long"
+  // ─── Derived values ─────────────────────────────────────────────────────────
+  const symKey    = position.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+  const livePrice = ticks[symKey]?.price ?? position.markPrice;
+
+  const pnlUsd = position.side === "Long"
     ? (livePrice - position.entryPrice) * position.size
     : (position.entryPrice - livePrice) * position.size;
-  const pnlInr     = pnlUsd * xr;
-  const pnlPct     = position.entryPrice > 0
+  const pnlInr = pnlUsd * xr;
+  const pnlPct = position.entryPrice > 0
     ? (Math.abs(pnlUsd) / (position.entryPrice * position.size)) * 100 * (pnlUsd >= 0 ? 1 : -1)
     : 0;
 
   const isProfit   = pnlUsd >= 0;
-  const pnlColor   = isProfit ? "#34d399" : "#f87171";
-  const sideColor  = position.side === "Long" ? "#34d399" : "#f87171";
+  const pnlColor   = isProfit ? "#22c55e" : "#ef4444";
+  const sideColor  = position.side === "Long" ? "#22c55e" : "#ef4444";
+  const sideBg     = position.side === "Long" ? "rgba(34,197,94,0.10)" : "rgba(239,68,68,0.10)";
+  const sideBorder = position.side === "Long" ? "rgba(34,197,94,0.22)" : "rgba(239,68,68,0.22)";
 
-  const raw = position.raw as Record<string, unknown> | null;
+  const raw        = position.raw as Record<string, unknown> | null;
   const liqPrice   = raw?.liquidation_price ? Number(raw.liquidation_price) : null;
   const marginUsed = raw?.margin            ? Number(raw.margin)            : null;
+  const openedAt   = raw?.created_at ?? raw?.updated_at ?? null;
+  const posValue   = position.size * position.entryPrice;
 
+  const brokerLabel =
+    activeBrokerId === "delta"   ? "Delta Exchange" :
+    activeBrokerId === "ctrader" ? "cTrader"        :
+    activeBrokerId === "mt5"     ? "MetaTrader 5"   : "Exchange";
+
+  const canUpdate = (!!tpValue || !!slValue) && !updating;
+  const canClose  = !closing && connectionStatus === "connected";
+
+  // ─── Handlers ───────────────────────────────────────────────────────────────
   async function handleClose() {
     if (closing || connectionStatus !== "connected") return;
     setClosing(true);
@@ -179,11 +160,8 @@ export default function PositionDetail() {
       await closePosition(position);
       setPosition(null);
       navigate("/portfolio?tab=positions");
-    } catch {
-      /* toast handled by broker service */
-    } finally {
-      setClosing(false);
-    }
+    } catch { /* toast handled by broker service */ }
+    finally { setClosing(false); }
   }
 
   async function handleUpdateTpSl() {
@@ -202,242 +180,378 @@ export default function PositionDetail() {
         stopPrice:  sl,
         reduceOnly: true,
       });
-    } catch {
-      /* toast handled by broker service */
-    } finally {
-      setUpdating(false);
-    }
+    } catch { /* toast handled by broker service */ }
+    finally { setUpdating(false); }
   }
 
+  // ─── Stat grid rows ─────────────────────────────────────────────────────────
+  type StatCell = { label: string; value: string; color?: string };
+  const statRows: [StatCell, StatCell][] = [
+    [
+      { label: "Entry Price",    value: fmt(position.entryPrice) },
+      { label: "Mark Price",     value: fmt(livePrice) },
+    ],
+    [
+      { label: "Liquidation",    value: liqPrice   !== null ? fmt(liqPrice)         : "—", color: liqPrice !== null ? "#f97316" : undefined },
+      { label: "Position Size",  value: String(position.size) },
+    ],
+    [
+      { label: "Position Value", value: fUSD(posValue) },
+      { label: "Margin Used",    value: marginUsed !== null ? fUSD(marginUsed) : "—" },
+    ],
+    [
+      { label: "Leverage",       value: position.leverage ? `${position.leverage}×` : "—" },
+      { label: "Opened",         value: formatDate(openedAt as string | number | undefined) },
+    ],
+  ];
+
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: "#000000", overflowY: "hidden" }}
+      style={{ background: BG, overflowY: "hidden" }}
     >
-      {/* ── Own header (hidden layout header) ── */}
+
+      {/* ══════════ HEADER ══════════════════════════════════════════════════ */}
       <div
         className="flex-shrink-0 flex items-center justify-between px-4"
-        style={{
-          height:       56,
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
-          background:   "#000000",
-        }}
+        style={{ height: 56, borderBottom: `1px solid ${BORDER}`, background: BG }}
       >
         <button
           onClick={() => { setPosition(null); navigate("/portfolio?tab=positions"); }}
-          className="flex items-center justify-center rounded-full transition-all duration-150"
-          style={{
-            width:   38,
-            height:  38,
-            border:  "1.5px solid rgba(255,255,255,0.1)",
-            background: "rgba(255,255,255,0.04)",
-            color:   "rgba(255,255,255,0.75)",
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.04)"; }}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 36, height: 36, border: `1px solid ${BORDER}`, background: SURFACE, color: PRIMARY }}
           aria-label="Back"
         >
-          <ArrowLeft className="w-[18px] h-[18px]" />
+          <ArrowLeft className="w-[17px] h-[17px]" />
         </button>
 
-        <span className="text-[14px] font-bold" style={{ color: "rgba(255,255,255,0.75)", letterSpacing: "0.01em" }}>
+        <span
+          className="text-[11px] font-semibold uppercase tracking-[0.12em]"
+          style={{ color: DIM }}
+        >
           Position Details
         </span>
 
         <button
-          className="flex items-center justify-center rounded-full transition-all duration-150"
-          style={{
-            width:   38,
-            height:  38,
-            border:  "1.5px solid rgba(255,255,255,0.08)",
-            background: "rgba(255,255,255,0.03)",
-            color:   "rgba(255,255,255,0.35)",
-          }}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 36, height: 36, border: `1px solid ${BORDER}`, background: SURFACE, color: MUTED }}
           aria-label="Refresh"
         >
-          <RefreshCw className="w-[15px] h-[15px]" />
+          <RefreshCw className="w-[13px] h-[13px]" />
         </button>
       </div>
 
-      {/* ── Scrollable body ── */}
+      {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
 
-        {/* Hero — Symbol + PnL ───────────────────────────────────────── */}
-        <div
-          className="px-5 pt-6 pb-7"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}
-        >
-          <div className="flex items-center gap-2.5 mb-4">
-            {position.side === "Long"
-              ? <TrendingUp  className="w-4 h-4" style={{ color: sideColor }} />
-              : <TrendingDown className="w-4 h-4" style={{ color: sideColor }} />
-            }
-            <span className="text-[22px] font-black tracking-tight" style={{ color: "#ffffff" }}>
-              {position.symbol}
-            </span>
-            <span
-              className="text-[10px] font-black px-2.5 py-1 rounded-full"
-              style={{
-                background: position.side === "Long" ? "rgba(52,211,153,0.10)" : "rgba(248,113,113,0.10)",
-                color:      sideColor,
-                border:     `1px solid ${sideColor}22`,
-              }}
-            >
-              {position.side === "Long" ? "LONG" : "SHORT"}
-            </span>
-          </div>
-
-          {/* PnL display */}
-          <div className="flex items-end justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.12em] mb-1.5" style={{ color: "rgba(255,255,255,0.25)" }}>
-                Unrealised P&amp;L
-              </p>
-              <p className="text-[32px] font-black leading-none" style={{ color: pnlColor }}>
-                {fUSD(pnlUsd, true)}
-              </p>
-              <p className="text-[13px] font-semibold mt-1" style={{ color: `${pnlColor}aa` }}>
-                {fINR(pnlInr, true)}
-                <span className="ml-2 text-[12px]" style={{ color: `${pnlColor}80` }}>
-                  {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
-                </span>
-              </p>
-            </div>
-
-            {/* Live price pill */}
-            <div
-              className="flex flex-col items-end gap-1"
-            >
-              <p className="text-[10px] font-black uppercase tracking-[0.1em]" style={{ color: "rgba(255,255,255,0.22)" }}>
-                Live Price
-              </p>
-              <p className="text-[18px] font-black" style={{ color: "rgba(255,255,255,0.88)" }}>
-                {fmt(livePrice)}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Position details ─────────────────────────────────────────── */}
-        <div className="px-5 pt-5 pb-2">
-          <SectionLabel>Trade Details</SectionLabel>
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-            <DetailRow label="Entry Price"   value={fmt(position.entryPrice)} />
-            <DetailRow label="Mark Price"    value={fmt(livePrice)} valueColor="rgba(255,255,255,0.65)" />
-            <DetailRow label="Size"          value={String(position.size)} />
-            <DetailRow label="Leverage"      value={position.leverage ? `${position.leverage}×` : "—"} />
-            {marginUsed !== null && (
-              <DetailRow
-                label="Margin Used"
-                value={fUSD(marginUsed)}
-                sub={fINR(marginUsed * xr)}
-              />
-            )}
-            {liqPrice !== null && (
-              <DetailRow
-                label="Liquidation Price"
-                value={fmt(liqPrice)}
-                valueColor="#f97316"
-              />
-            )}
-          </div>
-        </div>
-
-        {/* TP / SL ──────────────────────────────────────────────────── */}
-        <div className="px-5 pt-5 pb-6">
-          <SectionLabel>Take Profit &amp; Stop Loss</SectionLabel>
+        {/* ────────────────── HERO CARD ──────────────────────────────────── */}
+        <div className="px-4 pt-4">
           <div
-            className="rounded-2xl p-4"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}
+            className="rounded-[18px] p-5"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
           >
-            <div className="flex gap-6">
-              <EditableField
-                label="Take Profit"
-                value={tpValue}
-                onChange={setTpValue}
-                placeholder="Not set"
-              />
-              <div className="w-px" style={{ background: "rgba(255,255,255,0.07)" }} />
-              <EditableField
-                label="Stop Loss"
-                value={slValue}
-                onChange={setSlValue}
-                placeholder="Not set"
-              />
+
+            {/* Symbol + pills */}
+            <div className="flex items-center gap-2 mb-5 flex-wrap">
+              <span
+                className="text-[20px] font-black tracking-tight"
+                style={{ color: PRIMARY }}
+              >
+                {position.symbol}
+              </span>
+
+              {/* Long/Short */}
+              <span
+                className="text-[9px] font-black px-2 py-0.5 rounded-md tracking-[0.08em]"
+                style={{ background: sideBg, color: sideColor, border: `1px solid ${sideBorder}` }}
+              >
+                {position.side === "Long" ? "LONG" : "SHORT"}
+              </span>
+
+              {/* Leverage */}
+              {position.leverage && (
+                <span
+                  className="text-[9px] font-bold px-2 py-0.5 rounded-md tracking-[0.06em]"
+                  style={{ background: "rgba(255,255,255,0.05)", color: DIM, border: `1px solid ${BORDER}` }}
+                >
+                  {position.leverage}×
+                </span>
+              )}
+
+              {/* Exchange badge — pushed right */}
+              <span
+                className="ml-auto text-[9px] font-semibold px-2.5 py-1 rounded-md tracking-[0.06em] uppercase"
+                style={{ background: "rgba(255,255,255,0.04)", color: MUTED, border: `1px solid ${BORDER}` }}
+              >
+                {brokerLabel}
+              </span>
             </div>
 
-            <button
-              onClick={handleUpdateTpSl}
-              disabled={updating || (!tpValue && !slValue)}
-              className="w-full mt-4 py-3 rounded-xl text-[13px] font-bold transition-all duration-150"
-              style={{
-                background: (tpValue || slValue) && !updating
-                  ? "rgba(167,139,250,0.12)"
-                  : "rgba(255,255,255,0.04)",
-                color: (tpValue || slValue) && !updating
-                  ? "#a78bfa"
-                  : "rgba(255,255,255,0.20)",
-                border: (tpValue || slValue) && !updating
-                  ? "1px solid rgba(167,139,250,0.25)"
-                  : "1px solid rgba(255,255,255,0.06)",
-              }}
+            {/* Unrealized P&L */}
+            <p
+              className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+              style={{ color: MUTED }}
             >
-              {updating ? "Updating…" : "Update TP / SL"}
-            </button>
+              Unrealized P&amp;L
+            </p>
+            <p
+              className="text-[38px] font-black leading-none tracking-tight"
+              style={{ color: pnlColor }}
+            >
+              {fUSD(pnlUsd, true)}
+            </p>
+
+            {/* INR + ROI row */}
+            <div className="flex items-center gap-2.5 mt-2 mb-5">
+              <span
+                className="text-[13px] font-semibold"
+                style={{ color: `${pnlColor}99` }}
+              >
+                {fINR(pnlInr, true)}
+              </span>
+              <span
+                className="text-[10px] font-black px-1.5 py-0.5 rounded-[5px]"
+                style={{
+                  background: isProfit ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                  color: pnlColor,
+                }}
+              >
+                {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
+              </span>
+            </div>
+
+            {/* Thin divider */}
+            <div style={{ height: 1, background: BORDER }} />
+
+            {/* Mark Price + Status */}
+            <div className="flex items-center justify-between mt-4">
+              <div>
+                <p
+                  className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+                  style={{ color: MUTED }}
+                >
+                  Mark Price
+                </p>
+                <p className="text-[19px] font-bold" style={{ color: PRIMARY }}>
+                  {fmt(livePrice)}
+                </p>
+              </div>
+
+              <div className="text-right">
+                <p
+                  className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+                  style={{ color: MUTED }}
+                >
+                  Status
+                </p>
+                <div className="flex items-center justify-end gap-1.5">
+                  {/* Pulsing dot via CSS animation */}
+                  <span
+                    className="inline-block w-1.5 h-1.5 rounded-full"
+                    style={{ background: "#22c55e", boxShadow: "0 0 0 0 #22c55e40",
+                      animation: "pulse-dot 2s ease-in-out infinite" }}
+                  />
+                  <span className="text-[13px] font-semibold" style={{ color: "#22c55e" }}>
+                    Live
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Spacer for fixed bottom bar */}
-        <div style={{ height: 96 }} />
+        {/* ────────────────── STATISTICS CARD ───────────────────────────── */}
+        <div className="px-4 pt-3">
+          <div
+            className="rounded-[18px] overflow-hidden"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
+          >
+            <CardHeader label="Position Details" />
+
+            {statRows.map(([left, right], ri) => (
+              <div
+                key={ri}
+                className="flex"
+                style={{
+                  borderBottom: ri < statRows.length - 1 ? `1px solid ${BORDER}` : undefined,
+                }}
+              >
+                {/* Left cell */}
+                <div
+                  className="flex-1 px-4 py-3.5"
+                  style={{ borderRight: `1px solid ${BORDER}` }}
+                >
+                  <p
+                    className="text-[9px] font-semibold uppercase tracking-[0.10em] mb-1.5"
+                    style={{ color: MUTED }}
+                  >
+                    {left.label}
+                  </p>
+                  <p
+                    className="text-[14px] font-bold"
+                    style={{ color: left.color ?? PRIMARY }}
+                  >
+                    {left.value}
+                  </p>
+                </div>
+
+                {/* Right cell */}
+                <div className="flex-1 px-4 py-3.5">
+                  <p
+                    className="text-[9px] font-semibold uppercase tracking-[0.10em] mb-1.5"
+                    style={{ color: MUTED }}
+                  >
+                    {right.label}
+                  </p>
+                  <p
+                    className="text-[14px] font-bold"
+                    style={{ color: right.color ?? PRIMARY }}
+                  >
+                    {right.value}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ────────────────── RISK MANAGEMENT ───────────────────────────── */}
+        <div className="px-4 pt-3">
+          <div
+            className="rounded-[18px] overflow-hidden"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
+          >
+            <CardHeader label="Risk Management" />
+
+            {/* TP + SL inputs side by side */}
+            <div
+              className="flex"
+              style={{ borderBottom: `1px solid ${BORDER}` }}
+            >
+              {/* Take Profit */}
+              <div
+                className="flex-1 px-4 py-4 transition-colors"
+                style={{
+                  borderRight:    `1px solid ${BORDER}`,
+                  background: tpFocused ? "rgba(34,197,94,0.04)" : "transparent",
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className="text-[9px] font-semibold uppercase tracking-[0.10em]"
+                    style={{ color: tpFocused ? "#22c55e" : MUTED }}
+                  >
+                    Take Profit
+                  </p>
+                  <Pencil
+                    className="w-[11px] h-[11px]"
+                    style={{ color: tpFocused ? "#22c55e" : MUTED }}
+                  />
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  value={tpValue}
+                  onChange={e => setTpValue(e.target.value)}
+                  onFocus={() => setTpFocused(true)}
+                  onBlur={() => setTpFocused(false)}
+                  placeholder="Not set"
+                  className="w-full bg-transparent outline-none text-[17px] font-bold"
+                  style={{
+                    color:       tpValue ? "#22c55e" : DIM,
+                    caretColor:  "#22c55e",
+                  }}
+                />
+              </div>
+
+              {/* Stop Loss */}
+              <div
+                className="flex-1 px-4 py-4 transition-colors"
+                style={{
+                  background: slFocused ? "rgba(239,68,68,0.04)" : "transparent",
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p
+                    className="text-[9px] font-semibold uppercase tracking-[0.10em]"
+                    style={{ color: slFocused ? "#ef4444" : MUTED }}
+                  >
+                    Stop Loss
+                  </p>
+                  <Pencil
+                    className="w-[11px] h-[11px]"
+                    style={{ color: slFocused ? "#ef4444" : MUTED }}
+                  />
+                </div>
+                <input
+                  type="number"
+                  step="any"
+                  value={slValue}
+                  onChange={e => setSlValue(e.target.value)}
+                  onFocus={() => setSlFocused(true)}
+                  onBlur={() => setSlFocused(false)}
+                  placeholder="Not set"
+                  className="w-full bg-transparent outline-none text-[17px] font-bold"
+                  style={{
+                    color:      slValue ? "#ef4444" : DIM,
+                    caretColor: "#ef4444",
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Update TP/SL button */}
+            <div className="px-4 py-4">
+              <button
+                onClick={handleUpdateTpSl}
+                disabled={!canUpdate}
+                className="w-full py-[14px] rounded-[12px] text-[13px] font-bold active:scale-[0.98] transition-transform"
+                style={{
+                  background: canUpdate
+                    ? "rgba(255,255,255,0.07)"
+                    : "rgba(255,255,255,0.03)",
+                  color:  canUpdate ? PRIMARY : MUTED,
+                  border: `1px solid ${canUpdate ? "rgba(255,255,255,0.14)" : BORDER}`,
+                  cursor: canUpdate ? "pointer" : "not-allowed",
+                }}
+              >
+                {updating ? "Updating…" : "Update TP / SL"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ────────────────── CLOSE POSITION ────────────────────────────── */}
+        <div className="px-4 pt-3 pb-4">
+          <button
+            onClick={handleClose}
+            disabled={!canClose}
+            className="w-full py-[15px] rounded-[18px] text-[14px] font-black active:scale-[0.98] transition-transform"
+            style={{
+              background: canClose
+                ? "rgba(239,68,68,0.10)"
+                : "rgba(239,68,68,0.04)",
+              color:  canClose ? "#ef4444" : "rgba(239,68,68,0.30)",
+              border: `1px solid ${canClose ? "rgba(239,68,68,0.22)" : "rgba(239,68,68,0.08)"}`,
+              cursor: canClose ? "pointer" : "not-allowed",
+            }}
+          >
+            {closing ? "Closing Position…" : "Close Position"}
+          </button>
+        </div>
+
+        {/* Safe-area bottom spacer */}
+        <div style={{ height: 32 }} />
       </div>
 
-      {/* ── Fixed bottom actions ── */}
-      <div
-        className="flex-shrink-0 px-4 py-4 flex gap-3"
-        style={{
-          borderTop:  "1px solid rgba(255,255,255,0.07)",
-          background: "rgba(0,0,0,0.95)",
-          backdropFilter: "blur(20px)",
-        }}
-      >
-        <button
-          onClick={() => { setPosition(null); navigate("/portfolio?tab=positions"); }}
-          className="flex-1 py-3.5 rounded-xl text-[13px] font-bold transition-all duration-150"
-          style={{
-            background: "rgba(255,255,255,0.05)",
-            color:      "rgba(255,255,255,0.55)",
-            border:     "1px solid rgba(255,255,255,0.08)",
-          }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.09)"; }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.05)"; }}
-        >
-          Back
-        </button>
-        <button
-          onClick={handleClose}
-          disabled={closing || connectionStatus !== "connected"}
-          className="flex-1 py-3.5 rounded-xl text-[13px] font-black transition-all duration-150"
-          style={{
-            background: closing || connectionStatus !== "connected"
-              ? "rgba(248,113,113,0.06)"
-              : "rgba(248,113,113,0.14)",
-            color: closing || connectionStatus !== "connected"
-              ? "rgba(248,113,113,0.4)"
-              : "#f87171",
-            border: "1px solid rgba(248,113,113,0.22)",
-          }}
-          onMouseEnter={e => {
-            if (!closing && connectionStatus === "connected")
-              (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.22)";
-          }}
-          onMouseLeave={e => {
-            if (!closing && connectionStatus === "connected")
-              (e.currentTarget as HTMLElement).style.background = "rgba(248,113,113,0.14)";
-          }}
-        >
-          {closing ? "Closing…" : "Close Position"}
-        </button>
-      </div>
+      {/* Pulse dot keyframe — injected once */}
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.4; }
+        }
+      `}</style>
     </div>
   );
 }
