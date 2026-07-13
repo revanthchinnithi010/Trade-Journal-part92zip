@@ -7,17 +7,20 @@ import { useTickStore } from "@/store/tickStore";
 import { useCurrencyStore } from "@/store/currencyStore";
 
 // ─── Design tokens (premium institutional / grayscale-first) ────────────────
-const BG      = "#0B0B0C";
-const CARD    = "#131313";
-const BORDER  = "#1E1E1E";
-const DIVIDER = "rgba(255,255,255,0.07)";
-const MUTED   = "#84848A";
-const PRIMARY = "#F5F5F5";
-const GREEN   = "#2FA971";
-const RED     = "#E0524F";
-const ORANGE  = "#C6862F";
-const RADIUS  = 16;
-const CARD_SHADOW = "0 1px 3px rgba(0,0,0,0.45)";
+const BG        = "#0B0B0C";
+const CARD      = "#151515";
+const BORDER    = "#252525";
+const DIVIDER   = "#262626";
+const MUTED     = "#8A8A8A";   // labels
+const VALUE     = "#E8E8E8";   // values (never pure white)
+const PRIMARY   = "#E8E8E8";
+const TITLE     = "#F3F3F3";   // screen title
+const GREEN     = "#35C37A";
+const RED       = "#E0524F";
+const ORANGE    = "#C6862F";
+const RADIUS    = 20;
+const CARD_SHADOW = "0 1px 2px rgba(0,0,0,0.3)";
+const FONT      = "'Inter', system-ui, -apple-system, sans-serif";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -75,8 +78,11 @@ function formatDate(ts: string | number | undefined): string {
 function Badge({ children, color }: { children: React.ReactNode; color?: string }) {
   return (
     <span
-      className="text-[11px] font-semibold px-2 py-[3px] rounded-md leading-none"
+      className="text-[12px] font-semibold leading-none inline-flex items-center"
       style={{
+        height: 32,
+        borderRadius: 16,
+        padding: "0 14px",
         background: "rgba(255,255,255,0.04)",
         color: color ?? MUTED,
         border: `1px solid ${color ? color + "35" : BORDER}`,
@@ -217,10 +223,10 @@ export default function PositionDetail() {
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: BG, overflowY: "hidden" }}
+      style={{ background: BG, overflowY: "hidden", fontFamily: FONT }}
     >
 
-      {/* ══════════ HEADER (56px) ═══════════════════════════════════════════ */}
+      {/* ══════════ HEADER ═══════════════════════════════════════════ */}
       <div
         className="flex-shrink-0 flex items-center justify-between px-5"
         style={{ height: 56, background: BG, borderBottom: `1px solid ${DIVIDER}` }}
@@ -231,12 +237,12 @@ export default function PositionDetail() {
           style={{ width: 32, height: 32, background: "transparent" }}
           aria-label="Back"
         >
-          <ChevronLeft size={20} style={{ color: PRIMARY }} />
+          <ChevronLeft size={20} style={{ color: VALUE }} />
         </button>
 
         <span
-          className="text-[14px] font-semibold"
-          style={{ color: PRIMARY }}
+          className="font-semibold"
+          style={{ color: TITLE, fontSize: 17 }}
         >
           Position Details
         </span>
@@ -252,15 +258,15 @@ export default function PositionDetail() {
 
       {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
-        <div className="flex flex-col gap-5" style={{ padding: 20 }}>
+        <div className="flex flex-col gap-4" style={{ padding: 20 }}>
 
           {/* ──────────────────── TOP CARD ───────────────────────────────── */}
           <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "18px 18px 16px", boxShadow: CARD_SHADOW }}
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "18px 20px", boxShadow: CARD_SHADOW }}
           >
-            {/* Row 1: symbol + badges */}
-            <div className="flex items-center gap-1.5 mb-3.5 flex-wrap">
-              <span className="text-[16px] font-bold tracking-tight" style={{ color: PRIMARY }}>
+            {/* Row 1: symbol + pills */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="font-bold" style={{ color: VALUE, fontSize: 22, letterSpacing: "-0.3px" }}>
                 {position.symbol}
               </span>
               <Badge color={sideColor}>{position.side === "Long" ? "LONG" : "SHORT"}</Badge>
@@ -269,41 +275,41 @@ export default function PositionDetail() {
             </div>
 
             {/* Row 2: label */}
-            <p className="text-[11px] font-medium uppercase tracking-wide mb-1" style={{ color: MUTED }}>
+            <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 12 }}>
               Unrealized P&amp;L
             </p>
 
             {/* Row 3: P&L value */}
-            <p className="font-bold leading-none tracking-tight" style={{ color: pnlColor, fontSize: 15 }}>
+            <p className="font-bold leading-none" style={{ color: pnlColor, fontSize: 44 }}>
               {fUSD(pnlUsd, true)}
             </p>
 
             {/* INR + pct row */}
-            <p className="text-[12px] font-medium mt-1.5 mb-4" style={{ color: pnlColor }}>
+            <p className="font-medium mt-2 mb-3" style={{ color: pnlColor, fontSize: 13 }}>
               {fINR(pnlInr, true)}
               <span style={{ color: MUTED, fontWeight: 500 }}> · {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</span>
             </p>
 
-            <div style={{ height: 1, background: DIVIDER, marginBottom: 14 }} />
+            <div style={{ height: 1, background: DIVIDER, marginTop: 10, marginBottom: 10 }} />
 
             {/* Bottom row: Mark price / Status — stacked label-over-value blocks */}
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[10px] font-medium uppercase tracking-wide mb-1" style={{ color: MUTED }}>
+                <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 11 }}>
                   Mark Price
                 </p>
-                <p className="text-[14px] font-semibold" style={{ color: PRIMARY }}>
+                <p className="font-semibold" style={{ color: VALUE, fontSize: 15 }}>
                   {fmtCompact(livePrice)}
                 </p>
               </div>
 
               <div className="text-right">
-                <p className="text-[10px] font-medium uppercase tracking-wide mb-1" style={{ color: MUTED }}>
+                <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 11 }}>
                   Status
                 </p>
                 <div className="flex items-center justify-end gap-1.5">
                   <span className="inline-block w-[6px] h-[6px] rounded-full" style={{ background: GREEN }} />
-                  <span className="text-[13px] font-semibold" style={{ color: GREEN }}>
+                  <span className="font-semibold" style={{ color: GREEN, fontSize: 14 }}>
                     Live
                   </span>
                 </div>
@@ -315,24 +321,24 @@ export default function PositionDetail() {
           <div
             style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: "hidden", boxShadow: CARD_SHADOW }}
           >
-            <div style={{ padding: "14px 18px 10px" }}>
-              <p className="text-[11px] font-medium uppercase tracking-wide" style={{ color: MUTED }}>
+            <div style={{ padding: "14px 20px 8px" }}>
+              <p className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
                 Position Details
               </p>
             </div>
 
             {tradeRows.map((row, i) => (
-              <div key={i} style={{ borderTop: `1px solid ${DIVIDER}` }}>
+              <div key={i} style={{ borderTop: i === 0 ? "none" : `1px solid ${DIVIDER}` }}>
                 <div
-                  className="flex items-center justify-between px-[18px]"
-                  style={{ height: 48 }}
+                  className="flex items-center justify-between px-5"
+                  style={{ height: 54 }}
                 >
-                  <span className="text-[14px]" style={{ color: MUTED, fontWeight: 400 }}>
+                  <span className="font-medium" style={{ color: MUTED, fontSize: 15 }}>
                     {row.label}
                   </span>
                   <span
-                    className="text-[15px]"
-                    style={{ color: row.valueColor ?? PRIMARY, fontWeight: 600 }}
+                    className="font-semibold"
+                    style={{ color: row.valueColor ?? VALUE, fontSize: 17 }}
                   >
                     {row.value}
                   </span>
@@ -343,9 +349,9 @@ export default function PositionDetail() {
 
           {/* ──────────────────── RISK MANAGEMENT CARD ───────────────────── */}
           <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 18, boxShadow: CARD_SHADOW }}
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "18px 20px", boxShadow: CARD_SHADOW }}
           >
-            <p className="text-[11px] font-medium uppercase tracking-wide mb-3.5" style={{ color: MUTED }}>
+            <p className="font-medium uppercase tracking-wide mb-3" style={{ color: MUTED, fontSize: 11 }}>
               Risk Management
             </p>
 
@@ -354,11 +360,11 @@ export default function PositionDetail() {
               {/* Take Profit card */}
               <div
                 className="flex-1 flex flex-col justify-between"
-                style={{ height: 72, borderRadius: 12, border: `1px solid ${BORDER}`, background: "#171717", padding: "10px 12px" }}
+                style={{ height: 92, borderRadius: 18, border: "1px solid #234A35", background: "#13231B", padding: "12px 14px" }}
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: GREEN }}>Take Profit</p>
-                  <Pencil size={12} style={{ color: GREEN, opacity: 0.75 }} />
+                  <p className="font-semibold uppercase tracking-wide" style={{ color: GREEN, fontSize: 11 }}>Take Profit</p>
+                  <Pencil size={18} style={{ color: GREEN, opacity: 0.8 }} />
                 </div>
                 <input
                   type="number"
@@ -366,19 +372,19 @@ export default function PositionDetail() {
                   value={tpValue}
                   onChange={e => setTpValue(e.target.value)}
                   placeholder="Not set"
-                  className="w-full bg-transparent outline-none text-[17px] font-semibold"
-                  style={{ color: tpValue ? PRIMARY : MUTED }}
+                  className="w-full bg-transparent outline-none font-semibold"
+                  style={{ color: tpValue ? VALUE : MUTED, fontSize: 17 }}
                 />
               </div>
 
               {/* Stop Loss card */}
               <div
                 className="flex-1 flex flex-col justify-between"
-                style={{ height: 72, borderRadius: 12, border: `1px solid ${BORDER}`, background: "#171717", padding: "10px 12px" }}
+                style={{ height: 92, borderRadius: 18, border: "1px solid #503131", background: "#241718", padding: "12px 14px" }}
               >
                 <div className="flex items-center justify-between">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: RED }}>Stop Loss</p>
-                  <Pencil size={12} style={{ color: RED, opacity: 0.75 }} />
+                  <p className="font-semibold uppercase tracking-wide" style={{ color: RED, fontSize: 11 }}>Stop Loss</p>
+                  <Pencil size={18} style={{ color: RED, opacity: 0.8 }} />
                 </div>
                 <input
                   type="number"
@@ -386,8 +392,8 @@ export default function PositionDetail() {
                   value={slValue}
                   onChange={e => setSlValue(e.target.value)}
                   placeholder="Not set"
-                  className="w-full bg-transparent outline-none text-[17px] font-semibold"
-                  style={{ color: slValue ? PRIMARY : MUTED }}
+                  className="w-full bg-transparent outline-none font-semibold"
+                  style={{ color: slValue ? VALUE : MUTED, fontSize: 17 }}
                 />
               </div>
             </div>
@@ -396,11 +402,12 @@ export default function PositionDetail() {
             <button
               onClick={handleUpdateTpSl}
               disabled={!canUpdate}
-              className="w-full rounded-xl text-[14px] font-semibold active:scale-[0.98] transition-transform"
+              className="w-full rounded-xl font-semibold active:scale-[0.98] transition-transform"
               style={{
-                height: 50,
-                background: canUpdate ? "#1C1C1C" : "#151515",
-                color:      canUpdate ? PRIMARY   : MUTED,
+                height: 54,
+                fontSize: 15,
+                background: canUpdate ? "#1D1D1D" : "#151515",
+                color:      canUpdate ? "#F2F2F2" : MUTED,
                 border:     `1px solid ${BORDER}`,
                 cursor: canUpdate ? "pointer" : "not-allowed",
               }}
@@ -413,12 +420,13 @@ export default function PositionDetail() {
           <button
             onClick={handleClose}
             disabled={!canClose}
-            className="w-full rounded-xl text-[15px] font-semibold active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+            className="w-full rounded-xl font-semibold active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             style={{
-              height: 52,
-              background: canClose ? "rgba(224,82,79,0.06)" : "rgba(224,82,79,0.03)",
-              color:      canClose ? RED : MUTED,
-              border:     `1px solid ${canClose ? "rgba(224,82,79,0.35)" : BORDER}`,
+              height: 54,
+              fontSize: 15,
+              background: canClose ? "#3B1114" : "#221012",
+              color:      canClose ? "#FF6767" : MUTED,
+              border:     `1px solid ${canClose ? "#6C2A30" : BORDER}`,
               cursor: canClose ? "pointer" : "not-allowed",
             }}
           >
