@@ -21,4 +21,11 @@ config.resolver.nodeModulesPaths = [
 //    "Unable to resolve ./index from /home/runner/workspace/." error.
 config.resolver.unstable_enablePackageExports = false;
 
+// 4. Follow symlinks so Metro can traverse pnpm's virtual store layout.
+//    pnpm hard-links package content into a global store and creates
+//    directory symlinks in node_modules; without this flag Metro may fail
+//    to locate binary assets (.ttf, .png) that live inside linked packages
+//    (e.g. @expo-google-fonts/inter fonts), causing font-loading to stall.
+config.resolver.unstable_enableSymlinks = true;
+
 module.exports = config;
