@@ -837,8 +837,8 @@ export const Layout = memo(function Layout({
           right:         0,
           bottom:        0,
           zIndex:        60,
-          visibility:    mobileChartFullscreen ? "hidden" : "visible",
-          pointerEvents: mobileChartFullscreen ? "none"   : "auto",
+          visibility:    (mobileChartFullscreen || pathname === "/position-detail") ? "hidden" : "visible",
+          pointerEvents: (mobileChartFullscreen || pathname === "/position-detail") ? "none"   : "auto",
         }}>
           <MobileBottomNav />
         </div>
