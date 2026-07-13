@@ -1,18 +1,20 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { ArrowLeft, RefreshCw, AlertTriangle, Pencil } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
 import { useCurrencyStore } from "@/store/currencyStore";
 
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const BG      = "#050505";
-const SURFACE = "#101113";
-const BORDER  = "#232323";
-const MUTED   = "#4b4b54";
-const DIM     = "#707078";
-const PRIMARY = "#e2e2e8";
+// ─── Design tokens (matched to Figma) ────────────────────────────────────────
+const BG      = "#0E0E0E";
+const SURFACE = "#1A1A1A";
+const BORDER  = "#2D2D2D";
+const MUTED   = "#777777";
+const PRIMARY = "#FFFFFF";
+const GREEN   = "#4ADE80";
+const RED     = "#EF4444";
+const ORANGE  = "#F97316";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -21,6 +23,13 @@ function fmt(v: number, decimals = 2) {
   return new Intl.NumberFormat("en-US", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
+  }).format(v);
+}
+
+function fmtCompact(v: number) {
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(v);
 }
 
@@ -47,26 +56,16 @@ function formatDate(ts: string | number | undefined): string {
   if (!ts) return "—";
   try {
     const d = new Date(typeof ts === "number" ? ts * 1000 : ts);
-    const mo = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const ti = d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
-    return `${mo}, ${ti}`;
+    const now = new Date();
+    const isToday =
+      d.getDate() === now.getDate() &&
+      d.getMonth() === now.getMonth() &&
+      d.getFullYear() === now.getFullYear();
+    const time = d.toLocaleTimeString("en-US", {
+      hour: "2-digit", minute: "2-digit", hour12: true,
+    });
+    return isToday ? `Today ${time}` : `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${time}`;
   } catch { return "—"; }
-}
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-/** Section header inside a card */
-function CardHeader({ label }: { label: string }) {
-  return (
-    <div className="px-4 pt-4 pb-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
-      <p
-        className="text-[10px] font-semibold uppercase tracking-[0.10em]"
-        style={{ color: MUTED }}
-      >
-        {label}
-      </p>
-    </div>
-  );
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -84,12 +83,10 @@ export default function PositionDetail() {
   const ticks = useTickStore(s => s.ticks);
   const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
 
-  const [tpValue,    setTpValue]    = useState("");
-  const [slValue,    setSlValue]    = useState("");
-  const [closing,    setClosing]    = useState(false);
-  const [updating,   setUpdating]   = useState(false);
-  const [tpFocused,  setTpFocused]  = useState(false);
-  const [slFocused,  setSlFocused]  = useState(false);
+  const [tpValue,  setTpValue]  = useState("");
+  const [slValue,  setSlValue]  = useState("");
+  const [closing,  setClosing]  = useState(false);
+  const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -106,12 +103,12 @@ export default function PositionDetail() {
         style={{ background: BG }}
       >
         <AlertTriangle className="w-8 h-8" style={{ color: MUTED }} />
-        <p className="text-[14px] font-semibold" style={{ color: DIM }}>
+        <p className="text-[14px] font-semibold" style={{ color: MUTED }}>
           No position selected
         </p>
         <button
           onClick={() => navigate("/portfolio?tab=positions")}
-          className="text-[13px] font-bold px-4 py-2 rounded-xl active:scale-95 transition-transform"
+          className="text-[13px] font-bold px-4 py-2.5 rounded-xl active:scale-95 transition-transform"
           style={{ background: SURFACE, border: `1px solid ${BORDER}`, color: PRIMARY }}
         >
           ← Back to Portfolio
@@ -132,17 +129,17 @@ export default function PositionDetail() {
     ? (Math.abs(pnlUsd) / (position.entryPrice * position.size)) * 100 * (pnlUsd >= 0 ? 1 : -1)
     : 0;
 
-  const isProfit   = pnlUsd >= 0;
-  const pnlColor   = isProfit ? "#22c55e" : "#ef4444";
-  const sideColor  = position.side === "Long" ? "#22c55e" : "#ef4444";
-  const sideBg     = position.side === "Long" ? "rgba(34,197,94,0.10)" : "rgba(239,68,68,0.10)";
-  const sideBorder = position.side === "Long" ? "rgba(34,197,94,0.22)" : "rgba(239,68,68,0.22)";
+  const isProfit  = pnlUsd >= 0;
+  const pnlColor  = isProfit ? GREEN : RED;
+  const sideColor = position.side === "Long" ? GREEN : RED;
+  const sideBg    = position.side === "Long" ? "rgba(74,222,128,0.15)" : "rgba(239,68,68,0.15)";
 
   const raw        = position.raw as Record<string, unknown> | null;
   const liqPrice   = raw?.liquidation_price ? Number(raw.liquidation_price) : null;
   const marginUsed = raw?.margin            ? Number(raw.margin)            : null;
   const openedAt   = raw?.created_at ?? raw?.updated_at ?? null;
   const posValue   = position.size * position.entryPrice;
+  const positionId = raw?.id ?? raw?.order_id ?? raw?.position_id ?? null;
 
   const brokerLabel =
     activeBrokerId === "delta"   ? "Delta Exchange" :
@@ -184,25 +181,18 @@ export default function PositionDetail() {
     finally { setUpdating(false); }
   }
 
-  // ─── Stat grid rows ─────────────────────────────────────────────────────────
-  type StatCell = { label: string; value: string; color?: string };
-  const statRows: [StatCell, StatCell][] = [
-    [
-      { label: "Entry Price",    value: fmt(position.entryPrice) },
-      { label: "Mark Price",     value: fmt(livePrice) },
-    ],
-    [
-      { label: "Liquidation",    value: liqPrice   !== null ? fmt(liqPrice)         : "—", color: liqPrice !== null ? "#f97316" : undefined },
-      { label: "Position Size",  value: String(position.size) },
-    ],
-    [
-      { label: "Position Value", value: fUSD(posValue) },
-      { label: "Margin Used",    value: marginUsed !== null ? fUSD(marginUsed) : "—" },
-    ],
-    [
-      { label: "Leverage",       value: position.leverage ? `${position.leverage}×` : "—" },
-      { label: "Opened",         value: formatDate(openedAt as string | number | undefined) },
-    ],
+  // ─── Trade detail rows ───────────────────────────────────────────────────────
+  type Row = { label: string; value: string; valueColor?: string; bold?: boolean };
+  const tradeRows: Row[] = [
+    { label: "Entry Price",      value: fmtCompact(position.entryPrice) },
+    { label: "Mark Price",       value: fmtCompact(livePrice) },
+    { label: "Liquidation Price",value: liqPrice   !== null ? fmtCompact(liqPrice)   : "—", valueColor: liqPrice !== null ? ORANGE : undefined },
+    { label: "Position Size",    value: `${position.size} ${position.symbol.replace(/USDT$|USD$|PERP$/, "")}` },
+    { label: "Position Value",   value: fUSD(posValue) },
+    { label: "Margin Used",      value: marginUsed !== null ? fUSD(marginUsed) : "—" },
+    { label: "Leverage",         value: position.leverage ? `${position.leverage}x` : "—" },
+    { label: "Opened",           value: formatDate(openedAt as string | number | undefined), bold: true },
+    ...(positionId ? [{ label: "Position ID", value: `#${String(positionId).slice(0, 12)}` }] : []),
   ];
 
   // ─── Render ─────────────────────────────────────────────────────────────────
@@ -215,304 +205,300 @@ export default function PositionDetail() {
       {/* ══════════ HEADER ══════════════════════════════════════════════════ */}
       <div
         className="flex-shrink-0 flex items-center justify-between px-4"
-        style={{ height: 56, borderBottom: `1px solid ${BORDER}`, background: BG }}
+        style={{ height: 56, background: BG }}
       >
+        {/* Back button */}
         <button
           onClick={() => { setPosition(null); navigate("/portfolio?tab=positions"); }}
           className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-          style={{ width: 36, height: 36, border: `1px solid ${BORDER}`, background: SURFACE, color: PRIMARY }}
+          style={{ width: 40, height: 40, background: SURFACE, border: `1px solid ${BORDER}` }}
           aria-label="Back"
         >
-          <ArrowLeft className="w-[17px] h-[17px]" />
+          <span style={{ color: PRIMARY, fontSize: 18, lineHeight: 1 }}>←</span>
         </button>
 
         <span
-          className="text-[11px] font-semibold uppercase tracking-[0.12em]"
-          style={{ color: DIM }}
+          className="text-[15px] font-semibold"
+          style={{ color: PRIMARY }}
         >
           Position Details
         </span>
 
+        {/* Refresh button */}
         <button
           className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-          style={{ width: 36, height: 36, border: `1px solid ${BORDER}`, background: SURFACE, color: MUTED }}
+          style={{ width: 40, height: 40, background: SURFACE, border: `1px solid ${BORDER}` }}
           aria-label="Refresh"
         >
-          <RefreshCw className="w-[13px] h-[13px]" />
+          <span style={{ color: MUTED, fontSize: 16, lineHeight: 1 }}>↻</span>
         </button>
       </div>
 
       {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
+        <div className="px-4 pb-8 flex flex-col gap-3 pt-2">
 
-        {/* ────────────────── HERO CARD ──────────────────────────────────── */}
-        <div className="px-4 pt-4">
+          {/* ──────────────────── HERO CARD ──────────────────────────────── */}
           <div
-            className="rounded-[18px] p-5"
+            className="rounded-2xl px-4 pt-4 pb-4"
             style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
           >
-
-            {/* Symbol + pills */}
-            <div className="flex items-center gap-2 mb-5 flex-wrap">
+            {/* Symbol row */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span
-                className="text-[20px] font-black tracking-tight"
+                className="text-[26px] font-black tracking-tight"
                 style={{ color: PRIMARY }}
               >
                 {position.symbol}
               </span>
 
-              {/* Long/Short */}
+              {/* Long/Short pill */}
               <span
-                className="text-[9px] font-black px-2 py-0.5 rounded-md tracking-[0.08em]"
-                style={{ background: sideBg, color: sideColor, border: `1px solid ${sideBorder}` }}
+                className="text-[11px] font-bold px-3 py-1 rounded-full"
+                style={{
+                  background: sideBg,
+                  color: sideColor,
+                  border: `1px solid ${sideColor}33`,
+                }}
               >
                 {position.side === "Long" ? "LONG" : "SHORT"}
               </span>
 
-              {/* Leverage */}
+              {/* Leverage chip */}
               {position.leverage && (
                 <span
-                  className="text-[9px] font-bold px-2 py-0.5 rounded-md tracking-[0.06em]"
-                  style={{ background: "rgba(255,255,255,0.05)", color: DIM, border: `1px solid ${BORDER}` }}
+                  className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                  style={{
+                    background: "rgba(255,255,255,0.07)",
+                    color: PRIMARY,
+                    border: `1px solid ${BORDER}`,
+                  }}
                 >
-                  {position.leverage}×
+                  {position.leverage}x
                 </span>
               )}
 
-              {/* Exchange badge — pushed right */}
+              {/* Exchange badge */}
               <span
-                className="ml-auto text-[9px] font-semibold px-2.5 py-1 rounded-md tracking-[0.06em] uppercase"
-                style={{ background: "rgba(255,255,255,0.04)", color: MUTED, border: `1px solid ${BORDER}` }}
+                className="text-[10px] font-semibold px-2.5 py-1 rounded-full uppercase tracking-wide"
+                style={{
+                  background: "rgba(255,255,255,0.05)",
+                  color: MUTED,
+                  border: `1px solid ${BORDER}`,
+                }}
               >
                 {brokerLabel}
               </span>
             </div>
 
-            {/* Unrealized P&L */}
+            {/* Unrealized P&L label */}
             <p
-              className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+              className="text-[10px] font-semibold uppercase tracking-widest mb-1"
               style={{ color: MUTED }}
             >
               Unrealized P&amp;L
             </p>
+
+            {/* Large P&L number */}
             <p
-              className="text-[38px] font-black leading-none tracking-tight"
-              style={{ color: pnlColor }}
+              className="font-black leading-none tracking-tight mb-2"
+              style={{ color: pnlColor, fontSize: 52 }}
             >
               {fUSD(pnlUsd, true)}
             </p>
 
-            {/* INR + ROI row */}
-            <div className="flex items-center gap-2.5 mt-2 mb-5">
-              <span
-                className="text-[13px] font-semibold"
-                style={{ color: `${pnlColor}99` }}
-              >
-                {fINR(pnlInr, true)}
-              </span>
-              <span
-                className="text-[10px] font-black px-1.5 py-0.5 rounded-[5px]"
-                style={{
-                  background: isProfit ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
-                  color: pnlColor,
-                }}
-              >
+            {/* INR + pct row */}
+            <p
+              className="text-[14px] font-semibold mb-4"
+              style={{ color: pnlColor }}
+            >
+              {fINR(pnlInr, true)}
+              {"  "}
+              <span style={{ opacity: 0.7 }}>
                 {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%
               </span>
-            </div>
+            </p>
 
-            {/* Thin divider */}
-            <div style={{ height: 1, background: BORDER }} />
+            {/* Divider */}
+            <div style={{ height: 1, background: BORDER, marginBottom: 14 }} />
 
-            {/* Mark Price + Status */}
-            <div className="flex items-center justify-between mt-4">
+            {/* Mark Price + Status row */}
+            <div className="flex items-end justify-between">
               <div>
                 <p
-                  className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+                  className="text-[10px] font-semibold uppercase tracking-widest mb-1.5"
                   style={{ color: MUTED }}
                 >
                   Mark Price
                 </p>
-                <p className="text-[19px] font-bold" style={{ color: PRIMARY }}>
-                  {fmt(livePrice)}
+                <p
+                  className="text-[22px] font-bold"
+                  style={{ color: PRIMARY }}
+                >
+                  {fmtCompact(livePrice)}
                 </p>
               </div>
 
               <div className="text-right">
                 <p
-                  className="text-[9px] font-semibold uppercase tracking-[0.12em] mb-1.5"
+                  className="text-[10px] font-semibold uppercase tracking-widest mb-2"
                   style={{ color: MUTED }}
                 >
                   Status
                 </p>
                 <div className="flex items-center justify-end gap-1.5">
-                  {/* Pulsing dot via CSS animation */}
                   <span
-                    className="inline-block w-1.5 h-1.5 rounded-full"
-                    style={{ background: "#22c55e", boxShadow: "0 0 0 0 #22c55e40",
-                      animation: "pulse-dot 2s ease-in-out infinite" }}
+                    className="inline-block w-2 h-2 rounded-full"
+                    style={{ background: GREEN }}
                   />
-                  <span className="text-[13px] font-semibold" style={{ color: "#22c55e" }}>
+                  <span
+                    className="text-[15px] font-semibold"
+                    style={{ color: GREEN }}
+                  >
                     Live
                   </span>
                 </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* ────────────────── STATISTICS CARD ───────────────────────────── */}
-        <div className="px-4 pt-3">
+          {/* ──────────────────── TRADE DETAILS CARD ─────────────────────── */}
           <div
-            className="rounded-[18px] overflow-hidden"
+            className="rounded-2xl overflow-hidden"
             style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
           >
-            <CardHeader label="Position Details" />
-
-            {statRows.map(([left, right], ri) => (
-              <div
-                key={ri}
-                className="flex"
-                style={{
-                  borderBottom: ri < statRows.length - 1 ? `1px solid ${BORDER}` : undefined,
-                }}
+            {/* Section header */}
+            <div className="px-4 pt-3.5 pb-3">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: MUTED }}
               >
-                {/* Left cell */}
-                <div
-                  className="flex-1 px-4 py-3.5"
-                  style={{ borderRight: `1px solid ${BORDER}` }}
-                >
-                  <p
-                    className="text-[9px] font-semibold uppercase tracking-[0.10em] mb-1.5"
-                    style={{ color: MUTED }}
-                  >
-                    {left.label}
-                  </p>
-                  <p
-                    className="text-[14px] font-bold"
-                    style={{ color: left.color ?? PRIMARY }}
-                  >
-                    {left.value}
-                  </p>
-                </div>
+                Position Details
+              </p>
+            </div>
 
-                {/* Right cell */}
-                <div className="flex-1 px-4 py-3.5">
-                  <p
-                    className="text-[9px] font-semibold uppercase tracking-[0.10em] mb-1.5"
-                    style={{ color: MUTED }}
+            {/* Rows */}
+            {tradeRows.map((row, i) => (
+              <div key={i}>
+                {/* Divider */}
+                <div style={{ height: 1, background: BORDER, marginLeft: 16 }} />
+
+                <div
+                  className="flex items-center justify-between px-4 py-[13px]"
+                >
+                  <span
+                    className="text-[14px]"
+                    style={{ color: MUTED, fontWeight: 400 }}
                   >
-                    {right.label}
-                  </p>
-                  <p
-                    className="text-[14px] font-bold"
-                    style={{ color: right.color ?? PRIMARY }}
+                    {row.label}
+                  </span>
+                  <span
+                    className="text-[14px]"
+                    style={{
+                      color: row.valueColor ?? PRIMARY,
+                      fontWeight: row.bold ? 700 : 500,
+                    }}
                   >
-                    {right.value}
-                  </p>
+                    {row.value}
+                  </span>
                 </div>
               </div>
             ))}
           </div>
-        </div>
 
-        {/* ────────────────── RISK MANAGEMENT ───────────────────────────── */}
-        <div className="px-4 pt-3">
+          {/* ──────────────────── RISK MANAGEMENT CARD ───────────────────── */}
           <div
-            className="rounded-[18px] overflow-hidden"
+            className="rounded-2xl overflow-hidden"
             style={{ background: SURFACE, border: `1px solid ${BORDER}` }}
           >
-            <CardHeader label="Risk Management" />
+            {/* Section header */}
+            <div className="px-4 pt-3.5 pb-3">
+              <p
+                className="text-[10px] font-semibold uppercase tracking-widest"
+                style={{ color: MUTED }}
+              >
+                Risk Management
+              </p>
+            </div>
 
-            {/* TP + SL inputs side by side */}
-            <div
-              className="flex"
-              style={{ borderBottom: `1px solid ${BORDER}` }}
-            >
-              {/* Take Profit */}
+            {/* TP + SL cards */}
+            <div className="px-4 flex gap-3 mb-3">
+
+              {/* Take Profit card */}
               <div
-                className="flex-1 px-4 py-4 transition-colors"
+                className="flex-1 rounded-xl p-3 relative"
                 style={{
-                  borderRight:    `1px solid ${BORDER}`,
-                  background: tpFocused ? "rgba(34,197,94,0.04)" : "transparent",
+                  background: "rgba(74,222,128,0.07)",
+                  border: `1px solid rgba(74,222,128,0.22)`,
                 }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <p
-                    className="text-[9px] font-semibold uppercase tracking-[0.10em]"
-                    style={{ color: tpFocused ? "#22c55e" : MUTED }}
+                    className="text-[10px] font-bold uppercase tracking-widest"
+                    style={{ color: GREEN }}
                   >
                     Take Profit
                   </p>
-                  <Pencil
-                    className="w-[11px] h-[11px]"
-                    style={{ color: tpFocused ? "#22c55e" : MUTED }}
-                  />
+                  {/* Pencil icon */}
+                  <span style={{ color: `${GREEN}88`, fontSize: 14 }}>✎</span>
                 </div>
                 <input
                   type="number"
                   step="any"
                   value={tpValue}
                   onChange={e => setTpValue(e.target.value)}
-                  onFocus={() => setTpFocused(true)}
-                  onBlur={() => setTpFocused(false)}
                   placeholder="Not set"
-                  className="w-full bg-transparent outline-none text-[17px] font-bold"
+                  className="w-full bg-transparent outline-none text-[18px] font-bold"
                   style={{
-                    color:       tpValue ? "#22c55e" : DIM,
-                    caretColor:  "#22c55e",
+                    color: tpValue ? PRIMARY : `${PRIMARY}55`,
+                    caretColor: GREEN,
                   }}
                 />
               </div>
 
-              {/* Stop Loss */}
+              {/* Stop Loss card */}
               <div
-                className="flex-1 px-4 py-4 transition-colors"
+                className="flex-1 rounded-xl p-3 relative"
                 style={{
-                  background: slFocused ? "rgba(239,68,68,0.04)" : "transparent",
+                  background: "rgba(239,68,68,0.07)",
+                  border: `1px solid rgba(239,68,68,0.22)`,
                 }}
               >
                 <div className="flex items-center justify-between mb-2">
                   <p
-                    className="text-[9px] font-semibold uppercase tracking-[0.10em]"
-                    style={{ color: slFocused ? "#ef4444" : MUTED }}
+                    className="text-[10px] font-bold uppercase tracking-widest"
+                    style={{ color: RED }}
                   >
                     Stop Loss
                   </p>
-                  <Pencil
-                    className="w-[11px] h-[11px]"
-                    style={{ color: slFocused ? "#ef4444" : MUTED }}
-                  />
+                  {/* Pencil icon */}
+                  <span style={{ color: `${RED}88`, fontSize: 14 }}>✎</span>
                 </div>
                 <input
                   type="number"
                   step="any"
                   value={slValue}
                   onChange={e => setSlValue(e.target.value)}
-                  onFocus={() => setSlFocused(true)}
-                  onBlur={() => setSlFocused(false)}
                   placeholder="Not set"
-                  className="w-full bg-transparent outline-none text-[17px] font-bold"
+                  className="w-full bg-transparent outline-none text-[18px] font-bold"
                   style={{
-                    color:      slValue ? "#ef4444" : DIM,
-                    caretColor: "#ef4444",
+                    color: slValue ? PRIMARY : `${PRIMARY}55`,
+                    caretColor: RED,
                   }}
                 />
               </div>
             </div>
 
             {/* Update TP/SL button */}
-            <div className="px-4 py-4">
+            <div className="px-4 pb-4">
               <button
                 onClick={handleUpdateTpSl}
                 disabled={!canUpdate}
-                className="w-full py-[14px] rounded-[12px] text-[13px] font-bold active:scale-[0.98] transition-transform"
+                className="w-full py-[14px] rounded-xl text-[14px] font-semibold active:scale-[0.98] transition-transform"
                 style={{
-                  background: canUpdate
-                    ? "rgba(255,255,255,0.07)"
-                    : "rgba(255,255,255,0.03)",
-                  color:  canUpdate ? PRIMARY : MUTED,
-                  border: `1px solid ${canUpdate ? "rgba(255,255,255,0.14)" : BORDER}`,
+                  background: canUpdate ? "#2A2A2A" : "#1F1F1F",
+                  color:      canUpdate ? PRIMARY   : `${PRIMARY}33`,
+                  border:     `1px solid ${BORDER}`,
                   cursor: canUpdate ? "pointer" : "not-allowed",
                 }}
               >
@@ -520,38 +506,26 @@ export default function PositionDetail() {
               </button>
             </div>
           </div>
-        </div>
 
-        {/* ────────────────── CLOSE POSITION ────────────────────────────── */}
-        <div className="px-4 pt-3 pb-4">
+          {/* ──────────────────── CLOSE POSITION BUTTON ──────────────────── */}
           <button
             onClick={handleClose}
             disabled={!canClose}
-            className="w-full py-[15px] rounded-[18px] text-[14px] font-black active:scale-[0.98] transition-transform"
+            className="w-full py-[15px] rounded-2xl text-[15px] font-bold active:scale-[0.98] transition-transform"
             style={{
-              background: canClose
-                ? "rgba(239,68,68,0.10)"
-                : "rgba(239,68,68,0.04)",
-              color:  canClose ? "#ef4444" : "rgba(239,68,68,0.30)",
-              border: `1px solid ${canClose ? "rgba(239,68,68,0.22)" : "rgba(239,68,68,0.08)"}`,
+              background: canClose ? "rgba(239,68,68,0.12)" : "rgba(239,68,68,0.05)",
+              color:      canClose ? RED                    : `${RED}44`,
+              border:     `1px solid ${canClose ? "rgba(239,68,68,0.30)" : "rgba(239,68,68,0.10)"}`,
               cursor: canClose ? "pointer" : "not-allowed",
             }}
           >
             {closing ? "Closing Position…" : "Close Position"}
           </button>
+
+          {/* Safe-area spacer */}
+          <div style={{ height: 16 }} />
         </div>
-
-        {/* Safe-area bottom spacer */}
-        <div style={{ height: 32 }} />
       </div>
-
-      {/* Pulse dot keyframe — injected once */}
-      <style>{`
-        @keyframes pulse-dot {
-          0%, 100% { opacity: 1; }
-          50%       { opacity: 0.4; }
-        }
-      `}</style>
     </div>
   );
 }
