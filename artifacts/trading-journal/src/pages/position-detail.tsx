@@ -332,12 +332,12 @@ export default function PositionDetail() {
                   className="flex items-center justify-between px-5"
                   style={{ height: 54 }}
                 >
-                  <span className="font-medium" style={{ color: MUTED, fontSize: 15 }}>
+                  <span className="font-normal" style={{ color: "#797979", fontSize: 13 }}>
                     {row.label}
                   </span>
                   <span
-                    className="font-medium"
-                    style={{ color: row.valueColor ?? "#C7C7C7", fontSize: 14 }}
+                    className="font-semibold"
+                    style={{ color: row.valueColor ?? "#D6D6D6", fontSize: 15 }}
                   >
                     {row.value}
                   </span>
