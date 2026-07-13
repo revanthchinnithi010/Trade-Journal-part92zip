@@ -1,13 +1,13 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { AlertTriangle, ChevronLeft, RotateCw, Pencil, Trash2 } from "lucide-react";
+import { AlertTriangle, ChevronLeft, RotateCw, Trash2, ChevronDown } from "lucide-react";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
 import { useCurrencyStore } from "@/store/currencyStore";
 
 // ─── Design tokens (premium institutional / grayscale-first) ────────────────
-const BG        = "#0B0B0C";
+const BG        = "#000000";
 const CARD      = "#151515";
 const BORDER    = "#252525";
 const DIVIDER   = "#262626";
@@ -112,6 +112,7 @@ export default function PositionDetail() {
   const [slValue,  setSlValue]  = useState("");
   const [closing,  setClosing]  = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -316,103 +317,51 @@ export default function PositionDetail() {
             </div>
           </div>
 
-          {/* ──────────────────── POSITION DETAILS CARD ──────────────────── */}
+          {/* ──────────────────── POSITION DETAILS CARD (collapsible) ─────── */}
           <div
             style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: "hidden", boxShadow: CARD_SHADOW }}
           >
-            <div style={{ padding: "14px 20px 8px" }}>
-              <p className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
-                Position Details
-              </p>
-            </div>
-
-            {tradeRows.map((row, i) => (
-              <div key={i} style={{ borderTop: i === 0 ? "none" : `1px solid ${DIVIDER}` }}>
-                <div
-                  className="flex items-center justify-between px-5"
-                  style={{ height: 54 }}
-                >
-                  <span className="font-normal" style={{ color: "#797979", fontSize: 13 }}>
-                    {row.label}
-                  </span>
-                  <span
-                    className="font-semibold"
-                    style={{ color: row.valueColor ?? "#D6D6D6", fontSize: 15 }}
-                  >
-                    {row.value}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ──────────────────── RISK MANAGEMENT CARD ───────────────────── */}
-          <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "18px 20px", boxShadow: CARD_SHADOW }}
-          >
-            <p className="font-medium uppercase tracking-wide mb-3" style={{ color: MUTED, fontSize: 11 }}>
-              Risk Management
-            </p>
-
-            {/* TP + SL cards */}
-            <div className="flex gap-3 mb-4">
-              {/* Take Profit card */}
-              <div
-                className="flex-1 flex flex-col justify-between"
-                style={{ height: 92, borderRadius: 18, border: "1px solid #234A35", background: "#13231B", padding: "12px 14px" }}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold uppercase tracking-wide" style={{ color: GREEN, fontSize: 11 }}>Take Profit</p>
-                  <Pencil size={18} style={{ color: GREEN, opacity: 0.8 }} />
-                </div>
-                <input
-                  type="number"
-                  step="any"
-                  value={tpValue}
-                  onChange={e => setTpValue(e.target.value)}
-                  placeholder="Not set"
-                  className="w-full bg-transparent outline-none font-semibold"
-                  style={{ color: tpValue ? VALUE : MUTED, fontSize: 17 }}
-                />
-              </div>
-
-              {/* Stop Loss card */}
-              <div
-                className="flex-1 flex flex-col justify-between"
-                style={{ height: 92, borderRadius: 18, border: "1px solid #503131", background: "#241718", padding: "12px 14px" }}
-              >
-                <div className="flex items-center justify-between">
-                  <p className="font-semibold uppercase tracking-wide" style={{ color: RED, fontSize: 11 }}>Stop Loss</p>
-                  <Pencil size={18} style={{ color: RED, opacity: 0.8 }} />
-                </div>
-                <input
-                  type="number"
-                  step="any"
-                  value={slValue}
-                  onChange={e => setSlValue(e.target.value)}
-                  placeholder="Not set"
-                  className="w-full bg-transparent outline-none font-semibold"
-                  style={{ color: slValue ? VALUE : MUTED, fontSize: 17 }}
-                />
-              </div>
-            </div>
-
-            {/* Update TP/SL button */}
             <button
-              onClick={handleUpdateTpSl}
-              disabled={!canUpdate}
-              className="w-full rounded-xl font-semibold active:scale-[0.98] transition-transform"
-              style={{
-                height: 54,
-                fontSize: 15,
-                background: canUpdate ? "#1D1D1D" : "#151515",
-                color:      canUpdate ? "#F2F2F2" : MUTED,
-                border:     `1px solid ${BORDER}`,
-                cursor: canUpdate ? "pointer" : "not-allowed",
-              }}
+              onClick={() => setDetailsOpen(o => !o)}
+              className="w-full flex items-center justify-between"
+              style={{ padding: "14px 20px", background: "transparent" }}
+              aria-expanded={detailsOpen}
             >
-              {updating ? "Updating…" : "Update TP / SL"}
+              <span className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
+                Position Details
+              </span>
+              <ChevronDown
+                size={16}
+                style={{
+                  color: MUTED,
+                  transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s ease",
+                }}
+              />
             </button>
+
+            {detailsOpen && (
+              <div>
+                {tradeRows.map((row, i) => (
+                  <div key={i} style={{ borderTop: `1px solid ${DIVIDER}` }}>
+                    <div
+                      className="flex items-center justify-between px-5"
+                      style={{ height: 54 }}
+                    >
+                      <span className="font-normal" style={{ color: "#797979", fontSize: 13 }}>
+                        {row.label}
+                      </span>
+                      <span
+                        className="font-semibold"
+                        style={{ color: row.valueColor ?? "#D6D6D6", fontSize: 15 }}
+                      >
+                        {row.value}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ──────────────────── CLOSE POSITION BUTTON ──────────────────── */}
