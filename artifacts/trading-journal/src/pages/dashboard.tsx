@@ -1,55 +1,24 @@
 import { memo, useMemo, useEffect, useRef, useState } from "react";
 import {
-  useGetStatsSummary,
-  useGetEquityCurve,
-  useGetWeeklyPnl,
   useListTrades,
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
-import { useCurrencyFormatter, useCurrencyAxisFormatter, formatAmount, useCurrencyStore } from "@/store/currencyStore";
-import {
-  ArrowUpRight, ArrowDownRight, TrendingUp, Percent, Layers,
-  BarChart2, Activity, Target, Flame, ChevronRight,
-  TrendingDown, Briefcase, DollarSign,
-} from "lucide-react";
+import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
+import { TrendingUp, Activity, ChevronRight } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
 import { useBrokerStore } from "@/store/brokerStore";
-import {
-  Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
-  Bar, BarChart as RechartsBarChart, Cell, PieChart, Pie, Legend,
-} from "recharts";
 import { Link } from "wouter";
 import { BROKER_MAP, BROKER_INFO } from "@/data/sampleData";
 import { useTickStore } from "@/store/tickStore";
 import {
   PageTransition,
   AnimatedCard,
-  NumberCounter,
-  LoadingSpinner,
-  FadeIn
 } from "@/components/animations";
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
 
-const GREEN = "hsl(145 58% 52%)";
-const RED   = "hsl(0 68% 58%)";
-const PURPLE = "#60a5fa";
-const MUTED_CLR = "hsl(128 8% 38%)";
-
-// Neutral trading-terminal stat-card palette — value text only, never the
-// card shell. No blue/teal anywhere.
-const VALUE_GREEN  = "#22C55E";
-const VALUE_RED    = "#EF4444";
-const VALUE_ORANGE = "#F59E0B";
-
-const DEFAULT_STATS = {
-  netPnl: 0, winRate: 0, profitFactor: 0, averageRR: 0,
-  totalTrades: 0, winCount: 0, lossCount: 0, breakevenCount: 0,
-};
-const DEFAULT_EQUITY: Array<{ date: string; equity: number }> = [];
-const DEFAULT_WEEKLY: Array<{ week: string; pnl: number }> = [];
 const DEFAULT_TRADES = { trades: [], total: 0 };
 
 const tooltipStyle = {
@@ -60,110 +29,6 @@ const tooltipStyle = {
   fontSize: "12px",
   padding: "8px 12px",
 };
-
-const CustomEquityTooltip = memo(function CustomEquityTooltip({
-  active, payload, label,
-}: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
-  const fc = useCurrencyFormatter();
-  if (!active || !payload?.length) return null;
-  return (
-    <div style={tooltipStyle} className="border border-white/[0.08]">
-      <p className="text-muted-foreground text-[11px] mb-1">
-        {label ? new Date(label).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""}
-      </p>
-      <p className="font-bold text-sm text-white">{fc(payload[0].value)}</p>
-    </div>
-  );
-});
-
-const CustomPnlTooltip = memo(function CustomPnlTooltip({
-  active, payload, label,
-}: { active?: boolean; payload?: Array<{ value: number }>; label?: string }) {
-  const fc = useCurrencyFormatter();
-  if (!active || !payload?.length) return null;
-  const val = payload[0].value;
-  return (
-    <div style={tooltipStyle} className="border border-white/[0.08]">
-      <p className="text-muted-foreground text-[11px] mb-1">Week of {label}</p>
-      <p className={`font-bold text-sm ${val >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-        {val >= 0 ? "+" : ""}{fc(val)}
-      </p>
-    </div>
-  );
-});
-
-const StatCard = memo(function StatCard({
-  label, value, sub, icon: Icon, positive, accent, bar, trend, index,
-}: {
-  label: string; value: string; sub?: React.ReactNode; icon: React.ElementType;
-  positive?: boolean; accent?: boolean; bar?: number; trend?: string; index?: number;
-}) {
-  return (
-    <AnimatedCard index={index} className="stat-card-neutral h-full relative overflow-hidden transition-colors duration-200 p-5">
-      <div className="relative flex items-start justify-between mb-4">
-        <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>{label}</p>
-        <div className="stat-icon-neutral p-1.5 rounded-lg">
-          <Icon className="w-3.5 h-3.5" style={{ color: "var(--stat-icon)" }} />
-        </div>
-      </div>
-
-      <div
-        className="relative text-[26px] font-black tracking-tight mb-1.5 leading-none"
-        style={{
-          color: accent ? "var(--stat-value)" :
-                 positive === true  ? VALUE_GREEN :
-                 positive === false ? VALUE_RED :
-                 "var(--stat-value)",
-        }}
-      >
-        {value}
-      </div>
-
-      {bar !== undefined && (
-        <div className="mt-2.5 mb-2 h-1 w-full bg-white/[0.06] rounded-full overflow-hidden">
-          <div
-            className="h-full rounded-full transition-all duration-700"
-            style={{
-              width: `${Math.min(bar, 100)}%`,
-              background: bar >= 55
-                ? `linear-gradient(90deg, ${VALUE_GREEN}99, ${VALUE_GREEN})`
-                : bar >= 40
-                ? `linear-gradient(90deg, ${VALUE_ORANGE}99, ${VALUE_ORANGE})`
-                : `linear-gradient(90deg, ${VALUE_RED}99, ${VALUE_RED})`,
-            }}
-          />
-        </div>
-      )}
-
-      {sub && <p className="text-[11px]" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
-      {trend && <p className="text-[11px] font-medium mt-0.5" style={{ color: "var(--stat-sub)" }}>{trend}</p>}
-    </AnimatedCard>
-  );
-});
-
-// ── Mini Sparkline ────────────────────────────────────────────────────────────
-function MiniSparkline({ data, positive, width = 72, height = 28 }: {
-  data: number[]; positive: boolean; width?: number; height?: number;
-}) {
-  if (data.length < 2) return <div style={{ width, height }} />;
-  const min   = Math.min(...data);
-  const max   = Math.max(...data);
-  const range = max - min || 1;
-  const pts   = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * width;
-    const y = height - ((v - min) / range) * (height - 3) - 1.5;
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ display: "block" }}>
-      <polyline
-        points={pts} fill="none"
-        stroke={positive ? "#B7FF5A" : "#ef4444"}
-        strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity={0.85}
-      />
-    </svg>
-  );
-}
 
 
 // ── Calendar Heatmap ──────────────────────────────────────────────────────────
@@ -247,8 +112,6 @@ const Dashboard = memo(function Dashboard() {
   const [timedOut,          setTimedOut]          = useState(false);
   const ticks         = useTickStore(s => s.ticks);
   const fc            = useCurrencyFormatter();
-  const axisFormatter = useCurrencyAxisFormatter();
-  const currency      = useCurrencyStore(s => s.currency);
 
   useEffect(() => {
     console.log("[Dashboard] mount");
@@ -259,12 +122,6 @@ const Dashboard = memo(function Dashboard() {
     return () => clearTimeout(t);
   }, []);
 
-  const { data: stats, isLoading: statsLoading, isError: statsError }
-    = useGetStatsSummary();
-  const { data: equity, isLoading: equityLoading, isError: equityError }
-    = useGetEquityCurve();
-  const { data: weeklyPnl, isLoading: weeklyLoading, isError: weeklyError }
-    = useGetWeeklyPnl();
   const { data: recentTrades, isLoading: tradesLoading, isError: tradesError }
     = useListTrades({ limit: 10 });
 
@@ -273,38 +130,19 @@ const Dashboard = memo(function Dashboard() {
     Object.values(s.brokerOrders).reduce((sum, o) => sum + o.length, 0));
 
   useEffect(() => {
-    const anyLoading = statsLoading || equityLoading || weeklyLoading || tradesLoading;
-    if (!anyLoading && !timedOut) {
+    if (!tradesLoading && !timedOut) {
       const elapsed = Math.round(performance.now() - mountTimeRef.current);
-      console.log(`[Dashboard] loading complete in ${elapsed}ms — stats:${!statsError} equity:${!equityError} weekly:${!weeklyError} trades:${!tradesError}`);
+      console.log(`[Dashboard] loading complete in ${elapsed}ms — trades:${!tradesError}`);
       setTimedOut(true);
     }
-  }, [statsLoading, equityLoading, weeklyLoading, tradesLoading, timedOut, statsError, equityError, weeklyError, tradesError]);
+  }, [tradesLoading, timedOut, tradesError]);
 
   const now = useMemo(() => new Date(), []);
   const { data: calData } = useGetCalendarHeatmap({ year: now.getFullYear(), month: now.getMonth() + 1 });
 
-  const isStillLoading = !timedOut && (statsLoading || equityLoading || weeklyLoading || tradesLoading);
+  const isStillLoading = !timedOut && tradesLoading;
 
-  const resolvedStats = stats ?? DEFAULT_STATS;
-  const resolvedEquity = equity ?? DEFAULT_EQUITY;
-  const resolvedWeekly = weeklyPnl ?? DEFAULT_WEEKLY;
   const resolvedTrades = recentTrades ?? DEFAULT_TRADES;
-
-  const weeklyLabels = useMemo(() => {
-    return resolvedWeekly.map((w) => {
-      const d = new Date(w.week);
-      return { ...w, label: d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) };
-    });
-  }, [resolvedWeekly]);
-
-  const winLossData = useMemo(() => {
-    return [
-      { name: "Win",  value: resolvedStats.winCount,       color: GREEN     },
-      { name: "Loss", value: resolvedStats.lossCount,      color: RED       },
-      { name: "BE",   value: resolvedStats.breakevenCount, color: MUTED_CLR },
-    ].filter((d) => d.value > 0);
-  }, [resolvedStats]);
 
   const openTrades = useMemo(() => {
     return resolvedTrades.trades.filter((t) => (t as { exitPrice?: number | null }).exitPrice == null);
@@ -335,34 +173,21 @@ const Dashboard = memo(function Dashboard() {
 
   if (isStillLoading) {
     // Structurally mirrors every section of the real content below, at the
-    // same fixed heights (AccountValueWidget ≈176px, 5 stat cards ≈152px,
-    // equity/weekly row 220px/200px charts + header, pie/calendar row
-    // 190px chart + header, recent trades table). Matching heights exactly
-    // means the eventual swap to real content never shifts layout — this
-    // only ever runs once now that Dashboard is kept mounted (see
-    // DASHBOARD_NODE in App.tsx), not on every tab switch.
+    // same fixed heights (AccountValueWidget ≈176px, calendar card ≈302px,
+    // recent trades table). Matching heights exactly means the eventual
+    // swap to real content never shifts layout — this only ever runs once
+    // now that Dashboard is kept mounted (see DASHBOARD_NODE in App.tsx),
+    // not on every tab switch.
     return (
       <div className="space-y-4 pb-12">
         <div className="glass-card shimmer-loading rounded-2xl" style={{ height: 176 }} />
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="rounded-2xl shimmer-loading" style={{ height: 152 }} />
-          ))}
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2 rounded-2xl shimmer-loading" style={{ height: 276 }} />
-          <div className="rounded-2xl shimmer-loading" style={{ height: 256 }} />
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="rounded-2xl shimmer-loading" style={{ height: 302 }} />
-          <div className="lg:col-span-2 rounded-2xl shimmer-loading" style={{ height: 302 }} />
-        </div>
+        <div className="rounded-2xl shimmer-loading" style={{ height: 302 }} />
         <div className="rounded-2xl shimmer-loading" style={{ height: 340 }} />
       </div>
     );
   }
 
-  const apiOffline = statsError && equityError && weeklyError && tradesError;
+  const apiOffline = tradesError;
 
   return (
     <PageTransition className="space-y-4 pb-12" fill={false}>
@@ -400,218 +225,35 @@ const Dashboard = memo(function Dashboard() {
         openOrders={brokerOrdersCount}
       />
 
-      {/* ── Stat Cards ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <Link href="/net-pnl" className="block h-full cursor-pointer">
-          <StatCard
-            index={0}
-            label="Net PNL"
-            value={formatAmount(combined.display.netPnl, currency)}
-            icon={combined.usd.netPnl >= 0 ? ArrowUpRight : ArrowDownRight}
-            positive={combined.usd.netPnl > 0 ? true : combined.usd.netPnl < 0 ? false : undefined}
-            sub={<span className="flex items-center gap-1"><span className={combined.usd.netPnl >= 0 ? "text-emerald-400" : "text-red-400"}>{combined.usd.netPnl >= 0 ? "▲" : "▼"}</span>Delta + cTrader</span>}
-          />
-        </Link>
-        <StatCard
-          index={1}
-          label="Win Rate"
-          value={`${resolvedStats.winRate.toFixed(1)}%`}
-          icon={Percent}
-          accent
-          bar={resolvedStats.winRate}
-          sub={`${resolvedStats.winCount}W · ${resolvedStats.lossCount}L · ${resolvedStats.breakevenCount}BE`}
-        />
-        <StatCard
-          index={2}
-          label="Profit Factor"
-          value={resolvedStats.profitFactor.toFixed(2)}
-          icon={TrendingUp}
-          accent
-          positive={resolvedStats.profitFactor >= 1.5 ? true : resolvedStats.profitFactor < 1 ? false : undefined}
-          sub="Gross Win / Gross Loss"
-        />
-        <StatCard
-          index={3}
-          label="Avg RR"
-          value={`${resolvedStats.averageRR.toFixed(2)}R`}
-          icon={Target}
-          accent
-          positive={resolvedStats.averageRR >= 2 ? true : resolvedStats.averageRR < 1 ? false : undefined}
-          sub="Reward / Risk ratio"
-        />
-        <StatCard
-          index={4}
-          label="Total Trades"
-          value={`${resolvedStats.totalTrades}`}
-          icon={Layers}
-          accent
-          sub={<span><span className="text-emerald-400 font-semibold">{resolvedStats.winCount}W</span>{" · "}<span className="text-red-400 font-semibold">{resolvedStats.lossCount}L</span>{resolvedStats.breakevenCount > 0 && <span className="text-muted-foreground"> · {resolvedStats.breakevenCount}BE</span>}</span>}
-        />
-      </div>
-
-      {/* ── Equity Curve + Weekly PNL ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
-          <AnimatedCard index={5} className="glass-card h-full overflow-hidden">
-            <div className="p-5 pb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-                  <Activity className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <span className="text-[13px] font-semibold text-white">Equity Curve</span>
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground bg-white/[0.04] rounded-lg px-2.5 py-1 border border-white/[0.06]">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />
-                Account Balance
-              </div>
+      {/* ── Trading Calendar ── */}
+      <AnimatedCard index={1} className="glass-card overflow-hidden">
+        <div className="p-5 pb-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
+              <Activity className="w-3.5 h-3.5 text-primary" />
             </div>
-            <div className="h-[220px] px-4 pb-5">
-              {resolvedEquity.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-[12px] text-muted-foreground/50">
-                  No equity data available
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%" style={{ border: "none", outline: "none" }}>
-                  <AreaChart data={resolvedEquity} margin={{ top: 4, right: 2, left: -20, bottom: 0 }} style={{ border: "none" }}>
-                    <defs>
-                      <linearGradient id="equityGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={PURPLE} stopOpacity={0.28} />
-                        <stop offset="60%" stopColor={PURPLE} stopOpacity={0.04} />
-                        <stop offset="100%" stopColor={PURPLE} stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-                    <XAxis dataKey="date" stroke="none" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => new Date(v).toLocaleDateString("en-US", { month: "short", day: "numeric" })} />
-                    <YAxis stroke="none" tick={{ fill: "hsl(128 8% 42%)", fontSize: 10 }} tickLine={false} axisLine={false}
-                      tickFormatter={axisFormatter} />
-                    <Tooltip content={<CustomEquityTooltip />} cursor={{ stroke: "rgba(255,255,255,0.1)", strokeWidth: 1 }} />
-                    <Area type="monotone" dataKey="equity" stroke={PURPLE} strokeWidth={2} fill="url(#equityGrad)" dot={false}
-                      activeDot={{ r: 4, fill: PURPLE, stroke: "hsl(var(--background))", strokeWidth: 2 }}
-                      isAnimationActive={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </AnimatedCard>
+            <span className="text-[13px] font-semibold text-white">Trading Calendar</span>
+          </div>
+          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm bg-emerald-400/60 inline-block" /> Profit
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm bg-red-400/60 inline-block" /> Loss
+            </span>
+          </div>
         </div>
-
-        <div>
-          <AnimatedCard index={6} className="glass-card h-full overflow-hidden">
-            <div className="p-5 pb-2 flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-                <BarChart2 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <span className="text-[13px] font-semibold text-white">Weekly PNL</span>
-            </div>
-            <div className="h-[200px] px-1 pb-3">
-              {weeklyLabels.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-[12px] text-muted-foreground/50">
-                  No weekly data available
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <RechartsBarChart data={weeklyLabels} margin={{ top: 8, right: 12, left: -24, bottom: 0 }}>
-                    <XAxis dataKey="label" stroke="transparent" tick={{ fill: "hsl(220 10% 42%)", fontSize: 10 }} tickLine={false} axisLine={false} />
-                    <Tooltip content={<CustomPnlTooltip />} cursor={{ fill: "rgba(255,255,255,0.025)" }} />
-                    <Bar dataKey="pnl" radius={[4, 4, 2, 2]} maxBarSize={24} isAnimationActive={false}>
-                      {weeklyLabels.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.pnl >= 0 ? GREEN : RED} fillOpacity={0.88} />
-                      ))}
-                    </Bar>
-                  </RechartsBarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </AnimatedCard>
+        <div className="px-5 pb-5">
+          {calData ? (
+            <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
+          ) : (
+            <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
+          )}
         </div>
-      </div>
-
-      {/* ── Win/Loss Pie + Calendar ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div>
-          <AnimatedCard index={7} className="glass-card h-full overflow-hidden">
-            <div className="p-5 pb-2 flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-                <Flame className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <span className="text-[13px] font-semibold text-white">Win vs Loss</span>
-            </div>
-            <div className="h-[190px] px-1">
-              {winLossData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-[12px] text-muted-foreground/50">
-                  No trade data yet
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={winLossData} cx="50%" cy="48%" innerRadius={52} outerRadius={76}
-                      paddingAngle={4} dataKey="value" strokeWidth={0}
-                      isAnimationActive={false}
-                    >
-                      {winLossData.map((entry, index) => (
-                        <Cell key={`pie-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={tooltipStyle} itemStyle={{ color: "hsl(220 15% 88%)" }}
-                      formatter={(value: number, name: string) => [`${value} trades`, name]} />
-                    <Legend iconType="circle" iconSize={7}
-                      formatter={(value) => <span style={{ fontSize: 11, color: "hsl(220 10% 55%)" }}>{value}</span>} />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-            <div className="flex justify-around text-center mx-5 mb-5 border-t border-white/[0.06] pt-3">
-              <div>
-                <p className="text-base font-bold text-emerald-400">{resolvedStats.winCount}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Wins</p>
-              </div>
-              <div className="w-px bg-white/[0.06]" />
-              <div>
-                <p className="text-base font-bold text-red-400">{resolvedStats.lossCount}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Losses</p>
-              </div>
-              <div className="w-px bg-white/[0.06]" />
-              <div>
-                <p className="text-base font-bold text-foreground">{resolvedStats.breakevenCount}</p>
-                <p className="text-[10px] text-muted-foreground font-medium">Even</p>
-              </div>
-            </div>
-          </AnimatedCard>
-        </div>
-
-        <div className="lg:col-span-2">
-          <AnimatedCard index={8} className="glass-card h-full overflow-hidden">
-            <div className="p-5 pb-2 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-                  <Activity className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <span className="text-[13px] font-semibold text-white">Trading Calendar</span>
-              </div>
-              <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-sm bg-emerald-400/60 inline-block" /> Profit
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-sm bg-red-400/60 inline-block" /> Loss
-                </span>
-              </div>
-            </div>
-            <div className="px-5 pb-5">
-              {calData ? (
-                <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
-              ) : (
-                <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
-              )}
-            </div>
-          </AnimatedCard>
-        </div>
-      </div>
+      </AnimatedCard>
 
       {/* ── Recent Trades ── */}
-      <AnimatedCard index={9} className="glass-card overflow-hidden">
+      <AnimatedCard index={2} className="glass-card overflow-hidden">
         <div className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
