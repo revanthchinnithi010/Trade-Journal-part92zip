@@ -113,6 +113,7 @@ export default function PositionDetail() {
   const [closing,  setClosing]  = useState(false);
   const [updating, setUpdating] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -183,7 +184,7 @@ export default function PositionDetail() {
       setPosition(null);
       navigate("/portfolio?tab=positions");
     } catch { /* toast handled by broker service */ }
-    finally { setClosing(false); }
+    finally { setClosing(false); setShowCloseConfirm(false); }
   }
 
   async function handleUpdateTpSl() {
@@ -258,7 +259,7 @@ export default function PositionDetail() {
       </div>
 
       {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
-      <div className="flex-1 overflow-y-auto" style={{ overscrollBehavior: "contain" }}>
+      <div className="flex-1 overflow-y-auto pd-scroll-hide" style={{ overscrollBehavior: "contain" }}>
         <div className="flex flex-col gap-4" style={{ padding: 20 }}>
 
           {/* ──────────────────── TOP CARD ───────────────────────────────── */}
@@ -366,7 +367,7 @@ export default function PositionDetail() {
 
           {/* ──────────────────── CLOSE POSITION BUTTON ──────────────────── */}
           <button
-            onClick={handleClose}
+            onClick={() => setShowCloseConfirm(true)}
             disabled={!canClose}
             className="w-full rounded-xl font-semibold active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
             style={{
@@ -386,6 +387,56 @@ export default function PositionDetail() {
           <div style={{ height: 8 }} />
         </div>
       </div>
+
+      {/* ══════════ CLOSE CONFIRMATION MODAL ═══════════════════════════════ */}
+      {showCloseConfirm && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: "rgba(0,0,0,0.6)", padding: 20 }}
+          onClick={() => !closing && setShowCloseConfirm(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full"
+            style={{ maxWidth: 340, background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 20, boxShadow: "0 4px 24px rgba(0,0,0,0.5)" }}
+          >
+            <p className="font-semibold" style={{ color: TITLE, fontSize: 16, marginBottom: 6 }}>
+              Close Position?
+            </p>
+            <p className="font-normal" style={{ color: MUTED, fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
+              You're about to close <span style={{ color: VALUE, fontWeight: 600 }}>{position.symbol}</span> at market price.
+              Current P&amp;L:{" "}
+              <span style={{ color: pnlColor, fontWeight: 600 }}>{fUSD(pnlUsd, true)}</span>. This action cannot be undone.
+            </p>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCloseConfirm(false)}
+                disabled={closing}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                style={{ height: 48, fontSize: 14, background: "#1D1D1D", color: "#F2F2F2", border: `1px solid ${BORDER}` }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClose}
+                disabled={closing}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                style={{
+                  height: 48,
+                  fontSize: 14,
+                  background: "#3B1114",
+                  color: "#FF6767",
+                  border: "1px solid #6C2A30",
+                  cursor: closing ? "not-allowed" : "pointer",
+                }}
+              >
+                {closing ? "Closing…" : "Confirm Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
