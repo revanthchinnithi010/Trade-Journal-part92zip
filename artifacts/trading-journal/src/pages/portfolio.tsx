@@ -13,6 +13,7 @@ import type { BrokerPosition, BrokerOrder } from "@/types/broker";
 import { useDeltaAccount } from "@/store/deltaAccountStore";
 import { useCtraderAccount } from "@/store/ctraderAccountStore";
 import AccountCard from "@/components/portfolio/AccountCard";
+import PositionDetailModal from "@/components/portfolio/PositionDetailModal";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -82,7 +83,7 @@ function WalletRow({ label, inr, usd, masked, badge, arrow }: {
   );
 }
 
-function PositionRow({ pos }: { pos: BrokerPosition }) {
+function PositionRow({ pos, onTap }: { pos: BrokerPosition; onTap: () => void }) {
   const ticks = useTickStore(s => s.ticks);
   const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
   const symKey = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
@@ -93,8 +94,14 @@ function PositionRow({ pos }: { pos: BrokerPosition }) {
   const pos_ = pnl >= 0;
   return (
     <div
-      className="px-4 py-3.5"
-      style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}
+      onClick={onTap}
+      className="px-4 py-3.5 cursor-pointer transition-colors"
+      style={{
+        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        WebkitTapHighlightColor: "transparent",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
@@ -109,9 +116,12 @@ function PositionRow({ pos }: { pos: BrokerPosition }) {
           </span>
           <span className="text-[14px] font-black text-white">{pos.symbol}</span>
         </div>
-        <span className={`text-[13px] font-black ${pos_ ? "text-emerald-400" : "text-red-400"}`}>
-          {pos_ ? "+" : ""}{fUSD(pnl)}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-[13px] font-black ${pos_ ? "text-emerald-400" : "text-red-400"}`}>
+            {pos_ ? "+" : ""}{fUSD(pnl)}
+          </span>
+          <ChevronRight className="w-3.5 h-3.5 text-white/20" />
+        </div>
       </div>
       <div className="grid grid-cols-4 gap-2">
         {[
@@ -183,6 +193,7 @@ export default function Portfolio() {
     const t = new URLSearchParams(search).get("tab") as Tab | null;
     return t && VALID_TABS.includes(t) ? t : "balances";
   });
+  const [selectedPos, setSelectedPos] = useState<BrokerPosition | null>(null);
 
   // React to URL changes (e.g. navigating from Dashboard "Show Positions"
   // while the page is already mounted in the background).
@@ -303,7 +314,9 @@ export default function Portfolio() {
               </div>
             ) : positions.length > 0 ? (
               <div className="glass-card overflow-hidden">
-                {positions.map(pos => <PositionRow key={pos.id} pos={pos} />)}
+                {positions.map(pos => (
+                  <PositionRow key={pos.id} pos={pos} onTap={() => setSelectedPos(pos)} />
+                ))}
               </div>
             ) : openTrades.length > 0 ? (
               <div className="glass-card overflow-hidden">
@@ -391,6 +404,11 @@ export default function Portfolio() {
         )}
 
       </div>
+
+      <PositionDetailModal
+        pos={selectedPos}
+        onClose={() => setSelectedPos(null)}
+      />
     </div>
   );
 }
