@@ -37,6 +37,8 @@ import { getInitials } from "./ProfileMenu";
 import { ProfileSettingsPage }      from "./ProfileSettingsPage";
 import { AppearanceSettingsPage }   from "./AppearanceSettingsPage";
 import { NotificationsSettingsPage } from "./NotificationsSettingsPage";
+import { SecuritySettingsPage }     from "./SecuritySettingsPage";
+import { AboutSettingsPage }        from "./AboutSettingsPage";
 
 /* ─── animation constants ──────────────────────────────────────────────────── */
 
@@ -296,6 +298,8 @@ export const ProfilePage = memo(function ProfilePage({
   const settingsVisible      = navStack.length >= 1 && navStack[0] === "settings";
   const appearanceVisible    = navStack.length >= 2 && navStack[1] === "appearance";
   const notificationsVisible = navStack.length >= 2 && navStack[1] === "notifications";
+  const securityVisible      = navStack.length >= 2 && navStack[1] === "security";
+  const aboutVisible         = navStack.length >= 2 && navStack[1] === "about";
   const pickerPage           = navStack.length >= 3 ? navStack[2] : null;
 
   const initials = getInitials(profile.name);
@@ -600,6 +604,8 @@ export const ProfilePage = memo(function ProfilePage({
         onClose={popPage}
         onOpenAppearance={() => pushPage("appearance")}
         onOpenNotifications={() => pushPage("notifications")}
+        onOpenSecurity={() => pushPage("security")}
+        onOpenAbout={() => pushPage("about")}
       />
 
       <AppearanceSettingsPage
@@ -613,6 +619,16 @@ export const ProfilePage = memo(function ProfilePage({
         pickerPage={pickerPage}
         onOpenPicker={pushPage}
         onClosePicker={popPage}
+      />
+
+      <SecuritySettingsPage
+        open={securityVisible}
+        onClose={popPage}
+      />
+
+      <AboutSettingsPage
+        open={aboutVisible}
+        onClose={popPage}
       />
     </>
   );

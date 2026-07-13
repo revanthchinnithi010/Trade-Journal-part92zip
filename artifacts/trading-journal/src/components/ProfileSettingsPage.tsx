@@ -18,10 +18,12 @@
 import React, { memo, useEffect, useRef, useState, useCallback } from "react";
 import {
   ArrowLeft,
-  Palette, Bell, Database, Activity, Globe,
+  Palette, Bell, Database, Activity, Globe, Server,
   LogOut, ChevronRight, Copy, Check, RefreshCw,
+  ShieldCheck, Info,
 } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
+import { useBrokerStore } from "@/store/brokerStore";
 
 /* ─── animation ────────────────────────────────────────────────────────────── */
 
@@ -84,8 +86,14 @@ function SectionLabel({ children, first }: { children: React.ReactNode; first?: 
 
 /* ─── Divider ───────────────────────────────────────────────────────────────── */
 
+const ROW_HEIGHT  = 72;
+const ICON_SIZE   = 52;
+const ROW_GAP     = 16;
+const ROW_PADDING = 24;
+const DIVIDER_INSET = ROW_PADDING + ICON_SIZE + ROW_GAP; // aligns with title start
+
 const Divider = () => (
-  <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginLeft: 80 }} />
+  <div style={{ height: 1, background: "rgba(255,255,255,0.05)", marginLeft: DIVIDER_INSET }} />
 );
 
 /* ─── SignOutRow ────────────────────────────────────────────────────────────── */
@@ -100,18 +108,18 @@ function SignOutRow({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       style={{
         display: "flex", alignItems: "center",
-        padding: "0 24px", height: 68, width: "100%",
+        padding: `0 ${ROW_PADDING}px`, height: ROW_HEIGHT, width: "100%",
         background: pressed ? "rgba(239,68,68,0.06)" : "transparent",
-        border: "none", cursor: "pointer", gap: 16,
+        border: "none", cursor: "pointer", gap: ROW_GAP,
         transition: "background 60ms",
       }}
     >
       <div style={{
-        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+        width: ICON_SIZE, height: ICON_SIZE, borderRadius: 16, flexShrink: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
         background: "rgba(239,68,68,0.10)",
       }}>
-        <LogOut style={{ width: 18, height: 18, color: "#f87171" }} />
+        <LogOut style={{ width: 20, height: 20, color: "#f87171" }} />
       </div>
       <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "#f87171" }}>
         Sign Out
@@ -143,18 +151,18 @@ function NavRow({
         onClick={onClick}
         style={{
           display: "flex", alignItems: "center",
-          padding: "0 24px", height: 68, width: "100%",
+          padding: `0 ${ROW_PADDING}px`, height: ROW_HEIGHT, width: "100%",
           background: pressed ? "rgba(255,255,255,0.04)" : "transparent",
-          border: "none", cursor: "pointer", gap: 16,
+          border: "none", cursor: "pointer", gap: ROW_GAP,
           transition: "background 60ms",
         }}
       >
         <div style={{
-          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          width: ICON_SIZE, height: ICON_SIZE, borderRadius: 16, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: iconBg,
         }}>
-          <Icon style={{ width: 18, height: 18, color: iconColor }} />
+          <Icon style={{ width: 22, height: 22, color: iconColor }} />
         </div>
         <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
           {label}
@@ -192,19 +200,19 @@ function InfoRow({
         onClick={onClick}
         style={{
           display: "flex", alignItems: "center",
-          padding: "0 24px", height: 68, width: "100%",
+          padding: `0 ${ROW_PADDING}px`, height: ROW_HEIGHT, width: "100%",
           background: pressed ? "rgba(255,255,255,0.04)" : "transparent",
           cursor: onClick ? "pointer" : "default",
-          gap: 16,
+          gap: ROW_GAP,
           transition: "background 60ms",
         }}
       >
         <div style={{
-          width: 40, height: 40, borderRadius: 12, flexShrink: 0,
+          width: ICON_SIZE, height: ICON_SIZE, borderRadius: 16, flexShrink: 0,
           display: "flex", alignItems: "center", justifyContent: "center",
           background: iconBg,
         }}>
-          <Icon style={{ width: 18, height: 18, color: iconColor }} />
+          <Icon style={{ width: 22, height: 22, color: iconColor }} />
         </div>
         <span style={{ flex: 1, textAlign: "left", fontSize: 15, fontWeight: 600, color: "rgba(255,255,255,0.90)" }}>
           {label}
@@ -225,17 +233,20 @@ export interface ProfileSettingsPageProps {
   onClose:             () => void;
   onOpenAppearance:    () => void;
   onOpenNotifications: () => void;
+  onOpenSecurity:      () => void;
+  onOpenAbout:         () => void;
 }
 
 /* ─── main component ─────────────────────────────────────────────────────────── */
 
 export const ProfileSettingsPage = memo(function ProfileSettingsPage({
-  open, onClose, onOpenAppearance, onOpenNotifications,
+  open, onClose, onOpenAppearance, onOpenNotifications, onOpenSecurity, onOpenAbout,
 }: ProfileSettingsPageProps) {
   const [rendered, setRendered] = useState(open);
   const [visible,  setVisible]  = useState(false);
 
   const { themeMode } = useTheme();
+  const ctraderStatus = useBrokerStore(s => s.brokerStatuses["ctrader"] ?? "disconnected");
 
   /* live data */
   const [live, setLive] = useState<LiveData>({
@@ -344,6 +355,15 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
     : live.delta === "reconnecting" ? "Reconnecting…"
     : live.delta === "loading"      ? "Checking…"
     : "Offline";
+
+  const ctraderDot: "ok" | "warn" | "error" =
+    ctraderStatus === "connected"   ? "ok"
+    : ctraderStatus === "connecting" ? "warn"
+    : "error";
+  const ctraderLabel =
+    ctraderStatus === "connected"   ? "Connected"
+    : ctraderStatus === "connecting" ? "Connecting…"
+    : "Disconnected";
 
   if (!rendered) return null;
 
@@ -461,12 +481,26 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
           }
         />
 
+        {/* cTrader Status */}
+        <InfoRow
+          icon={Server}
+          iconBg="rgba(96,165,250,0.14)"
+          iconColor="#60a5fa"
+          label="cTrader"
+          rightContent={
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <StatusDot status={ctraderDot} />
+              <span style={{ fontSize: 13, color: "rgba(148,163,184,0.65)" }}>{ctraderLabel}</span>
+            </div>
+          }
+        />
+
         {/* Backend Server IP */}
         <InfoRow
           icon={Globe}
           iconBg="rgba(234,179,8,0.14)"
           iconColor="#fde047"
-          label="Server IP"
+          label="Backend Server"
           onClick={live.ip ? copyIp : undefined}
           rightContent={
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -492,6 +526,25 @@ export const ProfileSettingsPage = memo(function ProfileSettingsPage({
 
         {/* ── ACCOUNT ──────────────────────────────────────────────────────── */}
         <SectionLabel>Account</SectionLabel>
+
+        <NavRow
+          icon={ShieldCheck}
+          iconBg="rgba(52,211,153,0.14)"
+          iconColor="#34d399"
+          label="Security"
+          onClick={onOpenSecurity}
+        />
+
+        <NavRow
+          icon={Info}
+          iconBg="rgba(148,163,184,0.14)"
+          iconColor="#cbd5e1"
+          label="About"
+          onClick={onOpenAbout}
+          last
+        />
+
+        <div style={{ height: 8 }} />
 
         <SignOutRow onClick={onClose} />
 
