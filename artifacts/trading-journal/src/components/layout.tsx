@@ -140,6 +140,8 @@ const NavigationDrawer = memo(function NavigationDrawer({
   const sidebarBalance          = useBrokerStore(s => s.balance);
   const sidebarConnectionStatus = useBrokerStore(s => s.connectionStatus);
   const sidebarActiveAccount    = useBrokerStore(s => s.activeAccount);
+  const { theme: drawerTheme }  = useTheme();
+  const isDrawerLight           = drawerTheme === "light";
 
   /* `onClose` may be a fresh reference on some call sites — depend only on
      `open` in the effects below and read the callback via a ref (same
@@ -212,8 +214,8 @@ const NavigationDrawer = memo(function NavigationDrawer({
           zIndex:                   50,
           display:                  "flex",
           flexDirection:            "column",
-          background:               "#121316",
-          borderRight:              "1px solid rgba(255,255,255,0.06)",
+          background:               isDrawerLight ? "#FFFFFF" : "#121316",
+          borderRight:              isDrawerLight ? "1px solid #E5E7EB" : "1px solid rgba(255,255,255,0.06)",
           opacity:                  open ? 1 : 0,
           transform:                open ? "translate3d(0,0,0)" : "translate3d(-100%,0,0)",
           transition:               panelTx,
@@ -261,7 +263,7 @@ const NavigationDrawer = memo(function NavigationDrawer({
             <div key={section.label}>
               <p
                 className="text-[9px] font-bold uppercase tracking-[0.14em] px-3 pb-2 leading-none"
-                style={{ color: "rgba(148, 163, 184, 0.45)" }}
+                style={{ color: isDrawerLight ? "rgba(107,114,128,0.55)" : "rgba(148,163,184,0.45)" }}
               >
                 {section.label}
               </p>
@@ -318,8 +320,8 @@ const NavigationDrawer = memo(function NavigationDrawer({
                     <span
                       className="text-[9px] uppercase font-bold tracking-widest px-2 py-0.5 rounded-full text-foreground/60 truncate max-w-[110px]"
                       style={{
-                        background: "rgba(255, 255, 255, 0.05)",
-                        border:     "1px solid rgba(255, 255, 255, 0.10)",
+                        background: isDrawerLight ? "rgba(0,0,0,0.04)"  : "rgba(255,255,255,0.05)",
+                        border:     isDrawerLight ? "1px solid rgba(0,0,0,0.08)" : "1px solid rgba(255,255,255,0.10)",
                       }}
                     >
                       {brokerLabel}
@@ -572,7 +574,7 @@ export const Layout = memo(function Layout({
                     fontStyle:     "italic",
                     letterSpacing: "0px",
                     lineHeight:    "12.4px",
-                    color:         "rgba(255,255,255,0.45)",
+                    color:         theme === "light" ? "rgba(107,114,128,0.60)" : "rgba(255,255,255,0.45)",
                   }}
                 >
                   by Revanth chinnithi
