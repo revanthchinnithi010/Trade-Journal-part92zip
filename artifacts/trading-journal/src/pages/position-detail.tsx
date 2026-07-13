@@ -272,7 +272,7 @@ export default function PositionDetail() {
             </p>
 
             {/* Row 3: P&L value */}
-            <p className="font-bold leading-none tracking-tight" style={{ color: pnlColor, fontSize: 50 }}>
+            <p className="font-bold leading-none tracking-tight" style={{ color: pnlColor, fontSize: 32 }}>
               {fUSD(pnlUsd, true)}
             </p>
 
