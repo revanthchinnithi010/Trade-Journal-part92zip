@@ -99,6 +99,17 @@ export const pageDetailVariants: Variants = {
   exit:    { opacity: 0, scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
 };
 
+/**
+ * Full-screen slide page (e.g. Position Detail) — native mobile push/pop.
+ * Enters by sliding in from the right; exits by sliding back to the right.
+ * This gives the standard iOS/Android push-navigation feel.
+ */
+export const pageSlideVariants: Variants = {
+  initial: { x: "100%", opacity: 0 },
+  enter:   { x: 0,      opacity: 1, transition: { duration: 0.30, ease: EASE_PREMIUM } },
+  exit:    { x: "100%", opacity: 0, transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } },
+};
+
 /** Staggered sidebar nav items */
 export const sidebarItemVariants: Variants = {
   closed: { x: -12, opacity: 0 },

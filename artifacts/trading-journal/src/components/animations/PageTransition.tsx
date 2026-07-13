@@ -27,13 +27,13 @@
  */
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { pageVariants, pageDetailVariants, tabPageVariants } from "@/animations/motion";
+import { pageVariants, pageDetailVariants, tabPageVariants, pageSlideVariants } from "@/animations/motion";
 
 interface PageTransitionProps {
   children:   React.ReactNode;
   className?: string;
   style?:     React.CSSProperties;
-  variant?:   "page" | "detail" | "tab";
+  variant?:   "page" | "detail" | "tab" | "slide";
   /** Direction integer — forwarded from AnimatePresence custom prop. */
   custom?:    number;
   /**
@@ -67,6 +67,7 @@ export function PageTransition({ children, className, style, variant = "page", c
   const variants =
     variant === "tab"    ? tabPageVariants    :
     variant === "detail" ? pageDetailVariants :
+    variant === "slide"  ? pageSlideVariants  :
                            pageVariants;
 
   return (
