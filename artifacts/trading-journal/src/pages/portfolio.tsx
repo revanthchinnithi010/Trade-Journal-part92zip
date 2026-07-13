@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useSearch } from "wouter";
+import { useSearch, useLocation } from "wouter";
 import {
   TrendingUp,
   RefreshCw, ChevronRight, Wallet, Loader2,
@@ -13,7 +13,7 @@ import type { BrokerPosition, BrokerOrder } from "@/types/broker";
 import { useDeltaAccount } from "@/store/deltaAccountStore";
 import { useCtraderAccount } from "@/store/ctraderAccountStore";
 import AccountCard from "@/components/portfolio/AccountCard";
-import PositionDetailModal from "@/components/portfolio/PositionDetailModal";
+import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -189,11 +189,12 @@ const VALID_TABS: Tab[] = ["balances", "positions", "orders", "stop-orders"];
 
 export default function Portfolio() {
   const search = useSearch();
+  const [, navigate] = useLocation();
+  const setPosition  = useSelectedPositionStore(s => s.setPosition);
   const [tab, setTab] = useState<Tab>(() => {
     const t = new URLSearchParams(search).get("tab") as Tab | null;
     return t && VALID_TABS.includes(t) ? t : "balances";
   });
-  const [selectedPos, setSelectedPos] = useState<BrokerPosition | null>(null);
 
   // React to URL changes (e.g. navigating from Dashboard "Show Positions"
   // while the page is already mounted in the background).
@@ -315,7 +316,7 @@ export default function Portfolio() {
             ) : positions.length > 0 ? (
               <div className="glass-card overflow-hidden">
                 {positions.map(pos => (
-                  <PositionRow key={pos.id} pos={pos} onTap={() => setSelectedPos(pos)} />
+                  <PositionRow key={pos.id} pos={pos} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
                 ))}
               </div>
             ) : openTrades.length > 0 ? (
@@ -405,10 +406,6 @@ export default function Portfolio() {
 
       </div>
 
-      <PositionDetailModal
-        pos={selectedPos}
-        onClose={() => setSelectedPos(null)}
-      />
     </div>
   );
 }

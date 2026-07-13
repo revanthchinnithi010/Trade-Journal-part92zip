@@ -512,9 +512,12 @@ export const Layout = memo(function Layout({
                 its left edge — the pair is treated as one column and vertically
                 centered in the header alongside the menu button. */}
             <div className="flex items-center gap-2.5 shrink-0 z-10 min-w-0">
-              {(pathname === "/portfolio" || pathname === "/pnl" || pathname === "/net-pnl") ? (
+              {(pathname === "/portfolio" || pathname === "/pnl" || pathname === "/net-pnl" || pathname === "/position-detail") ? (
                 <button
-                  onClick={() => navigate("/")}
+                  onClick={() => {
+                    if (pathname === "/position-detail") navigate("/portfolio?tab=positions");
+                    else navigate("/");
+                  }}
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
                   style={{ border: "1px solid var(--surface-btn-border)" }}
                   onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; (e.currentTarget as HTMLElement).style.borderColor = "var(--surface-btn-active-border)"; }}

@@ -38,7 +38,8 @@ const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
 const NetPnl       = lazy(() => import("@/pages/NetPnLAnalytics"));
 const Trade        = lazy(() => import("@/pages/trade"));
 const NotFound      = lazy(() => import("@/pages/not-found"));
-const CtraderTest   = lazy(() => import("@/pages/ctrader-test"));
+const CtraderTest      = lazy(() => import("@/pages/ctrader-test"));
+const PositionDetail   = lazy(() => import("@/pages/position-detail"));
 
 const FETCH_TIMEOUT_MS = 8_000;
 
@@ -247,6 +248,7 @@ const KNOWN_PATHS = new Set([
   "/calendar", "/notebook", "/settings",
   "/calc/crypto", "/calc/forex", "/calc/position", "/calc/margin", "/calc/risk",
   "/portfolio", "/pnl", "/net-pnl", "/trade", "/ctrader-test", "/charts",
+  "/position-detail",
 ]);
 
 /**
@@ -312,6 +314,7 @@ function Router() {
       () => import("@/pages/NetPnLAnalytics"),
       () => import("@/pages/trade"),
       () => import("@/pages/ctrader-test"),
+      () => import("@/pages/position-detail"),
     ];
     const timers: ReturnType<typeof setTimeout>[] = [];
     const id = setTimeout(() => {
@@ -420,9 +423,10 @@ function Router() {
              StandardPageWrapper — it needs the PageTransition's absolute-fill
              box directly as its height reference, not an outer page-scroll
              container. */}
-        {pathname === "/portfolio"     && <Suspense key="/portfolio" fallback={<PageLoader />}><PageTransition key="/portfolio" variant="detail" custom={dir}><Portfolio /></PageTransition></Suspense>}
-        {pathname === "/pnl"          && <Suspense key="/pnl"       fallback={<PageLoader />}><PageTransition key="/pnl"       variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition></Suspense>}
-        {pathname === "/net-pnl"      && <Suspense key="/net-pnl"   fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/portfolio"        && <Suspense key="/portfolio"        fallback={<PageLoader />}><PageTransition key="/portfolio"        variant="detail" custom={dir}><Portfolio /></PageTransition></Suspense>}
+        {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="slide"  custom={1}><PositionDetail /></PageTransition></Suspense>}
+        {pathname === "/pnl"              && <Suspense key="/pnl"              fallback={<PageLoader />}><PageTransition key="/pnl"              variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition></Suspense>}
 
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
