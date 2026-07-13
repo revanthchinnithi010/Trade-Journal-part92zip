@@ -114,11 +114,9 @@ export default function PositionDetail() {
   const position    = useSelectedPositionStore(s => s.position);
   const setPosition = useSelectedPositionStore(s => s.setPosition);
 
-  const { closePosition, placeOrder, connectionStatus } = useBrokerStore(s => ({
-    closePosition: s.closePosition,
-    placeOrder:    s.placeOrder,
-    connectionStatus: s.connectionStatus,
-  }));
+  const closePosition    = useBrokerStore(s => s.closePosition);
+  const placeOrder       = useBrokerStore(s => s.placeOrder);
+  const connectionStatus = useBrokerStore(s => s.connectionStatus);
 
   const ticks = useTickStore(s => s.ticks);
   const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
