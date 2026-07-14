@@ -654,30 +654,36 @@ export const Layout = memo(function Layout({
                 {CURRENCY_META[currency].symbol}
               </button>
 
+              {/* Bell gets a filled chip (not just a hairline outline) so it
+                  reads as a distinct, tappable icon-button at a glance instead
+                  of a faint circle that disappears against the header —
+                  matches the weight of the search field / active pills rather
+                  than the barely-visible transparent ghost buttons. */}
               <div className="relative">
                 <button
                   ref={bellBtnRef}
                   onClick={toggleNotif}
-                  className="relative w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground transition-all duration-150"
+                  aria-label="Notifications"
+                  className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150"
                   style={{
-                    border:     notifOpen ? "1px solid var(--surface-btn-active-border)" : "1px solid var(--surface-btn-border)",
-                    background: notifOpen ? "var(--surface-btn-active-bg)" : "transparent",
-                    color:      notifOpen ? "hsl(var(--foreground))" : undefined,
+                    border:     notifOpen ? "1px solid var(--surface-btn-active-border)" : "1px solid var(--surface-btn-active-border)",
+                    background: notifOpen ? "var(--surface-btn-active-bg)" : "var(--surface-btn-hover)",
+                    color:      notifOpen ? "hsl(var(--primary))" : "hsl(var(--foreground) / 0.72)",
                   }}
-                  onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
-                  onMouseLeave={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                  onMouseLeave={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
                 >
-                  <Bell className={cn("w-4 h-4 transition-colors", bellShake && "bell-ring", notifOpen && "text-primary")} />
+                  <Bell className={cn("w-4 h-4 transition-colors", bellShake && "bell-ring")} strokeWidth={2.25} />
                   {badgeCount && (
                     <span
-                      className="absolute top-0.5 right-0.5 flex items-center justify-center rounded-full text-[7px] font-bold text-white leading-none"
+                      className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-[9px] font-bold text-white leading-none"
                       style={{
-                        minWidth:   "14px",
-                        height:     "14px",
-                        padding:    "0 2px",
-                        background: "hsl(0,68%,58%)",
-                        border:     "1.5px solid var(--notification-badge-border)",
-                        boxShadow:  "0 0 8px rgba(239,68,68,0.5)",
+                        minWidth:   "16px",
+                        height:     "16px",
+                        padding:    "0 3px",
+                        background: "hsl(0,72%,56%)",
+                        border:     "2px solid var(--notification-badge-border)",
+                        boxShadow:  "0 1px 4px rgba(0,0,0,0.35)",
                       }}
                     >
                       {badgeCount}
