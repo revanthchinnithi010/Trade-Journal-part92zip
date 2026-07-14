@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
-import { motion } from "framer-motion";
 import {
   TrendingUp,
   RefreshCw, ChevronRight, Wallet, Loader2,
@@ -188,47 +187,62 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
 type Tab = "positions" | "orders" | "stop-orders";
 const VALID_TABS: Tab[] = ["positions", "orders", "stop-orders"];
 
+// iOS-style segmented control matching the Dashboard header's
+// DashboardSegmentedControl (same colors, sizing and CSS-only sliding pill —
+// see that component for why the pill is a plain `transform` transition
+// rather than a Motion.dev/layoutId animation).
 function SegmentedControl({ tabs, active, onChange }: {
   tabs: { id: Tab; label: string; count?: number }[];
   active: Tab;
   onChange: (t: Tab) => void;
 }) {
+  const activeIndex = Math.max(0, tabs.findIndex(t => t.id === active));
+  const n = tabs.length;
+
   return (
     <div
-      className="flex items-stretch p-[3px] gap-[3px]"
+      role="tablist"
+      aria-label="Portfolio sections"
+      className="relative w-full grid"
       style={{
-        height: 44,
-        borderRadius: 14,
-        background: "#181818",
-        border: "1px solid #2A2A2A",
+        gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
+        height: 46,
+        borderRadius: 12,
+        background: "#2A2A2F",
+        padding: 4,
+        contain: "layout paint",
       }}
     >
+      <div
+        className="absolute top-1 left-1"
+        style={{
+          width: `calc(${100 / n}% - 4px)`,
+          height: "calc(100% - 8px)",
+          borderRadius: 9,
+          background: "#050505",
+          transform: `translate3d(calc(${activeIndex} * (100% + ${4 / n}px)), 0, 0)`,
+          transition: "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)",
+          willChange: "transform",
+          backfaceVisibility: "hidden",
+        }}
+      />
+
       {tabs.map(t => {
-        const isActive = active === t.id;
+        const selected = t.id === active;
         return (
           <button
             key={t.id}
+            type="button"
+            role="tab"
+            aria-selected={selected}
             onClick={() => onChange(t.id)}
-            className="relative flex-1 flex items-center justify-center gap-1.5 text-[13px] font-semibold"
-            style={{ WebkitTapHighlightColor: "transparent" }}
+            className="relative z-10 flex items-center justify-center gap-1.5 text-[14px] font-semibold transition-[color,transform] duration-150 ease-out active:scale-[0.96]"
+            style={{ color: selected ? "#FFFFFF" : "#B5B5B5", willChange: "transform" }}
           >
-            {isActive && (
-              <motion.span
-                layoutId="portfolio-segment-highlight"
-                className="absolute inset-0 rounded-[11px]"
-                style={{ background: "#262626" }}
-                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
-              />
-            )}
-            <span
-              className="relative z-10 transition-colors"
-              style={{ color: isActive ? "#FFFFFF" : "#7A7A7A" }}
-            >
-              {t.label}
-            </span>
+            {t.label}
             {t.count !== undefined && t.count > 0 && (
               <span
-                className="relative z-10 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
                 style={{ background: "rgba(249,115,22,0.2)", color: "#f97316" }}
               >
                 {t.count}
@@ -309,14 +323,7 @@ export default function Portfolio() {
 
         {/* ══ Segmented control — sticky while scrolling ══ */}
         <div className="sticky top-0 z-10 bg-background pt-2 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
-          <div className="flex items-center gap-2">
-            <div className="flex-1">
-              <SegmentedControl tabs={TABS} active={tab} onChange={setTab} />
-            </div>
-            <button className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
-              <Clock className="w-4 h-4 text-white/25" />
-            </button>
-          </div>
+          <SegmentedControl tabs={TABS} active={tab} onChange={setTab} />
         </div>
 
         {/* ══ POSITIONS ══ */}
