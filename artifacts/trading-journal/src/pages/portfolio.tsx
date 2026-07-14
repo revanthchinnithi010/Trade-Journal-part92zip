@@ -115,7 +115,7 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
       onClick={onTap}
       className="cursor-pointer"
       style={{
-        padding: "18px",
+        padding: "12px 18px",
         borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.055)",
         WebkitTapHighlightColor: "transparent",
         transition: "background 0.15s",
@@ -123,22 +123,26 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
       onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
-      {/* Row 1 — Symbol | direction icon | PNL */}
+      {/* Row 1 — Symbol + side label | PNL */}
       <div className="flex items-center justify-between">
-        {/* Left: symbol */}
-        <span
-          className="font-semibold leading-none tracking-tight"
-          style={{ fontSize: 15, color: "#F0F0F0", letterSpacing: "0.02em" }}
-        >
-          {pos.symbol}
-        </span>
-
-        {/* Center: direction arrow */}
-        <div className="flex-1 flex justify-center">
-          {pos.side === "Long"
-            ? <ArrowUp  className="w-[18px] h-[18px]" style={{ color: "#35C37A" }} strokeWidth={2.5} />
-            : <ArrowDown className="w-[18px] h-[18px]" style={{ color: "#E0524F" }} strokeWidth={2.5} />
-          }
+        {/* Left: symbol + LONG/SHORT badge */}
+        <div className="flex items-center gap-2">
+          <span
+            className="font-semibold leading-none"
+            style={{ fontSize: 15, color: "#F0F0F0" }}
+          >
+            {pos.symbol}
+          </span>
+          <span
+            className="font-semibold leading-none"
+            style={{
+              fontSize: 10,
+              color: pos.side === "Long" ? "#35C37A" : "#E0524F",
+              letterSpacing: "0.06em",
+            }}
+          >
+            {pos.side === "Long" ? "LONG" : "SHORT"}
+          </span>
         </div>
 
         {/* Right: live PNL */}
