@@ -428,7 +428,7 @@ function Router() {
         {/* position: fixed — viewport-anchored so the portfolio secondary header
             mounting in Layout's flex column cannot jolt the dashboard (or any
             other keep-alive page) downward before the entry animation runs. */}
-        {pathname === "/portfolio"        && <Suspense key="/portfolio"        fallback={<PageLoader />}><PageTransition key="/portfolio"        variant="detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 10 }}><Portfolio /></PageTransition></Suspense>}
+        {pathname === "/portfolio"        && <Suspense key="/portfolio"        fallback={<PageLoader />}><PageTransition key="/portfolio"        variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Portfolio /></PageTransition></Suspense>}
         {/* Balances manages its own full-height black scroll region (matching
              the forced-black secondary header in Layout.tsx) instead of
              StandardPageWrapper's themed page background, so there's no

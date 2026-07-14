@@ -100,6 +100,19 @@ export const pageDetailVariants: Variants = {
 };
 
 /**
+ * Cover-detail page (e.g. Portfolio when rendered position:fixed over keep-alive
+ * pages). Identical feel to pageDetailVariants but starts fully opaque so it
+ * immediately occludes the Layout header and any keep-alive content below it —
+ * a page that starts at opacity:0 lets lower z-index elements show through
+ * during the fade-in, causing a visible "header-over-new-page" flash.
+ */
+export const pageDetailCoverVariants: Variants = {
+  initial: { scale: 0.97, y: 8 },         // no opacity:0 — covers immediately
+  enter:   { scale: 1,    y: 0, transition: { duration: 0.24, ease: EASE_PREMIUM } },
+  exit:    { opacity: 0,  scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
+};
+
+/**
  * Full-screen slide page (e.g. Position Detail) — native mobile push/pop.
  * Enters by sliding in from the right; exits by sliding back to the right.
  * This gives the standard iOS/Android push-navigation feel.
