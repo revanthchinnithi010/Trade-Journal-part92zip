@@ -14,6 +14,7 @@ import type { BrokerPosition, BrokerOrder } from "@/types/broker";
 import { useDeltaAccount } from "@/store/deltaAccountStore";
 import { useCtraderAccount } from "@/store/ctraderAccountStore";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
+import { classifyBrokerForSymbol } from "@/lib/brokerClassification";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -306,13 +307,51 @@ export default function Portfolio() {
 
   const { data: tradeRes } = useListTrades({ limit: 200 });
 
-  const { positions, orders, connectionStatus, refreshPositions, refreshOrders } = useBrokerStore();
+  const { positions, orders, connectionStatus, refreshAll } = useBrokerStore();
+  const ticks = useTickStore(s => s.ticks);
 
   const deltaAccount   = useDeltaAccount();
   const ctraderAccount = useCtraderAccount();
 
-  const upnlUSD = deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD;
-  const upnlINR = deltaAccount.toINR(deltaAccount.unrealizedPnlUSD) + ctraderAccount.toINR(ctraderAccount.unrealizedPnlUSD);
+  // Force an immediate refresh on every mount — background broker polling
+  // (3s Delta / 15s cTrader, see brokerStore.ts POLL_INTERVAL) can leave
+  // positions/orders/balance up to 15s stale, which read as "stuck" when
+  // navigating straight into Portfolio. This kicks a fresh fetch in without
+  // waiting for the next tick of the background interval.
+  useEffect(() => {
+    refreshAll();
+  }, [refreshAll]);
+
+  // Live, tick-driven Unrealized PnL — sums each open position's PnL using
+  // the same live-price calc as PositionRow (falls back to markPrice when no
+  // tick has arrived yet) instead of the balance snapshot's `unrealisedPnl`,
+  // which is only as fresh as the last poll and visibly "stuck" between
+  // ticks. Falls back to the balance-derived total when there are no open
+  // positions to sum (e.g. balance carries pnl from a source other than the
+  // currently-open positions list).
+  const upnlUSD = positions.length > 0
+    ? positions.reduce((sum, pos) => {
+        const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+        const livePrice = ticks[symKey]?.price ?? pos.markPrice;
+        const pnl = pos.side === "Long"
+          ? (livePrice - pos.entryPrice) * pos.size
+          : (pos.entryPrice - livePrice) * pos.size;
+        return sum + pnl;
+      }, 0)
+    : deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD;
+
+  const upnlINR = positions.length > 0
+    ? positions.reduce((sum, pos) => {
+        const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+        const livePrice = ticks[symKey]?.price ?? pos.markPrice;
+        const pnl = pos.side === "Long"
+          ? (livePrice - pos.entryPrice) * pos.size
+          : (pos.entryPrice - livePrice) * pos.size;
+        const broker = classifyBrokerForSymbol(pos.symbol);
+        return sum + (broker === "delta" ? deltaAccount.toINR(pnl) : ctraderAccount.toINR(pnl));
+      }, 0)
+    : deltaAccount.toINR(deltaAccount.unrealizedPnlUSD) + ctraderAccount.toINR(ctraderAccount.unrealizedPnlUSD);
+
   const upPos   = upnlUSD >= 0;
 
   const openTrades = (tradeRes?.trades ?? []).filter(
@@ -442,7 +481,7 @@ export default function Portfolio() {
                 </div>
               </div>
               <button
-                onClick={() => refreshOrders()}
+                onClick={() => refreshAll()}
                 className="w-8 h-8 flex items-center justify-center rounded-xl"
                 style={{ background: "#1E1E1E", border: "1px solid #2E2E2E" }}
               >
