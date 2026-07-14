@@ -3,7 +3,7 @@ import { useSearch, useLocation } from "wouter";
 import {
   TrendingUp, ArrowLeft,
   RefreshCw, ChevronRight, Wallet, Loader2,
-  Clock, CheckCircle, XCircle, AlertCircle,
+  Clock, CheckCircle, XCircle, AlertCircle, Trash2,
   ArrowUp, ArrowDown, ArrowRight,
 } from "lucide-react";
 import { useCurrencyStore } from "@/store/currencyStore";
@@ -187,7 +187,12 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
   );
 }
 
-function OrderRow({ ord }: { ord: BrokerOrder }) {
+function isCancellableOrder(ord: BrokerOrder): boolean {
+  const s = ord.status?.toLowerCase() ?? "";
+  return !s.includes("fill") && !s.includes("complet") && !s.includes("cancel");
+}
+
+function OrderRow({ ord, onDelete }: { ord: BrokerOrder; onDelete: (ord: BrokerOrder) => void }) {
   const isBuy = ord.side === "Buy";
   const st = ord.status?.toLowerCase() ?? "";
   const statusColor =
@@ -198,6 +203,7 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
     : st.includes("cancel") ? XCircle
     : st.includes("partial") ? AlertCircle
     : Clock;
+  const cancellable = isCancellableOrder(ord);
 
   return (
     <div
@@ -223,9 +229,22 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
           <span>Price: <span className="text-white/65 font-semibold">{ord.price ? fUSD(ord.price) : "Market"}</span></span>
         </div>
       </div>
-      <div className="flex items-center gap-1.5 ml-2">
-        <StatusIcon className="w-3.5 h-3.5" style={{ color: statusColor }} />
-        <span className="text-[11px] font-semibold capitalize" style={{ color: statusColor }}>{ord.status}</span>
+      <div className="flex items-center gap-2 ml-2">
+        <div className="flex items-center gap-1.5">
+          <StatusIcon className="w-3.5 h-3.5" style={{ color: statusColor }} />
+          <span className="text-[11px] font-semibold capitalize" style={{ color: statusColor }}>{ord.status}</span>
+        </div>
+        {cancellable && (
+          <button
+            type="button"
+            onClick={() => onDelete(ord)}
+            aria-label={`Cancel ${ord.symbol} order`}
+            className="w-7 h-7 flex items-center justify-center rounded-lg active:scale-[0.9] transition-transform"
+            style={{ background: "rgba(248,113,113,0.08)", border: "1px solid rgba(248,113,113,0.18)" }}
+          >
+            <Trash2 className="w-3.5 h-3.5" style={{ color: "#f87171" }} />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -320,8 +339,26 @@ export default function Portfolio() {
 
   const { data: tradeRes } = useListTrades({ limit: 200 });
 
-  const { positions, orders, connectionStatus, refreshAll } = useBrokerStore();
+  const { positions, orders, connectionStatus, refreshAll, cancelOrder } = useBrokerStore();
   const ticks = useTickStore(s => s.ticks);
+
+  // ── Order cancel confirmation popup ──────────────────────────────────────
+  const [cancelTarget, setCancelTarget] = useState<BrokerOrder | null>(null);
+  const [cancelling,   setCancelling]   = useState(false);
+  const [cancelError,  setCancelError]  = useState<string | null>(null);
+
+  const handleCancelOrder = async () => {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    setCancelError(null);
+    const r = await cancelOrder(cancelTarget);
+    setCancelling(false);
+    if (r.ok) {
+      setCancelTarget(null);
+    } else {
+      setCancelError(r.error ?? "Failed to cancel order");
+    }
+  };
 
   const deltaAccount   = useDeltaAccount();
   const ctraderAccount = useCtraderAccount();
@@ -508,7 +545,13 @@ export default function Portfolio() {
 
             {orders.length > 0 ? (
               <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-                {orders.map(ord => <OrderRow key={ord.id} ord={ord} />)}
+                {orders.map(ord => (
+                  <OrderRow
+                    key={ord.id}
+                    ord={ord}
+                    onDelete={o => { setCancelError(null); setCancelTarget(o); }}
+                  />
+                ))}
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
@@ -530,6 +573,60 @@ export default function Portfolio() {
         )}
 
       </div>
+
+      {/* ══════════ CANCEL ORDER CONFIRMATION POPUP ═══════════════════════════ */}
+      {cancelTarget && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: "rgba(0,0,0,0.6)", padding: 20 }}
+          onClick={() => !cancelling && setCancelTarget(null)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full"
+            style={{ maxWidth: 320, background: "#151515", border: "1px solid #252525", borderRadius: 20, padding: 20, boxShadow: "0 4px 24px rgba(0,0,0,0.5)" }}
+          >
+            <p className="font-semibold" style={{ color: "#F2F2F2", fontSize: 16, marginBottom: 6 }}>
+              Cancel Order?
+            </p>
+            <p className="font-normal" style={{ color: "#8A8A8A", fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
+              You're about to cancel the {cancelTarget.side.toLowerCase()} {cancelTarget.orderType.toLowerCase()} order for{" "}
+              <span style={{ color: "#E8E8E8", fontWeight: 600 }}>{cancelTarget.symbol}</span>. This action cannot be undone.
+            </p>
+
+            {cancelError && (
+              <p className="font-medium" style={{ color: "#f87171", fontSize: 12, marginBottom: 12 }}>{cancelError}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setCancelTarget(null)}
+                disabled={cancelling}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                style={{ height: 46, fontSize: 14, background: "#1D1D1D", color: "#F2F2F2", border: "1px solid #252525" }}
+              >
+                Keep Order
+              </button>
+              <button
+                onClick={handleCancelOrder}
+                disabled={cancelling}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform flex items-center justify-center gap-2"
+                style={{
+                  height: 46,
+                  fontSize: 14,
+                  background: "#3B1114",
+                  color: "#FF6767",
+                  border: "1px solid #6C2A30",
+                  cursor: cancelling ? "not-allowed" : "pointer",
+                }}
+              >
+                {cancelling && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {cancelling ? "Cancelling…" : "Cancel Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
