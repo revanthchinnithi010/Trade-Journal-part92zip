@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
+import { motion } from "framer-motion";
 import {
   TrendingUp,
   RefreshCw, ChevronRight, Wallet, Loader2,
@@ -184,8 +185,61 @@ function OrderRow({ ord }: { ord: BrokerOrder }) {
   );
 }
 
-type Tab = "balances" | "positions" | "orders" | "stop-orders";
-const VALID_TABS: Tab[] = ["balances", "positions", "orders", "stop-orders"];
+type Tab = "positions" | "orders" | "stop-orders";
+const VALID_TABS: Tab[] = ["positions", "orders", "stop-orders"];
+
+function SegmentedControl({ tabs, active, onChange }: {
+  tabs: { id: Tab; label: string; count?: number }[];
+  active: Tab;
+  onChange: (t: Tab) => void;
+}) {
+  return (
+    <div
+      className="flex items-stretch p-[3px] gap-[3px]"
+      style={{
+        height: 44,
+        borderRadius: 14,
+        background: "#181818",
+        border: "1px solid #2A2A2A",
+      }}
+    >
+      {tabs.map(t => {
+        const isActive = active === t.id;
+        return (
+          <button
+            key={t.id}
+            onClick={() => onChange(t.id)}
+            className="relative flex-1 flex items-center justify-center gap-1.5 text-[13px] font-semibold"
+            style={{ WebkitTapHighlightColor: "transparent" }}
+          >
+            {isActive && (
+              <motion.span
+                layoutId="portfolio-segment-highlight"
+                className="absolute inset-0 rounded-[11px]"
+                style={{ background: "#262626" }}
+                transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+              />
+            )}
+            <span
+              className="relative z-10 transition-colors"
+              style={{ color: isActive ? "#FFFFFF" : "#7A7A7A" }}
+            >
+              {t.label}
+            </span>
+            {t.count !== undefined && t.count > 0 && (
+              <span
+                className="relative z-10 text-[9px] font-black px-1.5 py-0.5 rounded-full"
+                style={{ background: "rgba(249,115,22,0.2)", color: "#f97316" }}
+              >
+                {t.count}
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function Portfolio() {
   const search = useSearch();
@@ -193,7 +247,7 @@ export default function Portfolio() {
   const setPosition  = useSelectedPositionStore(s => s.setPosition);
   const [tab, setTab] = useState<Tab>(() => {
     const t = new URLSearchParams(search).get("tab") as Tab | null;
-    return t && VALID_TABS.includes(t) ? t : "balances";
+    return t && VALID_TABS.includes(t) ? t : "positions";
   });
 
   // React to URL changes (e.g. navigating from Dashboard "Show Positions"
@@ -228,7 +282,6 @@ export default function Portfolio() {
   });
 
   const TABS: { id: Tab; label: string; count?: number }[] = [
-    { id: "balances",     label: "Balances" },
     { id: "positions",    label: "Positions",   count: positions.length },
     { id: "orders",       label: "Orders",      count: openOrders.length },
     { id: "stop-orders",  label: "Stop Orders" },
@@ -236,58 +289,32 @@ export default function Portfolio() {
 
   return (
     <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
-      {/* ── Tabs ──
-          Back navigation + page title now live in the persistent global header
-          (Layout.tsx) so they never disappear during the Dashboard↔Portfolio
-          transition. Tabs sit directly below the header now that the
-          Main/Isolated toggle has been removed. */}
-      <div
-        className="flex gap-0 mt-3 mb-4"
-        style={{ borderBottom: "1px solid rgba(255,255,255,0.07)" }}
-      >
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className="relative flex items-center gap-1.5 px-3 pb-2.5 text-[12px] font-semibold transition-colors"
-            style={{ color: tab === t.id ? "#ffffff" : "rgba(255,255,255,0.35)" }}
-          >
-            {t.label}
-            {t.count !== undefined && t.count > 0 && (
-              <span
-                className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(249,115,22,0.2)", color: "#f97316" }}
-              >
-                {t.count}
-              </span>
-            )}
-            {tab === t.id && (
-              <span
-                className="absolute bottom-0 left-0 right-0 h-[2px] rounded-full"
-                style={{ background: "#f97316" }}
-              />
-            )}
-          </button>
-        ))}
-        {/* history icon */}
-        <button className="ml-auto pb-2.5 pr-1">
-          <Clock className="w-4 h-4 text-white/25" />
-        </button>
-      </div>
-
-      {/* ── Tab content ── */}
+      {/* ── Scroll container ──
+          Back navigation + page title live in the persistent global header
+          (Layout.tsx). Balances renders unconditionally as the page's default
+          content; the segmented control below it selects Positions / Orders /
+          Stop Orders only — there is no Balances tab. */}
       <div className="flex-1 overflow-y-auto space-y-3" style={{ scrollbarWidth: "none" }}>
 
-        {/* ══ BALANCES ══ */}
-        {tab === "balances" && (
-          <>
-            {/* Two broker account cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <AccountCard account={deltaAccount} index={0} />
-              <AccountCard account={ctraderAccount} index={1} />
+        {/* ══ BALANCES — always visible, page header/content ══ */}
+        <div className="pt-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <AccountCard account={deltaAccount} index={0} />
+            <AccountCard account={ctraderAccount} index={1} />
+          </div>
+        </div>
+
+        {/* ══ Segmented control — sticky while scrolling ══ */}
+        <div className="sticky top-0 z-10 bg-background pt-2 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <SegmentedControl tabs={TABS} active={tab} onChange={setTab} />
             </div>
-          </>
-        )}
+            <button className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
+              <Clock className="w-4 h-4 text-white/25" />
+            </button>
+          </div>
+        </div>
 
         {/* ══ POSITIONS ══ */}
         {tab === "positions" && (
