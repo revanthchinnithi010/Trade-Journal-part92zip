@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
-  TrendingUp,
+  TrendingUp, ArrowLeft,
   RefreshCw, ChevronRight, Wallet, Loader2,
   Clock, CheckCircle, XCircle, AlertCircle,
 } from "lucide-react";
@@ -301,15 +301,30 @@ export default function Portfolio() {
   ];
 
   return (
-    <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6" style={{ background: "#000000" }}>
-      {/* ── Scroll container ──
-          Back navigation + page title live in the persistent global header
-          (Layout.tsx). Balances now lives on its own dedicated page (reached
-          from Dashboard's "Account Value" card) — this page only ever shows
-          Positions / Orders / Stop Orders, selected via the sticky segmented
-          control below. */}
+    <div className="flex flex-col h-full" style={{ background: "#000000" }}>
+
+      {/* ── Secondary header — back-arrow left, title centred, spacer right ── */}
       <div
-        className="flex-1 overflow-y-auto space-y-3 [&::-webkit-scrollbar]:hidden"
+        className="flex-shrink-0 flex items-center justify-between px-5"
+        style={{ height: 56, borderBottom: "1px solid #262626" }}
+      >
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 32, height: 32, background: "transparent" }}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+        </button>
+        <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+          Portfolio
+        </span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* ── Scroll area ── */}
+      <div
+        className="flex-1 overflow-y-auto space-y-3 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6 [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
 

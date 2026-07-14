@@ -494,28 +494,6 @@ export const Layout = memo(function Layout({
             persistent header — swapping only its left control between hamburger
             and back-arrow — eliminates that gap entirely. */}
 
-        {/* Portfolio — dedicated secondary header: back-arrow left, title centred,
-            empty spacer right (mirrors Balances/Position Details visual language). */}
-        {pathname === "/portfolio" && (
-          <div
-            className="flex-shrink-0 flex items-center justify-between px-5"
-            style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
-          >
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-              style={{ width: 32, height: 32, background: "transparent" }}
-              aria-label="Back"
-            >
-              <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
-            </button>
-            <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
-              Portfolio
-            </span>
-            <div style={{ width: 32 }} />
-          </div>
-        )}
-
         {/* Balances — dedicated secondary header (no wordmark/search/bell/profile),
             same visual language as the Position Details bar: back-arrow left,
             page title centered, and here a USD/INR conversion toggle on the right
