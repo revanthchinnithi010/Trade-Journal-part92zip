@@ -294,7 +294,10 @@ export default function Portfolio() {
           (Layout.tsx). Balances renders unconditionally as the page's default
           content; the segmented control below it selects Positions / Orders /
           Stop Orders only — there is no Balances tab. */}
-      <div className="flex-1 overflow-y-auto space-y-3" style={{ scrollbarWidth: "none" }}>
+      <div
+        className="flex-1 overflow-y-auto space-y-3 [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+      >
 
         {/* ══ BALANCES — always visible, page header/content ══ */}
         <div className="pt-3">
