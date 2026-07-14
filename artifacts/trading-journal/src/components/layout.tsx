@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { compositorPanelTransition, compositorFadeTransition, pageSlideVariants } from "@/animations/motion";
+import { compositorPanelTransition, compositorFadeTransition, pageSlideVariants, EASE_PREMIUM } from "@/animations/motion";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
 import { useBrokerStore } from "@/store/brokerStore";
 import { cn } from "@/lib/utils";
@@ -503,12 +503,24 @@ export const Layout = memo(function Layout({
           {pathname === "/position-detail" && (
             <motion.div
               key="position-detail-header"
-              variants={pageSlideVariants}
-              initial="initial"
-              animate="enter"
-              exit="exit"
-              className="flex-shrink-0 flex items-center justify-between px-5"
-              style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
+              initial={{ x: "100%", opacity: 0 }}
+              animate={{ x: 0, opacity: 1, transition: { delay: 0.15, duration: 0.30, ease: EASE_PREMIUM } }}
+              exit={{ x: "100%", opacity: 0, transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 56,
+                zIndex: 20,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                paddingLeft: 20,
+                paddingRight: 20,
+                background: "#000000",
+                borderBottom: "1px solid #262626",
+              }}
             >
               <button
                 onClick={() => navigate("/portfolio?tab=positions")}

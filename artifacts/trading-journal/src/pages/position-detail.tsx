@@ -336,7 +336,7 @@ export default function PositionDetail() {
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: BG, overflowY: "hidden", fontFamily: FONT }}
+      style={{ background: BG, overflowY: "hidden", fontFamily: FONT, paddingTop: 56 }}
     >
 
       {/* Header lives in Layout (src/components/layout.tsx) as a persistently-
