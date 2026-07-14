@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { compositorPanelTransition, compositorFadeTransition, pageSlideVariants, EASE_PREMIUM } from "@/animations/motion";
+import { compositorPanelTransition, compositorFadeTransition } from "@/animations/motion";
 import { useBrokerWs } from "@/hooks/useBrokerWs";
 import { useBrokerStore } from "@/store/brokerStore";
 import { cn } from "@/lib/utils";
@@ -493,50 +493,6 @@ export const Layout = memo(function Layout({
             flash while Dashboard's exit animation was still playing. Keeping one
             persistent header — swapping only its left control between hamburger
             and back-arrow — eliminates that gap entirely. */}
-        {/* AnimatePresence-wrapped so the header slides out to the right in
-            sync with PositionDetail's own exit animation (pageSlideVariants,
-            App.tsx) when the back button is pressed. Previously this div
-            toggled instantly on the raw pathname condition — the content slid
-            away over ~240ms while the header just vanished on the same frame
-            the click fired, which read as "only half the page animates". */}
-        <AnimatePresence>
-          {pathname === "/position-detail" && (
-            <motion.div
-              key="position-detail-header"
-              initial={{ x: "100%", opacity: 0 }}
-              animate={{ x: 0, opacity: 1, transition: { duration: 0.30, ease: EASE_PREMIUM } }}
-              exit={{ x: "100%", opacity: 0, transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
-              style={{
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0,
-                height: 56,
-                zIndex: 20,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                paddingLeft: 20,
-                paddingRight: 20,
-                background: "#000000",
-                borderBottom: "1px solid #262626",
-              }}
-            >
-              <button
-                onClick={() => navigate("/portfolio?tab=positions")}
-                className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-                style={{ width: 32, height: 32, background: "transparent" }}
-                aria-label="Back"
-              >
-                <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
-              </button>
-              <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
-                Position Details
-              </span>
-              <div style={{ width: 32, height: 32 }} />
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* Balances — dedicated secondary header (no wordmark/search/bell/profile),
             same visual language as the Position Details bar: back-arrow left,

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { AlertTriangle, Trash2, ChevronDown } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Trash2, ChevronDown } from "lucide-react";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
@@ -336,14 +336,33 @@ export default function PositionDetail() {
   return (
     <div
       className="flex flex-col h-full"
-      style={{ background: BG, overflowY: "hidden", fontFamily: FONT, paddingTop: 56 }}
+      style={{ background: BG, overflowY: "hidden", fontFamily: FONT }}
     >
 
-      {/* Header lives in Layout (src/components/layout.tsx) as a persistently-
-          mounted element keyed on pathname === "/position-detail", so it never
-          disappears mid-navigation while this page's content is still
-          entering/exiting the AnimatePresence tree. Do not add a page-local
-          header here — see layout-content-wrapper-stability memory note. */}
+      {/* ══════════ HEADER ══════════════════════════════════════════════════
+          Rendered inside the page (not in Layout) so header and content are
+          part of the same PageTransition motion tree. This guarantees they
+          always animate in/out together — including on first load when the
+          lazy chunk isn't cached yet. Previously the header lived in Layout
+          and reacted instantly to pathname changes while content waited behind
+          a <Suspense> boundary, causing a visible desync on the first visit. */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between"
+        style={{ height: 56, paddingLeft: 20, paddingRight: 20, background: BG, borderBottom: "1px solid #262626" }}
+      >
+        <button
+          onClick={() => navigate("/portfolio?tab=positions")}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 32, height: 32, background: "transparent" }}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+        </button>
+        <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+          Position Details
+        </span>
+        <div style={{ width: 32, height: 32 }} />
+      </div>
 
       {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto pd-scroll-hide" style={{ overscrollBehavior: "contain" }}>
