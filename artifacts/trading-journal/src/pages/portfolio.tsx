@@ -150,20 +150,17 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
         </span>
       </div>
 
-      {/* Row 2 — Entry price | arrow | size + unit */}
-      <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
-        {/* Left: entry price */}
+      {/* Row 2 — Entry price | size + unit */}
+      <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
         <span
           className="font-medium tabular-nums"
-          style={{ fontSize: 15, color: "#A0A0A0" }}
+          style={{ fontSize: 12, color: "#6B6B6B" }}
         >
           {fPrice(pos.entryPrice)}
         </span>
-
-        {/* Right: size + base currency */}
         <span
           className="font-medium tabular-nums"
-          style={{ fontSize: 15, color: "#A0A0A0" }}
+          style={{ fontSize: 12, color: "#6B6B6B" }}
         >
           {pos.size}{unit ? ` ${unit}` : ""}
         </span>
@@ -382,7 +379,7 @@ export default function Portfolio() {
                 <p className="text-[12px]" style={{ color: "#6B6B6B" }}>Loading positions…</p>
               </div>
             ) : positions.length > 0 ? (
-              <div className="overflow-hidden" style={{ background: "#171717", border: "1px solid #2A2A2A", borderRadius: 18, boxShadow: "0 2px 16px rgba(0,0,0,0.35)" }}>
+              <div>
                 {positions.map((pos, i) => (
                   <PositionRow key={pos.id} pos={pos} isLast={i === positions.length - 1} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
                 ))}
