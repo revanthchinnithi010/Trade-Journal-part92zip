@@ -123,7 +123,7 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
         {/* Left: symbol */}
         <span
           className="font-semibold leading-none tracking-tight"
-          style={{ fontSize: 20, color: "#F0F0F0" }}
+          style={{ fontSize: 15, color: "#F0F0F0", letterSpacing: "0.02em" }}
         >
           {pos.symbol}
         </span>
@@ -154,11 +154,6 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
         >
           {fPrice(pos.entryPrice)}
         </span>
-
-        {/* Center: thin right arrow */}
-        <div className="flex-1 flex justify-center">
-          <ArrowRight className="w-[13px] h-[13px]" style={{ color: "#A0A0A0", opacity: 0.4 }} strokeWidth={2} />
-        </div>
 
         {/* Right: size + base currency */}
         <span
