@@ -97,16 +97,29 @@ function fPrice(n: number): string {
 
 function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () => void; isLast: boolean }) {
   const ticks     = useTickStore(s => s.ticks);
-  const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
-  const livePrice = ticks[symKey]?.price ?? pos.markPrice;
-  // Prefer server-computed unrealisedPnl; fall back to live-price calculation
-  const serverPnl = pos.unrealisedPnl;
+  // cTrader positions report their symbol as the raw symbol-catalog name
+  // (e.g. "NAS100", "GBPJPY", "XAUUSD") — the same key the WS "ctrader_tick"
+  // handler writes into tickStore, so it must be used as-is. Only crypto
+  // (Delta) symbols need the USDT/PERP-stripping + "USD" suffix normalization
+  // to match their tick key (e.g. "BTCUSDT" -> "BTCUSD").
+  const symKey    = classifyBrokerForSymbol(pos.symbol) === "ctrader"
+    ? pos.symbol
+    : pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+  const liveTick  = ticks[symKey];
+  const livePrice = liveTick?.price ?? pos.markPrice;
+  // Prefer the live-tick calculation whenever a tick has actually arrived for
+  // this symbol — it updates every tick. `pos.unrealisedPnl` is a
+  // server-computed snapshot that's only as fresh as the last broker poll
+  // (3s Delta / 15s cTrader — see brokerStore.ts POLL_INTERVAL), so preferring
+  // it whenever non-zero (the previous behaviour) made the PnL visibly
+  // "stuck" between polls. Fall back to it only when no live tick exists yet.
   const calcPnl   = pos.side === "Long"
     ? (livePrice - pos.entryPrice) * pos.size
     : (pos.entryPrice - livePrice) * pos.size;
-  const pnl      = (typeof serverPnl === "number" && isFinite(serverPnl) && serverPnl !== 0)
-    ? serverPnl
-    : calcPnl;
+  const serverPnl = pos.unrealisedPnl;
+  const pnl      = liveTick
+    ? calcPnl
+    : (typeof serverPnl === "number" && isFinite(serverPnl)) ? serverPnl : calcPnl;
   const isPos    = pnl >= 0;
   const pnlColor = "#F0F0F0";
   const unit     = baseCurrency(pos.symbol);
@@ -329,24 +342,28 @@ export default function Portfolio() {
   // ticks. Falls back to the balance-derived total when there are no open
   // positions to sum (e.g. balance carries pnl from a source other than the
   // currently-open positions list).
+  // Same tick-key resolution as PositionRow: cTrader symbols (NAS100,
+  // GBPJPY, XAUUSD, ...) are used as-is; crypto symbols get the
+  // USDT/PERP-stripping + "USD" suffix normalization.
+  const tickKeyForPosition = (symbol: string) =>
+    classifyBrokerForSymbol(symbol) === "ctrader"
+      ? symbol
+      : symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+
+  const livePnlForPosition = (pos: BrokerPosition) => {
+    const livePrice = ticks[tickKeyForPosition(pos.symbol)]?.price ?? pos.markPrice;
+    return pos.side === "Long"
+      ? (livePrice - pos.entryPrice) * pos.size
+      : (pos.entryPrice - livePrice) * pos.size;
+  };
+
   const upnlUSD = positions.length > 0
-    ? positions.reduce((sum, pos) => {
-        const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
-        const livePrice = ticks[symKey]?.price ?? pos.markPrice;
-        const pnl = pos.side === "Long"
-          ? (livePrice - pos.entryPrice) * pos.size
-          : (pos.entryPrice - livePrice) * pos.size;
-        return sum + pnl;
-      }, 0)
+    ? positions.reduce((sum, pos) => sum + livePnlForPosition(pos), 0)
     : deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD;
 
   const upnlINR = positions.length > 0
     ? positions.reduce((sum, pos) => {
-        const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
-        const livePrice = ticks[symKey]?.price ?? pos.markPrice;
-        const pnl = pos.side === "Long"
-          ? (livePrice - pos.entryPrice) * pos.size
-          : (pos.entryPrice - livePrice) * pos.size;
+        const pnl = livePnlForPosition(pos);
         const broker = classifyBrokerForSymbol(pos.symbol);
         return sum + (broker === "delta" ? deltaAccount.toINR(pnl) : ctraderAccount.toINR(pnl));
       }, 0)
