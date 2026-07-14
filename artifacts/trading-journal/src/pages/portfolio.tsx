@@ -95,15 +95,20 @@ function fPrice(n: number): string {
 }
 
 function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () => void; isLast: boolean }) {
-  const ticks   = useTickStore(s => s.ticks);
-  const symKey  = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+  const ticks     = useTickStore(s => s.ticks);
+  const symKey    = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
   const livePrice = ticks[symKey]?.price ?? pos.markPrice;
-  const pnl     = pos.side === "Long"
+  // Prefer server-computed unrealisedPnl; fall back to live-price calculation
+  const serverPnl = pos.unrealisedPnl;
+  const calcPnl   = pos.side === "Long"
     ? (livePrice - pos.entryPrice) * pos.size
     : (pos.entryPrice - livePrice) * pos.size;
-  const isPos   = pnl >= 0;
+  const pnl      = (typeof serverPnl === "number" && isFinite(serverPnl) && serverPnl !== 0)
+    ? serverPnl
+    : calcPnl;
+  const isPos    = pnl >= 0;
   const pnlColor = isPos ? "#35C37A" : "#E0524F";
-  const unit    = baseCurrency(pos.symbol);
+  const unit     = baseCurrency(pos.symbol);
 
   return (
     <div
@@ -138,8 +143,8 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
 
         {/* Right: live PNL */}
         <span
-          className="font-bold leading-none"
-          style={{ fontSize: 20, color: pnlColor }}
+          className="font-semibold leading-none tabular-nums"
+          style={{ fontSize: 15, color: pnlColor }}
         >
           {isPos ? "+" : ""}{fUSD(pnl)}
         </span>
