@@ -504,7 +504,7 @@ export const Layout = memo(function Layout({
             <motion.div
               key="position-detail-header"
               initial={{ x: "100%", opacity: 0 }}
-              animate={{ x: 0, opacity: 1, transition: { delay: 0.15, duration: 0.30, ease: EASE_PREMIUM } }}
+              animate={{ x: 0, opacity: 1, transition: { duration: 0.30, ease: EASE_PREMIUM } }}
               exit={{ x: "100%", opacity: 0, transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } }}
               style={{
                 position: "absolute",
@@ -570,8 +570,21 @@ export const Layout = memo(function Layout({
           </div>
         )}
 
-        {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && (
-          <header
+        {/* AnimatePresence with initial={false} so the header doesn't fade in
+            on first load (it's already visible). Children added later — i.e.
+            when returning from /position-detail — still play the enter animation.
+            The exit fade (0.15 s) means the header dissolves gracefully when
+            navigating TO /position-detail instead of vanishing the instant the
+            pathname changes, which previously left a header-less gap for ~150 ms
+            while mode="wait" finished the portfolio exit before the position-
+            detail header could start entering. */}
+        <AnimatePresence initial={false}>
+          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && (
+          <motion.header
+            key="main-header"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1, transition: { duration: 0.20, ease: "easeOut" } }}
+            exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeIn" } }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
               position:             "relative",
@@ -802,8 +815,9 @@ export const Layout = memo(function Layout({
                 anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
               />
             )}
-          </header>
-        )}
+          </motion.header>
+          )}
+        </AnimatePresence>
 
         {/* ── Content area ─────────────────────────────────────────────────────────
             Charts is the only keep-alive page: its LWC instance must survive tab
