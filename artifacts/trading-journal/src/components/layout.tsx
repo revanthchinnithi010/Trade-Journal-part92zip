@@ -26,6 +26,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useChartStore } from "@/store/chartStore";
 import { useCurrencyStore, CURRENCY_META } from "@/store/currencyStore";
 import { AreaLabLogo } from "./AreaLabLogo";
+import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 
 const NAV_SECTIONS = [
   {
@@ -493,6 +494,26 @@ export const Layout = memo(function Layout({
             flash while Dashboard's exit animation was still playing. Keeping one
             persistent header — swapping only its left control between hamburger
             and back-arrow — eliminates that gap entirely. */}
+        {pathname === "/position-detail" && (
+          <div
+            className="flex-shrink-0 flex items-center justify-between px-5"
+            style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
+          >
+            <button
+              onClick={() => { useSelectedPositionStore.getState().setPosition(null); navigate("/portfolio?tab=positions"); }}
+              className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+              style={{ width: 32, height: 32, background: "transparent" }}
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+            </button>
+            <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+              Position Details
+            </span>
+            <div style={{ width: 32, height: 32 }} />
+          </div>
+        )}
+
         {pathname !== "/charts" && pathname !== "/position-detail" && (
           <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"

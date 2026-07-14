@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
-import { AlertTriangle, ChevronLeft, RotateCw, Trash2, ChevronDown } from "lucide-react";
+import { AlertTriangle, Trash2, ChevronDown } from "lucide-react";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { useBrokerStore } from "@/store/brokerStore";
 import { useTickStore } from "@/store/tickStore";
@@ -168,6 +168,7 @@ export default function PositionDetail() {
   const [tpLimitPrice, setTpLimitPrice] = useState("");
   const [slLimitPrice, setSlLimitPrice] = useState("");
   const [showTpSlConfirm, setShowTpSlConfirm] = useState(false);
+  const [bracketOpen, setBracketOpen] = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -312,35 +313,11 @@ export default function PositionDetail() {
       style={{ background: BG, overflowY: "hidden", fontFamily: FONT }}
     >
 
-      {/* ══════════ HEADER ═══════════════════════════════════════════ */}
-      <div
-        className="flex-shrink-0 flex items-center justify-between px-5"
-        style={{ height: 56, background: BG, borderBottom: `1px solid ${DIVIDER}` }}
-      >
-        <button
-          onClick={() => { setPosition(null); navigate("/portfolio?tab=positions"); }}
-          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-          style={{ width: 32, height: 32, background: "transparent" }}
-          aria-label="Back"
-        >
-          <ChevronLeft size={20} style={{ color: VALUE }} />
-        </button>
-
-        <span
-          className="font-semibold"
-          style={{ color: TITLE, fontSize: 17 }}
-        >
-          Position Details
-        </span>
-
-        <button
-          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-          style={{ width: 32, height: 32, background: "transparent" }}
-          aria-label="Refresh"
-        >
-          <RotateCw size={16} style={{ color: MUTED }} />
-        </button>
-      </div>
+      {/* Header lives in Layout (src/components/layout.tsx) as a persistently-
+          mounted element keyed on pathname === "/position-detail", so it never
+          disappears mid-navigation while this page's content is still
+          entering/exiting the AnimatePresence tree. Do not add a page-local
+          header here — see layout-content-wrapper-stability memory note. */}
 
       {/* ══════════ SCROLLABLE BODY ═════════════════════════════════════════ */}
       <div className="flex-1 overflow-y-auto pd-scroll-hide" style={{ overscrollBehavior: "contain" }}>
@@ -449,13 +426,31 @@ export default function PositionDetail() {
             )}
           </div>
 
-          {/* ──────────────────── BRACKET ORDER CARD ─────────────────────── */}
+          {/* ──────────────────── BRACKET ORDER CARD (collapsible) ─────────── */}
           <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "15px 20px", boxShadow: CARD_SHADOW }}
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: "hidden", boxShadow: CARD_SHADOW }}
           >
-            <p className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11, marginBottom: 12 }}>
-              Bracket Order
-            </p>
+            <button
+              onClick={() => setBracketOpen(o => !o)}
+              className="w-full flex items-center justify-between"
+              style={{ padding: "14px 20px" }}
+              aria-expanded={bracketOpen}
+            >
+              <span className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
+                Bracket Order
+              </span>
+              <ChevronDown
+                size={16}
+                style={{
+                  color: MUTED,
+                  transform: bracketOpen ? "rotate(180deg)" : "rotate(0deg)",
+                  transition: "transform 0.2s ease",
+                }}
+              />
+            </button>
+
+            {bracketOpen && (
+            <div style={{ padding: "0 20px 15px" }}>
 
             {/* Take Profit */}
             <div style={{ marginBottom: 9 }}>
@@ -587,6 +582,8 @@ export default function PositionDetail() {
             >
               {updating ? "Updating…" : "Update TP / SL"}
             </button>
+            </div>
+            )}
           </div>
 
           {/* ──────────────────── CLOSE POSITION BUTTON ──────────────────── */}
