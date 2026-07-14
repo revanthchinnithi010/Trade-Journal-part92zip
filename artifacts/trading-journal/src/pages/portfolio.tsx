@@ -107,7 +107,7 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
     ? serverPnl
     : calcPnl;
   const isPos    = pnl >= 0;
-  const pnlColor = isPos ? "#35C37A" : "#E0524F";
+  const pnlColor = "#F0F0F0";
   const unit     = baseCurrency(pos.symbol);
 
   return (
