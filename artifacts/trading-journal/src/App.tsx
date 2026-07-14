@@ -431,7 +431,11 @@ function Router() {
              StandardPageWrapper's themed page background, so there's no
              light/dark seam between the header and the content below it. */}
         {pathname === "/balances"         && <Suspense key="/balances"         fallback={<PageLoader />}><PageTransition key="/balances"         variant="detail" custom={dir}><Balances /></PageTransition></Suspense>}
-        {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="slide"  custom={1}><PositionDetail /></PageTransition></Suspense>}
+        {/* position: fixed so the page is viewport-anchored and immune to the
+            parent flex layout shifting (main header mounting/unmounting adds/
+            removes 60 px from the flex column, which previously jolted the
+            position:absolute content-div before the slide animation could run). */}
+        {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="slide"  custom={1} style={{ position: "fixed", inset: 0, zIndex: 10 }}><PositionDetail /></PageTransition></Suspense>}
         {pathname === "/pnl"              && <Suspense key="/pnl"              fallback={<PageLoader />}><PageTransition key="/pnl"              variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition></Suspense>}
 
