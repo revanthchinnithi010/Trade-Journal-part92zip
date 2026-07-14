@@ -24,11 +24,6 @@ const TOTAL_VALUE_STYLE: CSSProperties = {
 };
 export const VALUE_POSITIVE = "#35D39A";
 export const VALUE_NEGATIVE = "#FF6B6B";
-const USD_SUB_STYLE: CSSProperties = {
-  fontSize:   13,
-  fontWeight: 500,
-  color:      "#7A7A7A",
-};
 const LABEL_STYLE: CSSProperties = {
   fontSize:   13,
   fontWeight: 500,
@@ -41,17 +36,13 @@ function DualAmount({
   const currency = useCurrencyStore(s => s.currency);
   const native = currency === "INR" ? toINR(usd) : usd;
   const base = total ? TOTAL_VALUE_STYLE : VALUE_STYLE;
+  // Single-currency display — the header's $/₹ toggle picks exactly which
+  // currency is shown. No secondary amount is ever rendered alongside it,
+  // so switching to INR hides USD entirely and vice versa.
   return (
-    <div className="flex items-baseline gap-2">
-      <span style={{ ...base, ...(color ? { color } : {}) }}>
-        {formatAmount(native, currency)}
-      </span>
-      {currency === "INR" && (
-        <span style={USD_SUB_STYLE}>
-          {formatAmount(usd, "USD")}
-        </span>
-      )}
-    </div>
+    <span style={{ ...base, ...(color ? { color } : {}) }}>
+      {formatAmount(native, currency)}
+    </span>
   );
 }
 
