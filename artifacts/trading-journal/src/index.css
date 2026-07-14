@@ -97,6 +97,13 @@
   --accent-teal-400: #00E5B0;
   --accent-teal-500: #00CCA0;
 
+  /* ── Balances page numeric value color ──────────────────────────
+     Dense fintech-terminal register (Bloomberg/Bybit/Binance Pro).
+     #E6E6E6 reads correctly on this theme's near-black card surfaces;
+     the .light override below swaps to a dark ink so the same tokens
+     stay legible on the white glass-card surface in light mode. */
+  --balance-value-color: #E6E6E6;
+
   /* ── Elevation helpers ──────────────────────────────────────── */
   --button-outline:              rgba(255, 255, 255, 0.06);
   --badge-outline:               rgba(255, 255, 255, 0.04);
@@ -224,6 +231,10 @@
   /* ── Profit/Loss accent remap ───────────────────────────────── */
   --accent-teal-400: #16A34A;        /* profit green (#16A34A)             */
   --accent-teal-500: #15803D;
+
+  /* Balances numeric values sit on a white glass-card in light mode —
+     #E6E6E6 would be nearly invisible there, so swap to a dark ink. */
+  --balance-value-color: #1A1A1A;
 
   --button-outline:              rgba(0, 0, 0, 0.07);
   --badge-outline:               rgba(0, 0, 0, 0.04);

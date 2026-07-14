@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { CSSProperties } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { Wifi, WifiOff, Loader2, ChevronDown } from "lucide-react";
 import { useCurrencyStore, formatAmount } from "@/store/currencyStore";
@@ -6,21 +7,47 @@ import { useReducedMotion } from "@/hooks/useReducedMotion";
 import { cardVariants } from "@/animations/motion";
 import type { AccountSnapshot } from "@/store/accountTypes";
 
+// Balances page numeric styling — dense, professional (Bloomberg/Bybit/Binance
+// Pro/TradingView register), not oversized fintech-card typography. Every
+// value uses these exact tokens; never fall back to bold white text.
+const VALUE_STYLE: CSSProperties = {
+  fontSize:      16,
+  fontWeight:    600,
+  letterSpacing: "-0.2px",
+  lineHeight:    "22px",
+  color:         "var(--balance-value-color)",
+};
+const TOTAL_VALUE_STYLE: CSSProperties = {
+  fontSize:   18,
+  fontWeight: 700,
+  color:      "var(--balance-value-color)",
+};
+export const VALUE_POSITIVE = "#35D39A";
+export const VALUE_NEGATIVE = "#FF6B6B";
+const USD_SUB_STYLE: CSSProperties = {
+  fontSize:   13,
+  fontWeight: 500,
+  color:      "#7A7A7A",
+};
+const LABEL_STYLE: CSSProperties = {
+  fontSize:   13,
+  fontWeight: 500,
+  color:      "#8C8C8C",
+};
+
 function DualAmount({
-  usd, toINR, color,
-}: { usd: number; toINR: (v: number) => number; color?: string }) {
+  usd, toINR, color, total,
+}: { usd: number; toINR: (v: number) => number; color?: string; total?: boolean }) {
   const currency = useCurrencyStore(s => s.currency);
   const native = currency === "INR" ? toINR(usd) : usd;
+  const base = total ? TOTAL_VALUE_STYLE : VALUE_STYLE;
   return (
     <div className="flex items-baseline gap-2">
-      <span
-        className="font-black leading-none text-[18px] text-foreground"
-        style={color ? { color } : undefined}
-      >
+      <span style={{ ...base, ...(color ? { color } : {}) }}>
         {formatAmount(native, currency)}
       </span>
       {currency === "INR" && (
-        <span className="font-semibold text-muted-foreground/50 text-[12px]">
+        <span style={USD_SUB_STYLE}>
           {formatAmount(usd, "USD")}
         </span>
       )}
@@ -32,8 +59,8 @@ function MetricRow({
   label, usd, toINR, color,
 }: { label: string; usd: number; toINR: (v: number) => number; color?: string }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 last:border-b-0">
-      <span className="text-[12.5px] font-medium text-muted-foreground">{label}</span>
+    <div className="flex items-center justify-between px-4 py-[6px] border-b border-border/50 last:border-b-0">
+      <span style={LABEL_STYLE}>{label}</span>
       <DualAmount usd={usd} toINR={toINR} color={color} />
     </div>
   );
@@ -109,9 +136,9 @@ export default function AccountCard({ account, index = 0 }: Props) {
         </div>
       </div>
 
-      {/* Balance — always visible, no label */}
-      <div className="px-4 pb-3">
-        <DualAmount usd={account.accountValueUSD} toINR={account.toINR} />
+      {/* Exchange Total Balance — always visible, no label */}
+      <div className="px-4 pb-2.5">
+        <DualAmount usd={account.accountValueUSD} toINR={account.toINR} total />
         {account.rateLabel && (
           <p className="text-[10px] text-muted-foreground/40 mt-0.5">{account.rateLabel}</p>
         )}
@@ -143,13 +170,13 @@ export default function AccountCard({ account, index = 0 }: Props) {
                 label="Unrealized PNL"
                 usd={account.unrealizedPnlUSD}
                 toINR={account.toINR}
-                color={account.unrealizedPnlUSD >= 0 ? "#34d399" : "#f87171"}
+                color={account.unrealizedPnlUSD >= 0 ? VALUE_POSITIVE : VALUE_NEGATIVE}
               />
               <MetricRow
                 label="Realized PNL"
                 usd={account.realizedPnlUSD}
                 toINR={account.toINR}
-                color={account.realizedPnlUSD >= 0 ? "#34d399" : "#f87171"}
+                color={account.realizedPnlUSD >= 0 ? VALUE_POSITIVE : VALUE_NEGATIVE}
               />
             </div>
           </motion.div>
