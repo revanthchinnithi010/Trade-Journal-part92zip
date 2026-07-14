@@ -150,8 +150,7 @@ function PctChip({ label, onClick, accent }: { label: string; onClick: () => voi
 export default function PositionDetail() {
   const [, navigate] = useLocation();
 
-  const position    = useSelectedPositionStore(s => s.position);
-  const setPosition = useSelectedPositionStore(s => s.setPosition);
+  const position = useSelectedPositionStore(s => s.position);
 
   const closePosition    = useBrokerStore(s => s.closePosition);
   const placeOrder       = useBrokerStore(s => s.placeOrder);
@@ -173,6 +172,15 @@ export default function PositionDetail() {
   const [slLimitPrice, setSlLimitPrice] = useState("");
   const [showTpSlConfirm, setShowTpSlConfirm] = useState(false);
   const [bracketOpen, setBracketOpen] = useState(false);
+
+  // Clear the selected position only when this page actually unmounts (i.e.
+  // after its exit transition finishes), not synchronously on click — clearing
+  // it eagerly re-renders this still-visible page into the "No position
+  // selected" empty state for ~200ms before the AnimatePresence exit
+  // completes, producing a visible flash on every back/close navigation.
+  useEffect(() => {
+    return () => { useSelectedPositionStore.getState().setPosition(null); };
+  }, []);
 
   useEffect(() => {
     if (!position) return;
@@ -275,7 +283,6 @@ export default function PositionDetail() {
     setClosing(true);
     try {
       await closePosition(position);
-      setPosition(null);
       navigate("/portfolio?tab=positions");
     } catch { /* toast handled by broker service */ }
     finally { setClosing(false); setShowCloseConfirm(false); }

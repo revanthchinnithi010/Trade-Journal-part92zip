@@ -26,7 +26,6 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useChartStore } from "@/store/chartStore";
 import { useCurrencyStore, CURRENCY_META } from "@/store/currencyStore";
 import { AreaLabLogo } from "./AreaLabLogo";
-import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 
 const NAV_SECTIONS = [
   {
@@ -500,7 +499,7 @@ export const Layout = memo(function Layout({
             style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
           >
             <button
-              onClick={() => { useSelectedPositionStore.getState().setPosition(null); navigate("/portfolio?tab=positions"); }}
+              onClick={() => navigate("/portfolio?tab=positions")}
               className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
               style={{ width: 32, height: 32, background: "transparent" }}
               aria-label="Back"
