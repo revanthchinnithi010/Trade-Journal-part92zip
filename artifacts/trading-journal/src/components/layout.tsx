@@ -638,16 +638,20 @@ export const Layout = memo(function Layout({
                 </button>
               )}
 
-              {/* Currency Toggle — same 36×36 icon-button language as the theme
-                  toggle and notification bell beside it (border + hover fill),
-                  just the active symbol centered. The old wide "$ USD" text
-                  pill read as a mismatched, oddly-shaped outlier in this row. */}
+              {/* Currency Toggle — same filled-chip language as the notification
+                  bell beside it (same border + idle/hover background), so the
+                  two icon-buttons read as one consistent set instead of the
+                  bell looking "on" while this one looks like a flat outline. */}
               <button
                 onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
-                className="w-9 h-9 flex items-center justify-center rounded-xl text-foreground transition-all duration-200 text-[15px] font-bold"
-                style={{ border: "1px solid var(--surface-btn-border)" }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 text-[15px] font-bold"
+                style={{
+                  border:     "1px solid var(--surface-btn-active-border)",
+                  background: "var(--surface-btn-hover)",
+                  color:      "hsl(var(--foreground) / 0.72)",
+                }}
+                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
                 title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
                 aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
               >
