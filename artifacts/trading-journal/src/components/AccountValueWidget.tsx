@@ -82,7 +82,7 @@ export default function AccountValueWidget({
       <div className="px-4 pt-4 pb-3">
         {/* Header row */}
         <div className="flex items-start justify-between mb-3">
-          <button className="flex items-center gap-0.5 group" onClick={() => navigate("/portfolio")}>
+          <button className="flex items-center gap-0.5 group" onClick={() => navigate("/balances")}>
             <span className="text-[13px] font-semibold text-white/70 group-hover:text-white/90 transition-colors">
               Account Value
             </span>

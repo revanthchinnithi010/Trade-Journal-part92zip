@@ -12,7 +12,6 @@ import { useListTrades } from "@workspace/api-client-react";
 import type { BrokerPosition, BrokerOrder } from "@/types/broker";
 import { useDeltaAccount } from "@/store/deltaAccountStore";
 import { useCtraderAccount } from "@/store/ctraderAccountStore";
-import AccountCard from "@/components/portfolio/AccountCard";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 
 const USD_TO_INR_FALLBACK = 85;
@@ -305,24 +304,17 @@ export default function Portfolio() {
     <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
       {/* ── Scroll container ──
           Back navigation + page title live in the persistent global header
-          (Layout.tsx). Balances renders unconditionally as the page's default
-          content; the segmented control below it selects Positions / Orders /
-          Stop Orders only — there is no Balances tab. */}
+          (Layout.tsx). Balances now lives on its own dedicated page (reached
+          from Dashboard's "Account Value" card) — this page only ever shows
+          Positions / Orders / Stop Orders, selected via the sticky segmented
+          control below. */}
       <div
         className="flex-1 overflow-y-auto space-y-3 [&::-webkit-scrollbar]:hidden"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
 
-        {/* ══ BALANCES — always visible, page header/content ══ */}
-        <div className="pt-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <AccountCard account={deltaAccount} index={0} />
-            <AccountCard account={ctraderAccount} index={1} />
-          </div>
-        </div>
-
         {/* ══ Segmented control — sticky while scrolling ══ */}
-        <div className="sticky top-0 z-10 bg-background pt-2 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
+        <div className="sticky top-0 z-10 bg-background pt-3 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
           <SegmentedControl tabs={TABS} active={tab} onChange={setTab} />
         </div>
 

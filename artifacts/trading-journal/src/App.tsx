@@ -34,6 +34,7 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 // is preloaded eagerly in the background so the first tap to /charts is instant.
 const Charts      = lazy(() => import("@/pages/charts"));
 const Portfolio    = lazy(() => import("@/pages/portfolio"));
+const Balances     = lazy(() => import("@/pages/balances"));
 const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
 const NetPnl       = lazy(() => import("@/pages/NetPnLAnalytics"));
 const Trade        = lazy(() => import("@/pages/trade"));
@@ -247,7 +248,7 @@ const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
   "/calendar", "/notebook", "/settings",
   "/calc/crypto", "/calc/forex", "/calc/position", "/calc/margin", "/calc/risk",
-  "/portfolio", "/pnl", "/net-pnl", "/trade", "/ctrader-test", "/charts",
+  "/portfolio", "/balances", "/pnl", "/net-pnl", "/trade", "/ctrader-test", "/charts",
   "/position-detail",
 ]);
 
@@ -310,6 +311,7 @@ function Router() {
       () => import("@/pages/calc-margin"),
       () => import("@/pages/calc-risk"),
       () => import("@/pages/portfolio"),
+      () => import("@/pages/balances"),
       () => import("@/pages/pnl-analytics"),
       () => import("@/pages/NetPnLAnalytics"),
       () => import("@/pages/trade"),
@@ -424,6 +426,7 @@ function Router() {
              box directly as its height reference, not an outer page-scroll
              container. */}
         {pathname === "/portfolio"        && <Suspense key="/portfolio"        fallback={<PageLoader />}><PageTransition key="/portfolio"        variant="detail" custom={dir}><Portfolio /></PageTransition></Suspense>}
+        {pathname === "/balances"         && <Suspense key="/balances"         fallback={<PageLoader />}><PageTransition key="/balances"         variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/balances"><Balances /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="slide"  custom={1}><PositionDetail /></PageTransition></Suspense>}
         {pathname === "/pnl"              && <Suspense key="/pnl"              fallback={<PageLoader />}><PageTransition key="/pnl"              variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/pnl"><PnlAnalytics /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="detail" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/net-pnl"><NetPnl /></StandardPageWrapper></PageTransition></Suspense>}
