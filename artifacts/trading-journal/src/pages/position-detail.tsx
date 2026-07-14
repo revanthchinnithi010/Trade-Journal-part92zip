@@ -163,8 +163,8 @@ export default function PositionDetail() {
   const [updating, setUpdating] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [tpOrderType, setTpOrderType] = useState<"Market" | "Limit">("Limit");
-  const [slOrderType, setSlOrderType] = useState<"Market" | "Limit">("Limit");
+  const [tpOrderType, setTpOrderType] = useState<"Market" | "Limit">("Market");
+  const [slOrderType, setSlOrderType] = useState<"Market" | "Limit">("Market");
   const [tpLimitPrice, setTpLimitPrice] = useState("");
   const [slLimitPrice, setSlLimitPrice] = useState("");
   const [showTpSlConfirm, setShowTpSlConfirm] = useState(false);
