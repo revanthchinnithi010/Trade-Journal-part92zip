@@ -322,65 +322,56 @@ export default function Portfolio() {
         {tab === "positions" && (
           <>
             {/* UPNL summary */}
-            <div className="glass-card px-4 py-3.5 flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-semibold text-white/35 uppercase tracking-widest mb-1">Unrealized PnL</p>
-                <DualValue inr={upnlINR} usd={upnlUSD} masked={false} color={upPos ? "#34d399" : "#f87171"} size="md" />
-              </div>
-              <button
-                onClick={() => refreshPositions()}
-                className="w-8 h-8 flex items-center justify-center rounded-xl transition-colors hover:bg-white/[0.07]"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
-              >
-                <RefreshCw className="w-3.5 h-3.5 text-white/40" />
-              </button>
+            <div className="px-4 py-3.5" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+              <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: "#6B6B6B" }}>Unrealized PnL</p>
+              <DualValue inr={upnlINR} usd={upnlUSD} masked={false} color={upPos ? "#35C37A" : "#E0524F"} size="md" />
             </div>
 
             {/* Broker positions */}
             {connectionStatus === "connecting" ? (
-              <div className="glass-card flex flex-col items-center justify-center py-12 gap-2">
-                <Loader2 className="w-6 h-6 animate-spin text-white/30" />
-                <p className="text-[12px] text-white/35">Loading positions…</p>
+              <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+                <Loader2 className="w-6 h-6 animate-spin" style={{ color: "#6B6B6B" }} />
+                <p className="text-[12px]" style={{ color: "#6B6B6B" }}>Loading positions…</p>
               </div>
             ) : positions.length > 0 ? (
-              <div className="glass-card overflow-hidden">
+              <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
                 {positions.map(pos => (
                   <PositionRow key={pos.id} pos={pos} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
                 ))}
               </div>
             ) : openTrades.length > 0 ? (
-              <div className="glass-card overflow-hidden">
+              <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
                 {openTrades.map((t, i) => {
                   const sym    = (t as { symbol?: string }).symbol ?? "—";
                   const side   = (t as { side?: string }).side ?? "";
                   const ep     = (t as { entryPrice?: number }).entryPrice ?? 0;
                   const isLong = side === "long";
                   return (
-                    <div key={i} className="px-4 py-3.5" style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                    <div key={i} className="px-4 py-3.5" style={{ borderBottom: "1px solid #252525" }}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <span
                             className="text-[10px] font-black px-2 py-0.5 rounded-md"
                             style={{
-                              background: isLong ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)",
-                              color: isLong ? "#34d399" : "#f87171",
+                              background: isLong ? "rgba(53,195,122,0.12)" : "rgba(224,82,79,0.12)",
+                              color: isLong ? "#35C37A" : "#E0524F",
                             }}
                           >
                             {isLong ? "▲ LONG" : "▼ SHORT"}
                           </span>
-                          <span className="text-[14px] font-black text-white">{sym}</span>
+                          <span className="text-[14px] font-black" style={{ color: "#E8E8E8" }}>{sym}</span>
                         </div>
-                        <span className="text-[12px] font-bold text-white/40">Entry: {ep.toFixed(2)}</span>
+                        <span className="text-[12px] font-bold" style={{ color: "#5A5A5A" }}>Entry: {ep.toFixed(2)}</span>
                       </div>
                     </div>
                   );
                 })}
               </div>
             ) : (
-              <div className="glass-card flex flex-col items-center justify-center py-14 gap-1.5">
-                <TrendingUp className="w-8 h-8 text-white/15 mb-1" />
-                <p className="text-[13px] font-semibold text-white/35">No Open Positions</p>
-                <p className="text-[11px] text-white/20">Your active trades will appear here.</p>
+              <div className="flex flex-col items-center justify-center py-14 gap-1.5" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+                <TrendingUp className="w-8 h-8 mb-1" style={{ color: "#2A2A2A" }} />
+                <p className="text-[13px] font-semibold" style={{ color: "#5A5A5A" }}>No Open Positions</p>
+                <p className="text-[11px]" style={{ color: "#3A3A3A" }}>Your active trades will appear here.</p>
               </div>
             )}
           </>
@@ -389,36 +380,36 @@ export default function Portfolio() {
         {/* ══ ORDERS ══ */}
         {tab === "orders" && (
           <>
-            <div className="glass-card px-4 py-3.5 flex items-center justify-between">
+            <div className="px-4 py-3.5 flex items-center justify-between" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
               <div className="flex items-center gap-3">
                 <div>
-                  <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold mb-0.5">Open</p>
-                  <p className="text-[18px] font-black text-white">{openOrders.length}</p>
+                  <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#6B6B6B" }}>Open</p>
+                  <p className="text-[18px] font-black" style={{ color: "#E8E8E8" }}>{openOrders.length}</p>
                 </div>
-                <div className="w-px h-8 bg-white/[0.07]" />
+                <div className="w-px h-8" style={{ background: "#252525" }} />
                 <div>
-                  <p className="text-[10px] text-white/35 uppercase tracking-widest font-semibold mb-0.5">History</p>
-                  <p className="text-[18px] font-black text-white/55">{histOrders.length}</p>
+                  <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#6B6B6B" }}>History</p>
+                  <p className="text-[18px] font-black" style={{ color: "#5A5A5A" }}>{histOrders.length}</p>
                 </div>
               </div>
               <button
                 onClick={() => refreshOrders()}
                 className="w-8 h-8 flex items-center justify-center rounded-xl"
-                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)" }}
+                style={{ background: "#1E1E1E", border: "1px solid #2E2E2E" }}
               >
-                <RefreshCw className="w-3.5 h-3.5 text-white/40" />
+                <RefreshCw className="w-3.5 h-3.5" style={{ color: "#5A5A5A" }} />
               </button>
             </div>
 
             {orders.length > 0 ? (
-              <div className="glass-card overflow-hidden">
+              <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
                 {orders.map(ord => <OrderRow key={ord.id} ord={ord} />)}
               </div>
             ) : (
-              <div className="glass-card flex flex-col items-center justify-center py-12 gap-2">
-                <Wallet className="w-8 h-8 text-white/15" />
-                <p className="text-[13px] font-semibold text-white/30">No orders</p>
-                <p className="text-[11px] text-white/20">Active and recent orders will appear here</p>
+              <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+                <Wallet className="w-8 h-8" style={{ color: "#2A2A2A" }} />
+                <p className="text-[13px] font-semibold" style={{ color: "#5A5A5A" }}>No orders</p>
+                <p className="text-[11px]" style={{ color: "#3A3A3A" }}>Active and recent orders will appear here</p>
               </div>
             )}
           </>
@@ -426,10 +417,10 @@ export default function Portfolio() {
 
         {/* ══ STOP ORDERS ══ */}
         {tab === "stop-orders" && (
-          <div className="glass-card flex flex-col items-center justify-center py-14 gap-2">
-            <AlertCircle className="w-8 h-8 text-white/15" />
-            <p className="text-[13px] font-semibold text-white/30">No stop orders</p>
-            <p className="text-[11px] text-white/20">Stop loss & take profit orders will appear here</p>
+          <div className="flex flex-col items-center justify-center py-14 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+            <AlertCircle className="w-8 h-8" style={{ color: "#2A2A2A" }} />
+            <p className="text-[13px] font-semibold" style={{ color: "#5A5A5A" }}>No stop orders</p>
+            <p className="text-[11px]" style={{ color: "#3A3A3A" }}>Stop loss & take profit orders will appear here</p>
           </div>
         )}
 
