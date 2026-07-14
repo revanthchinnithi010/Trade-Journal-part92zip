@@ -432,8 +432,13 @@ function Router() {
         {/* Balances manages its own full-height black scroll region (matching
              the forced-black secondary header in Layout.tsx) instead of
              StandardPageWrapper's themed page background, so there's no
-             light/dark seam between the header and the content below it. */}
-        {pathname === "/balances"         && <Suspense key="/balances"         fallback={<PageLoader />}><PageTransition key="/balances"         variant="detail" custom={dir}><Balances /></PageTransition></Suspense>}
+             light/dark seam between the header and the content below it.
+             Uses the same cover-detail treatment as Portfolio — position:
+             fixed + zIndex so its secondary header mounting in Layout's flex
+             column can't jolt the dashboard (or any keep-alive page) before
+             the entry animation runs, and it immediately occludes the Layout
+             header/keep-alive content instead of fading in over it. */}
+        {pathname === "/balances"         && <Suspense key="/balances"         fallback={<PageLoader />}><PageTransition key="/balances"         variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Balances /></PageTransition></Suspense>}
         {/* position: fixed so the page is viewport-anchored and immune to the
             parent flex layout shifting (main header mounting/unmounting adds/
             removes 60 px from the flex column, which previously jolted the
