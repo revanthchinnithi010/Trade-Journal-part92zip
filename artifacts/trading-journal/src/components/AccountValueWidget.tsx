@@ -5,15 +5,6 @@ import { useCurrencyStore, formatAmount } from "@/store/currencyStore";
 import type { Currency } from "@/store/currencyStore";
 import { useLocation } from "wouter";
 
-function fUSD(value: number): string {
-  const abs = Math.abs(value);
-  const s = new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD",
-    minimumFractionDigits: 2, maximumFractionDigits: 2,
-  }).format(abs);
-  return value < 0 ? `-${s}` : s;
-}
-
 function Dots({ count = 10 }: { count?: number }) {
   return (
     <span className="inline-flex items-center gap-[3px] align-middle">
@@ -31,7 +22,12 @@ function fmt(v: number, currency: Currency, masked: boolean): React.ReactNode {
 }
 
 interface Props {
-  /** Raw USD totals — for the secondary USD label shown in INR mode. */
+  /**
+   * Raw USD totals — kept in the prop contract for callers (dashboard.tsx
+   * passes them from useCombinedPortfolio()), but no longer rendered here:
+   * the widget shows a single currency at a time, driven by the header's
+   * $/₹ toggle, never both side-by-side.
+   */
   accountValueUSD: number;
   upnlUSD: number;
   realizedPnlUSD?: number;
@@ -53,13 +49,9 @@ interface Props {
 }
 
 export default function AccountValueWidget({
-  accountValueUSD,
   accountValueDisplay,
-  upnlUSD,
   upnlDisplay,
-  realizedPnlUSD = 0,
   realizedPnlDisplay = 0,
-  netPnlUSD,
   netPnlDisplay,
   openPositions,
   openOrders,
@@ -69,12 +61,10 @@ export default function AccountValueWidget({
   const currency = useCurrencyStore(s => s.currency);
 
   const resolvedNetPnlDisplay = netPnlDisplay ?? (upnlDisplay + realizedPnlDisplay);
-  const resolvedNetPnlUSD     = netPnlUSD     ?? (upnlUSD + realizedPnlUSD);
 
   const upPos      = upnlDisplay >= 0;
   const realPos    = realizedPnlDisplay >= 0;
   const netPos     = resolvedNetPnlDisplay >= 0;
-  const showUSD    = currency === "INR"; // dual display only in INR mode
 
   return (
     <div className="stat-card-neutral overflow-hidden">
@@ -83,10 +73,10 @@ export default function AccountValueWidget({
         {/* Header row */}
         <div className="flex items-start justify-between mb-3">
           <button className="flex items-center gap-0.5 group" onClick={() => navigate("/balances")}>
-            <span className="text-[13px] font-semibold text-white/70 group-hover:text-white/90 transition-colors">
+            <span className="text-[13px] font-semibold transition-colors" style={{ color: "var(--stat-title)" }}>
               Account Value
             </span>
-            <ChevronRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/60 transition-colors" />
+            <ChevronRight className="w-3.5 h-3.5 transition-colors" style={{ color: "var(--stat-icon)" }} />
           </button>
           <motion.button
             whileTap={{ scale: 0.97 }}
@@ -105,19 +95,16 @@ export default function AccountValueWidget({
           </motion.button>
         </div>
 
-        {/* Value row — uses pre-converted display value, no extra conversion */}
+        {/* Value row — single-currency display, driven entirely by the header's
+            $/₹ toggle. No secondary amount in the other currency is ever shown. */}
         <div className="flex items-center gap-3">
-          <span className="text-[28px] font-black tracking-tight leading-none text-white">
+          <span className="text-[28px] font-black tracking-tight leading-none" style={{ color: "var(--stat-value)" }}>
             {masked ? <Dots count={9} /> : formatAmount(accountValueDisplay, currency)}
           </span>
-          {showUSD && (
-            <span className="text-[14px] font-semibold text-white/25 leading-none mt-1">
-              {masked ? <Dots count={6} /> : fUSD(accountValueUSD)}
-            </span>
-          )}
           <button
             onClick={() => setMasked(m => !m)}
-            className="ml-0.5 mt-1 text-white/30 hover:text-white/50 transition-colors"
+            className="ml-0.5 mt-1 transition-colors"
+            style={{ color: "var(--stat-icon)" }}
             aria-label={masked ? "Show" : "Hide"}
           >
             {masked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -129,82 +116,67 @@ export default function AccountValueWidget({
       <div
         className="mx-3 mb-3 rounded-xl grid grid-cols-2 overflow-hidden"
         style={{
-          background: "rgba(255,255,255,0.04)",
-          border: "1px solid rgba(255,255,255,0.07)",
+          background: "var(--elevate-1)",
+          border: "1px solid var(--surface-btn-border)",
         }}
       >
         {/* UPNL */}
-        <div className="px-3.5 py-3 border-r border-b border-white/[0.06]">
+        <div className="px-3.5 py-3 border-r border-b" style={{ borderColor: "var(--surface-btn-border)" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
-            <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
+            <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               UPNL
             </span>
-            <ChevronRight className="w-3 h-3 text-white/30" />
+            <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-black leading-none" style={{ color: upPos ? "#34d399" : "#f87171" }}>
               {fmt(upnlDisplay, currency, masked)}
             </span>
-            {showUSD && (
-              <span className="text-[11px] font-semibold text-white/25 leading-none">
-                {masked ? <Dots count={4} /> : `${upPos ? "+" : ""}${fUSD(upnlUSD)}`}
-              </span>
-            )}
           </div>
         </div>
 
         {/* Realized PNL */}
-        <div className="px-3.5 py-3 border-b border-white/[0.06]">
+        <div className="px-3.5 py-3 border-b" style={{ borderColor: "var(--surface-btn-border)" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
-            <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
+            <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Realized PNL
             </span>
-            <ChevronRight className="w-3 h-3 text-white/30" />
+            <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-black leading-none" style={{ color: realPos ? "#34d399" : "#f87171" }}>
               {fmt(realizedPnlDisplay, currency, masked)}
             </span>
-            {showUSD && (
-              <span className="text-[11px] font-semibold text-white/25 leading-none">
-                {masked ? <Dots count={4} /> : `${realPos ? "+" : ""}${fUSD(realizedPnlUSD)}`}
-              </span>
-            )}
           </div>
         </div>
 
         {/* Net PNL — tapping navigates to the PNL Analytics page */}
-        <div className="px-3.5 py-3 border-r border-white/[0.06]">
+        <div className="px-3.5 py-3 border-r" style={{ borderColor: "var(--surface-btn-border)" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/pnl")}>
-            <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
+            <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Net PNL
             </span>
-            <ChevronRight className="w-3 h-3 text-white/30" />
+            <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
             <span className="text-[15px] font-black leading-none" style={{ color: netPos ? "#34d399" : "#f87171" }}>
               {fmt(resolvedNetPnlDisplay, currency, masked)}
             </span>
-            {showUSD && (
-              <span className="text-[11px] font-semibold text-white/25 leading-none">
-                {masked ? <Dots count={4} /> : `${netPos ? "+" : ""}${fUSD(resolvedNetPnlUSD)}`}
-              </span>
-            )}
           </div>
         </div>
 
         {/* Positions / Orders */}
         <div className="px-3.5 py-3">
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
-            <span className="text-[11px] font-semibold text-white/40 group-hover:text-white/60 transition-colors">
+            <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Positions / Orders
             </span>
-            <ChevronRight className="w-3 h-3 text-white/30" />
+            <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-1.5">
-            <span className="text-[15px] font-black leading-none text-white/80">{openPositions}</span>
-            <span className="text-[15px] font-black leading-none text-white/25">/</span>
-            <span className="text-[15px] font-black leading-none text-white/80">{openOrders}</span>
+            <span className="text-[15px] font-black leading-none" style={{ color: "var(--stat-value)" }}>{openPositions}</span>
+            <span className="text-[15px] font-black leading-none" style={{ color: "var(--stat-sub)" }}>/</span>
+            <span className="text-[15px] font-black leading-none" style={{ color: "var(--stat-value)" }}>{openOrders}</span>
           </div>
         </div>
       </div>
