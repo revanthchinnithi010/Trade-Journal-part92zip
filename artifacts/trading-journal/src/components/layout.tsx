@@ -513,7 +513,39 @@ export const Layout = memo(function Layout({
           </div>
         )}
 
-        {pathname !== "/charts" && pathname !== "/position-detail" && (
+        {/* Balances — dedicated secondary header (no wordmark/search/bell/profile),
+            same visual language as the Position Details bar: back-arrow left,
+            page title centered, and here a USD/INR conversion toggle on the right
+            (the one control this page's data actually needs). */}
+        {pathname === "/balances" && (
+          <div
+            className="flex-shrink-0 flex items-center justify-between px-5"
+            style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
+          >
+            <button
+              onClick={() => navigate("/")}
+              className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+              style={{ width: 32, height: 32, background: "transparent" }}
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+            </button>
+            <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+              Balances
+            </span>
+            <button
+              onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
+              className="flex items-center justify-center gap-1 rounded-full active:scale-95 transition-transform"
+              style={{ width: 32, height: 32, background: "transparent", color: "#E8E8E8" }}
+              aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
+              title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
+            >
+              <span className="text-[15px] font-bold leading-none">{CURRENCY_META[currency].symbol}</span>
+            </button>
+          </div>
+        )}
+
+        {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && (
           <header
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
@@ -532,7 +564,7 @@ export const Layout = memo(function Layout({
                 its left edge — the pair is treated as one column and vertically
                 centered in the header alongside the menu button. */}
             <div className="flex items-center gap-2.5 shrink-0 z-10 min-w-0">
-              {(pathname === "/portfolio" || pathname === "/balances" || pathname === "/pnl" || pathname === "/net-pnl") ? (
+              {(pathname === "/portfolio" || pathname === "/pnl" || pathname === "/net-pnl") ? (
                 <button
                   onClick={() => navigate("/")}
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-white transition-all duration-150 shrink-0"
