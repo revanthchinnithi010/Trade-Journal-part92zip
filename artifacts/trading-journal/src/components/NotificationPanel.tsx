@@ -244,7 +244,7 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           top: 0, left: 0, right: 0, bottom: 0,
           height: "100%",
           display: "flex", flexDirection: "column",
-          background: "#121316",
+          background: "#000000",
           transform: open ? "translateX(0)" : "translateX(100%)",
           transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
           willChange: "transform",
