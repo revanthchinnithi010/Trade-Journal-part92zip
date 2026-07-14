@@ -4,6 +4,7 @@ import {
   TrendingUp, ArrowLeft,
   RefreshCw, ChevronRight, Wallet, Loader2,
   Clock, CheckCircle, XCircle, AlertCircle,
+  ArrowUp, ArrowDown, ArrowRight,
 } from "lucide-react";
 import { useCurrencyStore } from "@/store/currencyStore";
 import { useBrokerStore } from "@/store/brokerStore";
@@ -82,58 +83,90 @@ function WalletRow({ label, inr, usd, masked, badge, arrow }: {
   );
 }
 
-function PositionRow({ pos, onTap }: { pos: BrokerPosition; onTap: () => void }) {
-  const ticks = useTickStore(s => s.ticks);
-  const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
-  const symKey = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
+function baseCurrency(symbol: string): string {
+  // Strip common quote currencies to get the base (BTC from BTCUSDT, ETH from ETHUSD, etc.)
+  const base = symbol.replace(/USDT$|USD$|PERP$|\.P$/, "").replace(/-/g, "");
+  // If nothing was stripped (e.g. NAS100, XAUUSD already stripped), return empty
+  return base === symbol ? "" : base;
+}
+
+function fPrice(n: number): string {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () => void; isLast: boolean }) {
+  const ticks   = useTickStore(s => s.ticks);
+  const symKey  = pos.symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
   const livePrice = ticks[symKey]?.price ?? pos.markPrice;
-  const pnl = pos.side === "Long"
+  const pnl     = pos.side === "Long"
     ? (livePrice - pos.entryPrice) * pos.size
     : (pos.entryPrice - livePrice) * pos.size;
-  const pos_ = pnl >= 0;
+  const isPos   = pnl >= 0;
+  const pnlColor = isPos ? "#35C37A" : "#E0524F";
+  const unit    = baseCurrency(pos.symbol);
+
   return (
     <div
       onClick={onTap}
-      className="px-4 py-3.5 cursor-pointer transition-colors"
+      className="cursor-pointer"
       style={{
-        borderBottom: "1px solid rgba(255,255,255,0.05)",
+        padding: "18px",
+        borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.055)",
         WebkitTapHighlightColor: "transparent",
+        transition: "background 0.15s",
       }}
       onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <span
-            className="text-[10px] font-black px-2 py-0.5 rounded-md"
-            style={{
-              background: pos.side === "Long" ? "rgba(52,211,153,0.12)" : "rgba(248,113,113,0.12)",
-              color: pos.side === "Long" ? "#34d399" : "#f87171",
-            }}
-          >
-            {pos.side === "Long" ? "▲ LONG" : "▼ SHORT"}
-          </span>
-          <span className="text-[14px] font-black text-white">{pos.symbol}</span>
+      {/* Row 1 — Symbol | direction icon | PNL */}
+      <div className="flex items-center justify-between">
+        {/* Left: symbol */}
+        <span
+          className="font-semibold leading-none tracking-tight"
+          style={{ fontSize: 20, color: "#F0F0F0" }}
+        >
+          {pos.symbol}
+        </span>
+
+        {/* Center: direction arrow */}
+        <div className="flex-1 flex justify-center">
+          {pos.side === "Long"
+            ? <ArrowUp  className="w-[18px] h-[18px]" style={{ color: "#35C37A" }} strokeWidth={2.5} />
+            : <ArrowDown className="w-[18px] h-[18px]" style={{ color: "#E0524F" }} strokeWidth={2.5} />
+          }
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`text-[13px] font-black ${pos_ ? "text-emerald-400" : "text-red-400"}`}>
-            {pos_ ? "+" : ""}{fUSD(pnl)}
-          </span>
-          <ChevronRight className="w-3.5 h-3.5 text-white/20" />
-        </div>
+
+        {/* Right: live PNL */}
+        <span
+          className="font-bold leading-none"
+          style={{ fontSize: 20, color: pnlColor }}
+        >
+          {isPos ? "+" : ""}{fUSD(pnl)}
+        </span>
       </div>
-      <div className="grid grid-cols-4 gap-2">
-        {[
-          { label: "Entry", val: pos.entryPrice.toFixed(2) },
-          { label: "Mark", val: livePrice.toFixed(2), hi: true },
-          { label: "Size", val: String(pos.size) },
-          { label: "Lev", val: pos.leverage ? `${pos.leverage}x` : "—" },
-        ].map(({ label, val, hi }) => (
-          <div key={label}>
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-white/30 mb-0.5">{label}</p>
-            <p className={`text-[12px] font-bold ${hi ? "text-emerald-300" : "text-white/75"}`}>{val}</p>
-          </div>
-        ))}
+
+      {/* Row 2 — Entry price | arrow | size + unit */}
+      <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
+        {/* Left: entry price */}
+        <span
+          className="font-medium tabular-nums"
+          style={{ fontSize: 15, color: "#A0A0A0" }}
+        >
+          {fPrice(pos.entryPrice)}
+        </span>
+
+        {/* Center: thin right arrow */}
+        <div className="flex-1 flex justify-center">
+          <ArrowRight className="w-[13px] h-[13px]" style={{ color: "#A0A0A0", opacity: 0.4 }} strokeWidth={2} />
+        </div>
+
+        {/* Right: size + base currency */}
+        <span
+          className="font-medium tabular-nums"
+          style={{ fontSize: 15, color: "#A0A0A0" }}
+        >
+          {pos.size}{unit ? ` ${unit}` : ""}
+        </span>
       </div>
     </div>
   );
@@ -349,9 +382,9 @@ export default function Portfolio() {
                 <p className="text-[12px]" style={{ color: "#6B6B6B" }}>Loading positions…</p>
               </div>
             ) : positions.length > 0 ? (
-              <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-                {positions.map(pos => (
-                  <PositionRow key={pos.id} pos={pos} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
+              <div className="overflow-hidden" style={{ background: "#171717", border: "1px solid #2A2A2A", borderRadius: 18, boxShadow: "0 2px 16px rgba(0,0,0,0.35)" }}>
+                {positions.map((pos, i) => (
+                  <PositionRow key={pos.id} pos={pos} isLast={i === positions.length - 1} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
                 ))}
               </div>
             ) : openTrades.length > 0 ? (
