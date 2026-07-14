@@ -494,37 +494,11 @@ export const Layout = memo(function Layout({
             persistent header — swapping only its left control between hamburger
             and back-arrow — eliminates that gap entirely. */}
 
-        {/* Balances — dedicated secondary header (no wordmark/search/bell/profile),
-            same visual language as the Position Details bar: back-arrow left,
-            page title centered, and here a USD/INR conversion toggle on the right
-            (the one control this page's data actually needs). */}
-        {pathname === "/balances" && (
-          <div
-            className="flex-shrink-0 flex items-center justify-between px-5"
-            style={{ height: 56, background: "#000000", borderBottom: "1px solid #262626" }}
-          >
-            <button
-              onClick={() => navigate("/")}
-              className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
-              style={{ width: 32, height: 32, background: "transparent" }}
-              aria-label="Back"
-            >
-              <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
-            </button>
-            <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
-              Balances
-            </span>
-            <button
-              onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
-              className="flex items-center justify-center gap-1 rounded-full active:scale-95 transition-transform"
-              style={{ width: 32, height: 32, background: "transparent", color: "#E8E8E8" }}
-              aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
-              title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
-            >
-              <span className="text-[15px] font-bold leading-none">{CURRENCY_META[currency].symbol}</span>
-            </button>
-          </div>
-        )}
+        {/* Balances now renders its own self-contained secondary header
+            inside balances.tsx (same pattern as Portfolio) — it's mounted
+            position:fixed/inset:0 with its own z-index (see App.tsx's
+            "cover-detail" PageTransition), which sits above this Layout
+            header tree, so a header defined here would be invisible. */}
 
         {/* AnimatePresence with initial={false} so the header doesn't fade in
             on first load (it's already visible). Children added later — i.e.
