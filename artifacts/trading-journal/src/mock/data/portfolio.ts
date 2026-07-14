@@ -53,7 +53,12 @@ export const MOCK_DELTA_POSITIONS: BrokerPosition[] = [
     markPrice: 64842.1,
     unrealisedPnl: 165.4,
     leverage: "10",
-    raw: null,
+    raw: {
+      product_id: "pos-btc-1",
+      liquidation_price: "57762.45",
+      margin: "1604.51",
+      created_at: "2026-07-10T08:12:00Z",
+    },
   },
   {
     id: "pos-eth-1",
@@ -64,7 +69,12 @@ export const MOCK_DELTA_POSITIONS: BrokerPosition[] = [
     markPrice: 3378.2,
     unrealisedPnl: 51.9,
     leverage: "8",
-    raw: null,
+    raw: {
+      product_id: "pos-eth-1",
+      liquidation_price: "3754.08",
+      margin: "639.90",
+      created_at: "2026-07-11T14:35:00Z",
+    },
   },
   {
     id: "pos-sol-1",
@@ -75,7 +85,12 @@ export const MOCK_DELTA_POSITIONS: BrokerPosition[] = [
     markPrice: 145.65,
     unrealisedPnl: -30.6,
     leverage: "5",
-    raw: null,
+    raw: {
+      product_id: "pos-sol-1",
+      liquidation_price: "118.56",
+      margin: "355.68",
+      created_at: "2026-07-12T05:50:00Z",
+    },
   },
 ];
 
@@ -89,7 +104,11 @@ export const MOCK_CTRADER_POSITIONS: BrokerPosition[] = [
     markPrice: 18451.65,
     unrealisedPnl: 62.65,
     leverage: "20",
-    raw: null,
+    raw: {
+      positionId: "pos-nas-1",
+      usedMargin: 1842.04,
+      openTimestamp: new Date("2026-07-13T10:05:00Z").getTime(),
+    },
   },
 ];
 

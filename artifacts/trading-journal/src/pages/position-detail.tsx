@@ -61,7 +61,11 @@ function fINR(v: number, sign = false) {
 function formatDate(ts: string | number | undefined): string {
   if (!ts) return "—";
   try {
-    const d = new Date(typeof ts === "number" ? ts * 1000 : ts);
+    // Numeric timestamps arrive in different units per broker (cTrader/MT5
+    // time_msc: milliseconds; MT5 time / Unix-style: seconds) — treat
+    // anything already in the millisecond range (> ~2001 in ms) as-is,
+    // otherwise assume seconds and scale up.
+    const d = new Date(typeof ts === "number" ? (ts > 1e12 ? ts : ts * 1000) : ts);
     const now = new Date();
     const isToday =
       d.getDate() === now.getDate() &&
@@ -216,11 +220,26 @@ export default function PositionDetail() {
   const sideColor = position.side === "Long" ? GREEN : RED;
 
   const raw        = position.raw as Record<string, unknown> | null;
-  const liqPrice   = raw?.liquidation_price ? Number(raw.liquidation_price) : null;
-  const marginUsed = raw?.margin            ? Number(raw.margin)            : null;
-  const openedAt   = raw?.created_at ?? raw?.updated_at ?? null;
+
+  // Field names differ per broker's raw position payload — check every known
+  // variant (Delta: liquidation_price/margin/created_at; cTrader: usedMargin/
+  // openTimestamp, no liquidation price exposed; MT5: margin/time or time_msc).
+  const liqPriceRaw = raw?.liquidation_price ?? raw?.liq_price ?? null;
+  const liqPrice    = liqPriceRaw !== null && liqPriceRaw !== undefined ? Number(liqPriceRaw) : null;
+
+  const marginRaw   = raw?.margin ?? raw?.usedMargin ?? raw?.used_margin ?? raw?.maintenance_margin ?? null;
+  const marginUsed  = marginRaw !== null && marginRaw !== undefined && marginRaw !== ""
+    ? Number(marginRaw)
+    // Fallback: derive from notional value / leverage when the broker doesn't report margin directly.
+    : (position.leverage && Number(position.leverage) > 0
+        ? (position.size * position.entryPrice) / Number(position.leverage)
+        : null);
+
+  const openedAt   = (raw?.created_at ?? raw?.updated_at ?? raw?.openTimestamp ?? raw?.open_timestamp
+    ?? raw?.time_msc ?? raw?.time ?? raw?.setupTime ?? null) as string | number | null;
+
   const posValue   = position.size * position.entryPrice;
-  const positionId = raw?.id ?? raw?.order_id ?? raw?.position_id ?? null;
+  const positionId = raw?.id ?? raw?.order_id ?? raw?.position_id ?? raw?.product_id ?? raw?.positionId ?? null;
 
   const brokerLabel =
     activeBrokerId === "delta"   ? "Delta Exchange" :
