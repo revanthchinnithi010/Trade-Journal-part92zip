@@ -165,6 +165,9 @@ export default function PositionDetail() {
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [tpOrderType, setTpOrderType] = useState<"Market" | "Limit">("Limit");
   const [slOrderType, setSlOrderType] = useState<"Market" | "Limit">("Limit");
+  const [tpLimitPrice, setTpLimitPrice] = useState("");
+  const [slLimitPrice, setSlLimitPrice] = useState("");
+  const [showTpSlConfirm, setShowTpSlConfirm] = useState(false);
 
   useEffect(() => {
     if (!position) return;
@@ -260,22 +263,32 @@ export default function PositionDetail() {
 
   async function handleUpdateTpSl() {
     if (updating) return;
-    const tp = tpValue ? parseFloat(tpValue) : undefined;
-    const sl = slValue ? parseFloat(slValue) : undefined;
-    if (tp === undefined && sl === undefined) return;
+    if (!tpValue && !slValue) return;
     setUpdating(true);
     try {
-      await placeOrder({
-        symbol:     position.symbol,
-        side:       position.side === "Long" ? "Sell" : "Buy",
-        orderType:  "Limit",
-        qty:        position.size,
-        price:      tp,
-        stopPrice:  sl,
-        reduceOnly: true,
-      });
+      const exitSide = position.side === "Long" ? "Sell" : "Buy";
+      if (tpValue) {
+        await placeOrder({
+          symbol:     position.symbol,
+          side:       exitSide,
+          orderType:  tpOrderType,
+          qty:        String(position.size),
+          ...(tpOrderType === "Limit" ? { price: tpLimitPrice || tpValue } : {}),
+          takeProfit: tpValue,
+        });
+      }
+      if (slValue) {
+        await placeOrder({
+          symbol:     position.symbol,
+          side:       exitSide,
+          orderType:  slOrderType,
+          qty:        String(position.size),
+          ...(slOrderType === "Limit" ? { price: slLimitPrice || slValue } : {}),
+          stopLoss:   slValue,
+        });
+      }
     } catch { /* toast handled by broker service */ }
-    finally { setUpdating(false); }
+    finally { setUpdating(false); setShowTpSlConfirm(false); }
   }
 
   // ─── Trade detail rows ───────────────────────────────────────────────────────
@@ -467,6 +480,24 @@ export default function PositionDetail() {
                 <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
               </div>
 
+              {tpOrderType === "Limit" && (
+                <div
+                  className="flex items-center"
+                  style={{ height: 42, borderRadius: 12, border: "1px solid #2B2B2B", background: "#1A1A1A", padding: "0 12px", marginTop: 7 }}
+                >
+                  <input
+                    type="number"
+                    step="any"
+                    value={tpLimitPrice}
+                    onChange={e => setTpLimitPrice(e.target.value)}
+                    placeholder="Limit Price (optional)"
+                    className="flex-1 bg-transparent outline-none font-semibold"
+                    style={{ color: tpLimitPrice ? VALUE : "#6E6E6E", fontSize: 14 }}
+                  />
+                  <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
+                </div>
+              )}
+
               <div className="flex gap-2" style={{ marginTop: 9 }}>
                 {pctChips.map(p => (
                   <PctChip key={p} label={`${p}%`} accent={GREEN} onClick={() => setTpValue(tpPriceForPct(p).toFixed(2))} />
@@ -506,6 +537,24 @@ export default function PositionDetail() {
                 <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
               </div>
 
+              {slOrderType === "Limit" && (
+                <div
+                  className="flex items-center"
+                  style={{ height: 42, borderRadius: 12, border: "1px solid #2B2B2B", background: "#1A1A1A", padding: "0 12px", marginTop: 7 }}
+                >
+                  <input
+                    type="number"
+                    step="any"
+                    value={slLimitPrice}
+                    onChange={e => setSlLimitPrice(e.target.value)}
+                    placeholder="Limit Price (optional)"
+                    className="flex-1 bg-transparent outline-none font-semibold"
+                    style={{ color: slLimitPrice ? VALUE : "#6E6E6E", fontSize: 14 }}
+                  />
+                  <span className="font-medium" style={{ color: MUTED, fontSize: 11 }}>USD</span>
+                </div>
+              )}
+
               <div className="flex gap-2" style={{ marginTop: 9 }}>
                 {pctChips.map(p => (
                   <PctChip key={p} label={`${p}%`} accent={RED} onClick={() => setSlValue(slPriceForPct(p).toFixed(2))} />
@@ -522,7 +571,7 @@ export default function PositionDetail() {
 
             {/* Update TP/SL button */}
             <button
-              onClick={handleUpdateTpSl}
+              onClick={() => setShowTpSlConfirm(true)}
               disabled={!canUpdate}
               className="w-full rounded-2xl font-semibold active:scale-[0.98] transition-transform"
               style={{
@@ -607,6 +656,77 @@ export default function PositionDetail() {
                 }}
               >
                 {closing ? "Closing…" : "Confirm Close"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════ UPDATE TP/SL CONFIRMATION MODAL ═════════════════════════ */}
+      {showTpSlConfirm && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50"
+          style={{ background: "rgba(0,0,0,0.6)", padding: 20 }}
+          onClick={() => !updating && setShowTpSlConfirm(false)}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            className="w-full"
+            style={{ maxWidth: 340, background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 20, boxShadow: "0 4px 24px rgba(0,0,0,0.5)" }}
+          >
+            <p className="font-semibold" style={{ color: TITLE, fontSize: 16, marginBottom: 6 }}>
+              Update TP / SL?
+            </p>
+            <p className="font-normal" style={{ color: MUTED, fontSize: 13, lineHeight: 1.5, marginBottom: 14 }}>
+              Apply the following bracket order for <span style={{ color: VALUE, fontWeight: 600 }}>{position.symbol}</span>:
+            </p>
+
+            <div style={{ background: "#1A1A1A", border: "1px solid #2B2B2B", borderRadius: 12, padding: "10px 12px", marginBottom: 18 }}>
+              {tpValue && (
+                <div className="flex items-center justify-between" style={{ marginBottom: slValue ? 6 : 0 }}>
+                  <span className="font-medium" style={{ color: GREEN, fontSize: 12 }}>
+                    Take Profit ({tpOrderType})
+                  </span>
+                  <span className="font-semibold" style={{ color: VALUE, fontSize: 13 }}>
+                    {fmtCompact(parseFloat(tpValue))} USD
+                  </span>
+                </div>
+              )}
+              {slValue && (
+                <div className="flex items-center justify-between">
+                  <span className="font-medium" style={{ color: RED, fontSize: 12 }}>
+                    Stop Loss ({slOrderType})
+                  </span>
+                  <span className="font-semibold" style={{ color: VALUE, fontSize: 13 }}>
+                    {fmtCompact(parseFloat(slValue))} USD
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowTpSlConfirm(false)}
+                disabled={updating}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                style={{ height: 48, fontSize: 14, background: "#1D1D1D", color: "#F2F2F2", border: `1px solid ${BORDER}` }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleUpdateTpSl}
+                disabled={updating}
+                className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
+                style={{
+                  height: 48,
+                  fontSize: 14,
+                  background: "#202020",
+                  color: "#F2F2F2",
+                  border: `1px solid ${BORDER}`,
+                  cursor: updating ? "not-allowed" : "pointer",
+                }}
+              >
+                {updating ? "Updating…" : "Confirm"}
               </button>
             </div>
           </div>
