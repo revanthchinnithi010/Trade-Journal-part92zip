@@ -301,7 +301,7 @@ export default function Portfolio() {
   ];
 
   return (
-    <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6">
+    <div className="flex flex-col h-full min-h-0 pb-4 mx-auto w-full max-w-[1400px] px-4 md:px-6" style={{ background: "#000000" }}>
       {/* ── Scroll container ──
           Back navigation + page title live in the persistent global header
           (Layout.tsx). Balances now lives on its own dedicated page (reached
@@ -314,7 +314,7 @@ export default function Portfolio() {
       >
 
         {/* ══ Segmented control — sticky while scrolling ══ */}
-        <div className="sticky top-0 z-10 bg-background pt-3 pb-2 -mx-4 px-4 md:-mx-6 md:px-6">
+        <div className="sticky top-0 z-10 pt-3 pb-2 -mx-4 px-4 md:-mx-6 md:px-6" style={{ background: "#000000" }}>
           <SegmentedControl tabs={TABS} active={tab} onChange={setTab} />
         </div>
 
