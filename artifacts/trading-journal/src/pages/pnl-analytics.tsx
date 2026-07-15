@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
   CalendarDays, Target, Flame, Zap, Trophy, ArrowLeft,
@@ -395,6 +395,18 @@ export default function PnlAnalytics() {
 
   const pnlSign = (v: number) => (v > 0 ? "+" : "");
 
+  // Defer heavy chart mount until the entry animation (~240 ms) has finished.
+  // The cover-page-enter animation runs on the JS main thread; mounting
+  // ResponsiveContainer charts mid-animation gives them 0 dimensions → blank.
+  const [chartsReady, setChartsReady] = useState(false);
+  useEffect(() => {
+    let timerId: ReturnType<typeof setTimeout>;
+    const rafId = requestAnimationFrame(() => {
+      timerId = setTimeout(() => setChartsReady(true), 260);
+    });
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timerId); };
+  }, []);
+
   // ── All hooks must appear before any early returns ────────────────────
   const filterLabel = TIME_FILTERS.find(f => f.id === timeFilter)?.label ?? "All";
 
@@ -414,8 +426,8 @@ export default function PnlAnalytics() {
   const grossProfit = (stats?.averageWin  ?? 0) * (stats?.winCount  ?? 0);
   const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
 
-  // ── Loading skeleton — shown only while data is loading ──
-  const showSkeleton = pageState === "loading";
+  // ── Loading skeleton — shown while data is loading OR animation is in-flight ──
+  const showSkeleton = pageState === "loading" || !chartsReady;
   const loadingSkeleton = showSkeleton && (
     <div className="space-y-4 pb-12 px-4 sm:px-6 pt-4">
       <div className="grid grid-cols-2 gap-3">
