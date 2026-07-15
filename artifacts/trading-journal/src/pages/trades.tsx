@@ -608,136 +608,136 @@ export default function Trades() {
         }}
       />
 
-      {/* ── Table ── */}
+      {/* ── Trade list — Positions-style rows ── */}
       <div className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="border-b border-white/[0.06] bg-white/[0.02]">
-                {[
-                  { label: "Date", align: "" },
-                  { label: "Symbol", align: "" },
-                  { label: "Broker", align: "" },
-                  { label: "Direction", align: "" },
-                  { label: "Entry", align: "text-right" },
-                  { label: "Exit", align: "text-right" },
-                  { label: "PNL", align: "text-right" },
-                  { label: "RR", align: "" },
-                  { label: "Tags", align: "" },
-                  { label: "", align: "text-right" },
-                ].map((col) => (
-                  <th key={col.label} className={`px-5 py-3.5 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest ${col.align}`}>
-                    {col.label}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <AnimatedList as="tbody">
-              {!tradesResponse ? (
-                <tr>
-                  <td colSpan={10} className="px-5 py-12 text-center">
-                    <div className="space-y-3">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="h-10 rounded-xl shimmer-loading mx-4" />
-                      ))}
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredTrades.length === 0 ? (
-                <tr>
-                  <td colSpan={10} className="px-5 py-16 text-center text-muted-foreground text-sm">
-                    No trades match your filters.
-                  </td>
-                </tr>
-              ) : (
-                filteredTrades.map((trade, idx) => {
-                  const broker = BROKER_MAP[trade.symbol] || "—";
-                  const rr = trade.riskRewardRatio || 0;
-                  const setupTags = trade.setupTags ? trade.setupTags.split(",").filter(Boolean) : [];
 
-                  return (
-                    <AnimatedListItem
-                      as="tr"
-                      key={trade.id}
-                      index={idx}
-                      className="border-b border-white/[0.04] hover:bg-white/[0.03] transition-colors group cursor-pointer"
-                      onClick={() => setSelectedTradeId(trade.id)}
+        {/* Loading skeleton */}
+        {!tradesResponse ? (
+          <div>
+            {[...Array(6)].map((_, i) => (
+              <div
+                key={i}
+                style={{
+                  padding: "12px 18px",
+                  borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.055)" : "none",
+                }}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="h-4 w-28 rounded-lg shimmer-loading" />
+                  <div className="h-4 w-16 rounded-lg shimmer-loading" />
+                </div>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="h-3 w-20 rounded shimmer-loading" />
+                  <div className="h-3 w-14 rounded shimmer-loading" />
+                </div>
+              </div>
+            ))}
+          </div>
+
+        ) : filteredTrades.length === 0 ? (
+          <div className="px-5 py-16 text-center text-muted-foreground text-sm">
+            No trades match your filters.
+          </div>
+
+        ) : (
+          <div>
+            {filteredTrades.map((trade, idx) => {
+              const isLast    = idx === filteredTrades.length - 1;
+              const rr        = trade.riskRewardRatio || 0;
+              const setupTags = trade.setupTags ? trade.setupTags.split(",").filter(Boolean) : [];
+              const isWin     = trade.pnl >= 0;
+              const pnlColor  = isWin ? "#35C37A" : "#E0524F";
+              const dateStr   = new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+              const fPrice    = (v: number) => v < 1 ? v.toFixed(5) : fc(v);
+
+              return (
+                <div
+                  key={trade.id}
+                  onClick={() => setSelectedTradeId(trade.id)}
+                  className="cursor-pointer"
+                  style={{
+                    padding:                 "12px 18px",
+                    borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.055)",
+                    WebkitTapHighlightColor: "transparent",
+                    transition:              "background 0.15s",
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                >
+                  {/* Row 1 — Symbol + side badge | PNL */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="font-semibold leading-none"
+                        style={{ fontSize: 15, color: "#F0F0F0" }}
+                      >
+                        {trade.symbol}
+                      </span>
+                      <span
+                        className="font-semibold leading-none"
+                        style={{
+                          fontSize:      10,
+                          color:         trade.side === "long" ? "#35C37A" : "#E0524F",
+                          letterSpacing: "0.06em",
+                        }}
+                      >
+                        {trade.side === "long" ? "LONG" : "SHORT"}
+                      </span>
+                    </div>
+                    <span
+                      className="font-semibold leading-none tabular-nums"
+                      style={{ fontSize: 15, color: pnlColor }}
                     >
-                      <td className="px-5 py-3.5 text-[12px] text-muted-foreground whitespace-nowrap">
-                        {new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="font-black text-[13px] text-foreground tracking-tight">{trade.symbol}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-[12px] text-muted-foreground">{broker}</td>
-                      <td className="px-5 py-3.5">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-bold ${
-                          trade.side === "long" ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
-                        }`}>
-                          {trade.side.toUpperCase()}
+                      {isWin ? "+" : ""}{fc(trade.pnl)}
+                    </span>
+                  </div>
+
+                  {/* Row 2 — Entry price + meta | Date */}
+                  <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
+                    <div className="flex items-center gap-2.5">
+                      <span
+                        className="font-medium tabular-nums"
+                        style={{ fontSize: 12, color: "#6B6B6B" }}
+                      >
+                        {fPrice(trade.entryPrice)}
+                      </span>
+                      {rr > 0 && (
+                        <span
+                          className="font-bold tabular-nums"
+                          style={{
+                            fontSize: 10,
+                            color:    rr >= 2 ? "#35C37A" : rr >= 1 ? "#F59E0B" : "#E0524F",
+                            letterSpacing: "0.04em",
+                          }}
+                        >
+                          {rr.toFixed(1)}R
                         </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
-                        {trade.entryPrice < 1 ? trade.entryPrice.toFixed(5) : fc(trade.entryPrice)}
-                      </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-[12px] text-muted-foreground tabular-nums">
-                        {trade.exitPrice == null ? "—" : trade.exitPrice < 1 ? trade.exitPrice.toFixed(5) : fc(trade.exitPrice)}
-                      </td>
-                      <td className={`px-5 py-3.5 text-right font-mono font-bold text-[13px] tabular-nums ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                        {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {rr > 0 ? (
-                          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                            rr >= 2 ? "bg-emerald-500/10 text-emerald-400" :
-                            rr >= 1 ? "bg-amber-500/10 text-amber-400" :
-                            "bg-red-500/10 text-red-400"
-                          }`}>
-                            {rr.toFixed(1)}R
-                          </span>
-                        ) : <span className="text-muted-foreground/40 text-sm">—</span>}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex gap-1 flex-wrap">
-                          {setupTags.slice(0, 2).map(tag => (
-                            <span key={tag} className="text-[10px] px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/20 whitespace-nowrap">
-                              {tag}
-                            </span>
-                          ))}
-                          {setupTags.length > 2 && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-lg bg-white/[0.04] text-muted-foreground border border-white/[0.08]">
-                              +{setupTags.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-white hover:bg-white/[0.07] transition-all"
-                            onClick={() => setSelectedTradeId(trade.id)}
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10 transition-all"
-                            onClick={() => deleteTrade.mutate({ id: trade.id })}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </AnimatedListItem>
-                  );
-                })
-              )}
-            </AnimatedList>
-          </table>
-        </div>
+                      )}
+                      {setupTags[0] && (
+                        <span style={{ fontSize: 10, color: "#6B6B6B" }}>
+                          {setupTags[0]}{setupTags.length > 1 ? ` +${setupTags.length - 1}` : ""}
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className="font-medium tabular-nums"
+                      style={{ fontSize: 12, color: "#6B6B6B" }}
+                    >
+                      {dateStr}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {/* Pagination */}
         {tradesResponse && tradesResponse.total > 20 && (
-          <div className="flex items-center justify-between px-5 py-3.5 border-t border-white/[0.05] bg-white/[0.01]">
+          <div
+            className="flex items-center justify-between"
+            style={{ padding: "10px 18px", borderTop: "1px solid rgba(255,255,255,0.055)" }}
+          >
             <p className="text-[12px] text-muted-foreground">
               {(page - 1) * 20 + 1}–{Math.min(page * 20, tradesResponse.total)} of {tradesResponse.total}
             </p>
@@ -753,7 +753,8 @@ export default function Trades() {
             </div>
           </div>
         )}
-          </div>{/* /glass-card */}
+
+      </div>{/* /glass-card */}
         </div>{/* /inner padding div */}
       </div>{/* /scroll container */}
 
