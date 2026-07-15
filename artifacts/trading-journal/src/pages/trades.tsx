@@ -657,7 +657,7 @@ export default function Trades() {
                   className="cursor-pointer"
                   style={{
                     padding:                 "12px 18px",
-                    borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.055)",
+                    borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
                     WebkitTapHighlightColor: "transparent",
                     transition:              "background 0.15s",
                   }}
