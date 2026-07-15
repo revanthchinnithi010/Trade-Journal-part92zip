@@ -14,6 +14,11 @@ import { AnimatePresence } from "motion/react";
 import { PageTransition } from "@/components/animations/PageTransition";
 import { SplashScreen } from "@/components/animations/SplashScreen";
 import { getSymbolBreakdown, getGetSymbolBreakdownQueryKey } from "@workspace/api-client-react";
+// Static imports — no lazy()/Suspense — so these pages are always available
+// the instant the user navigates, with zero chunk-loading delay on first visit.
+// Neither page imports heavy libraries (no Recharts, no chart engine).
+import Portfolio     from "@/pages/portfolio";
+import Balances      from "@/pages/balances";
 
 const Dashboard   = lazy(() => import("@/pages/dashboard"));
 const Markets     = lazy(() => import("@/pages/markets"));
@@ -32,23 +37,14 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 // Charts is kept alive permanently — never unmounts on tab switch.
 // Using lazy() still splits the bundle (fast initial load), but the module
 // is preloaded eagerly in the background so the first tap to /charts is instant.
-const Charts      = lazy(() => import("@/pages/charts"));
-const NetPnl       = lazy(() => import("@/pages/NetPnLAnalytics"));
-const Trade        = lazy(() => import("@/pages/trade"));
-const NotFound      = lazy(() => import("@/pages/not-found"));
-const CtraderTest      = lazy(() => import("@/pages/ctrader-test"));
-
-// Critical pages reachable in one tap from Dashboard — start the import()
-// promise immediately at module-evaluation time (NOT inside a setTimeout).
-// lazy() still handles the Suspense wiring, but the underlying fetch is
-// in-flight from the very first millisecond so it always resolves before
-// any possible user interaction (~1-3 s on real devices).
-const _pPortfolio     = import("@/pages/portfolio");
-const _pBalances      = import("@/pages/balances");
+const Charts         = lazy(() => import("@/pages/charts"));
+const NetPnl         = lazy(() => import("@/pages/NetPnLAnalytics"));
+const Trade          = lazy(() => import("@/pages/trade"));
+const NotFound       = lazy(() => import("@/pages/not-found"));
+const CtraderTest    = lazy(() => import("@/pages/ctrader-test"));
+// Kept lazy — imports Recharts; start immediately so it's ready before navigation.
 const _pPnlAnalytics  = import("@/pages/pnl-analytics");
 const _pPositionDetail = import("@/pages/position-detail");
-const Portfolio      = lazy(() => _pPortfolio);
-const Balances       = lazy(() => _pBalances);
 const PnlAnalytics   = lazy(() => _pPnlAnalytics);
 const PositionDetail = lazy(() => _pPositionDetail);
 
@@ -305,9 +301,7 @@ function Router() {
     // time the user navigates, so Suspense never has anything to wait on and the
     // previous page is never left on screen past its own exit animation.
     const modules = [
-      // High-priority: pages reachable in 1 tap from Dashboard — load first
-      () => import("@/pages/portfolio"),
-      () => import("@/pages/balances"),
+      // High-priority: pages with heavy deps, reachable in 1 tap from Dashboard
       () => import("@/pages/pnl-analytics"),
       () => import("@/pages/position-detail"),
       // Tab pages
@@ -468,10 +462,13 @@ function Router() {
            charts mid-animation causes stutter. These pages use a pure CSS @keyframes
            scale+fade that runs on the GPU compositor independently of JS work.
            Visual feel matches Portfolio's cover-detail (scale 0.97→1, slight y lift). */}
-      {pathname === "/pnl"             && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics   /></div></Suspense>}
-      {pathname === "/balances"         && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances        /></div></Suspense>}
-      {pathname === "/portfolio"        && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Portfolio        /></div></Suspense>}
-      {pathname === "/position-detail"  && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}
+      {/* fallback={null} — no shimmer flash; user sees previous screen until chunk
+           resolves (immediate imports mean this is always near-instant). Static
+           imports (Portfolio/Balances) need no Suspense at all. */}
+      {pathname === "/pnl"             && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics   /></div></Suspense>}
+      {pathname === "/balances"         && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances        /></div>}
+      {pathname === "/portfolio"        && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Portfolio        /></div>}
+      {pathname === "/position-detail"  && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}
     </Layout>
   );
 }
