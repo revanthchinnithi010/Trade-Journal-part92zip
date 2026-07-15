@@ -449,15 +449,16 @@ function Router() {
              header/keep-alive content instead of flashing through it) instead of
              the old CSS side-slide, so open/close feels consistent with Portfolio. */}
         {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><NetPnl /></PageTransition></Suspense>}
-        {/* PNL Analytics ("Net PNL Analytics" — reached from the dashboard's
-             "Net PNL" stat) — uses the same cover-detail treatment as Portfolio
-             (fade + gentle zoom) instead of the old CSS side-slide, so open/close
-             feels consistent with Portfolio. */}
-        {pathname === "/pnl"              && <Suspense key="/pnl"              fallback={<PageLoader />}><PageTransition key="/pnl"              variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><PnlAnalytics /></PageTransition></Suspense>}
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
       </AnimatePresence>
 
+      {/* ── Cover-scale pages — CSS compositor animation, outside AnimatePresence ──
+           Framer Motion runs on the JS main thread via rAF, so mounting 5+ Recharts
+           charts mid-animation causes stutter. These pages use a pure CSS @keyframes
+           scale+fade that runs on the GPU compositor independently of JS work.
+           Visual feel matches Portfolio's cover-detail (scale 0.97→1, slight y lift). */}
+      {pathname === "/pnl" && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics /></div></Suspense>}
     </Layout>
   );
 }

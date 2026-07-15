@@ -32,6 +32,26 @@
   will-change: transform;
 }
 
+/* ─── Cover-page scale-in (compositor-thread, JS-independent) ─────── */
+/* Same visual feel as the Framer Motion "cover-detail" variant but runs
+   entirely on the GPU compositor — JS chart work can never block it.   */
+@keyframes cover-page-enter {
+  from { transform: scale(0.97) translateY(8px); opacity: 0.6; }
+  to   { transform: scale(1)    translateY(0);   opacity: 1;   }
+}
+@keyframes cover-page-exit {
+  from { transform: scale(1)    translateY(0);   opacity: 1;   }
+  to   { transform: scale(0.98) translateY(4px); opacity: 0;   }
+}
+.cover-page-enter {
+  animation: cover-page-enter 0.26s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+.cover-page-exit {
+  animation: cover-page-exit 0.15s cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: transform, opacity;
+}
+
 
 @custom-variant dark  (&:is(.dark *));
 @custom-variant light (&:is(.light *));
