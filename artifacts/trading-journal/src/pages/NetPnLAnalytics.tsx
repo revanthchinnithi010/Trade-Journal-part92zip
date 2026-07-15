@@ -26,7 +26,6 @@ import {
   Trophy,
   Target,
 } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DEV_MODE } from "@/mock/config";
 import { MOCK_NETPNL_TRADE_ROWS } from "@/mock/data/netpnl";
@@ -625,21 +624,21 @@ export default function NetPnLAnalytics() {
           setTrades(rows);
           return;
         }
-        if (!supabase) { setTrades([]); return; }
-        let q = supabase
-          .from("trades")
-          .select("pnl, exit_date")
-          .order("exit_date", { ascending: true });
-        const startIso = getStartIso(timeFilter);
-        if (startIso) q = q.gte("exit_date", startIso);
-        const { data, error: sbErr } = await q;
+        const res = await fetch("/api/stats/equity-curve");
         if (cancelled) return;
-        if (sbErr) { setError(sbErr.message); setTrades([]); return; }
-        const valid = (data ?? []).filter((r: Record<string, unknown>) => {
-          if (typeof r.pnl !== "number" || isNaN(r.pnl as number)) return false;
-          if (!r.exit_date) return false;
-          return !isNaN(new Date(r.exit_date as string).getTime());
-        }) as TradeRow[];
+        if (!res.ok) { setError(`Failed to load trades (${res.status})`); setTrades([]); return; }
+        const points = (await res.json()) as Array<{ date: string; pnl: number }>;
+        const startIso = getStartIso(timeFilter);
+        const startMs = startIso ? new Date(startIso).getTime() : null;
+        const valid = points
+          .filter((r) => {
+            if (typeof r.pnl !== "number" || isNaN(r.pnl)) return false;
+            if (!r.date) return false;
+            const t = new Date(r.date).getTime();
+            if (isNaN(t)) return false;
+            return startMs === null || t >= startMs;
+          })
+          .map((r) => ({ pnl: r.pnl, exit_date: r.date }));
         setTrades(valid);
       } catch (e) {
         if (cancelled) return;
