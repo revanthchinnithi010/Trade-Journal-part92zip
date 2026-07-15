@@ -1,8 +1,9 @@
 import { memo, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
-  CalendarDays, Target, Flame, Zap, Trophy,
+  CalendarDays, Target, Flame, Zap, Trophy, ArrowLeft,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import {
   useGetStatsSummary, useGetEquityCurve, useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
@@ -263,6 +264,7 @@ function StatItem({ label, value, sub, color }: {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 export default function PnlAnalytics() {
+  const [, navigate]  = useLocation();
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
 
   const fc            = useCurrencyFormatter();
@@ -420,20 +422,42 @@ export default function PnlAnalytics() {
   const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
 
   // ── Loading skeleton (after all hooks) ───────────────────────────────
-  if (pageState === "loading") {
-    return (
-      <PageTransition className="space-y-4 pb-12" fill={false}>
-        <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
-          {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
-        </div>
-        <div className="h-8 w-80 rounded-xl shimmer-loading" />
-        {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
-      </PageTransition>
-    );
-  }
+  const loadingSkeleton = pageState === "loading" && (
+    <PageTransition className="space-y-4 pb-12" fill={false}>
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+        {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
+      </div>
+      <div className="h-8 w-80 rounded-xl shimmer-loading" />
+      {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
+    </PageTransition>
+  );
 
   return (
-    <PageTransition className="space-y-4 pb-12" fill={false}>
+    <div className="flex flex-col h-full" style={{ background: "#000000" }}>
+
+      {/* ── Secondary header ── */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-5"
+        style={{ height: 56, borderBottom: "1px solid #262626" }}
+      >
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 32, height: 32, background: "transparent" }}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+        </button>
+        <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+          Net PNL Analytics
+        </span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+        {loadingSkeleton}
+        {pageState !== "loading" && <PageTransition className="space-y-4 pb-12" fill={false}>
 
       {/* ── Demo data banner ── */}
       {IS_DEMO && (
@@ -892,6 +916,8 @@ export default function PnlAnalytics() {
         </div>
       </AnimatedCard>
 
-    </PageTransition>
+    </PageTransition>}
+      </div>
+    </div>
   );
 }
