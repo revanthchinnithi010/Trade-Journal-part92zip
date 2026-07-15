@@ -295,28 +295,31 @@ function Router() {
     // time the user navigates, so Suspense never has anything to wait on and the
     // previous page is never left on screen past its own exit animation.
     const modules = [
+      // High-priority: pages reachable in 1 tap from Dashboard — load first
+      () => import("@/pages/portfolio"),
+      () => import("@/pages/balances"),
+      () => import("@/pages/pnl-analytics"),
+      () => import("@/pages/position-detail"),
+      // Tab pages
       () => import("@/pages/charts"),
       () => import("@/pages/dashboard"),
       () => import("@/pages/markets"),
       () => import("@/pages/trades"),
       () => import("@/pages/reports"),
+      () => import("@/pages/alerts"),
+      // Secondary pages
       () => import("@/pages/calendar"),
       () => import("@/pages/notebook"),
       () => import("@/pages/settings"),
       () => import("@/pages/brokers"),
-      () => import("@/pages/alerts"),
       () => import("@/pages/calc-crypto"),
       () => import("@/pages/calc-forex"),
       () => import("@/pages/calc-position"),
       () => import("@/pages/calc-margin"),
       () => import("@/pages/calc-risk"),
-      () => import("@/pages/portfolio"),
-      () => import("@/pages/balances"),
-      () => import("@/pages/pnl-analytics"),
       () => import("@/pages/NetPnLAnalytics"),
       () => import("@/pages/trade"),
       () => import("@/pages/ctrader-test"),
-      () => import("@/pages/position-detail"),
     ];
     const timers: ReturnType<typeof setTimeout>[] = [];
     const id = setTimeout(() => {
@@ -438,7 +441,6 @@ function Router() {
              column can't jolt the dashboard (or any keep-alive page) before
              the entry animation runs, and it immediately occludes the Layout
              header/keep-alive content instead of fading in over it. */}
-        {pathname === "/balances"         && <Suspense key="/balances"         fallback={<PageLoader />}><PageTransition key="/balances"         variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Balances /></PageTransition></Suspense>}
         {/* position: fixed so the page is viewport-anchored and immune to the
             parent flex layout shifting (main header mounting/unmounting adds/
             removes 60 px from the flex column, which previously jolted the
@@ -458,7 +460,8 @@ function Router() {
            charts mid-animation causes stutter. These pages use a pure CSS @keyframes
            scale+fade that runs on the GPU compositor independently of JS work.
            Visual feel matches Portfolio's cover-detail (scale 0.97→1, slight y lift). */}
-      {pathname === "/pnl" && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics /></div></Suspense>}
+      {pathname === "/pnl"      && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics /></div></Suspense>}
+      {pathname === "/balances" && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances /></div></Suspense>}
     </Layout>
   );
 }

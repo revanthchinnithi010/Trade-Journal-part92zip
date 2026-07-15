@@ -4,7 +4,6 @@ import { motion, AnimatePresence } from "motion/react";
 import { Wifi, WifiOff, Loader2, ChevronDown } from "lucide-react";
 import { useCurrencyStore, formatAmount } from "@/store/currencyStore";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { cardVariants } from "@/animations/motion";
 import type { AccountSnapshot } from "@/store/accountTypes";
 
 // Balances page numeric styling — dense, professional (Bloomberg/Bybit/Binance
@@ -176,17 +175,9 @@ export default function AccountCard({ account, index = 0 }: Props) {
     </div>
   );
 
-  if (reduced) return content;
-
-  return (
-    <motion.div
-      variants={cardVariants}
-      custom={index}
-      initial="hidden"
-      animate="visible"
-      className="h-full"
-    >
-      {content}
-    </motion.div>
-  );
+  // No entrance animation on the card wrapper — the page itself (cover-page-enter
+  // CSS compositor animation) already provides the entrance. Staggered card
+  // fade-ins on top of the page animation created a double-layer effect that
+  // looked like "loading" on first open.
+  return <div className="h-full">{content}</div>;
 }
