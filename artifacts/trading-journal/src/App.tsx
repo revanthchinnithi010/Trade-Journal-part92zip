@@ -444,12 +444,16 @@ function Router() {
             removes 60 px from the flex column, which previously jolted the
             position:absolute content-div before the slide animation could run). */}
         {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><PositionDetail /></PageTransition></Suspense>}
-        {pathname === "/pnl"              && <Suspense key="/pnl"              fallback={<PageLoader />}><PageTransition key="/pnl"              variant="slide" style={{ position: "fixed", inset: 0, zIndex: 50 }}><PnlAnalytics /></PageTransition></Suspense>}
-        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="slide" style={{ position: "fixed", inset: 0, zIndex: 50 }}><NetPnl /></PageTransition></Suspense>}
-
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
       </AnimatePresence>
+
+      {/* ── Push-navigation pages — CSS compositor slide, outside AnimatePresence ──
+           Framer Motion runs on the JS main thread via rAF, so a heavy React render
+           (7+ Recharts charts) blocks it. These pages use a pure CSS @keyframes slide
+           that runs on the GPU compositor independently of JS work. */}
+      {pathname === "/pnl"     && <Suspense fallback={<PageLoader />}><div className="push-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics /></div></Suspense>}
+      {pathname === "/net-pnl" && <Suspense fallback={<PageLoader />}><div className="push-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><NetPnl /></div></Suspense>}
     </Layout>
   );
 }

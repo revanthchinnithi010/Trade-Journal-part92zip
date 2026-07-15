@@ -1,7 +1,7 @@
 // Net PNL Analytics — redesigned dashboard layout
 // Header, back button, and page title are rendered by the shared Layout
 // (see components/layout.tsx, keyed on the "/net-pnl" pathname).
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -613,6 +613,16 @@ export default function NetPnLAnalytics() {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
 
+  // Defer heavy chart render until after CSS entry animation completes.
+  const [chartsReady, setChartsReady] = useState(false);
+  useEffect(() => {
+    let timerId: ReturnType<typeof setTimeout>;
+    const rafId = requestAnimationFrame(() => {
+      timerId = setTimeout(() => setChartsReady(true), 320);
+    });
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timerId); };
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -697,7 +707,17 @@ export default function NetPnLAnalytics() {
 
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
-    <div
+        {/* Skeleton shown while entry animation plays (chartsReady=false) */}
+        {!chartsReady && (
+          <div className="space-y-4 px-4 sm:px-6 pt-4 pb-12">
+            <div className="grid grid-cols-2 gap-3">
+              {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
+            </div>
+            <div className="h-8 w-64 rounded-xl shimmer-loading" />
+            {[...Array(4)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
+          </div>
+        )}
+        {chartsReady && <div
       className="py-4 space-y-4 w-full"
       style={{ maxWidth: 1400, margin: "0 auto" }}
     >
@@ -1052,7 +1072,7 @@ export default function NetPnLAnalytics() {
 
       {/* bottom spacing */}
       <div className="h-2" />
-    </div>
+    </div>}
     </div>
     </div>
   );

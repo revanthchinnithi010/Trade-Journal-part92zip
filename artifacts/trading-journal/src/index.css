@@ -14,6 +14,24 @@
 .neon-sheet-enter  { animation: sheet-slide-up 0.30s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .neon-overlay-enter{ animation: sheet-fade-in  0.22s ease both; }
 
+/* ─── Push-page slide (compositor-thread, JS-independent) ─────────── */
+@keyframes push-page-enter {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+@keyframes push-page-exit {
+  from { transform: translateX(0); }
+  to   { transform: translateX(100%); }
+}
+.push-page-enter {
+  animation: push-page-enter 0.32s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform;
+}
+.push-page-exit {
+  animation: push-page-exit 0.22s cubic-bezier(0.4, 0, 1, 1) both;
+  will-change: transform;
+}
+
 
 @custom-variant dark  (&:is(.dark *));
 @custom-variant light (&:is(.light *));
