@@ -478,7 +478,8 @@ export default function Trades() {
     if (!tradesResponse) return [];
     return tradesResponse.trades.filter(t => {
       const broker = BROKER_MAP[t.symbol] || "";
-      return (sideFilter === "all" || t.side === sideFilter) &&
+      return t.exitPrice != null &&
+             (sideFilter === "all" || t.side === sideFilter) &&
              (brokerFilter === "all" || broker === brokerFilter);
     });
   }, [tradesResponse, sideFilter, brokerFilter]);
