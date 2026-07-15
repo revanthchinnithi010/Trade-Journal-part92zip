@@ -821,9 +821,9 @@ body.tj-modal-open .animate-pulse {
 
 .shimmer-loading {
   background: linear-gradient(90deg,
-    rgba(12, 14, 18, 0.40) 25%,
-    rgba(255, 255, 255, 0.03) 50%,
-    rgba(12, 14, 18, 0.40) 75%
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.05) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.8s ease-in-out infinite;
