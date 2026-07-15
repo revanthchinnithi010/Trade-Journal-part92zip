@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo, useState, useEffect } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
   CalendarDays, Target, Flame, Zap, Trophy, ArrowLeft,
@@ -283,6 +283,20 @@ export default function PnlAnalytics() {
   const pageState: PageState = !queriesSettled ? "loading" : hasLiveData ? "live" : "demo";
   const IS_DEMO = pageState === "demo";
 
+  // Defer heavy chart mount until the page's entry animation (cover-detail,
+  // 240ms) has finished. Framer Motion drives that animation on the JS main
+  // thread, so committing 5+ Recharts charts mid-animation causes visible
+  // stutter — mounting the lightweight skeleton first lets the animation
+  // finish smoothly, then swaps in the real charts right after.
+  const [chartsReady, setChartsReady] = useState(false);
+  useEffect(() => {
+    let timerId: ReturnType<typeof setTimeout>;
+    const rafId = requestAnimationFrame(() => {
+      timerId = setTimeout(() => setChartsReady(true), 260);
+    });
+    return () => { cancelAnimationFrame(rafId); clearTimeout(timerId); };
+  }, []);
+
   const stats   = pageState === "live" ? liveStats   : pageState === "demo" ? DEMO_STATS   : undefined;
   const equity  = pageState === "live" ? liveEquity  : pageState === "demo" ? DEMO_EQUITY_CURVE : undefined;
   const calData = pageState === "live" ? liveCalData : pageState === "demo" ? getDemoCalendarHeatmap(now.getFullYear(), now.getMonth() + 1) : undefined;
@@ -414,8 +428,9 @@ export default function PnlAnalytics() {
   const grossProfit = (stats?.averageWin  ?? 0) * (stats?.winCount  ?? 0);
   const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
 
-  // ── Loading skeleton — shown only while data is actually loading ──
-  const showSkeleton = pageState === "loading";
+  // ── Loading skeleton — shown while data is loading OR the entry animation
+  //    hasn't finished yet (keeps heavy charts off the JS thread mid-animation) ──
+  const showSkeleton = pageState === "loading" || !chartsReady;
   const loadingSkeleton = showSkeleton && (
     <div className="space-y-4 pb-12 px-4 sm:px-6 pt-4">
       <div className="grid grid-cols-2 gap-3">
