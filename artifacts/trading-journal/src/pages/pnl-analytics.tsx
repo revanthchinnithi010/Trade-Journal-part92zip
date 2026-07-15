@@ -423,13 +423,13 @@ export default function PnlAnalytics() {
 
   // ── Loading skeleton (after all hooks) ───────────────────────────────
   const loadingSkeleton = pageState === "loading" && (
-    <PageTransition className="space-y-4 pb-12" fill={false}>
+    <div className="space-y-4 pb-12 p-5">
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
       </div>
       <div className="h-8 w-80 rounded-xl shimmer-loading" />
       {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
-    </PageTransition>
+    </div>
   );
 
   return (
@@ -457,7 +457,7 @@ export default function PnlAnalytics() {
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
         {loadingSkeleton}
-        {pageState !== "loading" && <PageTransition className="space-y-4 pb-12" fill={false}>
+        {pageState !== "loading" && <div className="space-y-4 pb-12">
 
       {/* ── Demo data banner ── */}
       {IS_DEMO && (
@@ -916,7 +916,7 @@ export default function PnlAnalytics() {
         </div>
       </AnimatedCard>
 
-    </PageTransition>}
+    </div>}
       </div>
     </div>
   );
