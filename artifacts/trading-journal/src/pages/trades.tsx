@@ -608,8 +608,8 @@ export default function Trades() {
         }}
       />
 
-      {/* ── Trade list — Positions-style rows ── */}
-      <div className="glass-card overflow-hidden">
+      {/* ── Trade list ── */}
+      <div>
 
         {/* Loading skeleton */}
         {!tradesResponse ? (
