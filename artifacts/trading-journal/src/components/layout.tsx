@@ -509,7 +509,7 @@ export const Layout = memo(function Layout({
             while mode="wait" finished the portfolio exit before the position-
             detail header could start entering. */}
         <AnimatePresence initial={false}>
-          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && pathname !== "/portfolio" && (
+          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && pathname !== "/portfolio" && pathname !== "/net-pnl" && (
           <motion.header
             key="main-header"
             initial={{ opacity: 0 }}
@@ -870,8 +870,8 @@ export const Layout = memo(function Layout({
           right:         0,
           bottom:        0,
           zIndex:        60,
-          visibility:    (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances") ? "hidden" : "visible",
-          pointerEvents: (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances") ? "none"   : "auto",
+          visibility:    (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl") ? "hidden" : "visible",
+          pointerEvents: (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl") ? "none"   : "auto",
         }}>
           <MobileBottomNav />
         </div>

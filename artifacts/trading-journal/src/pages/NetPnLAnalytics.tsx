@@ -25,7 +25,9 @@ import {
   Calendar,
   Trophy,
   Target,
+  ArrowLeft,
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DEV_MODE } from "@/mock/config";
 import { MOCK_NETPNL_TRADE_ROWS } from "@/mock/data/netpnl";
@@ -605,6 +607,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function NetPnLAnalytics() {
+  const [, navigate]  = useLocation();
   const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
   const [trades,     setTrades]     = useState<TradeRow[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -671,6 +674,29 @@ export default function NetPnLAnalytics() {
 
 
   return (
+    <div className="flex flex-col h-full" style={{ background: "#000000" }}>
+
+      {/* ── Secondary header ── */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-5"
+        style={{ height: 56, borderBottom: "1px solid #262626" }}
+      >
+        <button
+          onClick={() => navigate("/")}
+          className="flex items-center justify-center rounded-full active:scale-95 transition-transform"
+          style={{ width: 32, height: 32, background: "transparent" }}
+          aria-label="Back"
+        >
+          <ArrowLeft className="w-5 h-5" style={{ color: "#E8E8E8" }} />
+        </button>
+        <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
+          Net PNL Analytics
+        </span>
+        <div style={{ width: 32 }} />
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
     <div
       className="py-4 space-y-4 w-full"
       style={{ maxWidth: 1400, margin: "0 auto" }}
@@ -1026,6 +1052,8 @@ export default function NetPnLAnalytics() {
 
       {/* bottom spacing */}
       <div className="h-2" />
+    </div>
+    </div>
     </div>
   );
 }
