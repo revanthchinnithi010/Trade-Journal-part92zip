@@ -33,14 +33,24 @@ const CalcRisk    = lazy(() => import("@/pages/calc-risk"));
 // Using lazy() still splits the bundle (fast initial load), but the module
 // is preloaded eagerly in the background so the first tap to /charts is instant.
 const Charts      = lazy(() => import("@/pages/charts"));
-const Portfolio    = lazy(() => import("@/pages/portfolio"));
-const Balances     = lazy(() => import("@/pages/balances"));
-const PnlAnalytics = lazy(() => import("@/pages/pnl-analytics"));
 const NetPnl       = lazy(() => import("@/pages/NetPnLAnalytics"));
 const Trade        = lazy(() => import("@/pages/trade"));
 const NotFound      = lazy(() => import("@/pages/not-found"));
 const CtraderTest      = lazy(() => import("@/pages/ctrader-test"));
-const PositionDetail   = lazy(() => import("@/pages/position-detail"));
+
+// Critical pages reachable in one tap from Dashboard — start the import()
+// promise immediately at module-evaluation time (NOT inside a setTimeout).
+// lazy() still handles the Suspense wiring, but the underlying fetch is
+// in-flight from the very first millisecond so it always resolves before
+// any possible user interaction (~1-3 s on real devices).
+const _pPortfolio     = import("@/pages/portfolio");
+const _pBalances      = import("@/pages/balances");
+const _pPnlAnalytics  = import("@/pages/pnl-analytics");
+const _pPositionDetail = import("@/pages/position-detail");
+const Portfolio      = lazy(() => _pPortfolio);
+const Balances       = lazy(() => _pBalances);
+const PnlAnalytics   = lazy(() => _pPnlAnalytics);
+const PositionDetail = lazy(() => _pPositionDetail);
 
 const FETCH_TIMEOUT_MS = 8_000;
 
@@ -431,7 +441,6 @@ function Router() {
         {/* position: fixed — viewport-anchored so the portfolio secondary header
             mounting in Layout's flex column cannot jolt the dashboard (or any
             other keep-alive page) downward before the entry animation runs. */}
-        {pathname === "/portfolio"        && <Suspense key="/portfolio"        fallback={<PageLoader />}><PageTransition key="/portfolio"        variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Portfolio /></PageTransition></Suspense>}
         {/* Balances manages its own full-height black scroll region (matching
              the forced-black secondary header in Layout.tsx) instead of
              StandardPageWrapper's themed page background, so there's no
@@ -445,7 +454,6 @@ function Router() {
             parent flex layout shifting (main header mounting/unmounting adds/
             removes 60 px from the flex column, which previously jolted the
             position:absolute content-div before the slide animation could run). */}
-        {pathname === "/position-detail"  && <Suspense key="/position-detail"  fallback={<PageLoader />}><PageTransition key="/position-detail"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><PositionDetail /></PageTransition></Suspense>}
         {/* Net PNL Analytics — uses the same cover-detail treatment as Portfolio
              (fade + gentle zoom, immediately opaque so it occludes the Layout
              header/keep-alive content instead of flashing through it) instead of
@@ -460,8 +468,10 @@ function Router() {
            charts mid-animation causes stutter. These pages use a pure CSS @keyframes
            scale+fade that runs on the GPU compositor independently of JS work.
            Visual feel matches Portfolio's cover-detail (scale 0.97→1, slight y lift). */}
-      {pathname === "/pnl"      && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics /></div></Suspense>}
-      {pathname === "/balances" && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances /></div></Suspense>}
+      {pathname === "/pnl"             && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics   /></div></Suspense>}
+      {pathname === "/balances"         && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances        /></div></Suspense>}
+      {pathname === "/portfolio"        && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Portfolio        /></div></Suspense>}
+      {pathname === "/position-detail"  && <Suspense fallback={<PageLoader />}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}
     </Layout>
   );
 }
