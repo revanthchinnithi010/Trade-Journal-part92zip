@@ -84,7 +84,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
         )}
         {entry && entry.trades > 0 && (
           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 hidden group-hover/cell:block pointer-events-none">
-            <div className="glass-card px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-xl border-white/10">
+            <div className="dash-card px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-xl">
               <p className={`font-bold ${entry.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fc(entry.pnl)}</p>
               <p className="text-muted-foreground">{entry.trades} trade{entry.trades !== 1 ? "s" : ""}</p>
             </div>
@@ -179,10 +179,10 @@ const Dashboard = memo(function Dashboard() {
     // now that Dashboard is kept mounted (see DASHBOARD_NODE in App.tsx),
     // not on every tab switch.
     return (
-      <div className="space-y-4 pb-12">
-        <div className="glass-card shimmer-loading rounded-2xl" style={{ height: 176 }} />
-        <div className="rounded-2xl shimmer-loading" style={{ height: 302 }} />
-        <div className="rounded-2xl shimmer-loading" style={{ height: 340 }} />
+      <div className="min-h-full space-y-4 pb-12" style={{ background: "#000000" }}>
+        <div className="dash-card shimmer-loading" style={{ height: 176 }} />
+        <div className="dash-card shimmer-loading" style={{ height: 302 }} />
+        <div className="dash-card shimmer-loading" style={{ height: 340 }} />
       </div>
     );
   }
@@ -190,10 +190,10 @@ const Dashboard = memo(function Dashboard() {
   const apiOffline = tradesError;
 
   return (
-    <PageTransition className="space-y-4 pb-12" fill={false}>
+    <PageTransition className="space-y-4 pb-12" style={{ minHeight: "100%", background: "#000000" }} fill={false}>
 
       {apiOffline && (
-        <div className="glass-card px-5 py-3 flex items-center gap-3 border-amber-500/20 bg-amber-500/[0.04]">
+        <div className="dash-card px-5 py-3 flex items-center gap-3 border-amber-500/20 bg-amber-500/[0.04]">
           <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
           <p className="text-[12px] text-amber-400 font-medium">
             API server offline — dashboard showing cached or empty data
@@ -226,7 +226,7 @@ const Dashboard = memo(function Dashboard() {
       />
 
       {/* ── Trading Calendar ── */}
-      <AnimatedCard index={1} className="glass-card overflow-hidden">
+      <AnimatedCard index={1} className="dash-card overflow-hidden">
         <div className="p-5 pb-2 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
@@ -253,7 +253,7 @@ const Dashboard = memo(function Dashboard() {
       </AnimatedCard>
 
       {/* ── Recent Trades ── */}
-      <AnimatedCard index={2} className="glass-card overflow-hidden">
+      <AnimatedCard index={2} className="dash-card overflow-hidden">
         <div className="px-5 pt-5 pb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">

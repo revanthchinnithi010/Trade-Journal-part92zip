@@ -67,7 +67,7 @@ export default function AccountValueWidget({
   const netPos     = resolvedNetPnlDisplay >= 0;
 
   return (
-    <div className="stat-card-neutral overflow-hidden">
+    <div className="dash-account-card overflow-hidden">
       {/* ── Main section ── */}
       <div className="px-4 pt-4 pb-3">
         {/* Header row */}
@@ -116,12 +116,12 @@ export default function AccountValueWidget({
       <div
         className="mx-3 mb-3 rounded-xl grid grid-cols-2 overflow-hidden"
         style={{
-          background: "var(--elevate-1)",
-          border: "1px solid var(--surface-btn-border)",
+          background: "#1D1D1D",
+          border: "1px solid #252525",
         }}
       >
         {/* UPNL */}
-        <div className="px-3.5 py-3 border-r border-b" style={{ borderColor: "var(--surface-btn-border)" }}>
+        <div className="px-3.5 py-3 border-r border-b" style={{ borderColor: "#252525" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               UPNL
@@ -136,7 +136,7 @@ export default function AccountValueWidget({
         </div>
 
         {/* Realized PNL */}
-        <div className="px-3.5 py-3 border-b" style={{ borderColor: "var(--surface-btn-border)" }}>
+        <div className="px-3.5 py-3 border-b" style={{ borderColor: "#252525" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Realized PNL
@@ -151,7 +151,7 @@ export default function AccountValueWidget({
         </div>
 
         {/* Net PNL — tapping navigates to the PNL Analytics page */}
-        <div className="px-3.5 py-3 border-r" style={{ borderColor: "var(--surface-btn-border)" }}>
+        <div className="px-3.5 py-3 border-r" style={{ borderColor: "#252525" }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/pnl")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Net PNL

@@ -489,6 +489,32 @@ body.tj-modal-open .animate-pulse {
 }
 
 
+/* ── Dashboard-only flat cards ─────────────────────────────────────────────
+   Dashboard's page background is forced to pure #000000 (deep black), unlike
+   the rest of the app which sits on the themed --body-bg gradient. The shared
+   .glass-card / .stat-card-neutral tones (dark blue-grey, ~#131417–#181A1E)
+   were designed to sit on top of that gradient and read as barely-there on
+   true black — so Dashboard gets its own flat #151515/#252525 card language
+   (matching Portfolio/Balances) instead of reusing those shared classes. */
+.dash-card {
+  background: #151515;
+  border: 1px solid #252525;
+  border-radius: 20px;
+}
+
+.dash-account-card {
+  --stat-title: rgba(255, 255, 255, 0.72);
+  --stat-value: #FFFFFF;
+  --stat-sub:   rgba(255, 255, 255, 0.55);
+  --stat-icon:  rgba(255, 255, 255, 0.55);
+  background: #151515;
+  border: 1px solid #252525;
+  border-radius: 24px;
+  transition: filter 0.15s ease;
+}
+.dash-account-card:hover  { filter: brightness(1.05); }
+.dash-account-card:active { filter: brightness(0.97); }
+
 .glass-card {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.01) 100%),
