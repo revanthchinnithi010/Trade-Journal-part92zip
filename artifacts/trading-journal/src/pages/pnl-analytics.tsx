@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
   CalendarDays, Target, Flame, Zap, Trophy, ArrowLeft,
@@ -395,18 +395,6 @@ export default function PnlAnalytics() {
 
   const pnlSign = (v: number) => (v > 0 ? "+" : "");
 
-  // Defer heavy chart mount until the entry animation (~240 ms) has finished.
-  // The cover-page-enter animation runs on the JS main thread; mounting
-  // ResponsiveContainer charts mid-animation gives them 0 dimensions → blank.
-  const [chartsReady, setChartsReady] = useState(false);
-  useEffect(() => {
-    let timerId: ReturnType<typeof setTimeout>;
-    const rafId = requestAnimationFrame(() => {
-      timerId = setTimeout(() => setChartsReady(true), 260);
-    });
-    return () => { cancelAnimationFrame(rafId); clearTimeout(timerId); };
-  }, []);
-
   // ── All hooks must appear before any early returns ────────────────────
   const filterLabel = TIME_FILTERS.find(f => f.id === timeFilter)?.label ?? "All";
 
@@ -429,7 +417,7 @@ export default function PnlAnalytics() {
   // ── Loading skeleton — shown while data is loading OR entry animation is in-flight ──
   // The full-page skeleton covers the header area too, so the real header and
   // cards all appear together in one shot instead of the header popping in first.
-  const showSkeleton = pageState === "loading" || !chartsReady;
+  const showSkeleton = pageState === "loading";
 
   if (showSkeleton) {
     return (

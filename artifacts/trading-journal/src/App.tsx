@@ -249,6 +249,41 @@ const REPORTS_NODE = (
   </Suspense>
 );
 
+/**
+ * PnlAnalytics keep-alive wrapper — same pattern as DashboardKeepAlive /
+ * ReportsKeepAlive. Keeping PnlAnalytics permanently mounted means navigating
+ * to "/pnl" is an instant display:flex toggle on an already-rendered, already-
+ * fetched tree — no skeleton, no refetch, no chart-defer delay on every open.
+ */
+function PnlAnalyticsKeepAlive() {
+  return <PnlAnalytics />;
+}
+
+/**
+ * Gates when the PnlAnalytics keep-alive subtree mounts in the background.
+ * Delayed slightly past ReportsPreload (400 ms) so three heavy subtrees never
+ * race on startup. If the user navigates to /pnl before the timer fires the
+ * gate short-circuits immediately so the page never shows blank.
+ */
+function PnlPreload() {
+  const [location] = useLocation();
+  const onPnlRoute = location.split("?")[0] === "/pnl";
+  const [ready, setReady] = useState(onPnlRoute);
+  useEffect(() => {
+    if (ready) return;
+    const id = setTimeout(() => setReady(true), 600);
+    return () => clearTimeout(id);
+  }, [ready]);
+  if (!ready && !onPnlRoute) return null;
+  return <PnlAnalyticsKeepAlive />;
+}
+
+const PNL_NODE = (
+  <Suspense fallback={null}>
+    <PnlPreload />
+  </Suspense>
+);
+
 // Known pathnames — used to decide whether to render NotFound.
 const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
@@ -364,7 +399,7 @@ function Router() {
   return (
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
-    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE} reportsNode={REPORTS_NODE}>
+    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE} reportsNode={REPORTS_NODE} pnlNode={PNL_NODE}>
       {/*
         ── Single AnimatePresence (mode="wait") ────────────────────────────
         All pages — tab pages, sidebar pages, detail pages — live in ONE
@@ -465,7 +500,7 @@ function Router() {
       {/* fallback={null} — no shimmer flash; user sees previous screen until chunk
            resolves (immediate imports mean this is always near-instant). Static
            imports (Portfolio/Balances) need no Suspense at all. */}
-      {pathname === "/pnl"             && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PnlAnalytics   /></div></Suspense>}
+      {/* /pnl is a keep-alive node (PNL_NODE) rendered in Layout — not here */}
       {pathname === "/balances"         && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances        /></div>}
       {pathname === "/portfolio"        && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Portfolio        /></div>}
       {pathname === "/position-detail"  && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}

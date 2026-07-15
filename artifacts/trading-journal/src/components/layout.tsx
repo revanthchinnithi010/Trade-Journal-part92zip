@@ -375,11 +375,13 @@ export const Layout = memo(function Layout({
   chartsNode,
   dashboardNode,
   reportsNode,
+  pnlNode,
 }: {
-  children:      React.ReactNode;
-  chartsNode?:   React.ReactNode;
+  children:       React.ReactNode;
+  chartsNode?:    React.ReactNode;
   dashboardNode?: React.ReactNode;
   reportsNode?:   React.ReactNode;
+  pnlNode?:       React.ReactNode;
 }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
@@ -819,6 +821,23 @@ export const Layout = memo(function Layout({
             </div>
           )}
 
+          {/* PnlAnalytics — keep-alive, same pattern as Dashboard/Reports.
+              Staying mounted means navigating to "/pnl" is an instant
+              display:flex toggle on an already-rendered, already-fetched tree
+              — no skeleton flash, no refetch, no chart-defer delay. */}
+          {pnlNode && (
+            <div style={{
+              position:      "absolute",
+              inset:         0,
+              display:       pathname === "/pnl" ? "flex" : "none",
+              flexDirection: "column",
+              overflow:      "hidden",
+              background:    "#000000",
+            }}>
+              {pnlNode}
+            </div>
+          )}
+
           {/* All other pages — mounted/unmounted by AnimatePresence in App.tsx.
               The paddingBottom for the mobile nav bar is applied per-page in
               App.tsx via StandardPageWrapper or the page's own layout.
@@ -852,7 +871,7 @@ export const Layout = memo(function Layout({
             display:       "flex",
             flexDirection: "column",
             overflow:      "hidden",
-            pointerEvents: (pathname === "/" || pathname === "/charts" || pathname === "/reports") ? "none" : "auto",
+            pointerEvents: (pathname === "/" || pathname === "/charts" || pathname === "/reports" || pathname === "/pnl") ? "none" : "auto",
           }}>
             {children}
           </div>
