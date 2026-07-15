@@ -14,7 +14,7 @@ import {
   Bar, BarChart as RechartsBarChart, ResponsiveContainer, Tooltip,
   XAxis, YAxis, Area, AreaChart, Cell, ReferenceLine,
 } from "recharts";
-import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
+import { useCurrencyFormatter, useCurrencyAxisFormatter, useCurrencyStore } from "@/store/currencyStore";
 
 // ── Colours ────────────────────────────────────────────────────────────────
 const GREEN  = "hsl(145 58% 52%)";
@@ -262,6 +262,8 @@ export default function PnlAnalytics() {
 
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
+  const currency      = useCurrencyStore(s => s.currency);
+  const setCurrency   = useCurrencyStore(s => s.setCurrency);
 
   const { data: liveStats,  isFetched: statsFetched  } = useGetStatsSummary();
   const { data: liveEquity, isFetched: equityFetched } = useGetEquityCurve();
@@ -464,7 +466,27 @@ export default function PnlAnalytics() {
         <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>
           Net PNL Analytics
         </span>
-        <div style={{ width: 32 }} />
+        <button
+          onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
+          className="flex items-center gap-1 active:scale-95 transition-transform"
+          style={{
+            height:       28,
+            padding:      "0 10px",
+            borderRadius: 8,
+            background:   currency === "INR" ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.07)",
+            border:       currency === "INR" ? "1px solid rgba(251,191,36,0.35)" : "1px solid rgba(255,255,255,0.12)",
+          }}
+          aria-label="Toggle currency"
+        >
+          <span style={{
+            fontSize:   11,
+            fontWeight: 700,
+            color:      currency === "INR" ? "rgba(251,191,36,0.9)" : "#9ca3af",
+            letterSpacing: "0.04em",
+          }}>
+            {currency === "USD" ? "$ USD" : "₹ INR"}
+          </span>
+        </button>
       </div>
 
       {/* ── Scrollable content ── */}
