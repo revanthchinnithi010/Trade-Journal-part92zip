@@ -14,10 +14,7 @@ import {
   Bar, BarChart as RechartsBarChart, ResponsiveContainer, Tooltip,
   XAxis, YAxis, Area, AreaChart, Cell, ReferenceLine,
 } from "recharts";
-import { motion } from "motion/react";
 import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
-import { PageTransition, AnimatedCard } from "@/components/animations";
-import { cardVariants } from "@/animations/motion";
 
 // ── Colours ────────────────────────────────────────────────────────────────
 const GREEN  = "hsl(145 58% 52%)";
@@ -114,16 +111,12 @@ const CumTooltip = memo(function CumTooltip({
 });
 
 // ── KPI card ───────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, positive, icon: Icon, index }: {
+function KpiCard({ label, value, sub, positive, icon: Icon }: {
   label: string; value: string; sub?: string; positive?: boolean;
   icon: React.ElementType; index: number;
 }) {
   return (
-    <motion.div
-      variants={cardVariants} custom={index}
-      initial="hidden" animate="visible"
-      className="stat-card-neutral p-4 relative overflow-hidden"
-    >
+    <div className="stat-card-neutral p-4 relative overflow-hidden">
       <div className="flex items-center justify-between mb-3">
         <span className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--stat-title)" }}>
           {label}
@@ -141,7 +134,7 @@ function KpiCard({ label, value, sub, positive, icon: Icon, index }: {
         {value}
       </div>
       {sub && <p className="text-[10px] mt-1.5" style={{ color: "var(--stat-sub)" }}>{sub}</p>}
-    </motion.div>
+    </div>
   );
 }
 
@@ -457,7 +450,7 @@ export default function PnlAnalytics() {
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
         {loadingSkeleton}
-        {pageState !== "loading" && <div className="space-y-4 pb-12">
+        {pageState !== "loading" && <div className="space-y-4 pb-12 px-4 sm:px-6">
 
       {/* ── Demo data banner ── */}
       {IS_DEMO && (
@@ -535,7 +528,7 @@ export default function PnlAnalytics() {
       </div>
 
       {/* ── 1. Daily Net PNL Bar Chart ── */}
-      <AnimatedCard index={0} className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <ChartHeader
           icon={BarChart2}
           title="Daily Net PNL"
@@ -584,13 +577,13 @@ export default function PnlAnalytics() {
             </div>
           )}
         </div>
-      </AnimatedCard>
+      </div>
 
       {/* ── 2 & 3. Weekly | Monthly ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
         {/* Weekly */}
-        <AnimatedCard index={1} className="glass-card overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <ChartHeader icon={BarChart2} title="Weekly Net PNL" />
           <div className="overflow-x-auto" style={{ scrollbarWidth: "none" }}>
             {weeklyData.length === 0 ? (
@@ -628,10 +621,10 @@ export default function PnlAnalytics() {
               </div>
             )}
           </div>
-        </AnimatedCard>
+        </div>
 
         {/* Monthly */}
-        <AnimatedCard index={2} className="glass-card overflow-hidden">
+        <div className="glass-card overflow-hidden">
           <ChartHeader icon={CalendarDays} title="Monthly Net PNL" />
           <div className="overflow-x-auto" style={{ scrollbarWidth: "none" }}>
             {monthlyData.length === 0 ? (
@@ -669,11 +662,11 @@ export default function PnlAnalytics() {
               </div>
             )}
           </div>
-        </AnimatedCard>
+        </div>
       </div>
 
       {/* ── 4. Cumulative PNL (Equity Curve) ── */}
-      <AnimatedCard index={3} className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <ChartHeader
           icon={Activity}
           title="Cumulative Net PNL"
@@ -732,10 +725,10 @@ export default function PnlAnalytics() {
             </div>
           )}
         </div>
-      </AnimatedCard>
+      </div>
 
       {/* ── 5. PNL Calendar Heatmap ── */}
-      <AnimatedCard index={4} className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <ChartHeader
           icon={CalendarDays}
           title="PNL Calendar"
@@ -760,10 +753,10 @@ export default function PnlAnalytics() {
             month={now.getMonth() + 1}
           />
         </div>
-      </AnimatedCard>
+      </div>
 
       {/* ── Trade Statistics grid ── */}
-      <AnimatedCard index={5} className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <ChartHeader icon={Trophy} title="Trade Statistics" />
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 border-t border-border/50 divide-y divide-border/40">
 
@@ -851,10 +844,10 @@ export default function PnlAnalytics() {
           </div>
 
         </div>
-      </AnimatedCard>
+      </div>
 
       {/* ── Daily / Period stats grid ── */}
-      <AnimatedCard index={6} className="glass-card overflow-hidden">
+      <div className="glass-card overflow-hidden">
         <ChartHeader
           icon={Target}
           title="PNL Statistics"
@@ -914,7 +907,7 @@ export default function PnlAnalytics() {
             color={totalFilteredPnl >= 0 ? "#34d399" : "#f87171"}
           />
         </div>
-      </AnimatedCard>
+      </div>
 
     </div>}
       </div>
