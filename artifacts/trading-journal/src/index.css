@@ -199,7 +199,7 @@
   --destructive-border: hsl(from hsl(var(--destructive)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
 
   /* ── Surface tokens ──────────────────────────────────────────── */
-  --surface-header:            rgba(5, 7, 10, 0.92);
+  --surface-header:            #000000;
   --surface-header-border:     rgba(255, 255, 255, 0.05);
   --surface-backdrop:          rgba(0, 0, 0, 0.70);
   --surface-btn-border:        rgba(255, 255, 255, 0.06);
@@ -380,7 +380,7 @@
   --chart-3:   0 72%  56%;
   --chart-4:  38 90%  58%;
   --chart-5: 230 72%  62%;
-  --surface-header:            rgba(5, 7, 10, 0.92);
+  --surface-header:            #000000;
   --surface-header-border:     rgba(255, 255, 255, 0.05);
   --surface-backdrop:          rgba(0, 0, 0, 0.70);
   --surface-btn-border:        rgba(255, 255, 255, 0.06);

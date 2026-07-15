@@ -517,11 +517,9 @@ export const Layout = memo(function Layout({
             exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeIn" } }}
             className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
             style={{
-              position:             "relative",
-              background:           "var(--surface-header)",
-              backdropFilter:       "blur(16px)",
-              WebkitBackdropFilter: "blur(16px)",
-              borderBottom:         "1px solid var(--surface-header-border)",
+              position:    "relative",
+              background:  "var(--surface-header)",
+              borderBottom: "1px solid var(--surface-header-border)",
             }}
           >
             {/* Left: hamburger (or back-arrow on detail pages) + Area.lab wordmark.
