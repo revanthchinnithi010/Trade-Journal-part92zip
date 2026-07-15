@@ -649,7 +649,7 @@ export default function Trades() {
               const isWin     = trade.pnl >= 0;
               const pnlColor  = isWin ? "#35C37A" : "#E0524F";
               const dateStr   = new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-              const fPrice    = (v: number) => v < 1 ? v.toFixed(5) : fc(v);
+              const fPrice    = (v: number) => v < 1 ? v.toFixed(4) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
 
               return (
                 <div
@@ -687,7 +687,7 @@ export default function Trades() {
                     </div>
                     <span
                       className="font-semibold leading-none tabular-nums"
-                      style={{ fontSize: 15, color: "#F0F0F0" }}
+                      style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}
                     >
                       {isWin ? "+" : ""}{fc(trade.pnl)}
                     </span>
@@ -702,7 +702,7 @@ export default function Trades() {
                       >
                         {fPrice(trade.entryPrice)}
                       </span>
-                      <span style={{ fontSize: 11, color: "#444", margin: "0 1px" }}>→</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", margin: "0 2px" }}>→</span>
                       <span
                         className="font-medium tabular-nums"
                         style={{ fontSize: 12, color: "#6B6B6B" }}
