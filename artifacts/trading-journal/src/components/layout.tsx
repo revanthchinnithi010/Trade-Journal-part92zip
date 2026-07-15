@@ -797,6 +797,7 @@ export const Layout = memo(function Layout({
               display:       pathname === "/" ? "flex" : "none",
               flexDirection: "column",
               overflow:      "hidden",
+              background:    "#000000",
             }}>
               {dashboardNode}
             </div>
