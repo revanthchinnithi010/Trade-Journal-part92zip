@@ -426,17 +426,36 @@ export default function PnlAnalytics() {
   const grossProfit = (stats?.averageWin  ?? 0) * (stats?.winCount  ?? 0);
   const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
 
-  // ── Loading skeleton — shown while data is loading OR animation is in-flight ──
+  // ── Loading skeleton — shown while data is loading OR entry animation is in-flight ──
+  // The full-page skeleton covers the header area too, so the real header and
+  // cards all appear together in one shot instead of the header popping in first.
   const showSkeleton = pageState === "loading" || !chartsReady;
-  const loadingSkeleton = showSkeleton && (
-    <div className="space-y-4 pb-12 px-4 sm:px-6 pt-4">
-      <div className="grid grid-cols-2 gap-3">
-        {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
+
+  if (showSkeleton) {
+    return (
+      <div className="flex flex-col h-full" style={{ background: "#000000" }}>
+        {/* Header placeholder */}
+        <div
+          className="flex-shrink-0 flex items-center justify-between px-5"
+          style={{ height: 56, borderBottom: "1px solid #262626" }}
+        >
+          <div className="w-8 h-8 rounded-full shimmer-loading" />
+          <div className="h-4 w-36 rounded-lg shimmer-loading" />
+          <div style={{ width: 32 }} />
+        </div>
+        {/* Content placeholder */}
+        <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
+          <div className="space-y-4 pb-12 px-4 sm:px-6 pt-4">
+            <div className="grid grid-cols-2 gap-3">
+              {[...Array(6)].map((_, i) => <div key={i} className="h-24 rounded-2xl shimmer-loading" />)}
+            </div>
+            <div className="h-8 w-80 rounded-xl shimmer-loading" />
+            {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
+          </div>
+        </div>
       </div>
-      <div className="h-8 w-80 rounded-xl shimmer-loading" />
-      {[...Array(3)].map((_, i) => <div key={i} className="h-52 rounded-2xl shimmer-loading" />)}
-    </div>
-  );
+    );
+  }
 
   return (
     <div className="flex flex-col h-full" style={{ background: "#000000" }}>
@@ -462,8 +481,7 @@ export default function PnlAnalytics() {
 
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
-        {loadingSkeleton}
-        {!showSkeleton && <div className="space-y-4 pt-4 pb-12 px-4 sm:px-6">
+        {<div className="space-y-4 pt-4 pb-12 px-4 sm:px-6">
 
       {/* ── Demo data banner ── */}
       {IS_DEMO && (
