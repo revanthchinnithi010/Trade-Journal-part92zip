@@ -15,6 +15,7 @@ import { useDeltaAccount } from "@/store/deltaAccountStore";
 import { useCtraderAccount } from "@/store/ctraderAccountStore";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { classifyBrokerForSymbol } from "@/lib/brokerClassification";
+import { livePnlForPosition, liveUnrealizedPnlUSD } from "@/lib/livePnl";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -373,34 +374,17 @@ export default function Portfolio() {
   }, [refreshAll]);
 
   // Live, tick-driven Unrealized PnL — sums each open position's PnL using
-  // the same live-price calc as PositionRow (falls back to markPrice when no
-  // tick has arrived yet) instead of the balance snapshot's `unrealisedPnl`,
-  // which is only as fresh as the last poll and visibly "stuck" between
-  // ticks. Falls back to the balance-derived total when there are no open
-  // positions to sum (e.g. balance carries pnl from a source other than the
-  // currently-open positions list).
-  // Same tick-key resolution as PositionRow: cTrader symbols (NAS100,
-  // GBPJPY, XAUUSD, ...) are used as-is; crypto symbols get the
-  // USDT/PERP-stripping + "USD" suffix normalization.
-  const tickKeyForPosition = (symbol: string) =>
-    classifyBrokerForSymbol(symbol) === "ctrader"
-      ? symbol
-      : symbol.replace(/USDT$|USD$|PERP$/, "").replace(/-/g, "") + "USD";
-
-  const livePnlForPosition = (pos: BrokerPosition) => {
-    const livePrice = ticks[tickKeyForPosition(pos.symbol)]?.price ?? pos.markPrice;
-    return pos.side === "Long"
-      ? (livePrice - pos.entryPrice) * pos.size
-      : (pos.entryPrice - livePrice) * pos.size;
-  };
-
-  const upnlUSD = positions.length > 0
-    ? positions.reduce((sum, pos) => sum + livePnlForPosition(pos), 0)
-    : deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD;
+  // the shared livePnl helper (also used by deltaAccountStore/ctraderAccountStore
+  // so the Dashboard's account cards stay in sync with this page) instead of
+  // the balance snapshot's `unrealisedPnl`, which is only as fresh as the
+  // last poll and visibly "stuck" between ticks.
+  const upnlUSD = liveUnrealizedPnlUSD(
+    positions, ticks, deltaAccount.unrealizedPnlUSD + ctraderAccount.unrealizedPnlUSD,
+  );
 
   const upnlINR = positions.length > 0
     ? positions.reduce((sum, pos) => {
-        const pnl = livePnlForPosition(pos);
+        const pnl = livePnlForPosition(pos, ticks);
         const broker = classifyBrokerForSymbol(pos.symbol);
         return sum + (broker === "delta" ? deltaAccount.toINR(pnl) : ctraderAccount.toINR(pnl));
       }, 0)
