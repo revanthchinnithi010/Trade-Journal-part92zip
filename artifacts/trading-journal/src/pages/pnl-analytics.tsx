@@ -466,7 +466,7 @@ export default function PnlAnalytics() {
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: "none" }}>
         {loadingSkeleton}
-        {!showSkeleton && <div className="space-y-4 pb-12 px-4 sm:px-6">
+        {!showSkeleton && <div className="space-y-4 pt-4 pb-12 px-4 sm:px-6">
 
       {/* ── Demo data banner ── */}
       {IS_DEMO && (
