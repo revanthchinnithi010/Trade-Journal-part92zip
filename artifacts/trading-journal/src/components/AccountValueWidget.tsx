@@ -72,12 +72,22 @@ export default function AccountValueWidget({
       <div className="px-4 pt-4 pb-3">
         {/* Header row */}
         <div className="flex items-start justify-between mb-3">
-          <button className="flex items-center gap-0.5 group" onClick={() => navigate("/balances")}>
-            <span className="text-[13px] font-semibold transition-colors" style={{ color: "var(--stat-title)" }}>
-              Account Value
-            </span>
-            <ChevronRight className="w-3.5 h-3.5 transition-colors" style={{ color: "var(--stat-icon)" }} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button className="flex items-center gap-0.5 group" onClick={() => navigate("/balances")}>
+              <span className="text-[13px] font-semibold transition-colors" style={{ color: "var(--stat-title)" }}>
+                Account Value
+              </span>
+              <ChevronRight className="w-3.5 h-3.5 transition-colors" style={{ color: "var(--stat-icon)" }} />
+            </button>
+            <button
+              onClick={() => setMasked(m => !m)}
+              className="transition-colors"
+              style={{ color: "var(--stat-icon)" }}
+              aria-label={masked ? "Show" : "Hide"}
+            >
+              {masked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
           <motion.button
             whileTap={{ scale: 0.97 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
@@ -97,18 +107,10 @@ export default function AccountValueWidget({
 
         {/* Value row — single-currency display, driven entirely by the header's
             $/₹ toggle. No secondary amount in the other currency is ever shown. */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center">
           <span className="text-[28px] font-black tracking-tight leading-none" style={{ color: "var(--stat-value)" }}>
             {masked ? <Dots count={9} /> : formatAmount(accountValueDisplay, currency)}
           </span>
-          <button
-            onClick={() => setMasked(m => !m)}
-            className="ml-0.5 mt-1 transition-colors"
-            style={{ color: "var(--stat-icon)" }}
-            aria-label={masked ? "Show" : "Hide"}
-          >
-            {masked ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-          </button>
         </div>
       </div>
 
