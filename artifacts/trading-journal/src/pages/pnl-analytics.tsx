@@ -1,4 +1,4 @@
-import { memo, useMemo, useState, useEffect } from "react";
+import { memo, useMemo, useState } from "react";
 import {
   TrendingUp, TrendingDown, BarChart2, Activity,
   CalendarDays, Target, Flame, Zap, Trophy, ArrowLeft,
@@ -283,20 +283,6 @@ export default function PnlAnalytics() {
   const pageState: PageState = !queriesSettled ? "loading" : hasLiveData ? "live" : "demo";
   const IS_DEMO = pageState === "demo";
 
-  // Defer heavy chart render until after CSS entry animation completes.
-  // The CSS slide runs on the GPU compositor regardless of JS work, but
-  // if React commits a heavy subtree on mount the initial paint is delayed.
-  // By showing a skeleton for the first ~320ms we let the browser paint the
-  // sliding shell immediately, then swap in the real charts.
-  const [chartsReady, setChartsReady] = useState(false);
-  useEffect(() => {
-    let timerId: ReturnType<typeof setTimeout>;
-    const rafId = requestAnimationFrame(() => {
-      timerId = setTimeout(() => setChartsReady(true), 320);
-    });
-    return () => { cancelAnimationFrame(rafId); clearTimeout(timerId); };
-  }, []);
-
   const stats   = pageState === "live" ? liveStats   : pageState === "demo" ? DEMO_STATS   : undefined;
   const equity  = pageState === "live" ? liveEquity  : pageState === "demo" ? DEMO_EQUITY_CURVE : undefined;
   const calData = pageState === "live" ? liveCalData : pageState === "demo" ? getDemoCalendarHeatmap(now.getFullYear(), now.getMonth() + 1) : undefined;
@@ -428,8 +414,8 @@ export default function PnlAnalytics() {
   const grossProfit = (stats?.averageWin  ?? 0) * (stats?.winCount  ?? 0);
   const grossLoss   = (stats?.averageLoss ?? 0) * (stats?.lossCount ?? 0);
 
-  // ── Loading skeleton — shown while entry animation plays OR data is loading ──
-  const showSkeleton = !chartsReady || pageState === "loading";
+  // ── Loading skeleton — shown only while data is actually loading ──
+  const showSkeleton = pageState === "loading";
   const loadingSkeleton = showSkeleton && (
     <div className="space-y-4 pb-12 px-4 sm:px-6 pt-4">
       <div className="grid grid-cols-2 gap-3">
