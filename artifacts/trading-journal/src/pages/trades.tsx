@@ -687,7 +687,7 @@ export default function Trades() {
                     </div>
                     <span
                       className="font-semibold leading-none tabular-nums"
-                      style={{ fontSize: 15, color: pnlColor }}
+                      style={{ fontSize: 15, color: "#F0F0F0" }}
                     >
                       {isWin ? "+" : ""}{fc(trade.pnl)}
                     </span>
@@ -695,14 +695,14 @@ export default function Trades() {
 
                   {/* Row 2 — Entry price + meta | Date */}
                   <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-0.5">
                       <span
                         className="font-medium tabular-nums"
                         style={{ fontSize: 12, color: "#6B6B6B" }}
                       >
                         {fPrice(trade.entryPrice)}
                       </span>
-                      <span style={{ fontSize: 11, color: "#444" }}>→</span>
+                      <span style={{ fontSize: 11, color: "#444", margin: "0 1px" }}>→</span>
                       <span
                         className="font-medium tabular-nums"
                         style={{ fontSize: 12, color: "#6B6B6B" }}
