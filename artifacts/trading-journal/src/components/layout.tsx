@@ -824,11 +824,16 @@ export const Layout = memo(function Layout({
           {/* PnlAnalytics — keep-alive, same pattern as Dashboard/Reports.
               Staying mounted means navigating to "/pnl" is an instant
               display:flex toggle on an already-rendered, already-fetched tree
-              — no skeleton flash, no refetch, no chart-defer delay. */}
+              — no skeleton flash, no refetch, no chart-defer delay.
+              Uses position:fixed (not absolute) so its size is always the full
+              viewport, independent of whether the Layout header is visible.
+              position:absolute would resize when the header shows/hides,
+              causing a visible layout jump the moment the page opens. */}
           {pnlNode && (
             <div style={{
-              position:      "absolute",
+              position:      "fixed",
               inset:         0,
+              zIndex:        50,
               display:       pathname === "/pnl" ? "flex" : "none",
               flexDirection: "column",
               overflow:      "hidden",
