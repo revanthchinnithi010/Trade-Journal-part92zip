@@ -487,27 +487,19 @@ export default function Trades() {
   const labelCls = "text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider";
 
   return (
-    <PageTransition className="space-y-5 pb-12" fill={false}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#000000" }}>
 
-      {/* ── Filter Bar ── */}
-      {isMobile ? (
-        /* ── Mobile: search + filter icon + log trade ── */
+      {/* ── Secondary header ── */}
+      <div
+        className="flex-shrink-0 flex items-center justify-between px-5"
+        style={{ height: 56, borderBottom: "1px solid #262626" }}
+      >
+        <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>Trades</span>
         <div className="flex items-center gap-2">
-          {/* Search stretches full width */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
-            <Input
-              placeholder="Search symbol…"
-              className="pl-8.5 w-full bg-white/[0.04] border-white/[0.08] rounded-xl h-10 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
-              value={symbolFilter}
-              onChange={(e) => { setSymbolFilter(e.target.value); setPage(1); }}
-            />
-          </div>
-
           {/* Filter icon with active-count badge */}
           <AnimatedIconButton
             onClick={() => setFilterSheetOpen(true)}
-            className="relative flex items-center justify-center w-10 h-10 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all shrink-0"
+            className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all shrink-0"
           >
             <SlidersHorizontal className="w-4 h-4" />
             {activeFilterCount > 0 && (
@@ -519,11 +511,10 @@ export default function Trades() {
               </span>
             )}
           </AnimatedIconButton>
-
           {/* Log Trade */}
           <AnimatedButton
             onClick={openModal}
-            className="flex items-center gap-1.5 px-3.5 h-10 rounded-xl border-2 border-white bg-white text-black text-[13px] font-semibold hover:bg-white/90 shadow-md shadow-black/10 shrink-0"
+            className="flex items-center gap-1.5 px-3.5 h-9 rounded-xl border-2 border-white bg-white text-black text-[13px] font-semibold hover:bg-white/90 shadow-md shadow-black/10 shrink-0"
           >
             <span className="flex items-center justify-center w-4 h-4 rounded-full bg-black">
               <Plus className="w-2.5 h-2.5 text-white" />
@@ -531,71 +522,76 @@ export default function Trades() {
             Log
           </AnimatedButton>
         </div>
-      ) : (
-        /* ── Desktop: original full filter bar ── */
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div className="flex flex-wrap items-center gap-2 flex-1">
+      </div>
+
+      {/* ── Scrollable content ── */}
+      <div
+        className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:hidden"
+        style={{ scrollbarWidth: "none" }}
+      >
+        <div
+          className="p-5 space-y-4 mx-auto max-w-[1400px]"
+          style={{ paddingBottom: isMobile ? 80 : 40 }}
+        >
+
+          {/* ── Search + desktop filter pills ── */}
+          <div className="flex flex-col gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/60" />
               <Input
-                placeholder="Symbol search..."
-                className="pl-8.5 w-44 bg-white/[0.04] border-white/[0.08] rounded-xl h-9 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
+                placeholder="Search symbol…"
+                className="pl-8.5 w-full bg-white/[0.04] border-white/[0.08] rounded-xl h-10 text-[13px] focus:border-primary/40 placeholder:text-muted-foreground/50"
                 value={symbolFilter}
                 onChange={(e) => { setSymbolFilter(e.target.value); setPage(1); }}
               />
             </div>
-            <div className="flex items-center gap-1.5">
-              {["all", "win", "loss", "breakeven"].map(v => (
-                <FilterPill
-                  key={v}
-                  label={v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
-                  active={outcomeFilter === v}
-                  onClick={() => { setOutcomeFilter(v); setPage(1); }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5 ml-1">
-              {["all", "long", "short"].map(v => (
-                <FilterPill
-                  key={v}
-                  label={v === "all" ? "All Sides" : v.charAt(0).toUpperCase() + v.slice(1)}
-                  active={sideFilter === v}
-                  onClick={() => setSideFilter(v)}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-1.5 ml-1">
-              <span className="text-[10px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Broker:</span>
-              {[
-                { value: "all",            label: "All" },
-                { value: "Delta Exchange", label: "Delta" },
-                { value: "FusionMarkets",  label: "Fusion" },
-              ].map(({ value, label }) => (
-                <button
-                  key={value}
-                  onClick={() => setBrokerFilter(value)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
-                    brokerFilter === value
-                      ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
-                      : value === "FusionMarkets"  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
-                      : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
-                      : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            {!isMobile && (
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  {["all", "win", "loss", "breakeven"].map(v => (
+                    <FilterPill
+                      key={v}
+                      label={v === "all" ? "All" : v.charAt(0).toUpperCase() + v.slice(1)}
+                      active={outcomeFilter === v}
+                      onClick={() => { setOutcomeFilter(v); setPage(1); }}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 ml-1">
+                  {["all", "long", "short"].map(v => (
+                    <FilterPill
+                      key={v}
+                      label={v === "all" ? "All Sides" : v.charAt(0).toUpperCase() + v.slice(1)}
+                      active={sideFilter === v}
+                      onClick={() => setSideFilter(v)}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-1.5 ml-1">
+                  <span className="text-[10px] text-muted-foreground/50 font-semibold uppercase tracking-wider">Broker:</span>
+                  {[
+                    { value: "all",            label: "All" },
+                    { value: "Delta Exchange", label: "Delta" },
+                    { value: "FusionMarkets",  label: "Fusion" },
+                  ].map(({ value, label }) => (
+                    <button
+                      key={value}
+                      onClick={() => setBrokerFilter(value)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all duration-150 ${
+                        brokerFilter === value
+                          ? value === "Delta Exchange" ? "bg-orange-500/15 text-orange-400 border-orange-500/30"
+                          : value === "FusionMarkets"  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                          : "bg-primary/15 text-primary border-primary/30 shadow-sm shadow-primary/10"
+                          : "bg-white/[0.03] border-white/[0.07] text-muted-foreground hover:text-white hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-          <AnimatedButton
-            onClick={openModal}
-            className="flex items-center gap-2 px-4 h-9 rounded-xl border-0 bg-primary text-white text-[13px] font-semibold hover:bg-primary/85 shadow-md shadow-primary/25 shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            Log Trade
-          </AnimatedButton>
-        </div>
-      )}
 
       {/* ── Mobile filter bottom sheet ── */}
       <FilterBottomSheet
@@ -757,7 +753,9 @@ export default function Trades() {
             </div>
           </div>
         )}
-      </div>
+          </div>{/* /glass-card */}
+        </div>{/* /inner padding div */}
+      </div>{/* /scroll container */}
 
       {/* ── Framer Motion Log Trade Modal ── */}
       <AnimatePresence>
@@ -1287,6 +1285,6 @@ export default function Trades() {
           )}
         </SheetContent>
       </Sheet>
-    </PageTransition>
+    </div>
   );
 }

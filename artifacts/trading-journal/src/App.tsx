@@ -440,7 +440,7 @@ function Router() {
              permanently-mounted keep-alive node (see DASHBOARD_NODE / Layout),
              exactly like Charts. It never enters/exits this AnimatePresence. */}
         {pathname === "/markets" && <Suspense key="/markets" fallback={<PageLoader />}><PageTransition key="/markets" variant="tab" custom={dir}><Markets /></PageTransition></Suspense>}
-        {pathname === "/trades"  && <Suspense key="/trades"  fallback={<PageLoader />}><PageTransition key="/trades"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trades"><Trades    /></StandardPageWrapper></PageTransition></Suspense>}
+        {pathname === "/trades"  && <Suspense key="/trades"  fallback={<PageLoader />}><PageTransition key="/trades"  variant="tab" custom={dir}><Trades    /></PageTransition></Suspense>}
         {pathname === "/alerts"  && <Suspense key="/alerts"  fallback={<PageLoader />}><PageTransition key="/alerts"  variant="tab" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/alerts"><Alerts    /></StandardPageWrapper></PageTransition></Suspense>}
 
         {/* ── Sidebar / utility pages — fade + slide-up ──
