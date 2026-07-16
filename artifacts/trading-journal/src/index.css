@@ -548,7 +548,7 @@ body.tj-modal-open .animate-pulse {
   --stat-icon:   #6E7578;
 
   /* ── Glass surface ─────────────────────────────── */
-  background:          rgba(15, 22, 24, 0.55);
+  background:          rgba(28, 28, 30, 0.82);
   backdrop-filter:     blur(20px) saturate(165%);
   -webkit-backdrop-filter: blur(20px) saturate(165%);
   border:              1px solid rgba(255, 255, 255, 0.12);
