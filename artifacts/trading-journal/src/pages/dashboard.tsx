@@ -1,10 +1,10 @@
-import { memo, useMemo, useEffect, useRef, useState } from "react";
+import { memo, useMemo, useEffect, useRef, useState, useCallback } from "react";
 import {
   useListTrades,
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
 import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
-import { TrendingUp, Activity, ChevronRight } from "lucide-react";
+import { TrendingUp, Activity, ChevronRight, ChevronLeft } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
@@ -33,8 +33,8 @@ const tooltipStyle = {
 
 // ── Calendar Heatmap ──────────────────────────────────────────────────────────
 const CalendarHeatmap = memo(function CalendarHeatmap({
-  data, year, month,
-}: { data: Array<{ date: string; pnl: number; trades: number }>; year: number; month: number }) {
+  data, year, month, onPrev, onNext,
+}: { data: Array<{ date: string; pnl: number; trades: number }>; year: number; month: number; onPrev: () => void; onNext: () => void }) {
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
   const dayMap = useMemo(() => {
@@ -96,7 +96,21 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 
   return (
     <div>
-      <p className="px-4 text-xs font-semibold text-muted-foreground mb-3">{monthName}</p>
+      <div className="px-4 flex items-center justify-between mb-3">
+        <button
+          onClick={onPrev}
+          className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <span className="text-xs font-semibold text-muted-foreground">{monthName}</span>
+        <button
+          onClick={onNext}
+          className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
       <div className="px-3">
         <div className="grid grid-cols-7 gap-1 mb-1.5">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
@@ -140,7 +154,17 @@ const Dashboard = memo(function Dashboard() {
   }, [tradesLoading, timedOut, tradesError]);
 
   const now = useMemo(() => new Date(), []);
-  const { data: calData } = useGetCalendarHeatmap({ year: now.getFullYear(), month: now.getMonth() + 1 });
+  const [calYear,  setCalYear]  = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth() + 1);
+
+  const handleCalPrev = useCallback(() => {
+    setCalMonth((m) => { if (m === 1) { setCalYear((y) => y - 1); return 12; } return m - 1; });
+  }, []);
+  const handleCalNext = useCallback(() => {
+    setCalMonth((m) => { if (m === 12) { setCalYear((y) => y + 1); return 1; } return m + 1; });
+  }, []);
+
+  const { data: calData } = useGetCalendarHeatmap({ year: calYear, month: calMonth });
 
   const isStillLoading = !timedOut && tradesLoading;
 
@@ -231,9 +255,9 @@ const Dashboard = memo(function Dashboard() {
       <div className="-mx-4">
         <p className="px-4 pb-2 text-[13px] font-semibold text-white">Trading Calendar</p>
         {calData ? (
-          <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
+          <CalendarHeatmap data={calData} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} />
         ) : (
-          <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
+          <CalendarHeatmap data={[]} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} />
         )}
       </div>
 
