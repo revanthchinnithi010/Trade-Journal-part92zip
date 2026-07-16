@@ -96,14 +96,14 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 
   return (
     <div>
-      <div className="px-4 flex items-center justify-between mb-3">
+      <div className="px-4 flex items-center gap-1 mb-3">
         <button
           onClick={onPrev}
           className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-xs font-semibold text-muted-foreground">{monthName}</span>
+        <span className="text-xs font-semibold text-muted-foreground px-1">{monthName}</span>
         <button
           onClick={onNext}
           className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
