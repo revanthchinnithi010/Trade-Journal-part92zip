@@ -492,7 +492,7 @@ export default function Trades() {
 
       {/* ── Secondary header ── */}
       <div
-        className="flex-shrink-0 flex items-center justify-between px-3"
+        className="flex-shrink-0 flex items-center justify-between px-4"
         style={{ height: 56, borderBottom: "1px solid #262626" }}
       >
         <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>Trades</span>
@@ -531,7 +531,7 @@ export default function Trades() {
         style={{ scrollbarWidth: "none" }}
       >
         <div
-          className="py-4 px-3 space-y-4 mx-auto max-w-[1400px]"
+          className="py-4 space-y-4 mx-auto max-w-[1400px]"
           style={{ paddingBottom: isMobile ? 80 : 40 }}
         >
 
@@ -619,7 +619,7 @@ export default function Trades() {
               <div
                 key={i}
                 style={{
-                  padding: "12px 18px",
+                  padding: "12px 0",
                   borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.055)" : "none",
                 }}
               >
@@ -636,7 +636,7 @@ export default function Trades() {
           </div>
 
         ) : filteredTrades.length === 0 ? (
-          <div className="px-5 py-16 text-center text-muted-foreground text-sm">
+          <div className="py-16 text-center text-muted-foreground text-sm">
             No trades match your filters.
           </div>
 
@@ -657,7 +657,7 @@ export default function Trades() {
                   onClick={() => setSelectedTradeId(trade.id)}
                   className="cursor-pointer"
                   style={{
-                    padding:                 "12px 18px",
+                    padding:                 "12px 0",
                     borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
                     WebkitTapHighlightColor: "transparent",
                     transition:              "background 0.15s",
