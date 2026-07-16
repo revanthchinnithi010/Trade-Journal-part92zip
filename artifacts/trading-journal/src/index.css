@@ -610,6 +610,23 @@ body.tj-modal-open .animate-pulse {
 /* All direct children sit above pseudo layers */
 .dash-account-card > * { position: relative; z-index: 2; }
 
+/* Dimmed reflection variant — less white sheen for list/content cards */
+.dash-account-card-dim::before {
+  background:
+    radial-gradient(
+      ellipse 100% 40% at 50% 0%,
+      rgba(255, 255, 255, 0.02)  0%,
+      rgba(255, 255, 255, 0.005) 50%,
+      rgba(255, 255, 255, 0.00) 100%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.015)  0%,
+      rgba(255, 255, 255, 0.00)  40%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
+}
+
 .dash-account-card:hover  { filter: brightness(1.05); }
 .dash-account-card:active { filter: brightness(0.97); }
 

@@ -552,7 +552,7 @@ export default function Portfolio() {
             </div>
 
             {orders.length > 0 ? (
-              <div className="dash-account-card overflow-hidden">
+              <div className="dash-account-card dash-account-card-dim overflow-hidden">
                 {orders.map(ord => (
                   <OrderRow
                     key={ord.id}
