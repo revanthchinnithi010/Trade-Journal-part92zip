@@ -1308,11 +1308,13 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
             in page mode (Markets page requirement). */}
         {mode === "page" && activeTab !== "Watchlist" && (
         <div style={{ padding: "8px 12px 6px" }}>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8,
-            background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-            borderRadius: 10, padding: "9px 12px",
-          }}>
+          <div
+            className="dash-segment-bar"
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              borderRadius: 10, padding: "9px 12px",
+            }}
+          >
             <Search size={13} color="rgba(148,163,184,0.38)" style={{ flexShrink: 0 }} />
             <input
               ref={searchRef}
