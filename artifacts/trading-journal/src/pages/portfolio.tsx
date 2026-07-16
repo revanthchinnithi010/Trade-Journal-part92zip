@@ -528,29 +528,31 @@ export default function Portfolio() {
         {/* ══ ORDERS ══ */}
         {tab === "orders" && (
           <>
-            <div className="px-4 py-3.5 flex items-center justify-between" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-              <div className="flex items-center gap-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#6B6B6B" }}>Open</p>
-                  <p className="text-[18px] font-black" style={{ color: "#E8E8E8" }}>{openOrders.length}</p>
+            <div className="dash-account-card overflow-hidden">
+              <div className="px-4 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "var(--stat-sub)" }}>Open</p>
+                    <p className="text-[18px] font-black" style={{ color: "var(--stat-value)" }}>{openOrders.length}</p>
+                  </div>
+                  <div className="w-px h-8" style={{ background: "rgba(255,255,255,0.08)" }} />
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "var(--stat-sub)" }}>History</p>
+                    <p className="text-[18px] font-black" style={{ color: "var(--stat-sub)" }}>{histOrders.length}</p>
+                  </div>
                 </div>
-                <div className="w-px h-8" style={{ background: "#252525" }} />
-                <div>
-                  <p className="text-[10px] uppercase tracking-widest font-semibold mb-0.5" style={{ color: "#6B6B6B" }}>History</p>
-                  <p className="text-[18px] font-black" style={{ color: "#5A5A5A" }}>{histOrders.length}</p>
-                </div>
+                <button
+                  onClick={() => refreshAll()}
+                  className="w-8 h-8 flex items-center justify-center rounded-xl"
+                  style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)" }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" style={{ color: "var(--stat-icon)" }} />
+                </button>
               </div>
-              <button
-                onClick={() => refreshAll()}
-                className="w-8 h-8 flex items-center justify-center rounded-xl"
-                style={{ background: "#1E1E1E", border: "1px solid #2E2E2E" }}
-              >
-                <RefreshCw className="w-3.5 h-3.5" style={{ color: "#5A5A5A" }} />
-              </button>
             </div>
 
             {orders.length > 0 ? (
-              <div className="overflow-hidden" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
+              <div className="dash-account-card overflow-hidden">
                 {orders.map(ord => (
                   <OrderRow
                     key={ord.id}
@@ -560,10 +562,10 @@ export default function Portfolio() {
                 ))}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-12 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-                <Wallet className="w-8 h-8" style={{ color: "#2A2A2A" }} />
-                <p className="text-[13px] font-semibold" style={{ color: "#5A5A5A" }}>No orders</p>
-                <p className="text-[11px]" style={{ color: "#3A3A3A" }}>Active and recent orders will appear here</p>
+              <div className="dash-account-card overflow-hidden flex flex-col items-center justify-center py-12 gap-2">
+                <Wallet className="w-8 h-8" style={{ color: "rgba(255,255,255,0.12)" }} />
+                <p className="text-[13px] font-semibold" style={{ color: "var(--stat-sub)" }}>No orders</p>
+                <p className="text-[11px]" style={{ color: "var(--stat-icon)" }}>Active and recent orders will appear here</p>
               </div>
             )}
           </>
