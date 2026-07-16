@@ -118,8 +118,8 @@ export default function AccountValueWidget({
       <div
         className="mx-3 mb-3 rounded-xl grid grid-cols-2 overflow-hidden"
         style={{
-          background: "#1D1D1D",
-          border: "1px solid #252525",
+          background: "rgba(255, 255, 255, 0.05)",
+          border: "1px solid rgba(255, 255, 255, 0.08)",
         }}
       >
         {/* UPNL */}
