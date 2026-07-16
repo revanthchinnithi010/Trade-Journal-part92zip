@@ -638,66 +638,69 @@ export const Layout = memo(function Layout({
                 </button>
               )}
 
-              {/* Currency Toggle — same filled-chip language as the notification
-                  bell beside it (same border + idle/hover background), so the
-                  two icon-buttons read as one consistent set instead of the
-                  bell looking "on" while this one looks like a flat outline. */}
-              <button
-                onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
-                className="w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-200 text-[15px] font-bold"
+              {/* Currency + Notification merged oval pill */}
+              <div
+                className="flex items-center"
                 style={{
-                  border:     "1px solid var(--surface-btn-active-border)",
-                  background: "var(--surface-btn-hover)",
-                  color:      "hsl(var(--foreground) / 0.72)",
+                  background:   "var(--surface-btn-hover)",
+                  border:       "1px solid var(--surface-btn-active-border)",
+                  borderRadius: 99,
+                  padding:      "3px",
+                  gap:          0,
                 }}
-                onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
-                title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
-                aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
               >
-                {CURRENCY_META[currency].symbol}
-              </button>
-
-              {/* Bell gets a filled chip (not just a hairline outline) so it
-                  reads as a distinct, tappable icon-button at a glance instead
-                  of a faint circle that disappears against the header —
-                  matches the weight of the search field / active pills rather
-                  than the barely-visible transparent ghost buttons. */}
-              <div className="relative">
+                {/* Currency toggle */}
                 <button
-                  ref={bellBtnRef}
-                  onClick={toggleNotif}
-                  aria-label="Notifications"
-                  className="relative w-9 h-9 flex items-center justify-center rounded-xl transition-all duration-150"
-                  style={{
-                    border:     notifOpen ? "1px solid var(--surface-btn-active-border)" : "1px solid var(--surface-btn-active-border)",
-                    background: notifOpen ? "var(--surface-btn-active-bg)" : "var(--surface-btn-hover)",
-                    color:      notifOpen ? "hsl(var(--primary))" : "hsl(var(--foreground) / 0.72)",
-                  }}
-                  onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
-                  onMouseLeave={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-hover)"; }}
+                  onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
+                  className="w-9 h-9 flex items-center justify-center rounded-full transition-all duration-200 text-[15px] font-bold"
+                  style={{ color: "hsl(var(--foreground) / 0.72)", background: "transparent" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
+                  aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
                 >
-                  <Bell className={cn("w-4 h-4 transition-colors", bellShake && "bell-ring")} strokeWidth={2.25} />
-                  {badgeCount && (
-                    <span
-                      className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-[9px] font-bold text-white leading-none"
-                      style={{
-                        minWidth:   "16px",
-                        height:     "16px",
-                        padding:    "0 3px",
-                        background: "hsl(0,72%,56%)",
-                        border:     "2px solid var(--notification-badge-border)",
-                        boxShadow:  "0 1px 4px rgba(0,0,0,0.35)",
-                      }}
-                    >
-                      {badgeCount}
-                    </span>
-                  )}
+                  {CURRENCY_META[currency].symbol}
                 </button>
-                <NotificationPanel
-                  open={notifOpen}
-                  onClose={closeNotif}
-                />
+
+                {/* Divider */}
+                <div style={{ width: 1, height: 18, background: "var(--surface-btn-active-border)", flexShrink: 0 }} />
+
+                {/* Notification bell */}
+                <div className="relative">
+                  <button
+                    ref={bellBtnRef}
+                    onClick={toggleNotif}
+                    aria-label="Notifications"
+                    className="relative w-9 h-9 flex items-center justify-center rounded-full transition-all duration-150"
+                    style={{
+                      background: notifOpen ? "var(--surface-btn-active-bg)" : "transparent",
+                      color:      notifOpen ? "hsl(var(--primary))" : "hsl(var(--foreground) / 0.72)",
+                    }}
+                    onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                    onMouseLeave={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
+                  >
+                    <Bell className={cn("w-4 h-4 transition-colors", bellShake && "bell-ring")} strokeWidth={2.25} />
+                    {badgeCount && (
+                      <span
+                        className="absolute -top-1 -right-1 flex items-center justify-center rounded-full text-[9px] font-bold text-white leading-none"
+                        style={{
+                          minWidth:   "16px",
+                          height:     "16px",
+                          padding:    "0 3px",
+                          background: "hsl(0,72%,56%)",
+                          border:     "2px solid var(--notification-badge-border)",
+                          boxShadow:  "0 1px 4px rgba(0,0,0,0.35)",
+                        }}
+                      >
+                        {badgeCount}
+                      </span>
+                    )}
+                  </button>
+                  <NotificationPanel
+                    open={notifOpen}
+                    onClose={closeNotif}
+                  />
+                </div>
               </div>
 
               {/* Desktop only: divider + profile button */}
