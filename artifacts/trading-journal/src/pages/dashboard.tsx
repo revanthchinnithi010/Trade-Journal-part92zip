@@ -51,6 +51,8 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
     [year, month]
   );
 
+  const [statsTooltip, setStatsTooltip] = useState(false);
+
   const monthlyPnl = useMemo(() => data.reduce((sum, d) => sum + d.pnl, 0), [data]);
 
   const remainingDays = useMemo(() => {
@@ -124,7 +126,30 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
         </div>
         {/* right: monthly stats */}
         <div className="flex items-center gap-2">
-          <span className="text-[11px] font-medium text-muted-foreground">Monthly stats:</span>
+          <div className="relative">
+            <button
+              onClick={() => setStatsTooltip((v) => !v)}
+              className="text-[11px] font-medium text-muted-foreground border-b border-dashed border-muted-foreground/50 leading-none pb-px cursor-pointer select-none"
+            >
+              Monthly stats:
+            </button>
+            {statsTooltip && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setStatsTooltip(false)} />
+                <div className="absolute right-0 top-full mt-2 z-40 w-52 rounded-xl border border-white/10 bg-[#1a1a2e] shadow-xl px-3 py-2.5">
+                  <p className="text-[11px] font-semibold text-white mb-1">Monthly Stats</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Total realised P&L for the selected month, calculated from all closed trades on trading days.
+                  </p>
+                  {remainingDays > 0 && (
+                    <p className="text-[10px] text-blue-300 mt-1.5">
+                      {remainingDays} trading days remaining this month.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
           {data.length > 0 && (
             <span
               className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
