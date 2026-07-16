@@ -227,6 +227,7 @@ const Dashboard = memo(function Dashboard() {
 
       {/* ── Trading Calendar ── */}
       <div className="-mx-4">
+        <p className="px-4 pb-2 text-[13px] font-semibold text-white">Trading Calendar</p>
         {calData ? (
           <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
         ) : (
