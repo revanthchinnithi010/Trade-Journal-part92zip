@@ -53,6 +53,17 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 
   const [statsTooltip, setStatsTooltip] = useState(false);
 
+  useEffect(() => {
+    if (!statsTooltip) return;
+    const close = () => setStatsTooltip(false);
+    window.addEventListener("scroll", close, { passive: true, capture: true });
+    window.addEventListener("touchmove", close, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("scroll", close, { capture: true });
+      window.removeEventListener("touchmove", close, { capture: true });
+    };
+  }, [statsTooltip]);
+
   const monthlyPnl = useMemo(() => data.reduce((sum, d) => sum + d.pnl, 0), [data]);
 
   const remainingDays = useMemo(() => {
