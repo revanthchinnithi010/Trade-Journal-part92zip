@@ -226,31 +226,13 @@ const Dashboard = memo(function Dashboard() {
       />
 
       {/* ── Trading Calendar ── */}
-      <AnimatedCard index={1} className="dash-card overflow-hidden">
-        <div className="p-5 pb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-              <Activity className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <span className="text-[13px] font-semibold text-white">Trading Calendar</span>
-          </div>
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-sm bg-emerald-400/60 inline-block" /> Profit
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-sm bg-red-400/60 inline-block" /> Loss
-            </span>
-          </div>
-        </div>
-        <div className="px-5 pb-5">
-          {calData ? (
-            <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
-          ) : (
-            <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
-          )}
-        </div>
-      </AnimatedCard>
+      <div className="-mx-4">
+        {calData ? (
+          <CalendarHeatmap data={calData} year={now.getFullYear()} month={now.getMonth() + 1} />
+        ) : (
+          <CalendarHeatmap data={[]} year={now.getFullYear()} month={now.getMonth() + 1} />
+        )}
+      </div>
 
       {/* ── Recent Trades ── */}
       <AnimatedCard index={2} className="dash-card overflow-hidden">
