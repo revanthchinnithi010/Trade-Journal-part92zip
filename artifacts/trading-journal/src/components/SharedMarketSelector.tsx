@@ -108,9 +108,7 @@ const SCROLL_STYLE: React.CSSProperties = {
 
 const HEADER_STYLE: React.CSSProperties = {
   flexShrink: 0,
-  background: "rgba(9,11,14,0.98)",
-  backdropFilter: "blur(20px)",
-  WebkitBackdropFilter: "blur(20px)",
+  background: "#000000",
   borderBottom: "1px solid rgba(255,255,255,0.06)",
 };
 
