@@ -578,16 +578,15 @@ body.tj-modal-open .animate-pulse {
   border-radius: inherit;
   background:
     radial-gradient(
-      ellipse 120% 70% at 50% -20%,
-      rgba(255, 255, 255, 0.22)  0%,
-      rgba(255, 255, 255, 0.08) 35%,
-      rgba(255, 255, 255, 0.00) 75%
+      ellipse 100% 40% at 50% 0%,
+      rgba(255, 255, 255, 0.07)  0%,
+      rgba(255, 255, 255, 0.02) 50%,
+      rgba(255, 255, 255, 0.00) 100%
     ),
     linear-gradient(
       180deg,
-      rgba(255, 255, 255, 0.14)  0%,
-      rgba(255, 255, 255, 0.06) 28%,
-      rgba(255, 255, 255, 0.02) 60%,
+      rgba(255, 255, 255, 0.05)  0%,
+      rgba(255, 255, 255, 0.01) 40%,
       rgba(255, 255, 255, 0.00) 100%
     );
   pointer-events: none;
