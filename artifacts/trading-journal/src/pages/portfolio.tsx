@@ -573,10 +573,10 @@ export default function Portfolio() {
 
         {/* ══ STOP ORDERS ══ */}
         {tab === "stop-orders" && (
-          <div className="flex flex-col items-center justify-center py-14 gap-2" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-            <AlertCircle className="w-8 h-8" style={{ color: "#2A2A2A" }} />
-            <p className="text-[13px] font-semibold" style={{ color: "#5A5A5A" }}>No stop orders</p>
-            <p className="text-[11px]" style={{ color: "#3A3A3A" }}>Stop loss & take profit orders will appear here</p>
+          <div className="dash-account-card dash-account-card-dim overflow-hidden flex flex-col items-center justify-center py-14 gap-2">
+            <AlertCircle className="w-8 h-8" style={{ color: "rgba(255,255,255,0.12)" }} />
+            <p className="text-[13px] font-semibold" style={{ color: "var(--stat-sub)" }}>No stop orders</p>
+            <p className="text-[11px]" style={{ color: "var(--stat-icon)" }}>Stop loss & take profit orders will appear here</p>
           </div>
         )}
 
