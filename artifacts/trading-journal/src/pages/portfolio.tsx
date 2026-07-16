@@ -310,8 +310,22 @@ function SegmentedControl({ tabs, active, onChange }: {
             {t.label}
             {t.count !== undefined && t.count > 0 && (
               <span
-                className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                style={{ background: "#E0524F", color: "#FFFFFF", border: "1px solid rgba(255,255,255,0.25)" }}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minWidth: 18,
+                  height: 18,
+                  padding: "0 5px",
+                  borderRadius: 9,
+                  background: "#FF3B30",
+                  color: "#FFFFFF",
+                  fontSize: 10,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  letterSpacing: "0.01em",
+                  boxShadow: "0 1px 4px rgba(255,59,48,0.45)",
+                }}
               >
                 {t.count}
               </span>
