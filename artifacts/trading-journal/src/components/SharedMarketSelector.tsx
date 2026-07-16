@@ -116,7 +116,7 @@ const HEADER_STYLE: React.CSSProperties = {
 
 const SHEET_CONTAINER_STYLE: React.CSSProperties = {
   display: "flex", flexDirection: "column", height: "100%",
-  background: "#090b0e", color: "#e2e8f0",
+  background: "#000000", color: "#e2e8f0",
   overflow: "hidden",
 };
 
