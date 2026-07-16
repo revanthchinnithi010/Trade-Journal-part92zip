@@ -72,9 +72,9 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
           width:               "calc(50% - 4px)",
           height:              "calc(100% - 8px)",
           borderRadius:        9,
-          background:          "rgba(72, 72, 78, 0.95)",
+          background:          "#2A2D31",
           border:              "1px solid rgba(255, 255, 255, 0.10)",
-          boxShadow:           "inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 6px rgba(0,0,0,0.35)",
+          boxShadow:           "inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 20px rgba(0,0,0,0.35)",
           transform:           `translate3d(${activeKey === "reports" ? "100%" : "0%"}, 0, 0)`,
           transition:          "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)",
           willChange:          "transform",
@@ -93,8 +93,8 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
             onClick={() => {
               if (tab.href !== pathname) navigate(tab.href);
             }}
-            className="relative z-10 flex items-center justify-center text-[14px] font-semibold transition-[color,transform] duration-150 ease-out active:scale-[0.96]"
-            style={{ color: selected ? "#FFFFFF" : "#B5B5B5", willChange: "transform" }}
+            className={`relative z-10 flex items-center justify-center text-[14px] font-semibold transition-[color,background,transform] duration-150 ease-out active:scale-[0.96] rounded-[9px] w-full h-full ${selected ? "dash-segment-btn-active" : "dash-segment-btn-idle"}`}
+            style={{ color: selected ? "#FFFFFF" : "#6E7578", willChange: "transform" }}
           >
             {/* Plain CSS transitions, not per-frame JS-driven ones — `color`
                 isn't GPU-compositable, so animating it through Motion.dev
