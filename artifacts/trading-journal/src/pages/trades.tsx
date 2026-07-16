@@ -531,7 +531,7 @@ export default function Trades() {
         style={{ scrollbarWidth: "none" }}
       >
         <div
-          className="py-4 space-y-4 mx-auto max-w-[1400px]"
+          className="py-4 px-2 space-y-4 mx-auto max-w-[1400px]"
           style={{ paddingBottom: isMobile ? 80 : 40 }}
         >
 
@@ -619,7 +619,7 @@ export default function Trades() {
               <div
                 key={i}
                 style={{
-                  padding: "12px 0",
+                  padding: "12px 8px",
                   borderBottom: i < 5 ? "1px solid rgba(255,255,255,0.055)" : "none",
                 }}
               >
@@ -657,7 +657,7 @@ export default function Trades() {
                   onClick={() => setSelectedTradeId(trade.id)}
                   className="cursor-pointer"
                   style={{
-                    padding:                 "12px 0",
+                    padding:                 "12px 8px",
                     borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
                     WebkitTapHighlightColor: "transparent",
                     transition:              "background 0.15s",
