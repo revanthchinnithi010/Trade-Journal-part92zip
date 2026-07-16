@@ -591,15 +591,15 @@ export default function Portfolio() {
         >
           <div
             onClick={e => e.stopPropagation()}
-            className="w-full"
-            style={{ maxWidth: 320, background: "#151515", border: "1px solid #252525", borderRadius: 20, padding: 20, boxShadow: "0 4px 24px rgba(0,0,0,0.5)" }}
+            className="dash-account-card w-full"
+            style={{ maxWidth: 320, padding: 20 }}
           >
-            <p className="font-semibold" style={{ color: "#F2F2F2", fontSize: 16, marginBottom: 6 }}>
+            <p className="font-semibold" style={{ color: "var(--stat-value)", fontSize: 16, marginBottom: 6 }}>
               Cancel Order?
             </p>
-            <p className="font-normal" style={{ color: "#8A8A8A", fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
+            <p className="font-normal" style={{ color: "var(--stat-sub)", fontSize: 13, lineHeight: 1.5, marginBottom: 18 }}>
               You're about to cancel the {cancelTarget.side.toLowerCase()} {cancelTarget.orderType.toLowerCase()} order for{" "}
-              <span style={{ color: "#E8E8E8", fontWeight: 600 }}>{cancelTarget.symbol}</span>. This action cannot be undone.
+              <span style={{ color: "var(--stat-value)", fontWeight: 600 }}>{cancelTarget.symbol}</span>. This action cannot be undone.
             </p>
 
             {cancelError && (
@@ -611,7 +611,7 @@ export default function Portfolio() {
                 onClick={() => setCancelTarget(null)}
                 disabled={cancelling}
                 className="flex-1 rounded-xl font-semibold active:scale-[0.98] transition-transform"
-                style={{ height: 46, fontSize: 14, background: "#1D1D1D", color: "#F2F2F2", border: "1px solid #252525" }}
+                style={{ height: 46, fontSize: 14, background: "rgba(255,255,255,0.06)", color: "var(--stat-value)", border: "1px solid rgba(255,255,255,0.10)" }}
               >
                 Keep Order
               </button>
@@ -622,9 +622,9 @@ export default function Portfolio() {
                 style={{
                   height: 46,
                   fontSize: 14,
-                  background: "#3B1114",
+                  background: "rgba(239,68,68,0.15)",
                   color: "#FF6767",
-                  border: "1px solid #6C2A30",
+                  border: "1px solid rgba(239,68,68,0.30)",
                   cursor: cancelling ? "not-allowed" : "pointer",
                 }}
               >
