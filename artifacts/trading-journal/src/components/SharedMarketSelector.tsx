@@ -1286,23 +1286,6 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: 2, flexShrink: 0 }}>
-            {activeTab === "Markets" && (
-              <button
-                onPointerDown={() => {
-                  fetchDeltaSymbols(true);
-                  if (ctraderIsStreaming) fetchCtraderSymbolsInternal();
-                }}
-                disabled={isLoading}
-                style={{
-                  background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
-                  borderRadius: 8, cursor: "pointer", padding: "7px 9px",
-                  color: isLoading ? "rgba(148,163,184,0.2)" : "rgba(148,163,184,0.5)",
-                  touchAction: "manipulation", lineHeight: 0,
-                }}
-              >
-                <RefreshCw size={13} style={{ animation: isLoading ? "spin 1s linear infinite" : "none" }} />
-              </button>
-            )}
             {headerActions}
             {mode === "sheet" && onClose && (
               <button
