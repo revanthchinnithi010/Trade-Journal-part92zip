@@ -62,9 +62,14 @@ export default function AccountValueWidget({
 
   const resolvedNetPnlDisplay = netPnlDisplay ?? (upnlDisplay + realizedPnlDisplay);
 
-  const upPos      = upnlDisplay >= 0;
-  const realPos    = realizedPnlDisplay >= 0;
-  const netPos     = resolvedNetPnlDisplay >= 0;
+  const upPos   = upnlDisplay >= 0;
+  const realPos = realizedPnlDisplay >= 0;
+  const netPos  = resolvedNetPnlDisplay >= 0;
+
+  // Palette constants
+  const PROFIT  = "#22C55E";
+  const LOSS    = "#EF4444";
+  const DIVIDER = "rgba(255,255,255,0.08)";
 
   return (
     <div className="dash-account-card overflow-hidden">
@@ -118,12 +123,12 @@ export default function AccountValueWidget({
       <div
         className="mx-3 mb-3 rounded-xl grid grid-cols-2 overflow-hidden"
         style={{
-          background: "rgba(255, 255, 255, 0.05)",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
+          background: "rgba(255,255,255,0.04)",
+          border: `1px solid ${DIVIDER}`,
         }}
       >
         {/* UPNL */}
-        <div className="px-3.5 py-3 border-r border-b" style={{ borderColor: "#252525" }}>
+        <div className="px-3.5 py-3 border-r border-b" style={{ borderColor: DIVIDER }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               UPNL
@@ -131,14 +136,14 @@ export default function AccountValueWidget({
             <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-[15px] font-black leading-none" style={{ color: upPos ? "#34d399" : "#f87171" }}>
+            <span className="text-[15px] font-black leading-none" style={{ color: upPos ? PROFIT : LOSS }}>
               {fmt(upnlDisplay, currency, masked)}
             </span>
           </div>
         </div>
 
         {/* Realized PNL */}
-        <div className="px-3.5 py-3 border-b" style={{ borderColor: "#252525" }}>
+        <div className="px-3.5 py-3 border-b" style={{ borderColor: DIVIDER }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/portfolio?tab=positions")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Realized PNL
@@ -146,14 +151,14 @@ export default function AccountValueWidget({
             <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-[15px] font-black leading-none" style={{ color: realPos ? "#34d399" : "#f87171" }}>
+            <span className="text-[15px] font-black leading-none" style={{ color: realPos ? PROFIT : LOSS }}>
               {fmt(realizedPnlDisplay, currency, masked)}
             </span>
           </div>
         </div>
 
         {/* Net PNL — tapping navigates to the PNL Analytics page */}
-        <div className="px-3.5 py-3 border-r" style={{ borderColor: "#252525" }}>
+        <div className="px-3.5 py-3 border-r" style={{ borderColor: DIVIDER }}>
           <button className="flex items-center gap-0.5 mb-1.5 group" onClick={() => navigate("/pnl")}>
             <span className="text-[11px] font-semibold transition-colors" style={{ color: "var(--stat-sub)" }}>
               Net PNL
@@ -161,7 +166,7 @@ export default function AccountValueWidget({
             <ChevronRight className="w-3 h-3" style={{ color: "var(--stat-icon)" }} />
           </button>
           <div className="flex items-center gap-2">
-            <span className="text-[15px] font-black leading-none" style={{ color: netPos ? "#34d399" : "#f87171" }}>
+            <span className="text-[15px] font-black leading-none" style={{ color: netPos ? PROFIT : LOSS }}>
               {fmt(resolvedNetPnlDisplay, currency, masked)}
             </span>
           </div>

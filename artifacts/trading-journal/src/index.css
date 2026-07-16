@@ -541,60 +541,74 @@ body.tj-modal-open .animate-pulse {
 }
 
 .dash-account-card {
-  --stat-title: rgba(255, 255, 255, 0.72);
-  --stat-value: #FFFFFF;
-  --stat-sub:   rgba(255, 255, 255, 0.55);
-  --stat-icon:  rgba(255, 255, 255, 0.55);
+  /* ── Design tokens ─────────────────────────────── */
+  --stat-title:  rgba(255, 255, 255, 0.72);
+  --stat-value:  #FFFFFF;
+  --stat-sub:    #A7A7A7;
+  --stat-icon:   #6E7578;
 
-  /* Glass surface */
-  background: rgba(15, 22, 24, 0.55);
-  backdrop-filter: blur(20px) saturate(165%);
+  /* ── Glass surface ─────────────────────────────── */
+  background:          rgba(15, 22, 24, 0.55);
+  backdrop-filter:     blur(20px) saturate(165%);
   -webkit-backdrop-filter: blur(20px) saturate(165%);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 24px;
+  border:              1px solid rgba(255, 255, 255, 0.12);
+  border-radius:       24px;
 
-  /* Soft depth shadow */
-  box-shadow:
-    0 8px 32px rgba(0, 0, 0, 0.52),
-    0 1px 6px rgba(0, 0, 0, 0.28);
+  /* ── Soft premium shadow ───────────────────────── */
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.55);
 
-  position: relative;
+  /* ── Stacking context ──────────────────────────── */
+  position:  relative;
   isolation: isolate;
+  transform: translateZ(0);          /* GPU layer */
+  will-change: transform;
   transition: filter 0.15s ease;
 }
 
-/* Top reflection — radial highlight at the crown */
+/*
+ * ::before  →  dual reflection
+ *   layer 1: radial ellipse burst from crown (bright centre highlight)
+ *   layer 2: linear top-to-bottom fade (diffuse sheen)
+ * Both are purely additive — no blend-mode tricks that could tint the glass.
+ */
 .dash-account-card::before {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: radial-gradient(
-    ellipse 120% 70% at 50% -20%,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.00) 70%
-  );
-  mix-blend-mode: screen;
-  opacity: 0.70;
+  background:
+    radial-gradient(
+      ellipse 120% 70% at 50% -20%,
+      rgba(255, 255, 255, 0.22)  0%,
+      rgba(255, 255, 255, 0.08) 35%,
+      rgba(255, 255, 255, 0.00) 75%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14)  0%,
+      rgba(255, 255, 255, 0.06) 28%,
+      rgba(255, 255, 255, 0.02) 60%,
+      rgba(255, 255, 255, 0.00) 100%
+    );
   pointer-events: none;
   z-index: 1;
 }
 
-/* Inner glass rim — hairline inset highlights */
+/* ::after  →  inner glass rim (hairline inset edge highlights) */
 .dash-account-card::after {
   content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   box-shadow:
-    inset 0  1px 0 rgba(255, 255, 255, 0.12),
-    inset 0  0   0 1px rgba(255, 255, 255, 0.06),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.02);
+    inset 0  1px 0 rgba(255, 255, 255, 0.12),   /* top inner edge  */
+    inset 0  0   0 1px rgba(255, 255, 255, 0.06), /* full inner rim   */
+    inset 0 -1px 0 rgba(255, 255, 255, 0.02);    /* bottom edge      */
   pointer-events: none;
   z-index: 1;
 }
 
-/* Keep all direct children above pseudo-element layers */
+/* All direct children sit above pseudo layers */
 .dash-account-card > * { position: relative; z-index: 2; }
 
 .dash-account-card:hover  { filter: brightness(1.05); }
