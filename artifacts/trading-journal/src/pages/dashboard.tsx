@@ -137,7 +137,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
             </span>
           )}
           {remainingDays > 0 && (
-            <span className="text-[11px] font-semibold text-muted-foreground">
+            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-900/70 text-white">
               {remainingDays} days
             </span>
           )}
