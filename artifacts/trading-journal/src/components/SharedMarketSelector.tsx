@@ -1240,26 +1240,31 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           padding: mode === "sheet" ? "4px 12px 0" : "10px 12px 0",
           gap: 8,
         }}>
-          <div style={{
-            display: "flex", flex: 1,
-            background: "rgba(255,255,255,0.055)", borderRadius: 10,
-            padding: 3, border: "1px solid rgba(255,255,255,0.07)",
-          }}>
+          <div
+            className="dash-segment-bar"
+            style={{
+              display: "flex", flex: 1,
+              borderRadius: 10,
+              padding: 4,
+            }}
+          >
             {TABS.map(tab => {
               const active = tab === activeTab;
               return (
                 <button
                   key={tab}
                   onClick={() => handleTabChange(tab)}
+                  className={`relative z-10 ${active ? "dash-segment-btn-active" : "dash-segment-btn-idle"}`}
                   style={{
                     flex: 1, padding: "7px 10px",
-                    border: "none", borderRadius: 7,
+                    borderRadius: 7,
                     cursor: "pointer", touchAction: "manipulation",
                     fontSize: 12.5, fontWeight: active ? 700 : 500,
-                    color: active ? "#fff" : "rgba(148,163,184,0.45)",
-                    background: active ? "rgba(245,158,11,0.18)" : "transparent",
-                    boxShadow: active ? "0 0 0 1px rgba(245,158,11,0.28)" : "none",
-                    transition: "all 0.15s",
+                    color: active ? "#FFFFFF" : "#6E7578",
+                    background: active ? "#2A2D31" : "transparent",
+                    border: active ? "1px solid rgba(255,255,255,0.10)" : "1px solid transparent",
+                    boxShadow: active ? "inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 20px rgba(0,0,0,0.35)" : "none",
+                    transition: "color 0.15s, background 0.15s, box-shadow 0.15s",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 5,
                     whiteSpace: "nowrap",
                   }}
