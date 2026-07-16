@@ -51,6 +51,15 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
     [year, month]
   );
 
+  const monthlyPnl = useMemo(() => data.reduce((sum, d) => sum + d.pnl, 0), [data]);
+
+  const remainingDays = useMemo(() => {
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === year && today.getMonth() + 1 === month;
+    if (!isCurrentMonth) return 0;
+    return daysInMonth - today.getDate();
+  }, [year, month, daysInMonth]);
+
   const cellStyles = useMemo(() => {
     const styles: Record<string, React.CSSProperties> = {};
     Object.entries(dayMap).forEach(([dateStr, d]) => {
@@ -96,20 +105,42 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 
   return (
     <div>
-      <div className="px-4 flex items-center gap-1 mb-3">
-        <button
-          onClick={onPrev}
-          className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <span className="text-xs font-semibold text-muted-foreground px-1">{monthName}</span>
-        <button
-          onClick={onNext}
-          className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+      <div className="px-4 flex items-center justify-between mb-3">
+        {/* left: month navigator */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={onPrev}
+            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs font-semibold text-muted-foreground px-1">{monthName}</span>
+          <button
+            onClick={onNext}
+            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-white hover:bg-white/10 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+        {/* right: monthly stats */}
+        <div className="flex items-center gap-2">
+          {data.length > 0 && (
+            <span
+              className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                monthlyPnl >= 0
+                  ? "bg-emerald-500/20 text-emerald-400"
+                  : "bg-red-500/20 text-red-400"
+              }`}
+            >
+              {monthlyPnl >= 0 ? "+" : ""}{axisFormatter(monthlyPnl)}
+            </span>
+          )}
+          {remainingDays > 0 && (
+            <span className="text-[11px] font-semibold text-muted-foreground">
+              {remainingDays} days
+            </span>
+          )}
+        </div>
       </div>
       <div className="px-3">
         <div className="grid grid-cols-7 gap-1 mb-1.5">
