@@ -96,7 +96,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
 
   return (
     <div>
-      <p className="text-xs font-semibold text-muted-foreground mb-3">{monthName}</p>
+      <p className="pl-4 text-xs font-semibold text-muted-foreground mb-3">{monthName}</p>
       <div className="grid grid-cols-7 gap-1 mb-1.5">
         {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
           <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground/60 py-0.5">{d}</div>
