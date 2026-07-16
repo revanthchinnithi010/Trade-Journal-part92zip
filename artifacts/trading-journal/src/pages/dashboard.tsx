@@ -136,7 +136,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
             {statsTooltip && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setStatsTooltip(false)} />
-                <div className="absolute right-0 top-full mt-2 z-40 w-52 rounded-xl border border-white/10 bg-[#1a1a2e] shadow-xl px-3 py-2.5">
+                <div className="absolute right-0 top-full mt-2 z-40 w-52 rounded-xl border border-white/[0.08] bg-[#111111] shadow-2xl px-3 py-2.5">
                   <p className="text-[11px] font-semibold text-white mb-1">Monthly Stats</p>
                   <p className="text-[10px] text-muted-foreground leading-relaxed">
                     Total realised P&L for the selected month, calculated from all closed trades on trading days.
