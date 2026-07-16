@@ -131,7 +131,7 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
       className="cursor-pointer"
       style={{
         padding: "12px 8px",
-        borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.055)",
+        borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
         WebkitTapHighlightColor: "transparent",
         transition: "background 0.15s",
       }}
