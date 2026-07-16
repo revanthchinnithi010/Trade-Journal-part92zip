@@ -48,11 +48,10 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
     <div
       role="tablist"
       aria-label="Dashboard sections"
-      className="relative w-full grid grid-cols-2"
+      className="dash-segment-bar relative w-full grid grid-cols-2"
       style={{
         height:       46,
         borderRadius: 12,
-        background:   "#2A2A2F",
         padding:       4,
         // Isolate this node's paint/layout from the rest of the (heavy,
         // constantly-ticking) dashboard tree — without this, the browser's
@@ -73,7 +72,9 @@ const DashboardSegmentedControl = memo(function DashboardSegmentedControl() {
           width:               "calc(50% - 4px)",
           height:              "calc(100% - 8px)",
           borderRadius:        9,
-          background:          "#050505",
+          background:          "rgba(255, 255, 255, 0.09)",
+          border:              "1px solid rgba(255, 255, 255, 0.12)",
+          boxShadow:           "inset 0 1px 0 rgba(255,255,255,0.10), 0 2px 8px rgba(0,0,0,0.40)",
           transform:           `translate3d(${activeKey === "reports" ? "100%" : "0%"}, 0, 0)`,
           transition:          "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)",
           willChange:          "transform",
