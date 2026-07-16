@@ -124,6 +124,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
         </div>
         {/* right: monthly stats */}
         <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-muted-foreground">Monthly stats:</span>
           {data.length > 0 && (
             <span
               className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
