@@ -492,7 +492,7 @@ export default function Trades() {
 
       {/* ── Secondary header ── */}
       <div
-        className="flex-shrink-0 flex items-center justify-between px-5"
+        className="flex-shrink-0 flex items-center justify-between px-3"
         style={{ height: 56, borderBottom: "1px solid #262626" }}
       >
         <span className="font-semibold" style={{ color: "#F3F3F3", fontSize: 17 }}>Trades</span>
@@ -531,7 +531,7 @@ export default function Trades() {
         style={{ scrollbarWidth: "none" }}
       >
         <div
-          className="p-5 space-y-4 mx-auto max-w-[1400px]"
+          className="py-4 px-3 space-y-4 mx-auto max-w-[1400px]"
           style={{ paddingBottom: isMobile ? 80 : 40 }}
         >
 
