@@ -311,7 +311,7 @@ function SegmentedControl({ tabs, active, onChange }: {
             {t.count !== undefined && t.count > 0 && (
               <span
                 className="text-[9px] font-black px-1.5 py-0.5 rounded-full"
-                style={{ background: "rgba(249,115,22,0.2)", color: "#f97316" }}
+                style={{ background: "#E0524F", color: "#FFFFFF", border: "1px solid rgba(255,255,255,0.25)" }}
               >
                 {t.count}
               </span>
