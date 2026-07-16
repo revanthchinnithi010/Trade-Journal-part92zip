@@ -642,8 +642,8 @@ export const Layout = memo(function Layout({
               <div
                 className="flex items-center"
                 style={{
-                  background:   "var(--surface-btn-hover)",
-                  border:       "1px solid var(--surface-btn-active-border)",
+                  background:   "#1E1E20",
+                  border:       "1px solid rgba(255,255,255,0.08)",
                   borderRadius: 99,
                   padding:      "3px",
                   gap:          0,
@@ -653,17 +653,14 @@ export const Layout = memo(function Layout({
                 <button
                   onClick={() => setCurrency(currency === "USD" ? "INR" : "USD")}
                   className="w-9 h-9 flex items-center justify-center rounded-full transition-all duration-200 text-[15px] font-bold"
-                  style={{ color: "hsl(var(--foreground) / 0.72)", background: "transparent" }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                  style={{ color: "#FFFFFF", background: "transparent" }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   title={`Switch to ${currency === "USD" ? "INR (₹)" : "USD ($)"}`}
                   aria-label={`Switch to ${currency === "USD" ? "INR" : "USD"}`}
                 >
                   {CURRENCY_META[currency].symbol}
                 </button>
-
-                {/* Divider */}
-                <div style={{ width: 1, height: 18, background: "var(--surface-btn-active-border)", flexShrink: 0 }} />
 
                 {/* Notification bell */}
                 <div className="relative">
@@ -673,10 +670,10 @@ export const Layout = memo(function Layout({
                     aria-label="Notifications"
                     className="relative w-9 h-9 flex items-center justify-center rounded-full transition-all duration-150"
                     style={{
-                      background: notifOpen ? "var(--surface-btn-active-bg)" : "transparent",
-                      color:      notifOpen ? "hsl(var(--primary))" : "hsl(var(--foreground) / 0.72)",
+                      background: notifOpen ? "rgba(255,255,255,0.08)" : "transparent",
+                      color:      "#FFFFFF",
                     }}
-                    onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "var(--surface-btn-active-bg)"; }}
+                    onMouseEnter={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,0.08)"; }}
                     onMouseLeave={e => { if (!notifOpen) (e.currentTarget as HTMLElement).style.background = "transparent"; }}
                   >
                     <Bell className={cn("w-4 h-4 transition-colors", bellShake && "bell-ring")} strokeWidth={2.25} />
