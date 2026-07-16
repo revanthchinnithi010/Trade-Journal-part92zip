@@ -449,9 +449,16 @@ export default function Portfolio() {
         {tab === "positions" && (
           <>
             {/* UPNL summary */}
-            <div className="px-4 py-3.5" style={{ background: "#151515", border: "1px solid #252525", borderRadius: 20 }}>
-              <p className="text-[10px] font-semibold uppercase tracking-widest mb-1" style={{ color: "#6B6B6B" }}>Unrealized PnL</p>
-              <DualValue inr={upnlINR} usd={upnlUSD} masked={false} color={upPos ? "#35C37A" : "#E0524F"} size="md" />
+            <div className="dash-account-card overflow-hidden">
+              <div className="px-4 pt-4 pb-4">
+                <p
+                  className="text-[11px] font-semibold uppercase tracking-widest mb-2"
+                  style={{ color: "var(--stat-sub)" }}
+                >
+                  Unrealized PnL
+                </p>
+                <DualValue inr={upnlINR} usd={upnlUSD} masked={false} color={upPos ? "#22C55E" : "#EF4444"} size="md" />
+              </div>
             </div>
 
             {/* Broker positions */}
