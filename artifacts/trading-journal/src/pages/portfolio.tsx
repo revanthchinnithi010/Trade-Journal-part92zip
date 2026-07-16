@@ -270,12 +270,11 @@ function SegmentedControl({ tabs, active, onChange }: {
     <div
       role="tablist"
       aria-label="Portfolio sections"
-      className="relative w-full grid"
+      className="dash-segment-bar relative w-full grid"
       style={{
         gridTemplateColumns: `repeat(${n}, minmax(0, 1fr))`,
         height: 46,
         borderRadius: 12,
-        background: "#2A2A2F",
         padding: 4,
         contain: "layout paint",
       }}
@@ -286,7 +285,9 @@ function SegmentedControl({ tabs, active, onChange }: {
           width: `calc(${100 / n}% - 4px)`,
           height: "calc(100% - 8px)",
           borderRadius: 9,
-          background: "#050505",
+          background: "#2A2D31",
+          border: "1px solid rgba(255, 255, 255, 0.10)",
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.12), 0 8px 20px rgba(0,0,0,0.35)",
           transform: `translate3d(calc(${activeIndex} * (100% + ${4 / n}px)), 0, 0)`,
           transition: "transform 200ms cubic-bezier(0.16, 1, 0.3, 1)",
           willChange: "transform",
@@ -303,8 +304,8 @@ function SegmentedControl({ tabs, active, onChange }: {
             role="tab"
             aria-selected={selected}
             onClick={() => onChange(t.id)}
-            className="relative z-10 flex items-center justify-center gap-1.5 text-[14px] font-semibold transition-[color,transform] duration-150 ease-out active:scale-[0.96]"
-            style={{ color: selected ? "#FFFFFF" : "#B5B5B5", willChange: "transform" }}
+            className={`relative z-10 flex items-center justify-center gap-1.5 text-[14px] font-semibold transition-[color,background,transform] duration-150 ease-out active:scale-[0.96] rounded-[9px] w-full h-full ${selected ? "dash-segment-btn-active" : "dash-segment-btn-idle"}`}
+            style={{ color: selected ? "#FFFFFF" : "#6E7578", willChange: "transform" }}
           >
             {t.label}
             {t.count !== undefined && t.count > 0 && (
