@@ -468,7 +468,7 @@ export default function Portfolio() {
                 <p className="text-[12px]" style={{ color: "#6B6B6B" }}>Loading positions…</p>
               </div>
             ) : positions.length > 0 ? (
-              <div>
+              <div className="-mx-4 md:-mx-6">
                 {positions.map((pos, i) => (
                   <PositionRow key={pos.id} pos={pos} isLast={i === positions.length - 1} onTap={() => { setPosition(pos); navigate("/position-detail"); }} />
                 ))}
