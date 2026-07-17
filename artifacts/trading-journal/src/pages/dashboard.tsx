@@ -52,26 +52,9 @@ const DayDetailSheet = memo(function DayDetailSheet({
     { query: { enabled: open && !!date } },
   );
 
-  const trades = data?.trades ?? [];
-
-  // Match exactly how the calendar heatmap groups trades: by exit_date calendar day.
-  // Compare year/month/day only — no UTC conversion, no timezone issues.
-  const selectedDate = useMemo(() => date ? new Date(date + "T00:00:00") : null, [date]);
-
-  const isSameCalendarDay = (a: Date, b: Date) =>
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate();
-
-  const dayTrades = useMemo(() => {
-    if (!selectedDate) return trades;
-    return trades.filter((t) => {
-      const raw = (t as { exitDate?: string | null; entryDate?: string | null }).exitDate
-               || (t as { entryDate?: string | null }).entryDate;
-      if (!raw) return false;
-      return isSameCalendarDay(new Date(raw), selectedDate);
-    });
-  }, [trades, selectedDate]);
+  // The API filters by date server-side (both real and mock), so every trade
+  // in the response already belongs to this calendar day. No client re-filter needed.
+  const dayTrades = data?.trades ?? [];
 
   const wins      = dayTrades.filter(t => t.outcome === "win").length;
   const losses    = dayTrades.filter(t => t.outcome === "loss").length;

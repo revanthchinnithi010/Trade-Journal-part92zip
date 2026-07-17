@@ -30,6 +30,7 @@ const routes: Route[] = [
       const page = Number(search.get("page")) || 1;
       const symbol = search.get("symbol");
       const outcome = search.get("outcome");
+      const date = search.get("date"); // YYYY-MM-DD
 
       let filtered = MOCK_TRADES;
       if (symbol) {
@@ -38,6 +39,11 @@ const routes: Route[] = [
       }
       if (outcome) {
         filtered = filtered.filter(t => t.outcome === outcome);
+      }
+      if (date) {
+        // Match the calendar's grouping: exitDate UTC-slice (first 10 chars of ISO string).
+        // Open trades (empty exitDate) are excluded when filtering by date.
+        filtered = filtered.filter(t => t.exitDate && t.exitDate.slice(0, 10) === date);
       }
 
       const start = (page - 1) * limit;
