@@ -85,7 +85,7 @@ export const tabPageVariants: Variants = {
   exit: (dir: number) => ({
     x:          dir === 0 ? 0 : (dir > 0 ? -TAB_X : TAB_X),
     opacity:    0,
-    transition: { duration: 0.16, ease: [0.4, 0, 1, 1] },
+    transition: { duration: 0.06, ease: [0.4, 0, 1, 1] },
   }),
 };
 
