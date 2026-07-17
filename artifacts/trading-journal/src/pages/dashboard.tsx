@@ -56,8 +56,8 @@ const DayDetailSheet = memo(function DayDetailSheet({
   // in the response already belongs to this calendar day. No client re-filter needed.
   const dayTrades = data?.trades ?? [];
 
-  const wins      = dayTrades.filter(t => t.outcome === "win").length;
-  const losses    = dayTrades.filter(t => t.outcome === "loss").length;
+  const wins      = dayTrades.filter(t => (t.pnl ?? 0) > 0).length;
+  const losses    = dayTrades.filter(t => (t.pnl ?? 0) < 0).length;
   const dailyPnl  = dayTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
   const label = useMemo(() => {
