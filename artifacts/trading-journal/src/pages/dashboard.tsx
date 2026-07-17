@@ -4,7 +4,7 @@ import {
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
 import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
-import { TrendingUp, Activity, ChevronRight, ChevronLeft, X, TrendingDown } from "lucide-react";
+import { TrendingUp, Activity, ChevronRight, ChevronLeft, X } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
@@ -125,14 +125,20 @@ const DayDetailSheet = memo(function DayDetailSheet({
         </div>
 
         {/* trade list */}
-        <div className="px-5 pb-1 mb-2">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Trades</p>
-        </div>
-        <div className="overflow-y-auto flex-1 px-5 pb-8">
+        <div className="overflow-y-auto flex-1 pb-8">
           {isLoading && (
-            <div className="space-y-2">
+            <div>
               {[0, 1, 2].map(i => (
-                <div key={i} className="h-16 rounded-xl bg-white/5 shimmer-loading" />
+                <div key={i} style={{ padding: "12px 20px", borderBottom: i < 2 ? "1px solid rgba(255,255,255,0.055)" : "none" }}>
+                  <div className="flex items-center justify-between">
+                    <div className="h-4 w-28 rounded-lg shimmer-loading" />
+                    <div className="h-4 w-16 rounded-lg shimmer-loading" />
+                  </div>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="h-3 w-20 rounded shimmer-loading" />
+                    <div className="h-3 w-14 rounded shimmer-loading" />
+                  </div>
+                </div>
               ))}
             </div>
           )}
@@ -141,47 +147,62 @@ const DayDetailSheet = memo(function DayDetailSheet({
               <p className="text-muted-foreground text-sm">No trades for this day.</p>
             </div>
           )}
-          {!isLoading && dayTrades.map((trade) => (
-            <div key={trade.id} className="flex items-center gap-3 py-3 border-b border-white/[0.06] last:border-0">
-              {/* icon */}
-              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                trade.pnl >= 0 ? "bg-emerald-500/15" : "bg-red-500/15"
-              }`}>
-                {trade.pnl >= 0
-                  ? <TrendingUp className="w-4 h-4 text-emerald-400" />
-                  : <TrendingDown className="w-4 h-4 text-red-400" />}
-              </div>
-              {/* info */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <span className="text-[13px] font-semibold text-white">{trade.symbol}</span>
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
-                    trade.side === "long"
-                      ? "bg-emerald-500/20 text-emerald-400"
-                      : "bg-red-500/20 text-red-400"
-                  }`}>{trade.side}</span>
+          {!isLoading && dayTrades.map((trade, idx) => {
+            const isLast   = idx === dayTrades.length - 1;
+            const isWin    = (trade.pnl ?? 0) >= 0;
+            const pnlColor = isWin ? "#35C37A" : "#E0524F";
+            const fPrice   = (v: number) => v < 1 ? v.toFixed(4) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+            const dateStr  = new Date((trade as { exitDate?: string }).exitDate ?? (trade as { entryDate?: string }).entryDate ?? "").toLocaleDateString(undefined, { month: "short", day: "numeric" });
+
+            return (
+              <div
+                key={trade.id}
+                style={{
+                  padding: "12px 20px",
+                  borderBottom: isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
+                  WebkitTapHighlightColor: "transparent",
+                  transition: "background 0.15s",
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+              >
+                {/* Row 1 — Symbol + side | PNL */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold leading-none" style={{ fontSize: 15, color: "#F0F0F0" }}>
+                      {trade.symbol}
+                    </span>
+                    <span className="font-semibold leading-none" style={{
+                      fontSize: 10,
+                      color: trade.side === "long" ? "#35C37A" : "#E0524F",
+                      letterSpacing: "0.06em",
+                    }}>
+                      {trade.side === "long" ? "LONG" : "SHORT"}
+                    </span>
+                  </div>
+                  <span className="font-semibold leading-none tabular-nums" style={{ fontSize: 15, color: pnlColor }}>
+                    {isWin ? "+" : ""}{fc(trade.pnl ?? 0)}
+                  </span>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
-                  {(trade.entryPrice ?? 0).toLocaleString()} → {(trade.exitPrice ?? 0).toLocaleString()}
-                  <span className="ml-2 text-white/40">× {trade.quantity}</span>
-                </p>
-                {trade.setupTags && (
-                  <p className="text-[10px] text-blue-400/70 mt-0.5 truncate">{trade.setupTags}</p>
-                )}
+
+                {/* Row 2 — Entry → Exit | Date */}
+                <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
+                  <div className="flex items-center gap-0.5">
+                    <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+                      {fPrice(trade.entryPrice ?? 0)}
+                    </span>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", margin: "0 2px" }}>→</span>
+                    <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+                      {trade.exitPrice != null ? fPrice(trade.exitPrice) : "—"}
+                    </span>
+                  </div>
+                  <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+                    {dateStr}
+                  </span>
+                </div>
               </div>
-              {/* pnl */}
-              <div className="text-right flex-shrink-0">
-                <p className={`text-[14px] font-bold ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
-                </p>
-                {trade.pnlPercent != null && (
-                  <p className="text-[10px] text-muted-foreground">
-                    {trade.pnlPercent >= 0 ? "+" : ""}{trade.pnlPercent.toFixed(2)}%
-                  </p>
-                )}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </DrawerContent>
     </Drawer>
