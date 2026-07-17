@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { useElasticScroll } from "@/hooks/useElasticScroll";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { popupManager } from "@/lib/popupManager";
@@ -117,7 +118,8 @@ const scrollPositions = new Map<string, number>();
  * the exact scroll offset the user had before navigating away.
  */
 function StandardPageWrapper({ children, bottomPad = 40, pathname }: { children: React.ReactNode; bottomPad?: number; pathname: string }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef  = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -128,16 +130,17 @@ function StandardPageWrapper({ children, bottomPad = 40, pathname }: { children:
     const onScroll = () => { scrollPositions.set(pathname, el.scrollTop); };
     el.addEventListener("scroll", onScroll, { passive: true });
     return () => {
-      // Capture the final position on unmount too, in case no scroll event
-      // fired after the last programmatic update.
       scrollPositions.set(pathname, el.scrollTop);
       el.removeEventListener("scroll", onScroll);
     };
   }, [pathname]);
 
+  useElasticScroll(scrollRef, contentRef);
+
   return (
     <div ref={scrollRef} style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }} className="scroll-container">
       <div
+        ref={contentRef}
         className="p-5 md:p-6 mx-auto max-w-[1400px] min-h-full"
         style={{ paddingBottom: bottomPad }}
       >
