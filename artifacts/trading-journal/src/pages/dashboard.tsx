@@ -12,6 +12,7 @@ import { useBrokerStore } from "@/store/brokerStore";
 import { Link } from "wouter";
 import { BROKER_MAP, BROKER_INFO } from "@/data/sampleData";
 import { useTickStore } from "@/store/tickStore";
+import { useChartStore } from "@/store/chartStore";
 import {
   PageTransition,
   AnimatedCard,
@@ -411,8 +412,14 @@ const Dashboard = memo(function Dashboard() {
 
   const { data: calData } = useGetCalendarHeatmap({ year: calYear, month: calMonth });
 
+  const setDashboardSheetOpen = useChartStore(s => s.setDashboardSheetOpen);
   const [selectedDate, setSelectedDate] = useState<string>("");
   const [sheetOpen,    setSheetOpen]    = useState(false);
+
+  const openSheet = useCallback((v: boolean) => {
+    setSheetOpen(v);
+    setDashboardSheetOpen(v);
+  }, [setDashboardSheetOpen]);
 
   const handleDateClick = useCallback((date: string) => {
     const calMap = (calData ?? []).reduce<Record<string, { pnl: number; trades: number }>>((m, d) => {
@@ -422,8 +429,8 @@ const Dashboard = memo(function Dashboard() {
     const entry = calMap[date];
     if (!entry || entry.trades === 0) return; // only open for days with trades
     setSelectedDate(date);
-    setSheetOpen(true);
-  }, [calData]);
+    openSheet(true);
+  }, [calData, openSheet]);
 
   const selectedDayData = useMemo(() => {
     if (!selectedDate || !calData) return null;
@@ -527,7 +534,7 @@ const Dashboard = memo(function Dashboard() {
         date={selectedDate}
         dayData={selectedDayData}
         open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
+        onClose={() => openSheet(false)}
       />
 
       {/* ── Recent Trades ── */}

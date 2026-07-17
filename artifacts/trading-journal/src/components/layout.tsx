@@ -386,6 +386,7 @@ export const Layout = memo(function Layout({
   useBrokerWs();
   const isMobile                = useIsMobile();
   const mobileChartFullscreen   = useChartStore(s => s.mobileChartFullscreen);
+  const dashboardSheetOpen      = useChartStore(s => s.dashboardSheetOpen);
   const [location, navigate] = useLocation();
   // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
   const pathname      = location.split("?")[0];
@@ -904,8 +905,8 @@ export const Layout = memo(function Layout({
           right:         0,
           bottom:        0,
           zIndex:        60,
-          visibility:    (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "hidden" : "visible",
-          pointerEvents: (mobileChartFullscreen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "none"   : "auto",
+          visibility:    (mobileChartFullscreen || dashboardSheetOpen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "hidden" : "visible",
+          pointerEvents: (mobileChartFullscreen || dashboardSheetOpen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "none"   : "auto",
         }}>
           <MobileBottomNav />
         </div>

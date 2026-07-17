@@ -38,6 +38,7 @@ interface ChartStoreState {
   crosshairInfo: CrosshairInfo;
   barsLoaded:            boolean;
   mobileChartFullscreen: boolean;
+  dashboardSheetOpen:    boolean;
 
   setSymbol:       (s: string) => void;
   setInterval:     (i: string) => void;
@@ -48,6 +49,7 @@ interface ChartStoreState {
   setCrosshair:    (info: CrosshairInfo) => void;
   setBarsLoaded:            (v: boolean) => void;
   setMobileChartFullscreen: (v: boolean) => void;
+  setDashboardSheetOpen:    (v: boolean) => void;
 }
 
 const loadIndicators = (): IndicatorState => {
@@ -77,6 +79,7 @@ export const useChartStore = create<ChartStoreState>((set, get) => ({
   crosshairInfo: { time: null, open: null, high: null, low: null, close: null, volume: null },
   barsLoaded: false,
   mobileChartFullscreen: false,
+  dashboardSheetOpen:    false,
 
   setSymbol:    (symbol)    => { localStorage.setItem("tv_symbol",   symbol);   set({ symbol,   barsLoaded: false }); },
   setInterval:  (interval)  => { localStorage.setItem("tv_interval", interval); set({ interval, barsLoaded: false }); },
@@ -91,4 +94,5 @@ export const useChartStore = create<ChartStoreState>((set, get) => ({
   setCrosshair:  (crosshairInfo)  => set({ crosshairInfo }),
   setBarsLoaded:            (barsLoaded)            => set({ barsLoaded }),
   setMobileChartFullscreen: (mobileChartFullscreen) => set({ mobileChartFullscreen }),
+  setDashboardSheetOpen:    (dashboardSheetOpen)    => set({ dashboardSheetOpen }),
 }));
