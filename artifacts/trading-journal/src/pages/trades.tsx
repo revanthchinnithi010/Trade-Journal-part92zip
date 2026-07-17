@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import {
   Search, Plus, Trash2, Eye, ExternalLink, ImageIcon, TrendingUp,
   X, ChevronDown, Tag, AlertTriangle, FileText, Link as LinkIcon,
-  SlidersHorizontal,
+  SlidersHorizontal, ArrowLeft,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -1118,9 +1118,20 @@ export default function Trades() {
 
       {/* ── Trade Detail Drawer ── */}
       <Sheet open={!!selectedTradeId} onOpenChange={(open) => !open && setSelectedTradeId(null)}>
-        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden" style={{ background: "hsl(var(--card))", borderLeft: "1px solid var(--surface-sidebar-border)" }}>
+        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden [&>button:first-child]:hidden" style={{ background: "hsl(var(--card))", borderLeft: "1px solid var(--surface-sidebar-border)" }}>
           {selectedTrade && (
             <>
+              {/* ── Custom Nav Header ── */}
+              <div className="flex items-center px-4 h-14 shrink-0 relative" style={{ background: "#000000" }}>
+                <button
+                  onClick={() => setSelectedTradeId(null)}
+                  className="flex items-center justify-center w-8 h-8 rounded-full text-white/70 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <span className="absolute left-1/2 -translate-x-1/2 text-[15px] font-semibold text-white tracking-tight">Trade Details</span>
+              </div>
+
               {/* Drawer Header */}
               <div className="relative px-6 pt-6 pb-5 border-b border-white/[0.07]">
                 <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] to-transparent pointer-events-none" />
