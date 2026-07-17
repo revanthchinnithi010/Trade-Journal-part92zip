@@ -1118,7 +1118,7 @@ export default function Trades() {
 
       {/* ── Trade Detail Drawer ── */}
       <Sheet open={!!selectedTradeId} onOpenChange={(open) => !open && setSelectedTradeId(null)}>
-        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden [&>button:first-child]:hidden" style={{ background: "hsl(var(--card))", borderLeft: "1px solid var(--surface-sidebar-border)" }}>
+        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden [&>button:first-child]:hidden" style={{ background: "#000000", borderLeft: "1px solid rgba(255,255,255,0.07)" }}>
           {selectedTrade && (
             <>
               {/* ── Custom Nav Header ── */}
@@ -1171,7 +1171,7 @@ export default function Trades() {
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6" style={{ background: "#000000" }}>
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-2 gap-2.5">
                   {[
@@ -1182,7 +1182,7 @@ export default function Trades() {
                     { label: "Stop Loss", value: selectedTrade.stopLoss ? fc(selectedTrade.stopLoss) : "—", mono: true },
                     { label: "Take Profit", value: selectedTrade.takeProfit ? fc(selectedTrade.takeProfit) : "—", mono: true },
                   ].map(({ label, value, mono }) => (
-                    <div key={label} className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                    <div key={label} className="p-3 rounded-xl border" style={{ background: "#111111", borderColor: "rgba(255,255,255,0.09)" }}>
                       <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-1">{label}</p>
                       <p className={`text-[14px] font-bold ${mono ? "font-mono" : ""} text-white leading-tight`}>{value}</p>
                     </div>
@@ -1273,7 +1273,7 @@ export default function Trades() {
                     <FileText className="w-3 h-3" /> Journal Notes
                   </p>
                   {selectedTrade.notes ? (
-                    <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.07] text-[13px] leading-relaxed text-foreground/80">
+                    <div className="p-4 rounded-xl text-[13px] leading-relaxed text-white/70" style={{ background: "#111111", border: "1px solid rgba(255,255,255,0.09)" }}>
                       {selectedTrade.notes}
                     </div>
                   ) : (
