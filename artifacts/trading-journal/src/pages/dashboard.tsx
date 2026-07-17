@@ -122,8 +122,16 @@ const DayDetailSheet = memo(function DayDetailSheet({
           </div>
         </div>
 
+        {/* trade list header */}
+        <div className="flex items-center justify-between px-5 pb-2 flex-shrink-0">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Trades</p>
+          {!isLoading && dayTrades.length > 0 && (
+            <span className="text-[11px] font-semibold text-muted-foreground">{dayTrades.length}</span>
+          )}
+        </div>
+
         {/* trade list */}
-        <div className="overflow-y-auto flex-1 pb-8">
+        <div className="overflow-y-auto flex-1 pb-8" data-vaul-no-drag>
           {isLoading && (
             <div>
               {[0, 1, 2].map(i => (
