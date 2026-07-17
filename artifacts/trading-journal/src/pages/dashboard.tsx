@@ -87,9 +87,6 @@ const DayDetailSheet = memo(function DayDetailSheet({
   return (
     <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
       <DrawerContent className="max-h-[85vh] bg-[#0d0d0d] border-white/10 rounded-t-2xl px-0 pb-0">
-        {/* handle */}
-        <div className="mx-auto mt-3 mb-4 h-1 w-10 rounded-full bg-white/20" />
-
         {/* header */}
         <div className="flex items-start justify-between px-5 mb-4">
           <div>
