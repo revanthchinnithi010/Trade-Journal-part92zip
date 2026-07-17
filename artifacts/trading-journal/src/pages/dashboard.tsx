@@ -69,7 +69,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
 
   return (
     <Drawer open={open} onOpenChange={(v) => !v && onClose()} snapPoints={[0.85]} fadeFromIndex={0}>
-      <DrawerContent className="bg-[#000000] border-white/10 rounded-t-2xl px-0 pb-0 flex flex-col" style={{ height: "85vh" }}>
+      <DrawerContent className="border-white/10 rounded-t-2xl px-0 pb-0 flex flex-col" style={{ height: "85vh", background: "linear-gradient(180deg, #0a0a0a 0%, #000000 40%, #050508 100%)" }}>
         {/* header */}
         <div className="flex items-start justify-between px-5 mt-3 mb-4 flex-shrink-0">
           <div>
