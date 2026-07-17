@@ -105,11 +105,11 @@ const DayDetailSheet = memo(function DayDetailSheet({
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1.5">
                 <span className="text-[13px] text-white/50 font-semibold">Win:</span>
-                <span className="inline-flex items-center justify-center h-[18px] px-3.5 rounded-full bg-emerald-500 text-white text-[11px] font-bold leading-none">{wins}</span>
+                <span className="inline-flex items-center justify-center h-[22px] px-3 rounded-lg text-[12px] font-bold leading-none" style={{ background: "rgba(16,185,129,0.15)", color: "#34d399", border: "1px solid rgba(52,211,153,0.2)" }}>{wins}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-[13px] text-white/50 font-semibold">Loss:</span>
-                <span className="inline-flex items-center justify-center h-[18px] px-3.5 rounded-full bg-red-500 text-white text-[11px] font-bold leading-none">{losses}</span>
+                <span className="inline-flex items-center justify-center h-[22px] px-3 rounded-lg text-[12px] font-bold leading-none" style={{ background: "rgba(239,68,68,0.15)", color: "#f87171", border: "1px solid rgba(248,113,113,0.2)" }}>{losses}</span>
               </div>
             </div>
           </div>
