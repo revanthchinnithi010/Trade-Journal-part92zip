@@ -395,29 +395,7 @@ export const Layout = memo(function Layout({
   const NO_HEADER_PATHS = new Set([
     "/charts", "/position-detail", "/balances", "/portfolio", "/net-pnl", "/pnl", "/trades",
   ]);
-  const headerForPath = (p: string) => !NO_HEADER_PATHS.has(p);
-
-  // `headerAllowed` gates the AnimatePresence header. When navigating FROM a
-  // no-header page TO a header page (e.g. /trades → /markets), we delay the
-  // mount by 72 ms — slightly longer than the 60 ms tab-exit animation — so
-  // the exiting page's content never sees the 60 px flex-column push that made
-  // the Trades header appear to "drop" before Markets opened.
-  const prevHeaderPathRef = useRef(pathname);
-  const [headerAllowed, setHeaderAllowed] = useState(() => headerForPath(pathname));
-  useEffect(() => {
-    const prev = prevHeaderPathRef.current;
-    prevHeaderPathRef.current = pathname;
-    const prevShows = headerForPath(prev);
-    const currShows = headerForPath(pathname);
-    if (!prevShows && currShows) {
-      // no-header → header: delay so the exit animation completes first.
-      const t = setTimeout(() => setHeaderAllowed(true), 72);
-      return () => clearTimeout(t);
-    }
-    // header → no-header, or no change: update immediately.
-    setHeaderAllowed(currShows);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  const headerVisible = !NO_HEADER_PATHS.has(pathname);
 
   const [sidebarOpen,     setSidebarOpen]     = useState(false);
   const [notifOpen,       setNotifOpen]       = useState(false);
@@ -540,20 +518,22 @@ export const Layout = memo(function Layout({
             pathname changes, which previously left a header-less gap for ~150 ms
             while mode="wait" finished the portfolio exit before the position-
             detail header could start entering. */}
-        <AnimatePresence initial={false}>
-          {headerAllowed && (
-          <motion.header
-            key="main-header"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.20, ease: "easeOut" } }}
-            exit={{ opacity: 0, transition: { duration: 0.15, ease: "easeIn" } }}
-            className="flex h-[60px] shrink-0 items-center justify-between px-4 z-30 sticky top-0 gap-3"
-            style={{
-              position:    "relative",
-              background:  "var(--surface-header)",
-              borderBottom: "1px solid var(--surface-header-border)",
-            }}
-          >
+        {/* Header — always mounted; height animates 0↔60px over 60ms (matches
+            tab exit duration) so the content area shrinks/grows gradually while
+            the entering page is still at low opacity. No mount/unmount cycle means
+            no sudden flex-column push that shifts visible page content. */}
+        <header
+          className="shrink-0 flex items-center justify-between px-4 z-30 gap-3"
+          style={{
+            height:       headerVisible ? 60 : 0,
+            overflow:     "hidden",
+            transition:   "height 0.06s linear",
+            position:     "relative",
+            background:   "var(--surface-header)",
+            borderBottom: headerVisible ? "1px solid var(--surface-header-border)" : "none",
+            pointerEvents: headerVisible ? "auto" : "none",
+          }}
+        >
             {/* Left: hamburger (or back-arrow on detail pages) + Area.lab wordmark.
                 Logo imported directly from the official SVG asset (never redrawn/
                 rasterized) so the purple→pink "area" gradient, white ".lab", and
@@ -795,9 +775,7 @@ export const Layout = memo(function Layout({
                 anchorRef={profileBtnRef as React.RefObject<HTMLElement | null>}
               />
             )}
-          </motion.header>
-          )}
-        </AnimatePresence>
+        </header>
 
         {/* ── Content area ─────────────────────────────────────────────────────────
             Charts is the only keep-alive page: its LWC instance must survive tab
