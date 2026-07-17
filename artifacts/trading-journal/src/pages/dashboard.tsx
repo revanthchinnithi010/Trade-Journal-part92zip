@@ -85,17 +85,17 @@ const DayDetailSheet = memo(function DayDetailSheet({
 
         {/* summary row */}
         <div className="flex gap-2 px-5 mb-4">
-          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
             <p className="text-[10px] text-muted-foreground mb-1">Net P&L</p>
             <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
             </p>
           </div>
-          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
             <p className="text-[10px] text-muted-foreground mb-1">Trades</p>
             <p className="text-[16px] font-bold text-white">{dayTrades.length}</p>
           </div>
-          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
             <p className="text-[10px] text-muted-foreground mb-1">W / L</p>
             <p className="text-[16px] font-bold">
               <span className="text-emerald-400">{wins}</span>
@@ -114,7 +114,8 @@ const DayDetailSheet = memo(function DayDetailSheet({
         </div>
 
         {/* trade list */}
-        <div className="overflow-y-auto flex-1 pb-8" data-vaul-no-drag>
+        <div className="overflow-y-auto flex-1 pb-8 px-5" data-vaul-no-drag>
+          <div className="dash-account-card dash-account-card-dim overflow-hidden">
           {isLoading && (
             <div>
               {[0, 1, 2].map(i => (
@@ -195,6 +196,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
               </div>
             );
           })}
+          </div>
         </div>
       </DrawerContent>
     </Drawer>
