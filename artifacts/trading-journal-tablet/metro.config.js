@@ -28,4 +28,12 @@ config.resolver.unstable_enablePackageExports = false;
 //    (e.g. @expo-google-fonts/inter fonts), causing font-loading to stall.
 config.resolver.unstable_enableSymlinks = true;
 
+// 5. Exclude .local (Replit skills/integrations metadata) from Metro's
+//    file watcher. Metro watches the entire monorepo root (see watchFolders
+//    above), so any directory deletion inside .local/skills causes Metro's
+//    FallbackWatcher to throw ENOENT and crash the bundler.
+config.resolver.blockList = [
+  /\/\.local\/.*/,
+];
+
 module.exports = config;
