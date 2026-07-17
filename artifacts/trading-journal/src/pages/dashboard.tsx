@@ -93,6 +93,9 @@ const DayDetailSheet = memo(function DayDetailSheet({
             {dailyPnl > 0 && (
               <p className="text-[10px] text-white/40 mt-1">Congrats, your day is profitable!</p>
             )}
+            {dailyPnl < 0 && (
+              <p className="text-[10px] text-white/40 mt-1">Stay disciplined. Better trades ahead.</p>
+            )}
           </div>
           <div className="flex-1 p-3">
             <p className="text-[10px] text-muted-foreground mb-1.5">Total Trades: <span className="text-white font-semibold">{dayTrades.length}</span></p>
