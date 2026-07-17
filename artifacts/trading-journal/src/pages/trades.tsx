@@ -1282,17 +1282,6 @@ export default function Trades() {
                 </div>
               </div>
 
-              {/* Drawer Footer */}
-              <div className="px-6 py-4 border-t border-white/[0.07] flex gap-2">
-                <button
-                  onClick={() => deleteTrade.mutate({ id: selectedTrade.id })}
-                  disabled={deleteTrade.isPending}
-                  className="flex-1 h-9 rounded-xl border border-red-500/20 bg-red-500/8 text-red-400 text-[13px] font-semibold hover:bg-red-500/15 transition-all flex items-center justify-center gap-1.5 disabled:opacity-50"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Delete Trade
-                </button>
-              </div>
             </>
           )}
         </SheetContent>
