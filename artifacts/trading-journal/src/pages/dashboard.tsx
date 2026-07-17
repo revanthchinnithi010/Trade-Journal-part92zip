@@ -85,10 +85,12 @@ const DayDetailSheet = memo(function DayDetailSheet({
   }, [date]);
 
   return (
-    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
-      <DrawerContent className="max-h-[85vh] bg-[#0d0d0d] border-white/10 rounded-t-2xl px-0 pb-0">
+    <Drawer open={open} onOpenChange={(v) => !v && onClose()} snapPoints={[0.85, 1]} fadeFromIndex={0}>
+      <DrawerContent className="bg-[#0d0d0d] border-white/10 rounded-t-2xl px-0 pb-0 flex flex-col" style={{ height: "100%" }}>
+        {/* drag indicator */}
+        <div className="mx-auto mt-3 mb-1 h-1 w-10 rounded-full bg-white/20 flex-shrink-0" />
         {/* header */}
-        <div className="flex items-start justify-between px-5 mt-4 mb-4">
+        <div className="flex items-start justify-between px-5 mt-3 mb-4 flex-shrink-0">
           <div>
             <p className="text-[11px] text-muted-foreground uppercase tracking-widest mb-0.5">Daily Summary</p>
             <p className="text-[15px] font-semibold text-white">{label}</p>
@@ -126,7 +128,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
         <div className="px-5 pb-1 mb-2">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Trades</p>
         </div>
-        <div className="overflow-y-auto px-5 pb-8" style={{ maxHeight: "calc(85vh - 240px)" }}>
+        <div className="overflow-y-auto flex-1 px-5 pb-8">
           {isLoading && (
             <div className="space-y-2">
               {[0, 1, 2].map(i => (
