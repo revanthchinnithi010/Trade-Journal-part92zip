@@ -61,7 +61,8 @@ const DayDetailSheet = memo(function DayDetailSheet({
     return trades.filter((t) => {
       const raw = (t as { entryTime?: string | null }).entryTime;
       if (!raw) return false;
-      return new Date(raw).toISOString().slice(0, 10) === date;
+      // Slice the date portion directly to avoid UTC-conversion timezone shifts
+      return raw.slice(0, 10) === date;
     });
   }, [trades, date]);
 
