@@ -143,7 +143,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
                   }`}>{trade.side}</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">
-                  {trade.entryPrice.toLocaleString()} → {trade.exitPrice.toLocaleString()}
+                  {(trade.entryPrice ?? 0).toLocaleString()} → {(trade.exitPrice ?? 0).toLocaleString()}
                   <span className="ml-2 text-white/40">× {trade.quantity}</span>
                 </p>
                 {trade.setupTags && (
@@ -555,11 +555,11 @@ const Dashboard = memo(function Dashboard() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-[13px] text-foreground/80 font-mono">
-                        {entryPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
+                        {(entryPrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
                       </td>
                       <td className="px-5 py-3.5 text-[13px] text-foreground/80 font-mono">
                         {exitPrice != null
-                          ? exitPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })
+                          ? (exitPrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })
                           : <span className="text-amber-400 text-[11px] font-semibold">Open</span>}
                       </td>
                       <td className="px-5 py-3.5">
