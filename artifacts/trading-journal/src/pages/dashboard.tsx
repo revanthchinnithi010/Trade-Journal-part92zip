@@ -300,24 +300,21 @@ const Dashboard = memo(function Dashboard() {
           it self-corrects when the user navigates back from Reports. */}
       <DashboardSegmentedControl />
 
-      {/* ── Account Value Widget ──
-          accountValue/upnl/pnl are sourced ONLY from combinedPortfolio
-          (Delta Exchange + cTrader combined). The `Display` props are already
-          converted using per-broker rates (Delta=fixed ₹85, cTrader=live).
-          AccountValueWidget uses them directly — it must NOT re-multiply by
-          the global exchange rate or Delta amounts will be double-converted. */}
-      <AccountValueWidget
-        accountValueUSD={combined.usd.accountValue}
-        accountValueDisplay={combined.display.accountValue}
-        upnlUSD={combined.usd.unrealizedPnl}
-        upnlDisplay={combined.display.unrealizedPnl}
-        realizedPnlUSD={combined.usd.realizedPnl}
-        realizedPnlDisplay={combined.display.realizedPnl}
-        netPnlUSD={combined.usd.netPnl}
-        netPnlDisplay={combined.display.netPnl}
-        openPositions={openTrades.length}
-        openOrders={brokerOrdersCount}
-      />
+      {/* ── Account Value Widget — -mt-2 closes the gap with the segmented control ── */}
+      <div className="-mt-2">
+        <AccountValueWidget
+          accountValueUSD={combined.usd.accountValue}
+          accountValueDisplay={combined.display.accountValue}
+          upnlUSD={combined.usd.unrealizedPnl}
+          upnlDisplay={combined.display.unrealizedPnl}
+          realizedPnlUSD={combined.usd.realizedPnl}
+          realizedPnlDisplay={combined.display.realizedPnl}
+          netPnlUSD={combined.usd.netPnl}
+          netPnlDisplay={combined.display.netPnl}
+          openPositions={openTrades.length}
+          openOrders={brokerOrdersCount}
+        />
+      </div>
 
       {/* ── Trading Calendar ── */}
       <div className="-mx-4">
