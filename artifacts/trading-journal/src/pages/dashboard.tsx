@@ -91,7 +91,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
             </p>
             {dailyPnl > 0 && (
-              <p className="text-[10px] text-white/40 mt-1">Congrats, your day is profitable!</p>
+              <p className="text-[10px] text-white/40 mt-1" style={{ textShadow: "0 0 8px rgba(255,255,255,0.6), 0 0 20px rgba(255,255,255,0.3)" }}>Congrats, your day is profitable!</p>
             )}
           </div>
           <div className="flex-1 p-3">
