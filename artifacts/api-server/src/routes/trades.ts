@@ -29,11 +29,9 @@ router.get("/trades", async (req, res): Promise<void> => {
   if (symbol)  conditions.push(eq(tradesTable.symbol, symbol));
   if (outcome) conditions.push(eq(tradesTable.outcome, outcome));
   if (date) {
-    // Filter trades whose exitDate falls on the given calendar date (YYYY-MM-DD)
-    const dayStart = new Date(`${date}T00:00:00.000Z`);
-    const dayEnd   = new Date(`${date}T23:59:59.999Z`);
-    conditions.push(gte(tradesTable.exitDate, dayStart));
-    conditions.push(lt(tradesTable.exitDate,  new Date(dayEnd.getTime() + 1)));
+    // Match exactly how the calendar heatmap groups: by calendar date in DB timezone.
+    // Using date(exit_date) = ? avoids UTC-boundary mismatches with TIMESTAMPTZ.
+    conditions.push(sql`date(${tradesTable.exitDate}) = ${date}`);
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
