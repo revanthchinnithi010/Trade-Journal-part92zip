@@ -23,7 +23,8 @@ export const ListTradesQueryParams = zod.object({
   "page": zod.coerce.number().optional(),
   "limit": zod.coerce.number().optional(),
   "symbol": zod.coerce.string().optional(),
-  "outcome": zod.enum(['win', 'loss', 'breakeven']).optional()
+  "outcome": zod.enum(['win', 'loss', 'breakeven']).optional(),
+  "date": zod.coerce.string().optional()
 })
 
 export const ListTradesResponse = zod.object({

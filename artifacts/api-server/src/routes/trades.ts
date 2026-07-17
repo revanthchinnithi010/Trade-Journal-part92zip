@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, sql, gte, lt } from "drizzle-orm";
 import { db, tradesTable } from "@workspace/db";
 import {
   ListTradesQueryParams,
@@ -22,12 +22,19 @@ router.get("/trades", async (req, res): Promise<void> => {
     return;
   }
 
-  const { page = 1, limit = 20, symbol, outcome } = query.data;
+  const { page = 1, limit = 20, symbol, outcome, date } = query.data;
   const offset = (page - 1) * limit;
 
   const conditions = [];
-  if (symbol) conditions.push(eq(tradesTable.symbol, symbol));
+  if (symbol)  conditions.push(eq(tradesTable.symbol, symbol));
   if (outcome) conditions.push(eq(tradesTable.outcome, outcome));
+  if (date) {
+    // Filter trades whose exitDate falls on the given calendar date (YYYY-MM-DD)
+    const dayStart = new Date(`${date}T00:00:00.000Z`);
+    const dayEnd   = new Date(`${date}T23:59:59.999Z`);
+    conditions.push(gte(tradesTable.exitDate, dayStart));
+    conditions.push(lt(tradesTable.exitDate,  new Date(dayEnd.getTime() + 1)));
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

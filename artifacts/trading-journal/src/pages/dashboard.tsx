@@ -4,7 +4,7 @@ import {
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
 import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
-import { TrendingUp, Activity, ChevronRight, ChevronLeft } from "lucide-react";
+import { TrendingUp, Activity, ChevronRight, ChevronLeft, X, TrendingDown } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
@@ -16,6 +16,11 @@ import {
   PageTransition,
   AnimatedCard,
 } from "@/components/animations";
+import {
+  Drawer,
+  DrawerContent,
+  DrawerClose,
+} from "@/components/ui/drawer";
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
 
@@ -32,9 +37,142 @@ const tooltipStyle = {
 
 
 // ── Calendar Heatmap ──────────────────────────────────────────────────────────
+// ── Day Detail Sheet ──────────────────────────────────────────────────────────
+const DayDetailSheet = memo(function DayDetailSheet({
+  date, dayData, open, onClose,
+}: {
+  date: string;
+  dayData: { pnl: number; trades: number } | null;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const fc  = useCurrencyFormatter();
+  const { data, isLoading } = useListTrades(
+    { date, limit: 100 },
+    { query: { enabled: open && !!date } },
+  );
+
+  const trades = data?.trades ?? [];
+  const wins   = trades.filter(t => t.outcome === "win").length;
+  const losses = trades.filter(t => t.outcome === "loss").length;
+  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
+
+  const label = useMemo(() => {
+    if (!date) return "";
+    return new Date(date + "T00:00:00").toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    });
+  }, [date]);
+
+  return (
+    <Drawer open={open} onOpenChange={(v) => !v && onClose()}>
+      <DrawerContent className="max-h-[85vh] bg-[#0d0d0d] border-white/10 rounded-t-2xl px-0 pb-0">
+        {/* handle */}
+        <div className="mx-auto mt-3 mb-4 h-1 w-10 rounded-full bg-white/20" />
+
+        {/* header */}
+        <div className="flex items-start justify-between px-5 mb-4">
+          <div>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-widest mb-0.5">Daily Summary</p>
+            <p className="text-[15px] font-semibold text-white">{label}</p>
+          </div>
+          <DrawerClose asChild>
+            <button className="w-7 h-7 flex items-center justify-center rounded-full bg-white/10 text-muted-foreground hover:text-white transition-colors mt-0.5">
+              <X className="w-4 h-4" />
+            </button>
+          </DrawerClose>
+        </div>
+
+        {/* summary row */}
+        <div className="flex gap-2 px-5 mb-4">
+          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+            <p className="text-[10px] text-muted-foreground mb-1">Net P&L</p>
+            <p className={`text-[16px] font-bold ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {totalPnl >= 0 ? "+" : ""}{fc(totalPnl)}
+            </p>
+          </div>
+          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+            <p className="text-[10px] text-muted-foreground mb-1">Trades</p>
+            <p className="text-[16px] font-bold text-white">{dayData?.trades ?? trades.length}</p>
+          </div>
+          <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
+            <p className="text-[10px] text-muted-foreground mb-1">W / L</p>
+            <p className="text-[16px] font-bold">
+              <span className="text-emerald-400">{wins}</span>
+              <span className="text-white/40 mx-1">/</span>
+              <span className="text-red-400">{losses}</span>
+            </p>
+          </div>
+        </div>
+
+        {/* trade list */}
+        <div className="px-5 pb-1 mb-2">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">Trades</p>
+        </div>
+        <div className="overflow-y-auto px-5 pb-8" style={{ maxHeight: "calc(85vh - 240px)" }}>
+          {isLoading && (
+            <div className="space-y-2">
+              {[0, 1, 2].map(i => (
+                <div key={i} className="h-16 rounded-xl bg-white/5 shimmer-loading" />
+              ))}
+            </div>
+          )}
+          {!isLoading && trades.length === 0 && (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground text-sm">No trades on this day</p>
+            </div>
+          )}
+          {!isLoading && trades.map((trade) => (
+            <div key={trade.id} className="flex items-center gap-3 py-3 border-b border-white/[0.06] last:border-0">
+              {/* icon */}
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                trade.pnl >= 0 ? "bg-emerald-500/15" : "bg-red-500/15"
+              }`}>
+                {trade.pnl >= 0
+                  ? <TrendingUp className="w-4 h-4 text-emerald-400" />
+                  : <TrendingDown className="w-4 h-4 text-red-400" />}
+              </div>
+              {/* info */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <span className="text-[13px] font-semibold text-white">{trade.symbol}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide ${
+                    trade.side === "long"
+                      ? "bg-emerald-500/20 text-emerald-400"
+                      : "bg-red-500/20 text-red-400"
+                  }`}>{trade.side}</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {trade.entryPrice.toLocaleString()} → {trade.exitPrice.toLocaleString()}
+                  <span className="ml-2 text-white/40">× {trade.quantity}</span>
+                </p>
+                {trade.setupTags && (
+                  <p className="text-[10px] text-blue-400/70 mt-0.5 truncate">{trade.setupTags}</p>
+                )}
+              </div>
+              {/* pnl */}
+              <div className="text-right flex-shrink-0">
+                <p className={`text-[14px] font-bold ${trade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                  {trade.pnl >= 0 ? "+" : ""}{fc(trade.pnl)}
+                </p>
+                {trade.pnlPercent != null && (
+                  <p className="text-[10px] text-muted-foreground">
+                    {trade.pnlPercent >= 0 ? "+" : ""}{trade.pnlPercent.toFixed(2)}%
+                  </p>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </DrawerContent>
+    </Drawer>
+  );
+});
+
+// ── Calendar Heatmap ──────────────────────────────────────────────────────────
 const CalendarHeatmap = memo(function CalendarHeatmap({
-  data, year, month, onPrev, onNext,
-}: { data: Array<{ date: string; pnl: number; trades: number }>; year: number; month: number; onPrev: () => void; onNext: () => void }) {
+  data, year, month, onPrev, onNext, onDateClick,
+}: { data: Array<{ date: string; pnl: number; trades: number }>; year: number; month: number; onPrev: () => void; onNext: () => void; onDateClick: (date: string) => void }) {
   const fc            = useCurrencyFormatter();
   const axisFormatter = useCurrencyAxisFormatter();
   const dayMap = useMemo(() => {
@@ -95,7 +233,10 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
     days.push(
       <div
         key={dateStr}
-        className="relative rounded-lg aspect-square flex flex-col items-center justify-center cursor-default group/cell border border-transparent"
+        onClick={() => onDateClick(dateStr)}
+        className={`relative rounded-lg aspect-square flex flex-col items-center justify-center border border-transparent transition-opacity active:opacity-60 ${
+          entry && entry.trades > 0 ? "cursor-pointer" : "cursor-default"
+        }`}
         style={cellStyles[dateStr]}
       >
         <span className="text-[10px] font-semibold leading-none text-foreground/90">{d}</span>
@@ -103,14 +244,6 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
           <span className={`text-[8px] font-bold leading-none mt-0.5 ${entry.pnl > 0 ? "text-emerald-400" : "text-red-400"}`}>
             {entry.pnl > 0 ? "+" : ""}{axisFormatter(Math.abs(entry.pnl))}
           </span>
-        )}
-        {entry && entry.trades > 0 && (
-          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-20 hidden group-hover/cell:block pointer-events-none">
-            <div className="dash-card px-2.5 py-1.5 text-[11px] whitespace-nowrap shadow-xl">
-              <p className={`font-bold ${entry.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>{fc(entry.pnl)}</p>
-              <p className="text-muted-foreground">{entry.trades} trade{entry.trades !== 1 ? "s" : ""}</p>
-            </div>
-          </div>
         )}
       </div>
     );
@@ -234,6 +367,25 @@ const Dashboard = memo(function Dashboard() {
 
   const { data: calData } = useGetCalendarHeatmap({ year: calYear, month: calMonth });
 
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [sheetOpen,    setSheetOpen]    = useState(false);
+
+  const handleDateClick = useCallback((date: string) => {
+    const calMap = (calData ?? []).reduce<Record<string, { pnl: number; trades: number }>>((m, d) => {
+      m[d.date] = { pnl: d.pnl, trades: d.trades };
+      return m;
+    }, {});
+    const entry = calMap[date];
+    if (!entry || entry.trades === 0) return; // only open for days with trades
+    setSelectedDate(date);
+    setSheetOpen(true);
+  }, [calData]);
+
+  const selectedDayData = useMemo(() => {
+    if (!selectedDate || !calData) return null;
+    return calData.find(d => d.date === selectedDate) ?? null;
+  }, [selectedDate, calData]);
+
   const isStillLoading = !timedOut && tradesLoading;
 
   const resolvedTrades = recentTrades ?? DEFAULT_TRADES;
@@ -320,11 +472,19 @@ const Dashboard = memo(function Dashboard() {
       <div className="-mx-4">
         <p className="px-4 pb-2 text-[16px] font-semibold text-white">Trading Calendar</p>
         {calData ? (
-          <CalendarHeatmap data={calData} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} />
+          <CalendarHeatmap data={calData} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} onDateClick={handleDateClick} />
         ) : (
-          <CalendarHeatmap data={[]} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} />
+          <CalendarHeatmap data={[]} year={calYear} month={calMonth} onPrev={handleCalPrev} onNext={handleCalNext} onDateClick={handleDateClick} />
         )}
       </div>
+
+      {/* ── Day Detail Sheet ── */}
+      <DayDetailSheet
+        date={selectedDate}
+        dayData={selectedDayData}
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+      />
 
       {/* ── Recent Trades ── */}
       <AnimatedCard index={2} className="dash-card overflow-hidden">

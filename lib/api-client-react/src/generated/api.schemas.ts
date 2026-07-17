@@ -205,6 +205,7 @@ page?: number;
 limit?: number;
 symbol?: string;
 outcome?: ListTradesOutcome;
+date?: string;
 };
 
 export type ListTradesOutcome = typeof ListTradesOutcome[keyof typeof ListTradesOutcome];
