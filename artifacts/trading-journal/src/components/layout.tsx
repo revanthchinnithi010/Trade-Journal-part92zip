@@ -512,7 +512,7 @@ export const Layout = memo(function Layout({
             while mode="wait" finished the portfolio exit before the position-
             detail header could start entering. */}
         <AnimatePresence initial={false}>
-          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && pathname !== "/portfolio" && pathname !== "/net-pnl" && pathname !== "/pnl" && pathname !== "/trades" && (
+          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && pathname !== "/portfolio" && pathname !== "/net-pnl" && pathname !== "/pnl" && pathname !== "/trades" && pathname !== "/markets" && (
           <motion.header
             key="main-header"
             initial={{ opacity: 0 }}
