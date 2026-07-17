@@ -1,4 +1,5 @@
 import { memo, useMemo, useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import {
   useListTrades,
   useGetCalendarHeatmap,
@@ -61,6 +62,8 @@ const DayDetailSheet = memo(function DayDetailSheet({
   const dailyPnl  = dayTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
   const [pnlTooltip, setPnlTooltip] = useState(false);
+  const [pnlTooltipPos, setPnlTooltipPos] = useState({ top: 0, left: 0 });
+  const pnlBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!pnlTooltip) return;
@@ -100,16 +103,26 @@ const DayDetailSheet = memo(function DayDetailSheet({
         <div className="flex gap-2 px-5 mb-4">
           <div className="dash-account-card dash-account-card-dim flex-1 p-3 relative">
             <button
-              onClick={() => setPnlTooltip(v => !v)}
-              className="text-[10px] text-muted-foreground mb-1 border-b border-dashed border-muted-foreground/50 pb-px cursor-pointer select-none leading-none"
+              ref={pnlBtnRef}
+              onClick={() => {
+                if (pnlBtnRef.current) {
+                  const r = pnlBtnRef.current.getBoundingClientRect();
+                  setPnlTooltipPos({ top: r.bottom + 8, left: r.left });
+                }
+                setPnlTooltip(v => !v);
+              }}
+              className="text-[10px] text-muted-foreground mb-1 border-b border-dashed border-muted-foreground/50 pb-px cursor-pointer select-none leading-none block"
             >Net P&amp;L</button>
             <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
             </p>
-            {pnlTooltip && (
+            {pnlTooltip && createPortal(
               <>
-                <div className="fixed inset-0 z-30" onClick={() => setPnlTooltip(false)} />
-                <div className="absolute left-0 top-full mt-2 z-40 w-56 rounded-xl border border-white/[0.08] bg-[#111111] shadow-2xl px-3 py-2.5">
+                <div className="fixed inset-0 z-[9998]" onClick={() => setPnlTooltip(false)} />
+                <div
+                  className="fixed z-[9999] w-56 rounded-xl border border-white/[0.08] bg-[#111111] shadow-2xl px-3 py-2.5"
+                  style={{ top: pnlTooltipPos.top, left: pnlTooltipPos.left }}
+                >
                   <p className="text-[11px] font-semibold text-white mb-1">Net P&amp;L</p>
                   <p className="text-[10px] text-muted-foreground leading-relaxed">
                     Total realised profit &amp; loss for this day, calculated from all closed trades.
@@ -120,7 +133,8 @@ const DayDetailSheet = memo(function DayDetailSheet({
                     </p>
                   )}
                 </div>
-              </>
+              </>,
+              document.body
             )}
             {dailyPnl > 0 && (
               <p className="text-[10px] text-white/40 mt-1">Congrats, your day is profitable!</p>
