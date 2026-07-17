@@ -141,7 +141,7 @@ function StandardPageWrapper({ children, bottomPad = 40, pathname }: { children:
     <div ref={scrollRef} style={{ height: "100%", overflowY: "auto", WebkitOverflowScrolling: "touch" }} className="scroll-container">
       <div
         ref={contentRef}
-        className="p-5 md:p-6 mx-auto max-w-[1400px] min-h-full"
+        className="px-5 pt-3 pb-5 md:px-6 md:pt-3 md:pb-6 mx-auto max-w-[1400px] min-h-full"
         style={{ paddingBottom: bottomPad }}
       >
         {children}
