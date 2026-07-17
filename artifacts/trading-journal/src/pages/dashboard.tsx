@@ -53,9 +53,21 @@ const DayDetailSheet = memo(function DayDetailSheet({
   );
 
   const trades = data?.trades ?? [];
-  const wins   = trades.filter(t => t.outcome === "win").length;
-  const losses = trades.filter(t => t.outcome === "loss").length;
-  const totalPnl = trades.reduce((s, t) => s + t.pnl, 0);
+
+  // Filter client-side to only the selected day's trades so the list and
+  // all derived stats are always consistent with the chosen calendar date.
+  const dayTrades = useMemo(() => {
+    if (!date) return trades;
+    return trades.filter((t) => {
+      const raw = (t as { entryTime?: string | null }).entryTime;
+      if (!raw) return false;
+      return new Date(raw).toISOString().slice(0, 10) === date;
+    });
+  }, [trades, date]);
+
+  const wins      = dayTrades.filter(t => t.outcome === "win").length;
+  const losses    = dayTrades.filter(t => t.outcome === "loss").length;
+  const dailyPnl  = dayTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
   const label = useMemo(() => {
     if (!date) return "";
@@ -87,13 +99,13 @@ const DayDetailSheet = memo(function DayDetailSheet({
         <div className="flex gap-2 px-5 mb-4">
           <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
             <p className="text-[10px] text-muted-foreground mb-1">Net P&L</p>
-            <p className={`text-[16px] font-bold ${totalPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {totalPnl >= 0 ? "+" : ""}{fc(totalPnl)}
+            <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+              {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
             </p>
           </div>
           <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
             <p className="text-[10px] text-muted-foreground mb-1">Trades</p>
-            <p className="text-[16px] font-bold text-white">{dayData?.trades ?? trades.length}</p>
+            <p className="text-[16px] font-bold text-white">{dayTrades.length}</p>
           </div>
           <div className="flex-1 rounded-xl bg-white/5 border border-white/[0.07] p-3">
             <p className="text-[10px] text-muted-foreground mb-1">W / L</p>
@@ -117,12 +129,12 @@ const DayDetailSheet = memo(function DayDetailSheet({
               ))}
             </div>
           )}
-          {!isLoading && trades.length === 0 && (
+          {!isLoading && dayTrades.length === 0 && (
             <div className="text-center py-10">
-              <p className="text-muted-foreground text-sm">No trades on this day</p>
+              <p className="text-muted-foreground text-sm">No trades for this day.</p>
             </div>
           )}
-          {!isLoading && trades.map((trade) => (
+          {!isLoading && dayTrades.map((trade) => (
             <div key={trade.id} className="flex items-center gap-3 py-3 border-b border-white/[0.06] last:border-0">
               {/* icon */}
               <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
