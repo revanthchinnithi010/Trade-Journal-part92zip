@@ -390,6 +390,35 @@ export const Layout = memo(function Layout({
   const [location, navigate] = useLocation();
   // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
   const pathname      = location.split("?")[0];
+
+  // Pages that suppress the layout header entirely.
+  const NO_HEADER_PATHS = new Set([
+    "/charts", "/position-detail", "/balances", "/portfolio", "/net-pnl", "/pnl", "/trades",
+  ]);
+  const headerForPath = (p: string) => !NO_HEADER_PATHS.has(p);
+
+  // `headerAllowed` gates the AnimatePresence header. When navigating FROM a
+  // no-header page TO a header page (e.g. /trades → /markets), we delay the
+  // mount by 72 ms — slightly longer than the 60 ms tab-exit animation — so
+  // the exiting page's content never sees the 60 px flex-column push that made
+  // the Trades header appear to "drop" before Markets opened.
+  const prevHeaderPathRef = useRef(pathname);
+  const [headerAllowed, setHeaderAllowed] = useState(() => headerForPath(pathname));
+  useEffect(() => {
+    const prev = prevHeaderPathRef.current;
+    prevHeaderPathRef.current = pathname;
+    const prevShows = headerForPath(prev);
+    const currShows = headerForPath(pathname);
+    if (!prevShows && currShows) {
+      // no-header → header: delay so the exit animation completes first.
+      const t = setTimeout(() => setHeaderAllowed(true), 72);
+      return () => clearTimeout(t);
+    }
+    // header → no-header, or no change: update immediately.
+    setHeaderAllowed(currShows);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   const [sidebarOpen,     setSidebarOpen]     = useState(false);
   const [notifOpen,       setNotifOpen]       = useState(false);
   const [profileOpen,     setProfileOpen]     = useState(false);
@@ -512,7 +541,7 @@ export const Layout = memo(function Layout({
             while mode="wait" finished the portfolio exit before the position-
             detail header could start entering. */}
         <AnimatePresence initial={false}>
-          {pathname !== "/charts" && pathname !== "/position-detail" && pathname !== "/balances" && pathname !== "/portfolio" && pathname !== "/net-pnl" && pathname !== "/pnl" && pathname !== "/trades" && pathname !== "/markets" && (
+          {headerAllowed && (
           <motion.header
             key="main-header"
             initial={{ opacity: 0 }}
