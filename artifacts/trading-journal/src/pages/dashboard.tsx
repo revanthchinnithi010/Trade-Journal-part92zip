@@ -99,13 +99,13 @@ const DayDetailSheet = memo(function DayDetailSheet({
         {/* summary row */}
         <div className="flex gap-2 px-5 mb-4">
           <div className="dash-account-card dash-account-card-dim flex-1 p-3 relative">
-            <p className="text-[10px] text-muted-foreground mb-1">Net P&L</p>
             <button
               onClick={() => setPnlTooltip(v => !v)}
-              className={`text-[16px] font-bold border-b border-dashed pb-px cursor-pointer select-none ${dailyPnl >= 0 ? "text-emerald-400 border-emerald-400/50" : "text-red-400 border-red-400/50"}`}
-            >
+              className="text-[10px] text-muted-foreground mb-1 border-b border-dashed border-muted-foreground/50 pb-px cursor-pointer select-none leading-none"
+            >Net P&amp;L</button>
+            <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
-            </button>
+            </p>
             {pnlTooltip && (
               <>
                 <div className="fixed inset-0 z-30" onClick={() => setPnlTooltip(false)} />
