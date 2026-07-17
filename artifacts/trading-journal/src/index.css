@@ -1234,3 +1234,20 @@ html, body { touch-action: manipulation; overscroll-behavior: none; }
 .tj-stagger > *:nth-child(6) { animation-delay: 0.20s; }
 .tj-stagger > *:nth-child(7) { animation-delay: 0.24s; }
 .tj-stagger > *:nth-child(8) { animation-delay: 0.28s; }
+
+/* ─── Vaul drawer — suppress border/outline flash on first render ── */
+/* Only opacity and transform are allowed to animate; border, outline,
+   and box-shadow must be static from frame 1.                         */
+[data-vaul-drawer] {
+  outline: none !important;
+  box-shadow: none !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  /* Override vaul's transition so border is never interpolated */
+  transition: transform 0.5s cubic-bezier(0.32, 0.72, 0, 1),
+              opacity   0.5s cubic-bezier(0.32, 0.72, 0, 1) !important;
+}
+[data-vaul-drawer]:focus,
+[data-vaul-drawer]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
