@@ -92,16 +92,9 @@ const DayDetailSheet = memo(function DayDetailSheet({
             </p>
           </div>
           <div className="dash-account-card dash-account-card-dim flex-1 p-3">
-            <p className="text-[10px] text-muted-foreground mb-1">Trades</p>
-            <p className="text-[16px] font-bold text-white">{dayTrades.length}</p>
-          </div>
-          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
-            <p className="text-[10px] text-muted-foreground mb-1">W / L</p>
-            <p className="text-[16px] font-bold">
-              <span className="text-emerald-400">{wins}</span>
-              <span className="text-white/40 mx-1">/</span>
-              <span className="text-red-400">{losses}</span>
-            </p>
+            <p className="text-[10px] text-muted-foreground mb-1.5">Total Trades: <span className="text-white font-semibold">{dayTrades.length}</span></p>
+            <p className="text-[11px] text-emerald-400 font-medium mb-0.5">Win: {wins}</p>
+            <p className="text-[11px] text-red-400 font-medium">Loss: {losses}</p>
           </div>
         </div>
 
