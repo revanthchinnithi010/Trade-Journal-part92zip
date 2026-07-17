@@ -183,7 +183,7 @@ const DayDetailSheet = memo(function DayDetailSheet({
                       {trade.side === "long" ? "LONG" : "SHORT"}
                     </span>
                   </div>
-                  <span className="font-bold leading-none tabular-nums" style={{ fontSize: 14, color: "rgba(255,255,255,0.55)" }}>
+                  <span className="font-bold leading-none tabular-nums" style={{ fontSize: 14, color: "#ffffff" }}>
                     {isWin ? "+" : ""}{fc(pnl)}
                   </span>
                 </div>
