@@ -98,7 +98,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
         className="relative rounded-lg aspect-square flex flex-col items-center justify-center cursor-default group/cell border border-transparent"
         style={cellStyles[dateStr]}
       >
-        <span className="text-[10px] font-semibold leading-none text-foreground/60">{d}</span>
+        <span className="text-[10px] font-semibold leading-none text-foreground/90">{d}</span>
         {entry && entry.trades > 0 && (
           <span className={`text-[8px] font-bold leading-none mt-0.5 ${entry.pnl > 0 ? "text-emerald-400" : "text-red-400"}`}>
             {entry.pnl > 0 ? "+" : ""}{axisFormatter(Math.abs(entry.pnl))}
@@ -182,7 +182,7 @@ const CalendarHeatmap = memo(function CalendarHeatmap({
       <div className="px-3">
         <div className="grid grid-cols-7 gap-1 mb-1.5">
           {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((d) => (
-            <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground/60 py-0.5">{d}</div>
+            <div key={d} className="text-center text-[10px] font-semibold text-muted-foreground py-0.5">{d}</div>
           ))}
         </div>
         <div className="grid grid-cols-7 gap-1">{days}</div>
