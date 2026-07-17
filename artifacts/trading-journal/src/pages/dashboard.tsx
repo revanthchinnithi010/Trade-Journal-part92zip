@@ -1,5 +1,4 @@
 import { memo, useMemo, useEffect, useRef, useState, useCallback } from "react";
-import { createPortal } from "react-dom";
 import {
   useListTrades,
   useGetCalendarHeatmap,
@@ -61,21 +60,6 @@ const DayDetailSheet = memo(function DayDetailSheet({
   const losses    = dayTrades.filter(t => t.outcome === "loss").length;
   const dailyPnl  = dayTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
-  const [pnlTooltip, setPnlTooltip] = useState(false);
-  const [pnlTooltipPos, setPnlTooltipPos] = useState({ top: 0, left: 0 });
-  const pnlBtnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!pnlTooltip) return;
-    const close = () => setPnlTooltip(false);
-    window.addEventListener("scroll", close, { passive: true, capture: true });
-    window.addEventListener("touchmove", close, { passive: true, capture: true });
-    return () => {
-      window.removeEventListener("scroll", close, { capture: true });
-      window.removeEventListener("touchmove", close, { capture: true });
-    };
-  }, [pnlTooltip]);
-
   const label = useMemo(() => {
     if (!date) return "";
     return new Date(date + "T00:00:00").toLocaleDateString("en-US", {
@@ -101,41 +85,11 @@ const DayDetailSheet = memo(function DayDetailSheet({
 
         {/* summary row */}
         <div className="flex gap-2 px-5 mb-4">
-          <div className="dash-account-card dash-account-card-dim flex-1 p-3 relative">
-            <button
-              ref={pnlBtnRef}
-              onClick={() => {
-                if (pnlBtnRef.current) {
-                  const r = pnlBtnRef.current.getBoundingClientRect();
-                  setPnlTooltipPos({ top: r.bottom + 8, left: r.left });
-                }
-                setPnlTooltip(v => !v);
-              }}
-              className="text-[10px] text-muted-foreground mb-1 border-b border-dashed border-muted-foreground/50 pb-px cursor-pointer select-none leading-none block"
-            >Net P&amp;L</button>
+          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
+            <p className="text-[10px] text-muted-foreground mb-1">Net P&amp;L</p>
             <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
             </p>
-            {pnlTooltip && createPortal(
-              <>
-                <div className="fixed inset-0 z-[9998]" onClick={() => setPnlTooltip(false)} />
-                <div
-                  className="fixed z-[9999] w-56 rounded-xl border border-white/[0.08] bg-[#111111] shadow-2xl px-3 py-2.5"
-                  style={{ top: pnlTooltipPos.top, left: pnlTooltipPos.left }}
-                >
-                  <p className="text-[11px] font-semibold text-white mb-1">Net P&amp;L</p>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    Total realised profit &amp; loss for this day, calculated from all closed trades.
-                  </p>
-                  {dayTrades.length > 0 && (
-                    <p className={`text-[10px] mt-1.5 font-medium ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                      {wins} win{wins !== 1 ? "s" : ""} · {losses} loss{losses !== 1 ? "es" : ""}
-                    </p>
-                  )}
-                </div>
-              </>,
-              document.body
-            )}
             {dailyPnl > 0 && (
               <p className="text-[10px] text-white/40 mt-1">Congrats, your day is profitable!</p>
             )}
