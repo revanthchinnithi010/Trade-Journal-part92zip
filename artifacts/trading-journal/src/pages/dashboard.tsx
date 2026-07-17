@@ -60,6 +60,19 @@ const DayDetailSheet = memo(function DayDetailSheet({
   const losses    = dayTrades.filter(t => t.outcome === "loss").length;
   const dailyPnl  = dayTrades.reduce((sum, t) => sum + (t.pnl ?? 0), 0);
 
+  const [pnlTooltip, setPnlTooltip] = useState(false);
+
+  useEffect(() => {
+    if (!pnlTooltip) return;
+    const close = () => setPnlTooltip(false);
+    window.addEventListener("scroll", close, { passive: true, capture: true });
+    window.addEventListener("touchmove", close, { passive: true, capture: true });
+    return () => {
+      window.removeEventListener("scroll", close, { capture: true });
+      window.removeEventListener("touchmove", close, { capture: true });
+    };
+  }, [pnlTooltip]);
+
   const label = useMemo(() => {
     if (!date) return "";
     return new Date(date + "T00:00:00").toLocaleDateString("en-US", {
@@ -85,11 +98,30 @@ const DayDetailSheet = memo(function DayDetailSheet({
 
         {/* summary row */}
         <div className="flex gap-2 px-5 mb-4">
-          <div className="dash-account-card dash-account-card-dim flex-1 p-3">
+          <div className="dash-account-card dash-account-card-dim flex-1 p-3 relative">
             <p className="text-[10px] text-muted-foreground mb-1">Net P&L</p>
-            <p className={`text-[16px] font-bold ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            <button
+              onClick={() => setPnlTooltip(v => !v)}
+              className={`text-[16px] font-bold border-b border-dashed pb-px cursor-pointer select-none ${dailyPnl >= 0 ? "text-emerald-400 border-emerald-400/50" : "text-red-400 border-red-400/50"}`}
+            >
               {dailyPnl >= 0 ? "+" : ""}{fc(dailyPnl)}
-            </p>
+            </button>
+            {pnlTooltip && (
+              <>
+                <div className="fixed inset-0 z-30" onClick={() => setPnlTooltip(false)} />
+                <div className="absolute left-0 top-full mt-2 z-40 w-56 rounded-xl border border-white/[0.08] bg-[#111111] shadow-2xl px-3 py-2.5">
+                  <p className="text-[11px] font-semibold text-white mb-1">Net P&amp;L</p>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Total realised profit &amp; loss for this day, calculated from all closed trades.
+                  </p>
+                  {dayTrades.length > 0 && (
+                    <p className={`text-[10px] mt-1.5 font-medium ${dailyPnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {wins} win{wins !== 1 ? "s" : ""} · {losses} loss{losses !== 1 ? "es" : ""}
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
             {dailyPnl > 0 && (
               <p className="text-[10px] text-white/40 mt-1">Congrats, your day is profitable!</p>
             )}
