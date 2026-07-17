@@ -1132,33 +1132,42 @@ export default function Trades() {
                 <span className="absolute left-1/2 -translate-x-1/2 text-[15px] font-semibold text-white tracking-tight">Trade Details</span>
               </div>
 
-              {/* Drawer Header */}
-              <div className="relative px-6 pt-6 pb-5 border-b border-white/[0.07]">
-                <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.07] to-transparent pointer-events-none" />
-                <div className="relative flex items-start justify-between mb-3">
+              {/* ── Summary Card ── */}
+              <div className="mx-4 mt-4 mb-1 rounded-2xl border border-white/[0.08] overflow-hidden" style={{ background: "linear-gradient(145deg, #0f0f0f 0%, #0a0a0a 100%)" }}>
+                {/* top row: symbol + position badge */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-3">
                   <div>
-                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-1">
-                      {BROKER_MAP[selectedTrade.symbol] || "Broker"} · {new Date(selectedTrade.entryDate).toLocaleDateString()}
-                    </p>
-                    <h2 className="text-3xl font-black tracking-tight text-foreground leading-none">{selectedTrade.symbol}</h2>
+                    <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-0.5">Symbol</p>
+                    <h2 className="text-2xl font-black tracking-tight text-white leading-none">{selectedTrade.symbol}</h2>
                   </div>
-                  <div className="flex flex-col items-end gap-1.5 mt-1">
-                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                      selectedTrade.side === "long" ? "bg-blue-500/10 text-blue-400" : "bg-orange-500/10 text-orange-400"
-                    }`}>
-                      {selectedTrade.side.toUpperCase()}
-                    </span>
-                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${
-                      selectedTrade.outcome === "win" ? "bg-emerald-500/10 text-emerald-400" :
-                      selectedTrade.outcome === "loss" ? "bg-red-500/10 text-red-400" :
-                      "bg-white/[0.05] text-muted-foreground"
-                    }`}>
-                      {selectedTrade.outcome.toUpperCase()}
-                    </span>
-                  </div>
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-bold ${
+                    selectedTrade.side === "long"
+                      ? "bg-blue-500/15 text-blue-400 border border-blue-500/20"
+                      : "bg-orange-500/15 text-orange-400 border border-orange-500/20"
+                  }`}>
+                    {selectedTrade.side === "long" ? "LONG" : "SHORT"}
+                  </span>
                 </div>
-                <div className={`text-2xl font-black ${selectedTrade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {selectedTrade.pnl >= 0 ? "+" : ""}{fc(selectedTrade.pnl)}
+
+                {/* divider */}
+                <div className="mx-4 h-px bg-white/[0.06]" />
+
+                {/* bottom row: P&L + date */}
+                <div className="flex items-center justify-between px-4 pt-3 pb-4">
+                  <div>
+                    <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-0.5">
+                      {selectedTrade.pnl >= 0 ? "Profit" : "Loss"}
+                    </p>
+                    <p className={`text-xl font-black ${selectedTrade.pnl >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {selectedTrade.pnl >= 0 ? "+" : ""}{fc(selectedTrade.pnl)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-0.5">Date</p>
+                    <p className="text-[13px] font-semibold text-white/80">
+                      {new Date(selectedTrade.entryDate).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })}
+                    </p>
+                  </div>
                 </div>
               </div>
 
