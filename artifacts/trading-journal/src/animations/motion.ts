@@ -68,10 +68,10 @@ export const pageVariants: Variants = {
  *   < 0  → lower-index tab   (enter fades in from -28px left,  exits to +28px right)
  *   = 0  → non-tab cross-nav → plain opacity cross-fade
  *
- * Small x offset (28px) instead of full viewport width — gives directionality
+ * Small x offset (10px) instead of full viewport width — gives directionality
  * without the jarring slide-across effect.
  */
-const TAB_X = 28;
+const TAB_X = 10;
 export const tabPageVariants: Variants = {
   initial: (dir: number) => ({
     x:       dir === 0 ? 0 : (dir > 0 ? TAB_X : -TAB_X),
