@@ -247,14 +247,17 @@ export const scaleVariants: Variants = {
 };
 
 // ── Buttons ───────────────────────────────────────────────────────────────
+/** 90 ms ease-out tween — press (whileTap) only; hover keeps its spring. */
+export const TAP_TRANSITION: Transition = { type: "tween", duration: 0.09, ease: "easeOut" };
+
 export const buttonConfig = {
-  whileTap:   { scale: 0.93 },
+  whileTap:   { scale: 0.97 },
   whileHover: { scale: 1.04 },
-  transition: SPRING_FAST as Transition,
+  transition: { ...SPRING_FAST, tap: TAP_TRANSITION } as Transition,
 };
 
 export const iconButtonConfig = {
-  whileTap:   { scale: 0.88 },
+  whileTap:   { scale: 0.97 },
   whileHover: { scale: 1.08, rotate: 4 },
-  transition: SPRING_FAST as Transition,
+  transition: { ...SPRING_FAST, tap: TAP_TRANSITION } as Transition,
 };

@@ -12,7 +12,7 @@
  */
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
-import { SPRING_FAST } from "@/animations/motion";
+import { SPRING_FAST, TAP_TRANSITION } from "@/animations/motion";
 
 // Omit motion-conflicting props (onDrag, onDragStart, etc.) to avoid
 // type collisions between React.ButtonHTMLAttributes and HTMLMotionProps.
@@ -22,7 +22,7 @@ type SafeButtonProps = Omit<
 >;
 
 interface AnimatedButtonProps extends SafeButtonProps {
-  /** Scale on press. Default: 0.93 */
+  /** Scale on press. Default: 0.97 */
   tapScale?:   number;
   /** Scale on hover. Default: 1.04 */
   hoverScale?: number;
@@ -38,7 +38,7 @@ interface AnimatedButtonProps extends SafeButtonProps {
 
 export function AnimatedButton({
   children,
-  tapScale   = 0.93,
+  tapScale   = 0.97,
   hoverScale = 1.04,
   hoverLift  = 0,
   noMotion   = false,
@@ -68,7 +68,7 @@ export function AnimatedButton({
         scale: hoverScale,
         y:     hoverLift ? -hoverLift : undefined,
       }}
-      transition={SPRING_FAST}
+      transition={{ ...SPRING_FAST, tap: TAP_TRANSITION }}
       {...rest}
     >
       {children}
@@ -111,9 +111,9 @@ export function AnimatedIconButton({
     <motion.button
       disabled={disabled}
       style={{ ...style, willChange: "transform" }}
-      whileTap={{   scale: 0.87 }}
+      whileTap={{   scale: 0.97 }}
       whileHover={{ scale: 1.10, rotate: rotateOnHover }}
-      transition={SPRING_FAST}
+      transition={{ ...SPRING_FAST, tap: TAP_TRANSITION }}
       {...rest}
     >
       {children}

@@ -83,6 +83,7 @@ export function AnimatedListItem({
       variants={listItemVariants}
       onClick={onClick}
       whileTap={tappable ? { scale: 0.97 } : undefined}
+      transition={tappable ? { type: "tween", duration: 0.09, ease: "easeOut" } : undefined}
     >
       {children}
     </MotionTag>

@@ -353,7 +353,8 @@ function PillSelector<T extends string>({
               key={opt.value}
               type="button"
               onClick={() => onChange(opt.value)}
-              whileTap={{ scale: 0.94 }}
+              whileTap={{ scale: 0.97 }}
+              transition={{ type: "tween", duration: 0.09, ease: "easeOut" }}
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-[11px] font-bold transition-colors min-h-[36px]"
               style={{
                 background: active ? `${accent}18` : "rgba(13,28,22,0.8)",
@@ -700,7 +701,8 @@ export function DrawingAlertModal({
                     <motion.button
                       key={tf}
                       type="button"
-                      whileTap={{ scale: 0.9 }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ type: "tween", duration: 0.09, ease: "easeOut" }}
                       onClick={() => setTimeframe(tf)}
                       className="min-w-[40px] px-2.5 py-2 rounded-xl text-[11px] font-bold transition-colors"
                       style={{
@@ -882,6 +884,7 @@ export function DrawingAlertModal({
               onClick={handleSubmit}
               disabled={saving || !!timeOrderError}
               whileTap={{ scale: 0.97 }}
+              transition={{ type: "tween", duration: 0.09, ease: "easeOut" }}
               className="flex-[2] flex items-center justify-center gap-2 h-11 rounded-xl text-[13px] font-bold transition-all"
               style={{
                 background: saving || timeOrderError ? "rgba(183,255,90,0.3)" : "#B7FF5A",

@@ -537,6 +537,7 @@ function AddAlertPillButton({ label, onClick }: { label: string; onClick: () => 
   return (
     <motion.button
       whileTap={{ scale: 0.97 }}
+      transition={{ type: "tween", duration: 0.09, ease: "easeOut" }}
       onClick={onClick}
       style={{
         display: "inline-flex",

@@ -55,7 +55,8 @@ export function AnimatedCard({
       whileInView={inView ? "visible" : undefined}
       viewport={inView ? viewport : undefined}
       whileHover={hoverable ? { y: -3, scale: 1.015 } : undefined}
-      whileTap={hoverable ? { scale: 0.98 } : undefined}
+      whileTap={hoverable ? { scale: 0.97 } : undefined}
+      transition={{ tap: { type: "tween", duration: 0.09, ease: "easeOut" } }}
       onClick={onClick}
     >
       {children}

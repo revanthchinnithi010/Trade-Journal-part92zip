@@ -95,7 +95,7 @@ export default function AccountValueWidget({
           </div>
           <motion.button
             whileTap={{ scale: 0.97 }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
+            transition={{ duration: 0.09, ease: "easeOut" }}
             onClick={() => navigate("/portfolio?tab=positions")}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px]"
             style={{

@@ -360,8 +360,8 @@ export function MobileBottomNav() {
                 <motion.div
                   className="tj-cnav-tab"
                   onPointerDown={handleTap}
-                  whileTap={{ scale: 0.88 }}
-                  transition={{ type: "spring", stiffness: 600, damping: 25 }}
+                  whileTap={{ scale: 0.97 }}
+                  transition={{ type: "tween", duration: 0.09, ease: "easeOut" }}
                   style={{
                     width:          "100%",
                     height:         "100%",
