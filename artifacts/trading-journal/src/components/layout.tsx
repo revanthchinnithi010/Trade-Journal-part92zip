@@ -531,16 +531,22 @@ export const Layout = memo(function Layout({
             pathname changes, which previously left a header-less gap for ~150 ms
             while mode="wait" finished the portfolio exit before the position-
             detail header could start entering. */}
-        {/* Header — always mounted; height animates 0↔60px over 60ms (matches
-            tab exit duration) so the content area shrinks/grows gradually while
-            the entering page is still at low opacity. No mount/unmount cycle means
-            no sudden flex-column push that shifts visible page content. */}
+        {/* Header — always mounted; height switches instantly (no CSS transition).
+            The previous "height 0.06s linear" was written to match an older
+            y-based tab animation where pages entered at low opacity so the
+            animated resize was hidden behind the fade. Tab pages now use a
+            pure opacity crossfade (0.98 → 1), so they are nearly fully opaque
+            the entire time — a 60ms animated height change is clearly visible
+            as positional movement of the page content. An instant resize is a
+            single imperceptible frame rather than 60ms of animated shift, which
+            is exactly what causes the "Markets header moves up / Trades enters
+            from bottom" artefact when switching between pages with different
+            header visibility. No mount/unmount cycle means no flex-column push. */}
         <header
           className="shrink-0 flex items-center justify-between px-4 z-30 gap-3"
           style={{
             height:       headerVisible ? 60 : 0,
             overflow:     "hidden",
-            transition:   "height 0.06s linear",
             position:     "relative",
             background:   "var(--surface-header)",
             borderBottom: headerVisible ? "1px solid var(--surface-header-border)" : "none",

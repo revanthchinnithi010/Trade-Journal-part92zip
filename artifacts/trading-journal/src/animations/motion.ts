@@ -60,15 +60,30 @@ const PAGE_EASE   = [0.25, 0.46, 0.45, 0.94] as const;
 const PAGE_ENTER  = { duration: 0.22, ease: PAGE_EASE };
 const PAGE_EXIT   = { duration: 0.14, ease: [0.4, 0, 1, 1] as const };
 
-/** Standard page — all sidebar, utility, and tab pages. */
+/** Standard page — sidebar and utility pages (non-tab). */
 export const pageVariants: Variants = {
   initial: { opacity: 0.98, y: 9 },
   enter:   { opacity: 1,    y: 0,  transition: PAGE_ENTER },
   exit:    { opacity: 0,    y: -4, transition: PAGE_EXIT  },
 };
 
-/** Tab pages — same premium system, directional x removed. */
-export const tabPageVariants: Variants = pageVariants;
+/**
+ * Tab pages — pure Instagram-style opacity crossfade. No y translate.
+ *
+ * Deliberately separated from pageVariants because tab pages (Markets, Trades,
+ * Alerts, …) sit inside a Layout whose header height changes between them
+ * (e.g. /trades hides the 60px Layout header; /markets does not). Any y offset
+ * on the entering or exiting page would interact with that height change and
+ * produce the "header moves upward / page enters from bottom" artefact. Pure
+ * opacity (0.98 → 1 enter, 1 → 0.98 exit) eliminates all positional movement
+ * from the page layer; the only remaining motion is the instant header resize,
+ * which is a single imperceptible frame rather than an animated shift.
+ */
+export const tabPageVariants: Variants = {
+  initial: { opacity: 0.98 },
+  enter:   { opacity: 1,    transition: PAGE_ENTER },
+  exit:    { opacity: 0.98, transition: PAGE_EXIT  },
+};
 
 /** Detail pages — same premium system. */
 export const pageDetailVariants: Variants = pageVariants;
