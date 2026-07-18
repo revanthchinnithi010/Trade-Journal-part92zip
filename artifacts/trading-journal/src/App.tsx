@@ -464,48 +464,23 @@ function Router() {
         {pathname === "/trade"         && <Suspense key="/trade"         fallback={<PageLoader />}><PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trade"><Trade       /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/ctrader-test"  && <Suspense key="/ctrader-test"  fallback={<PageLoader />}><PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/ctrader-test"><CtraderTest /></StandardPageWrapper></PageTransition></Suspense>}
 
-        {/* ── Detail pages — fade + scale ──
-             Portfolio manages its own internal scroll region (tab content
-             area) inside a fixed-height flex column, so it is NOT wrapped in
-             StandardPageWrapper — it needs the PageTransition's absolute-fill
-             box directly as its height reference, not an outer page-scroll
-             container. */}
-        {/* position: fixed — viewport-anchored so the portfolio secondary header
-            mounting in Layout's flex column cannot jolt the dashboard (or any
-            other keep-alive page) downward before the entry animation runs. */}
-        {/* Balances manages its own full-height black scroll region (matching
-             the forced-black secondary header in Layout.tsx) instead of
-             StandardPageWrapper's themed page background, so there's no
-             light/dark seam between the header and the content below it.
-             Uses the same cover-detail treatment as Portfolio — position:
-             fixed + zIndex so its secondary header mounting in Layout's flex
-             column can't jolt the dashboard (or any keep-alive page) before
-             the entry animation runs, and it immediately occludes the Layout
-             header/keep-alive content instead of fading in over it. */}
-        {/* position: fixed so the page is viewport-anchored and immune to the
-            parent flex layout shifting (main header mounting/unmounting adds/
-            removes 60 px from the flex column, which previously jolted the
-            position:absolute content-div before the slide animation could run). */}
-        {/* Net PNL Analytics — uses the same cover-detail treatment as Portfolio
-             (fade + gentle zoom, immediately opaque so it occludes the Layout
-             header/keep-alive content instead of flashing through it) instead of
-             the old CSS side-slide, so open/close feels consistent with Portfolio. */}
-        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"          variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><NetPnl /></PageTransition></Suspense>}
+        {/* ── Cover-detail pages — Framer Motion scale + y lift (pageDetailCoverVariants) ──
+             position:fixed + zIndex:50 so the page is viewport-anchored and immune to the
+             parent flex layout shifting (header mounting/unmounting adds/removes 60px from
+             the flex column). Starts fully opaque (no opacity:0 in initial) so the page
+             immediately occludes the Layout header and keep-alive content below it.
+             Portfolio manages its own scroll region — not wrapped in StandardPageWrapper.
+             Balances manages its own full-height black region — same cover-detail treatment.
+             Net PNL Analytics shares the identical treatment for visual consistency. */}
+        {pathname === "/portfolio"        && <PageTransition key="/portfolio"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Portfolio /></PageTransition>}
+        {pathname === "/balances"         && <PageTransition key="/balances"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Balances  /></PageTransition>}
+        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><NetPnl /></PageTransition></Suspense>}
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
       </AnimatePresence>
 
-      {/* ── Cover-scale pages — CSS compositor animation, outside AnimatePresence ──
-           Framer Motion runs on the JS main thread via rAF, so mounting 5+ Recharts
-           charts mid-animation causes stutter. These pages use a pure CSS @keyframes
-           scale+fade that runs on the GPU compositor independently of JS work.
-           Visual feel matches Portfolio's cover-detail (scale 0.97→1, slight y lift). */}
-      {/* fallback={null} — no shimmer flash; user sees previous screen until chunk
-           resolves (immediate imports mean this is always near-instant). Static
-           imports (Portfolio/Balances) need no Suspense at all. */}
+      {/* ── Cover-scale pages — CSS compositor animation, outside AnimatePresence ── */}
       {/* /pnl is a keep-alive node (PNL_NODE) rendered in Layout — not here */}
-      {pathname === "/balances"         && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Balances        /></div>}
-      {pathname === "/portfolio"        && <div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><Portfolio        /></div>}
       {pathname === "/position-detail"  && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}
     </Layout>
   );
