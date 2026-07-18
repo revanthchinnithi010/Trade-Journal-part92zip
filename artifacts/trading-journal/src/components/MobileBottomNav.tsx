@@ -215,7 +215,6 @@ export function MobileBottomNav() {
       ].join(",");
 
   const bubbleBg     = isLight ? "rgba(124,58,237,0.07)"      : "rgba(200,210,255,0.06)";
-  const bubbleBorder = isLight ? "1.5px solid rgba(124,58,237,0.28)" : "1.5px solid rgba(180,200,255,0.52)";
   const bubbleGlow = isLight
     ? [
         "0 0 0 0.5px rgba(124,58,237,0.18)",
@@ -274,7 +273,6 @@ export function MobileBottomNav() {
               pointerEvents: "none",
               background:    bubbleBg,
               willChange:    "transform",
-              border:        bubbleBorder,
               boxShadow:     bubbleGlow,
             }}
           >
