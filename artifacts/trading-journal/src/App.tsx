@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useElasticScroll } from "@/hooks/useElasticScroll";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ThemeProvider } from "@/contexts/ThemeContext";
@@ -288,6 +288,26 @@ const PNL_NODE = (
   </Suspense>
 );
 
+// ── Header-sync path sets ────────────────────────────────────────────────
+// Used by Router to compute the deferred headerVisible prop passed to Layout.
+// Must stay in sync with NO_HEADER_PATHS_LAYOUT in layout.tsx.
+
+/** Pages that hide the Layout header entirely. */
+const APP_NO_HEADER_PATHS = new Set([
+  "/charts",          // gesture surface owns the full viewport
+  "/position-detail", // clip-path shared-element covers the full screen
+  "/pnl",             // keep-alive full-viewport UI
+  "/trades",          // has its own secondary header
+]);
+
+/**
+ * Pages rendered as CSS display-toggle keep-alives — they are never mounted
+ * or unmounted via AnimatePresence. Transitions FROM these pages have no
+ * AnimatePresence exit animation to wait for, so the header update must be
+ * applied immediately (cannot rely on onExitComplete, which won't fire).
+ */
+const APP_KEEP_ALIVE_PATHS = new Set(["/", "/charts", "/reports", "/pnl"]);
+
 // Known pathnames — used to decide whether to render NotFound.
 const KNOWN_PATHS = new Set([
   "/", "/markets", "/trades", "/brokers", "/alerts", "/reports",
@@ -432,13 +452,80 @@ function Router() {
   }
   const dir = dirRef.current;
 
+  // ── Header-visibility sync ────────────────────────────────────────────────
+  //
+  // `headerVisible` is passed as a prop to Layout so Layout never computes it
+  // from the raw `pathname` (which changes on the same frame as the navigation).
+  //
+  // The problem with the naive approach:
+  //   AnimatePresence mode="wait" keeps the EXITING page alive for PAGE_EXIT
+  //   (140 ms). If headerVisible flips the instant pathname changes, the header
+  //   resizes while the old page is still animating → visible one-frame shift.
+  //
+  // The problem with the timer approach (setTimeout 150 ms):
+  //   Framer Motion schedules the exit animation to BEGIN on the first RAF
+  //   AFTER the React commit (~16 ms). So the exit COMPLETES at
+  //   useEffect_time + 16 + 140 = +156 ms, but the timer fires at +150 ms —
+  //   6 ms too early — causing an intermittent one-frame glitch on fast frames.
+  //
+  // The correct approach:
+  //   AnimatePresence's `onExitComplete` fires definitively when the last
+  //   exiting child has finished its animation — no timing approximation.
+  //   We pass `onExitComplete={handleExitComplete}` to the AnimatePresence
+  //   below and update `headerPath` only then.
+  //
+  //   Exception — keep-alive pages (/, /charts, /reports, /pnl) never go
+  //   through AnimatePresence, so onExitComplete will not fire for transitions
+  //   FROM them. We handle those in a useEffect with an immediate update.
+  const [headerPath, setHeaderPath] = useState(pathname);
+  // pathnameRef is always the current pathname; read by onExitComplete so its
+  // closure never captures a stale value across multiple rapid navigations.
+  const pathnameRef       = useRef(pathname);
+  // headerPathRef mirrors headerPath state for reading inside useEffect without
+  // including headerPath in the dep array (which would cause double-firing).
+  const headerPathRef     = useRef(pathname);
+  // prevPathnameRef tracks the pathname from the PREVIOUS render so we can
+  // detect keep-alive → animated-page transitions in useEffect.
+  const prevHdrPathnameRef = useRef(pathname);
+
+  // Keep pathnameRef current on every render (synchronous, no effect needed).
+  pathnameRef.current = pathname;
+
+  useEffect(() => {
+    const prev = prevHdrPathnameRef.current;
+    prevHdrPathnameRef.current = pathname;
+
+    const prevHdrVisible = !APP_NO_HEADER_PATHS.has(headerPathRef.current);
+    const nextHdrVisible  = !APP_NO_HEADER_PATHS.has(pathname);
+    const fromKeepAlive   =  APP_KEEP_ALIVE_PATHS.has(prev);
+
+    if (prevHdrVisible === nextHdrVisible || fromKeepAlive) {
+      // No header change — or the previous page was a keep-alive with no
+      // AnimatePresence exit animation to wait for. Update immediately.
+      headerPathRef.current = pathname;
+      setHeaderPath(pathname);
+    }
+    // Otherwise: onExitComplete fires when FM finishes the exit animation and
+    // calls setHeaderPath at exactly the right moment.
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ^ prevHdrPathnameRef / headerPathRef intentionally omitted: both are refs
+  //   (not state), always current, and must not cause the effect to re-fire.
+
+  const handleExitComplete = useCallback(() => {
+    const p = pathnameRef.current;
+    headerPathRef.current = p;
+    setHeaderPath(p);
+  }, []); // stable — reads via ref, never captures stale pathname
+
+  const headerVisible = !APP_NO_HEADER_PATHS.has(headerPath);
+
   // On mobile the fixed bottom nav bar is ~80px tall; pages need that clearance.
   const bp = isMobile ? 80 : 40;
 
   return (
     // Charts is the only keep-alive node — its LWC chart instance must survive
     // tab switches. Every other page mounts fresh and unmounts on navigation.
-    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE} reportsNode={REPORTS_NODE} pnlNode={PNL_NODE}>
+    <Layout chartsNode={CHARTS_NODE} dashboardNode={DASHBOARD_NODE} reportsNode={REPORTS_NODE} pnlNode={PNL_NODE} headerVisible={headerVisible}>
       {/*
         ── Single AnimatePresence (mode="wait") ────────────────────────────
         All pages — tab pages, sidebar pages, detail pages — live in ONE
@@ -473,7 +560,7 @@ function Router() {
         direction even after pathname has changed. `initial={false}` skips
         the enter animation on the very first load.
       */}
-      <AnimatePresence mode="wait" custom={dir} initial={false}>
+      <AnimatePresence mode="wait" custom={dir} initial={false} onExitComplete={handleExitComplete}>
         {/* ── Tab pages — direction-aware fade-shift ──
              Dashboard ("/") is intentionally NOT rendered here — it is a
              permanently-mounted keep-alive node (see DASHBOARD_NODE / Layout),

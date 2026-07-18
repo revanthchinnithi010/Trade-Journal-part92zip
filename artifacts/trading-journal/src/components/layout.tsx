@@ -374,7 +374,12 @@ function ReconnectBanner() {
 // Defined outside Layout so they are stable (no re-creation per render) and
 // usable inside the deferred-header useEffect without ESLint dep warnings.
 
-/** Pages that suppress the layout header entirely. */
+/**
+ * Pages that suppress the Layout header entirely.
+ * Used only as a fallback when `headerVisible` prop is not provided by App.tsx.
+ * The authoritative copy lives in App.tsx as `APP_NO_HEADER_PATHS`; keep both
+ * in sync if paths change.
+ */
 const NO_HEADER_PATHS_LAYOUT = new Set([
   "/charts",           // gesture surface owns the full viewport
   "/position-detail",  // clip-path shared-element covers the full screen
@@ -382,25 +387,26 @@ const NO_HEADER_PATHS_LAYOUT = new Set([
   "/trades",           // page has its own secondary header
 ]);
 
-/**
- * Pages that use a CSS display-toggle keep-alive (never mount/unmount via
- * AnimatePresence). Transitions FROM these pages have no AnimatePresence exit
- * animation to wait for, so the header update can be applied immediately.
- */
-const KEEP_ALIVE_PATHS_LAYOUT = new Set(["/", "/charts", "/reports", "/pnl"]);
-
 export const Layout = memo(function Layout({
   children,
   chartsNode,
   dashboardNode,
   reportsNode,
   pnlNode,
+  headerVisible: headerVisibleProp,
 }: {
-  children:       React.ReactNode;
-  chartsNode?:    React.ReactNode;
-  dashboardNode?: React.ReactNode;
-  reportsNode?:   React.ReactNode;
-  pnlNode?:       React.ReactNode;
+  children:          React.ReactNode;
+  chartsNode?:       React.ReactNode;
+  dashboardNode?:    React.ReactNode;
+  reportsNode?:      React.ReactNode;
+  pnlNode?:          React.ReactNode;
+  /**
+   * Pre-computed header visibility from App.tsx, synced to AnimatePresence's
+   * onExitComplete so the header never changes while a page is still animating.
+   * When provided, the internal deferred-state logic is bypassed entirely.
+   * Falls back to a direct pathname check if omitted (e.g. in tests).
+   */
+  headerVisible?:    boolean;
 }) {
   useBrokerWs();
   const isMobile                = useIsMobile();
@@ -412,59 +418,21 @@ export const Layout = memo(function Layout({
 
   // ── Header visibility ────────────────────────────────────────────────────
   //
-  // headerVisible drives the Layout header height (60 ↔ 0). The header change
-  // is instant (no CSS transition), so it MUST be timed correctly against the
-  // AnimatePresence page transition or the header and page will be visibly
-  // out of sync.
+  // Prefer the prop synced by App.tsx via AnimatePresence.onExitComplete.
+  // That prop changes only AFTER the exiting page finishes its animation,
+  // making the header change truly atomic with the page transition.
   //
-  // Problem: `pathname` updates on the same React render as the navigation.
-  // AnimatePresence mode="wait" runs the exit animation for PAGE_EXIT (140ms)
-  // before mounting the entering page. Computing `headerVisible` directly from
-  // `pathname` makes the header change 140ms before the page transition
-  // completes its exit — the header disappears/appears while the old page is
-  // still visibly on screen.
-  //
-  // Fix: `headerPath` is a deferred copy of `pathname`.
-  //   • When the header visibility would CHANGE and the transition is between
-  //     two animated (AnimatePresence) pages, we wait 150ms (> PAGE_EXIT 140ms)
-  //     so the header flips exactly between exit-complete and enter-start.
-  //   • When the transition is FROM a keep-alive page (/, /charts, /reports,
-  //     /pnl) there is no AnimatePresence exit to wait for, so we apply
-  //     immediately to avoid the entering page briefly showing the wrong
-  //     header state.
-  //   • When header visibility does not change at all, we apply immediately.
+  // Fallback (prop absent): compute directly from pathname. This is kept
+  // as a safety net for tests or any future caller that does not provide
+  // the prop, and for the initial render before App.tsx's first useEffect.
   //
   // NOTE: /portfolio, /balances, /net-pnl are intentionally excluded from
-  // NO_HEADER_PATHS. Those pages mount as position:fixed inset:0 zIndex:50
-  // overlays that occlude the Layout header on their own; adding them caused
+  // NO_HEADER_PATHS_LAYOUT. Those pages mount as position:fixed inset:0
+  // zIndex:50 overlays that already cover the header; adding them caused
   // the "header slides up" bug on Dashboard → Portfolio drill-down.
-  const [headerPath, setHeaderPath] = useState(pathname);
-  const _headerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    if (_headerTimerRef.current !== null) {
-      clearTimeout(_headerTimerRef.current);
-      _headerTimerRef.current = null;
-    }
-
-    const currentVisible = !NO_HEADER_PATHS_LAYOUT.has(headerPath);
-    const nextVisible    = !NO_HEADER_PATHS_LAYOUT.has(pathname);
-
-    if (currentVisible !== nextVisible && !KEEP_ALIVE_PATHS_LAYOUT.has(headerPath)) {
-      // Header changes AND we're leaving an animated page — defer to after exit.
-      _headerTimerRef.current = setTimeout(() => {
-        setHeaderPath(pathname);
-        _headerTimerRef.current = null;
-      }, 150); // 10 ms past PAGE_EXIT (140 ms)
-    } else {
-      setHeaderPath(pathname);
-    }
-  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
-  // ^ headerPath intentionally omitted: we read it as a "previous value"
-  //   snapshot taken when pathname changes. Including it would cause the
-  //   effect to re-fire when the deferred setHeaderPath resolves.
-
-  const headerVisible = !NO_HEADER_PATHS_LAYOUT.has(headerPath);
+  const headerVisible = typeof headerVisibleProp === "boolean"
+    ? headerVisibleProp
+    : !NO_HEADER_PATHS_LAYOUT.has(pathname);
 
   const [sidebarOpen,     setSidebarOpen]     = useState(false);
   const [notifOpen,       setNotifOpen]       = useState(false);
