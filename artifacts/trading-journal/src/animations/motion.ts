@@ -192,7 +192,7 @@ export const cardVariants: Variants = {
   hidden:  { opacity: 0, y: 20, scale: 0.96 },
   visible: (i: number = 0) => ({
     opacity: 1, y: 0, scale: 1,
-    transition: { ...SPRING_BOUNCY, delay: i * 0.055 },
+    transition: { type: "spring", stiffness: 260, damping: 32, mass: 0.9, delay: i * 0.055 },
   }),
 };
 
