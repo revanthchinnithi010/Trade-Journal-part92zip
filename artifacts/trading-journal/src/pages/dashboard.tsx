@@ -4,7 +4,7 @@ import {
   useGetCalendarHeatmap,
 } from "@workspace/api-client-react";
 import { useCurrencyFormatter, useCurrencyAxisFormatter } from "@/store/currencyStore";
-import { TrendingUp, Activity, ChevronRight, ChevronLeft, X } from "lucide-react";
+import { Activity, ChevronRight, ChevronLeft, X } from "lucide-react";
 import AccountValueWidget from "@/components/AccountValueWidget";
 import DashboardSegmentedControl from "@/components/DashboardSegmentedControl";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
@@ -15,7 +15,6 @@ import { useTickStore } from "@/store/tickStore";
 import { useChartStore } from "@/store/chartStore";
 import {
   PageTransition,
-  AnimatedCard,
 } from "@/components/animations";
 import {
   Drawer,
@@ -25,7 +24,6 @@ import {
 
 const DASHBOARD_TIMEOUT_MS = 2_000;
 
-const DEFAULT_TRADES = { trades: [], total: 0 };
 
 const tooltipStyle = {
   backgroundColor: "hsl(var(--card))",
@@ -384,8 +382,8 @@ const Dashboard = memo(function Dashboard() {
     return () => clearTimeout(t);
   }, []);
 
-  const { data: recentTrades, isLoading: tradesLoading, isError: tradesError }
-    = useListTrades({ limit: 10 });
+  const { isLoading: tradesLoading, isError: tradesError }
+    = useListTrades({ limit: 1 });
 
   const combined = useCombinedPortfolio();
   const brokerOrdersCount = useBrokerStore(s =>
@@ -439,34 +437,8 @@ const Dashboard = memo(function Dashboard() {
 
   const isStillLoading = !timedOut && tradesLoading;
 
-  const resolvedTrades = recentTrades ?? DEFAULT_TRADES;
-
-  const openTrades = useMemo(() => {
-    return resolvedTrades.trades.filter((t) => (t as { exitPrice?: number | null }).exitPrice == null);
-  }, [resolvedTrades.trades]);
-
-  const totalValue = useMemo(() => {
-    return openTrades.reduce((sum, t) => {
-      const ep = (t as { entryPrice?: number }).entryPrice ?? 0;
-      const qty = (t as { quantity?: number; size?: number }).quantity
-        ?? (t as { quantity?: number; size?: number }).size
-        ?? 1;
-      return sum + ep * qty;
-    }, 0);
-  }, [openTrades]);
-
-  const upnlUSD = useMemo(() => {
-    return openTrades.reduce((sum, t) => {
-      const symbol     = (t as { symbol?: string }).symbol ?? "";
-      const side       = (t as { side?: string }).side ?? "";
-      const entryPrice = (t as { entryPrice?: number }).entryPrice ?? 0;
-      const liveTick   = ticks[symbol.toUpperCase()];
-      const livePrice  = liveTick?.price ?? null;
-      if (livePrice == null || entryPrice === 0) return sum;
-      const isLong = side === "long";
-      return sum + (isLong ? livePrice - entryPrice : entryPrice - livePrice);
-    }, 0);
-  }, [openTrades, ticks]);
+  const openPositionsCount = useBrokerStore(s =>
+    Object.values(s.brokerPositions).reduce((sum, p) => sum + p.length, 0));
 
   if (isStillLoading) {
     // Structurally mirrors every section of the real content below, at the
@@ -479,7 +451,6 @@ const Dashboard = memo(function Dashboard() {
       <div className="min-h-full space-y-4 pb-12" style={{ background: "#000000" }}>
         <div className="dash-card shimmer-loading" style={{ height: 176 }} />
         <div className="dash-card shimmer-loading" style={{ height: 302 }} />
-        <div className="dash-card shimmer-loading" style={{ height: 340 }} />
       </div>
     );
   }
@@ -514,7 +485,7 @@ const Dashboard = memo(function Dashboard() {
           realizedPnlDisplay={combined.display.realizedPnl}
           netPnlUSD={combined.usd.netPnl}
           netPnlDisplay={combined.display.netPnl}
-          openPositions={openTrades.length}
+          openPositions={openPositionsCount}
           openOrders={brokerOrdersCount}
         />
       </div>
@@ -537,101 +508,6 @@ const Dashboard = memo(function Dashboard() {
         onClose={() => openSheet(false)}
       />
 
-      {/* ── Recent Trades ── */}
-      <AnimatedCard index={2} className="dash-card overflow-hidden">
-        <div className="px-5 pt-5 pb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5 text-primary" />
-            </div>
-            <span className="text-[13px] font-semibold text-white">Recent Trades</span>
-            <span className="text-[11px] text-muted-foreground bg-white/[0.04] rounded-full px-2 py-0.5 border border-white/[0.06]">
-              Last {resolvedTrades.trades.length}
-            </span>
-          </div>
-          <Link href="/trades">
-            <span className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-0.5 cursor-pointer">
-              View all <ChevronRight className="w-3 h-3" />
-            </span>
-          </Link>
-        </div>
-        {resolvedTrades.trades.length === 0 ? (
-          <div className="px-5 pb-6 pt-2 text-center text-[12px] text-muted-foreground/50">
-            No trades recorded yet
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-white/[0.06] bg-white/[0.015]">
-                  {["Symbol", "Side", "Entry", "Exit", "PNL", "RR", "Date"].map((h) => (
-                    <th key={h} className="px-5 py-3 text-[10px] font-bold text-muted-foreground/60 uppercase tracking-widest text-left">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {resolvedTrades.trades.slice(0, 8).map((trade) => {
-                  const brokerName = BROKER_MAP[(trade as { symbol?: string }).symbol ?? ""];
-                  const broker = brokerName ? BROKER_INFO[brokerName] : undefined;
-                  const pnl = (trade as { pnl?: number }).pnl ?? 0;
-                  const rr = (trade as { rr?: number }).rr ?? 0;
-                  const side = (trade as { side?: string }).side ?? "";
-                  const symbol = (trade as { symbol?: string }).symbol ?? "";
-                  const entryPrice = (trade as { entryPrice?: number }).entryPrice ?? 0;
-                  const exitPrice = (trade as { exitPrice?: number }).exitPrice ?? null;
-                  const entryTime = (trade as { entryTime?: string }).entryTime ?? "";
-                  const id = (trade as { id?: number }).id ?? 0;
-                  return (
-                    <tr key={id} className="border-b border-white/[0.04] last:border-0 hover:bg-white/[0.02] transition-colors">
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-bold text-white">{symbol}</span>
-                          {broker && (
-                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded"
-                              style={{ background: `${broker.color}18`, color: broker.color, border: `1px solid ${broker.color}30` }}>
-                              {broker.short}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                          side === "long"
-                            ? "text-emerald-400 bg-emerald-500/10 border border-emerald-500/20"
-                            : "text-red-400 bg-red-500/10 border border-red-500/20"
-                        }`}>
-                          {side?.toUpperCase()}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-[13px] text-foreground/80 font-mono">
-                        {(entryPrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })}
-                      </td>
-                      <td className="px-5 py-3.5 text-[13px] text-foreground/80 font-mono">
-                        {exitPrice != null
-                          ? (exitPrice ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 5 })
-                          : <span className="text-amber-400 text-[11px] font-semibold">Open</span>}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className={`text-[13px] font-bold ${pnl > 0 ? "text-emerald-400" : pnl < 0 ? "text-red-400" : "text-foreground/60"}`}>
-                          {pnl > 0 ? "+" : ""}{fc(pnl)}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-[13px] text-foreground/70">
-                        {rr > 0 ? `${rr.toFixed(2)}R` : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-[12px] text-muted-foreground">
-                        {entryTime ? new Date(entryTime).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </AnimatedCard>
     </PageTransition>
   );
 });
