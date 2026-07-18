@@ -464,19 +464,21 @@ function Router() {
         {pathname === "/trade"         && <Suspense key="/trade"         fallback={<PageLoader />}><PageTransition key="/trade"        custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/trade"><Trade       /></StandardPageWrapper></PageTransition></Suspense>}
         {pathname === "/ctrader-test"  && <Suspense key="/ctrader-test"  fallback={<PageLoader />}><PageTransition key="/ctrader-test" custom={dir}><StandardPageWrapper bottomPad={bp} pathname="/ctrader-test"><CtraderTest /></StandardPageWrapper></PageTransition></Suspense>}
 
-        {/* ── Cover-detail pages — Framer Motion scale + y lift (pageDetailCoverVariants) ──
-             position:fixed + zIndex:50 so the page is viewport-anchored and immune to the
-             parent flex layout shifting (header mounting/unmounting adds/removes 60px from
-             the flex column). Starts fully opaque (no opacity:0 in initial) so the page
-             immediately occludes the Layout header and keep-alive content below it.
-             Portfolio manages its own scroll region — not wrapped in StandardPageWrapper.
-             Balances manages its own full-height black region — same cover-detail treatment.
-             Net PNL Analytics shares the identical treatment for visual consistency. */}
-        {pathname === "/portfolio"        && <PageTransition key="/portfolio"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Portfolio /></PageTransition>}
-        {pathname === "/balances"         && <PageTransition key="/balances"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Balances  /></PageTransition>}
         {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><NetPnl /></PageTransition></Suspense>}
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
+      </AnimatePresence>
+
+      {/* ── Portfolio + Balances — own AnimatePresence (no mode="wait") so they mount
+           INSTANTLY on pathname change, covering the layout from frame 1 before the
+           header can start collapsing. Inside mode="wait" they would only mount after
+           the previous page's exit finished (~60 ms), leaving the header visibly jumping.
+           Each has its own AnimatePresence so enter/exit still get the cover-detail
+           Framer Motion animation. position:fixed + background:#000 ensures the scaled
+           content's edge gaps never show the layout behind them. */}
+      <AnimatePresence initial={false}>
+        {pathname === "/portfolio" && <PageTransition key="/portfolio" variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Portfolio /></PageTransition>}
+        {pathname === "/balances"  && <PageTransition key="/balances"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Balances  /></PageTransition>}
       </AnimatePresence>
 
       {/* ── Cover-scale pages — CSS compositor animation, outside AnimatePresence ── */}
