@@ -1121,7 +1121,29 @@ export default function Trades() {
 
       {/* ── Trade Detail Drawer ── */}
       <Sheet open={!!selectedTradeId} onOpenChange={(open) => !open && setSelectedTradeId(null)}>
-        <SheetContent className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden [&>button:first-child]:hidden" style={{ background: "#000000", borderLeft: "1px solid rgba(255,255,255,0.07)" }}>
+        <SheetContent
+          className="w-full sm:max-w-[420px] p-0 flex flex-col overflow-hidden [&>button:first-child]:hidden"
+          style={{
+            background:   "#000000",
+            borderLeft:   "1px solid rgba(255,255,255,0.07)",
+            // ── Kill the horizontal slide, replace with opacity fade ──────────
+            // sheetVariants applies slide-in-from-right / slide-out-to-right via
+            // the Tailwind animate plugin, which sets --tw-enter-translate-x and
+            // --tw-exit-translate-x to "100%". Inline styles beat class-declared
+            // custom properties, so zeroing them here removes the slide entirely
+            // without touching sheet.tsx (sidebar and other Sheet users unaffected).
+            // --tw-enter-opacity / --tw-exit-opacity add the 0.96→1 / 1→0 fade;
+            // these vars default to 1 (no fade) if unset, so explicitly setting
+            // them here activates the opacity leg of the animate keyframe.
+            "--tw-enter-translate-x" : "0px",
+            "--tw-exit-translate-x"  : "0px",
+            "--tw-enter-opacity"     : "0.96",
+            "--tw-exit-opacity"      : "0",
+            // Match the app-wide 220ms premium ease-out timing.
+            animationDuration        : "220ms",
+            animationTimingFunction  : "cubic-bezier(0.25, 0.46, 0.45, 0.94)",
+          } as React.CSSProperties}
+        >
           {selectedTrade && (
             <>
               {/* ── Custom Nav Header ── */}
