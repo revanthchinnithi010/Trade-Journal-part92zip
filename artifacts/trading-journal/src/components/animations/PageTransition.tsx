@@ -4,26 +4,24 @@
  * Place around route content. Use `key={route}` on each conditional so
  * AnimatePresence correctly tracks enter/exit per page.
  *
- * GPU-safe: opacity + transform (x, y, scale) only.
+ * GPU-safe: opacity + transform (y) only — no scale, no x-slide.
+ *
+ * All variants share the same premium motion system: opacity 0.98→1 + 9px
+ * translate-Y, 220ms smooth ease-out. The transition is almost imperceptible —
+ * content materialises in place rather than performing a visible animation.
+ *
+ * variant="page" | "tab" | "detail" | "slide"
+ *   Standard premium enter/exit. `custom` is accepted but unused (kept for
+ *   API compatibility with AnimatePresence).
+ *
+ * variant="cover-detail"
+ *   Same motion but starts fully opaque so it immediately occludes Layout's
+ *   header and any keep-alive content below (used for position:fixed overlays
+ *   such as Portfolio, Balances, Net-PnL).
  *
  * By default (`fill=true`) variants use position:absolute;inset:0 so the page
- * fills the absolute container in Layout and layers correctly with the Charts
- * keep-alive layer. With AnimatePresence mode="wait" only one page is in the
- * DOM at a time, so there is never an overlap — but consistent absolute
- * positioning prevents any height/flow issues regardless.
- *
- * Pass `fill={false}` when using PageTransition as an INNER content wrapper
- * inside an already-scrollable container (e.g. StandardPageWrapper) rather
- * than as the top-level route wrapper. Absolutely-positioned content does not
- * contribute to its scroll-parent's scrollHeight, which silently breaks
- * scrolling — `fill={false}` keeps the element in normal document flow so its
- * height (and therefore the scroll container's scrollable height) is correct.
- *
- * variant="page"   — fade + subtle slide-up (sidebar / utility pages)
- * variant="detail" — fade + gentle zoom-in (drill-down pages, e.g. Portfolio)
- * variant="tab"    — direction-aware fade-shift (bottom-tab pages). Small x offset
- *                    (±28px) + opacity gives directional cues without full-width sliding.
- *                    Requires `custom` (direction int) forwarded from AnimatePresence.
+ * fills the absolute container in Layout. Pass `fill={false}` for inner/nested
+ * usage inside a scrollable container to keep the element in normal flow.
  */
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/hooks/useReducedMotion";

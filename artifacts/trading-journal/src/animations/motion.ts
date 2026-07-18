@@ -45,83 +45,46 @@ export const SPRING_MODAL: Transition = {
 };
 
 // ── Page transitions ──────────────────────────────────────────────────────
-// GPU-safe: only opacity + transform (x, y, scale).
-// All transitions favour opacity-led cross-fades to avoid the "page shifting"
-// feel of full-width slides. Directional cues come from small x offsets (≤28px)
-// rather than viewport-width travel, keeping content visually stable.
+// GPU-safe: only opacity + transform (y).
+//
+// Single premium motion system — Instagram philosophy.
+// Enter: opacity 0.98 → 1, y 9px → 0, 220ms smooth ease-out.
+// The transition is almost imperceptible: content materialises in place
+// rather than performing a visible animation. No scale, no bounce, no slide.
+//
+// cover-detail stays fully opaque on enter so it immediately occludes
+// the Layout header and any keep-alive content below (opacity:0 start
+// lets lower z-index elements bleed through during the fade, causing a flash).
 
-/**
- * Default page swap — fade + subtle slide-up.
- * Used for sidebar / non-tab pages (mode="wait").
- */
+const PAGE_EASE   = [0.25, 0.46, 0.45, 0.94] as const;
+const PAGE_ENTER  = { duration: 0.22, ease: PAGE_EASE };
+const PAGE_EXIT   = { duration: 0.14, ease: [0.4, 0, 1, 1] as const };
+
+/** Standard page — all sidebar, utility, and tab pages. */
 export const pageVariants: Variants = {
-  initial: { opacity: 0, y: 10 },
-  enter:   { opacity: 1, y: 0,  transition: { duration: 0.22, ease: EASE_OUT_EXPO } },
-  exit:    { opacity: 0, y: -6, transition: { duration: 0.14, ease: [0.4, 0, 1, 1] } },
+  initial: { opacity: 0.98, y: 9 },
+  enter:   { opacity: 1,    y: 0,  transition: PAGE_ENTER },
+  exit:    { opacity: 0,    y: -4, transition: PAGE_EXIT  },
 };
 
-/**
- * Tab page — direction-aware fade-shift for bottom-tab navigation.
- *
- * `custom` is the direction integer forwarded from AnimatePresence:
- *   > 0  → higher-index tab  (enter fades in from +28px right, exits to -28px left)
- *   < 0  → lower-index tab   (enter fades in from -28px left,  exits to +28px right)
- *   = 0  → non-tab cross-nav → plain opacity cross-fade
- *
- * Small x offset (10px) instead of full viewport width — gives directionality
- * without the jarring slide-across effect.
- */
-const TAB_X = 10;
-export const tabPageVariants: Variants = {
-  initial: (dir: number) => ({
-    x:       dir === 0 ? 0 : (dir > 0 ? TAB_X : -TAB_X),
-    opacity: 0,
-  }),
-  enter: (_dir: number) => ({
-    x:          0,
-    opacity:    1,
-    transition: { duration: 0.22, ease: EASE_OUT_EXPO },
-  }),
-  exit: (dir: number) => ({
-    x:          dir === 0 ? 0 : (dir > 0 ? -TAB_X : TAB_X),
-    opacity:    0,
-    transition: { duration: 0.06, ease: [0.4, 0, 1, 1] },
-  }),
-};
+/** Tab pages — same premium system, directional x removed. */
+export const tabPageVariants: Variants = pageVariants;
+
+/** Detail pages — same premium system. */
+export const pageDetailVariants: Variants = pageVariants;
 
 /**
- * Detail page (e.g. Portfolio) — fade + gentle zoom-in.
- * Scale stays within container bounds (0.97–1) so overflow:hidden never clips.
- */
-export const pageDetailVariants: Variants = {
-  initial: { opacity: 0, scale: 0.97, y: 8 },
-  enter:   { opacity: 1, scale: 1,    y: 0, transition: { duration: 0.26, ease: EASE_PREMIUM } },
-  exit:    { opacity: 0, scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
-};
-
-/**
- * Cover-detail page (e.g. Portfolio when rendered position:fixed over keep-alive
- * pages). Identical feel to pageDetailVariants but starts fully opaque so it
- * immediately occludes the Layout header and any keep-alive content below it —
- * a page that starts at opacity:0 lets lower z-index elements show through
- * during the fade-in, causing a visible "header-over-new-page" flash.
+ * Cover-detail pages (Portfolio / Balances / Net-PnL — position:fixed overlay).
+ * Starts fully opaque so keep-alive content is immediately hidden on enter.
  */
 export const pageDetailCoverVariants: Variants = {
-  initial: { scale: 0.97, y: 8 },         // no opacity:0 — covers immediately
-  enter:   { scale: 1,    y: 0, transition: { duration: 0.24, ease: EASE_PREMIUM } },
-  exit:    { opacity: 0,  scale: 0.98, y: 4, transition: { duration: 0.15, ease: [0.4, 0, 1, 1] } },
+  initial: { opacity: 1, y: 9 },
+  enter:   { opacity: 1, y: 0,  transition: PAGE_ENTER },
+  exit:    { opacity: 0, y: -4, transition: PAGE_EXIT  },
 };
 
-/**
- * Full-screen slide page (e.g. Position Detail) — native mobile push/pop.
- * Enters by sliding in from the right; exits by sliding back to the right.
- * This gives the standard iOS/Android push-navigation feel.
- */
-export const pageSlideVariants: Variants = {
-  initial: { x: "100%", opacity: 0 },
-  enter:   { x: 0,      opacity: 1, transition: { duration: 0.30, ease: EASE_PREMIUM } },
-  exit:    { x: "100%", opacity: 0, transition: { duration: 0.24, ease: [0.4, 0, 1, 1] } },
-};
+/** Slide pages — full-screen slide removed, unified to premium system. */
+export const pageSlideVariants: Variants = pageVariants;
 
 /** Staggered sidebar nav items */
 export const sidebarItemVariants: Variants = {
