@@ -472,9 +472,9 @@ function Router() {
              Portfolio manages its own scroll region — not wrapped in StandardPageWrapper.
              Balances manages its own full-height black region — same cover-detail treatment.
              Net PNL Analytics shares the identical treatment for visual consistency. */}
-        {pathname === "/portfolio"        && <PageTransition key="/portfolio"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Portfolio /></PageTransition>}
-        {pathname === "/balances"         && <PageTransition key="/balances"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><Balances  /></PageTransition>}
-        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50 }}><NetPnl /></PageTransition></Suspense>}
+        {pathname === "/portfolio"        && <PageTransition key="/portfolio"  variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Portfolio /></PageTransition>}
+        {pathname === "/balances"         && <PageTransition key="/balances"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><Balances  /></PageTransition>}
+        {pathname === "/net-pnl"          && <Suspense key="/net-pnl"          fallback={<PageLoader />}><PageTransition key="/net-pnl"   variant="cover-detail" custom={dir} style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}><NetPnl /></PageTransition></Suspense>}
         {/* ── 404 ── */}
         {!KNOWN_PATHS.has(pathname)    && <Suspense key="not-found" fallback={<PageLoader />}><PageTransition key="not-found"  custom={dir}><StandardPageWrapper bottomPad={bp} pathname="not-found"><NotFound    /></StandardPageWrapper></PageTransition></Suspense>}
       </AnimatePresence>
