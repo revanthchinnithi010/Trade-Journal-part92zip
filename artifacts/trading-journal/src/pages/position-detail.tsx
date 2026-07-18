@@ -369,12 +369,10 @@ export default function PositionDetail() {
         <div className="flex flex-col gap-4" style={{ padding: 20 }}>
 
           {/* ──────────────────── TOP CARD ───────────────────────────────── */}
-          <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: "18px 20px", boxShadow: CARD_SHADOW }}
-          >
+          <div className="dash-account-card" style={{ padding: "18px 20px" }}>
             {/* Row 1: symbol + pills */}
             <div className="flex items-center gap-2 mb-3 flex-wrap">
-              <span className="font-bold" style={{ color: VALUE, fontSize: 22, letterSpacing: "-0.3px" }}>
+              <span className="font-bold" style={{ color: "var(--stat-value)", fontSize: 22, letterSpacing: "-0.3px" }}>
                 {position.symbol}
               </span>
               <Badge color={sideColor}>{position.side === "Long" ? "LONG" : "SHORT"}</Badge>
@@ -382,41 +380,41 @@ export default function PositionDetail() {
             </div>
 
             {/* Row 2: label */}
-            <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 12 }}>
+            <p className="font-semibold uppercase tracking-wide mb-1" style={{ color: "var(--stat-sub)", fontSize: 11 }}>
               Unrealized P&amp;L
             </p>
 
             {/* Row 3: P&L value */}
-            <p className="font-bold leading-none" style={{ color: pnlColor, fontSize: 26 }}>
+            <p className="font-black leading-none" style={{ color: pnlColor, fontSize: 28 }}>
               {fUSD(pnlUsd, true)}
             </p>
 
             {/* INR + pct row */}
-            <p className="font-medium mt-2 mb-3" style={{ color: pnlColor, fontSize: 13 }}>
+            <p className="font-medium mt-2 mb-4" style={{ color: pnlColor, fontSize: 13 }}>
               {fINR(pnlInr, true)}
-              <span style={{ color: MUTED, fontWeight: 500 }}> · {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</span>
+              <span style={{ color: "var(--stat-sub)", fontWeight: 500 }}> · {pnlPct >= 0 ? "+" : ""}{pnlPct.toFixed(2)}%</span>
             </p>
 
-            <div style={{ height: 1, background: DIVIDER, marginTop: 10, marginBottom: 10 }} />
-
-            {/* Bottom row: Mark price / Status — stacked label-over-value blocks */}
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 11 }}>
+            {/* Bottom row: Mark price / Status — sub-widget grid matching AccountValueWidget */}
+            <div
+              className="grid grid-cols-2 overflow-hidden rounded-xl"
+              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }}
+            >
+              <div className="px-3.5 py-3" style={{ borderRight: "1px solid rgba(255,255,255,0.08)" }}>
+                <p className="font-semibold uppercase tracking-wide mb-1.5" style={{ color: "var(--stat-sub)", fontSize: 11 }}>
                   Mark Price
                 </p>
-                <p className="font-semibold" style={{ color: VALUE, fontSize: 15 }}>
+                <p className="font-black leading-none" style={{ color: "var(--stat-value)", fontSize: 15 }}>
                   {fmtCompact(livePrice)}
                 </p>
               </div>
-
-              <div className="text-right">
-                <p className="font-medium uppercase tracking-wide mb-1" style={{ color: MUTED, fontSize: 11 }}>
+              <div className="px-3.5 py-3">
+                <p className="font-semibold uppercase tracking-wide mb-1.5" style={{ color: "var(--stat-sub)", fontSize: 11 }}>
                   Status
                 </p>
-                <div className="flex items-center justify-end gap-1.5">
+                <div className="flex items-center gap-1.5">
                   <span className="inline-block w-[6px] h-[6px] rounded-full" style={{ background: GREEN }} />
-                  <span className="font-semibold" style={{ color: GREEN, fontSize: 14 }}>
+                  <span className="font-black leading-none" style={{ color: GREEN, fontSize: 15 }}>
                     Live
                   </span>
                 </div>
@@ -425,22 +423,20 @@ export default function PositionDetail() {
           </div>
 
           {/* ──────────────────── POSITION DETAILS CARD (collapsible) ─────── */}
-          <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: "hidden", boxShadow: CARD_SHADOW }}
-          >
+          <div className="dash-account-card dash-account-card-dim" style={{ overflow: "hidden" }}>
             <button
               onClick={() => setDetailsOpen(o => !o)}
               className="w-full flex items-center justify-between"
               style={{ padding: "14px 20px", background: "transparent" }}
               aria-expanded={detailsOpen}
             >
-              <span className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
+              <span className="font-semibold uppercase tracking-wide" style={{ color: "var(--stat-sub)", fontSize: 11 }}>
                 Position Details
               </span>
               <ChevronDown
                 size={16}
                 style={{
-                  color: MUTED,
+                  color: "var(--stat-sub)",
                   transform: detailsOpen ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.2s ease",
                 }}
@@ -450,17 +446,17 @@ export default function PositionDetail() {
             {detailsOpen && (
               <div>
                 {tradeRows.map((row, i) => (
-                  <div key={i} style={{ borderTop: `1px solid ${DIVIDER}` }}>
+                  <div key={i} style={{ borderTop: "1px solid rgba(255,255,255,0.08)" }}>
                     <div
                       className="flex items-center justify-between px-5"
                       style={{ height: 54 }}
                     >
-                      <span className="font-normal" style={{ color: "#797979", fontSize: 13 }}>
+                      <span className="font-normal" style={{ color: "var(--stat-sub)", fontSize: 13 }}>
                         {row.label}
                       </span>
                       <span
                         className="font-semibold"
-                        style={{ color: row.valueColor ?? "#D6D6D6", fontSize: 15 }}
+                        style={{ color: row.valueColor ?? "var(--stat-value)", fontSize: 15 }}
                       >
                         {row.value}
                       </span>
@@ -472,22 +468,20 @@ export default function PositionDetail() {
           </div>
 
           {/* ──────────────────── BRACKET ORDER CARD (collapsible) ─────────── */}
-          <div
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, overflow: "hidden", boxShadow: CARD_SHADOW }}
-          >
+          <div className="dash-account-card dash-account-card-dim" style={{ overflow: "hidden" }}>
             <button
               onClick={() => setBracketOpen(o => !o)}
               className="w-full flex items-center justify-between"
               style={{ padding: "14px 20px" }}
               aria-expanded={bracketOpen}
             >
-              <span className="font-medium uppercase tracking-wide" style={{ color: MUTED, fontSize: 11 }}>
+              <span className="font-semibold uppercase tracking-wide" style={{ color: "var(--stat-sub)", fontSize: 11 }}>
                 Bracket Order
               </span>
               <ChevronDown
                 size={16}
                 style={{
-                  color: MUTED,
+                  color: "var(--stat-sub)",
                   transform: bracketOpen ? "rotate(180deg)" : "rotate(0deg)",
                   transition: "transform 0.2s ease",
                 }}
@@ -545,14 +539,14 @@ export default function PositionDetail() {
               </div>
 
               <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
-                <span className="font-normal" style={{ color: "#797979", fontSize: 12 }}>Estimated Exit PnL</span>
-                <span className="font-semibold" style={{ color: tpPnlPreview === null ? MUTED : (tpPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
+                <span className="font-normal" style={{ color: "var(--stat-sub)", fontSize: 12 }}>Estimated Exit PnL</span>
+                <span className="font-semibold" style={{ color: tpPnlPreview === null ? "var(--stat-sub)" : (tpPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
                   {tpPnlPreview === null ? "—" : fUSD(tpPnlPreview, true)}
                 </span>
               </div>
             </div>
 
-            <div style={{ height: 1, background: DIVIDER, marginTop: 3, marginBottom: 12 }} />
+            <div style={{ height: 1, background: "rgba(255,255,255,0.08)", marginTop: 3, marginBottom: 12 }} />
 
             {/* Stop Loss */}
             <div>
@@ -602,8 +596,8 @@ export default function PositionDetail() {
               </div>
 
               <div className="flex items-center justify-between" style={{ marginTop: 9 }}>
-                <span className="font-normal" style={{ color: "#797979", fontSize: 12 }}>Estimated Stop PnL</span>
-                <span className="font-semibold" style={{ color: slPnlPreview === null ? MUTED : (slPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
+                <span className="font-normal" style={{ color: "var(--stat-sub)", fontSize: 12 }}>Estimated Stop PnL</span>
+                <span className="font-semibold" style={{ color: slPnlPreview === null ? "var(--stat-sub)" : (slPnlPreview >= 0 ? GREEN : RED), fontSize: 13 }}>
                   {slPnlPreview === null ? "—" : fUSD(slPnlPreview, true)}
                 </span>
               </div>
