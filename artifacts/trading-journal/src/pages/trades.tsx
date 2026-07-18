@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useCallback, forwardRef, useImperativeHandle, memo } from "react";
 import { createPortal } from "react-dom";
 import {
   useListTrades,
@@ -130,8 +130,17 @@ function FilterPill({
 }
 
 // ── FilterBottomSheet — mobile-only filter panel ──────────────────────────
-// Opens from below with a spring slide. All filters live here on mobile.
-// Uses draft state: changes are staged until "Apply" is tapped.
+// Always mounted in the DOM (never unmounted) so toggling it open/close
+// triggers ZERO React re-renders in the parent Trades component.
+//
+// Animation runs entirely on the GPU compositor thread via CSS transitions on
+// `transform` + `opacity` (will-change: transform). No Framer Motion / JS
+// per-frame work during the slide, so the main thread stays free and the
+// animation hits 60/120 fps even on low-end devices.
+//
+// The component exposes an imperative `open()` handle via forwardRef so the
+// caller never needs to lift `isOpen` state — calling ref.current.open() is a
+// direct setState inside FilterBottomSheet only, keeping Trades fully inert.
 
 const BROKER_OPTS = [
   { value: "all",            label: "All",           color: undefined },
@@ -140,237 +149,239 @@ const BROKER_OPTS = [
   { value: "cTrader",        label: "cTrader",       color: "#a78bfa" },
 ] as const;
 
-function FilterBottomSheet({
-  open,
-  onClose,
-  outcomeFilter,
-  sideFilter,
-  brokerFilter,
-  onApply,
-}: {
-  open: boolean;
-  onClose: () => void;
-  outcomeFilter: string;
-  sideFilter: string;
-  brokerFilter: string;
-  onApply: (outcome: string, side: string, broker: string) => void;
-}) {
-  const [draftOutcome, setDraftOutcome] = useState(outcomeFilter);
-  const [draftSide,    setDraftSide]    = useState(sideFilter);
-  const [draftBroker,  setDraftBroker]  = useState(brokerFilter);
+export interface FilterSheetHandle {
+  open: () => void;
+}
 
-  // Sync draft when sheet opens (so it reflects current applied state)
-  const prevOpenRef = useState(false);
-  if (prevOpenRef[0] !== open) {
-    prevOpenRef[1](open);
-    if (open) {
-      setDraftOutcome(outcomeFilter);
-      setDraftSide(sideFilter);
-      setDraftBroker(brokerFilter);
-    }
-  }
+// CSS timing — open uses a fast ease-out (iOS feel), close is quicker ease-in.
+// These values match iOS UIKit spring feel without requiring JS-driven animation.
+const SHEET_OPEN_TRANSITION  = "transform 0.30s cubic-bezier(0.22,1,0.36,1), opacity 0.22s cubic-bezier(0.22,1,0.36,1)";
+const SHEET_CLOSE_TRANSITION = "transform 0.22s cubic-bezier(0.4,0,1,1),    opacity 0.16s cubic-bezier(0.4,0,1,1)";
+const FADE_OPEN_TRANSITION   = "opacity 0.22s ease";
+const FADE_CLOSE_TRANSITION  = "opacity 0.16s ease";
 
-  const handleReset = () => {
-    setDraftOutcome("all");
-    setDraftSide("all");
-    setDraftBroker("all");
-  };
-
-  const handleApply = () => {
-    onApply(draftOutcome, draftSide, draftBroker);
-    onClose();
-  };
-
-  // ── Chip helper ──────────────────────────────────────────────────────────
-  const Chip = ({
-    label, active, accent, onClick,
-  }: { label: string; active: boolean; accent?: string; onClick: () => void }) => (
+// Inner chip — local to FilterBottomSheet, defined outside so it is never
+// re-created on re-render.
+function FilterChip({
+  label, active, accent, onClick,
+}: { label: string; active: boolean; accent?: string; onClick: () => void }) {
+  const activeStyle: React.CSSProperties = accent
+    ? { background: `${accent}18`, border: `1.5px solid ${accent}55`, color: accent }
+    : { background: "rgba(255,255,255,0.12)", border: "1.5px solid rgba(255,255,255,0.40)", color: "#ffffff" };
+  return (
     <button
       type="button"
       onClick={onClick}
-      style={active && accent ? {
-        background: `${accent}18`,
-        border: `1.5px solid ${accent}55`,
-        color: accent,
-      } : active ? {
-        background: "rgba(255,255,255,0.12)",
-        border: "1.5px solid rgba(255,255,255,0.40)",
-        color: "#ffffff",
-      } : undefined}
-      className={`px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold border transition-all duration-150 ${
-        active
-          ? ""
-          : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:text-white hover:bg-white/[0.08]"
+      style={active ? activeStyle : undefined}
+      className={`px-3.5 py-1.5 rounded-xl text-[12.5px] font-semibold border transition-colors duration-100 ${
+        active ? "" : "bg-white/[0.04] border-white/[0.09] text-white/50 hover:text-white hover:bg-white/[0.08]"
       }`}
     >
       {label}
     </button>
   );
+}
 
-  // ── Section header ────────────────────────────────────────────────────────
-  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+function SheetSectionLabel({ children }: { children: React.ReactNode }) {
+  return (
     <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "rgba(148,163,184,0.5)", marginBottom: 8, textTransform: "uppercase" }}>
       {children}
     </p>
   );
+}
 
-  if (!open) return null;
+const FilterBottomSheet = forwardRef<FilterSheetHandle, {
+  outcomeFilter: string;
+  sideFilter: string;
+  brokerFilter: string;
+  onApply: (outcome: string, side: string, broker: string) => void;
+}>(function FilterBottomSheet({ outcomeFilter, sideFilter, brokerFilter, onApply }, ref) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [draftOutcome, setDraftOutcome] = useState(outcomeFilter);
+  const [draftSide,    setDraftSide]    = useState(sideFilter);
+  const [draftBroker,  setDraftBroker]  = useState(brokerFilter);
+
+  // Expose open() so the parent never needs its own isOpen state
+  useImperativeHandle(ref, () => ({
+    open() {
+      // Sync drafts to current applied values at open time
+      setDraftOutcome(outcomeFilter);
+      setDraftSide(sideFilter);
+      setDraftBroker(brokerFilter);
+      setIsOpen(true);
+    },
+  }), [outcomeFilter, sideFilter, brokerFilter]);
+
+  const close = useCallback(() => setIsOpen(false), []);
+
+  const handleReset = useCallback(() => {
+    setDraftOutcome("all");
+    setDraftSide("all");
+    setDraftBroker("all");
+  }, []);
+
+  const handleApply = useCallback(() => {
+    onApply(draftOutcome, draftSide, draftBroker);
+    setIsOpen(false);
+  }, [onApply, draftOutcome, draftSide, draftBroker]);
+
+  // ── CSS compositor styles ─────────────────────────────────────────────────
+  // Both layers stay in the DOM at all times — only opacity/transform change.
+  // No layout-triggering properties animate, so the GPU handles every frame.
+  const backdropStyle: React.CSSProperties = {
+    position:      "fixed",
+    inset:         0,
+    zIndex:        400,
+    background:    "rgba(0,0,0,0.72)",
+    opacity:       isOpen ? 1 : 0,
+    pointerEvents: isOpen ? "auto" : "none",
+    transition:    isOpen ? FADE_OPEN_TRANSITION : FADE_CLOSE_TRANSITION,
+  };
+
+  const sheetStyle: React.CSSProperties = {
+    position:      "fixed",
+    left:          0,
+    right:         0,
+    bottom:        0,
+    zIndex:        401,
+    background:    "#0d0f13",
+    borderTop:     "1px solid rgba(255,255,255,0.09)",
+    borderRadius:  "20px 20px 0 0",
+    // Keep shadow small and static — do not animate blur/spread, it forces repaint.
+    boxShadow:     "0 -4px 20px rgba(0,0,0,0.55)",
+    paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
+    display:       "flex",
+    flexDirection: "column",
+    // Compositor-thread animation: transform only, no layout properties
+    willChange:    "transform",
+    transform:     isOpen ? "translateY(0)" : "translateY(100%)",
+    transition:    isOpen ? SHEET_OPEN_TRANSITION : SHEET_CLOSE_TRANSITION,
+  };
 
   return createPortal(
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* Backdrop */}
-          <motion.div
-            key="fs-backdrop"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={onClose}
-            style={{
-              position: "fixed", inset: 0, zIndex: 400,
-              background: "rgba(0,0,0,0.72)",
-            }}
-          />
+    <>
+      {/* Backdrop — always in DOM, fades via opacity */}
+      <div style={backdropStyle} onClick={close} />
 
-          {/* Sheet */}
-          <motion.div
-            key="fs-sheet"
-            initial={{ y: "100%" }}
-            animate={{ y: 0 }}
-            exit={{ y: "100%" }}
-            transition={{ type: "spring", damping: 32, stiffness: 340, mass: 0.9 }}
-            onClick={e => e.stopPropagation()}
+      {/* Sheet — always in DOM, slides via transform */}
+      <div style={sheetStyle}>
+        {/* Handle pill */}
+        <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 4 }}>
+          <div style={{ width: 36, height: 4, borderRadius: 9999, background: "rgba(255,255,255,0.18)" }} />
+        </div>
+
+        {/* Title row */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "6px 18px 14px",
+          borderBottom: "1px solid rgba(255,255,255,0.06)",
+        }}>
+          <span style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", letterSpacing: "-0.01em" }}>
+            Filters
+          </span>
+          <button
+            onClick={close}
             style={{
-              position: "fixed", left: 0, right: 0, bottom: 0, zIndex: 401,
-              background: "#0d0f13",
-              borderTop: "1px solid rgba(255,255,255,0.09)",
-              borderRadius: "20px 20px 0 0",
-              boxShadow: "0 -16px 64px rgba(0,0,0,0.85)",
-              paddingBottom: "max(env(safe-area-inset-bottom, 16px), 16px)",
-              display: "flex", flexDirection: "column",
+              background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)",
+              borderRadius: 8, padding: "6px 8px", cursor: "pointer", lineHeight: 0,
+              color: "rgba(148,163,184,0.55)",
             }}
           >
-            {/* Handle pill */}
-            <div style={{ display: "flex", justifyContent: "center", paddingTop: 10, paddingBottom: 4 }}>
-              <div style={{ width: 36, height: 4, borderRadius: 9999, background: "rgba(255,255,255,0.18)" }} />
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Filter groups */}
+        <div style={{ padding: "18px 18px 8px", display: "flex", flexDirection: "column", gap: 20 }}>
+          {/* Trade Result */}
+          <div>
+            <SheetSectionLabel>Trade Result</SheetSectionLabel>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                { v: "all",       label: "All" },
+                { v: "win",       label: "Win",       accent: "#10b981" },
+                { v: "loss",      label: "Loss",      accent: "#ef4444" },
+                { v: "breakeven", label: "Breakeven", accent: "#f59e0b" },
+              ].map(({ v, label, accent }) => (
+                <FilterChip
+                  key={v} label={label} accent={accent}
+                  active={draftOutcome === v}
+                  onClick={() => setDraftOutcome(v)}
+                />
+              ))}
             </div>
+          </div>
 
-            {/* Title row */}
-            <div style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "6px 18px 14px",
-              borderBottom: "1px solid rgba(255,255,255,0.06)",
-            }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: "#f1f5f9", letterSpacing: "-0.01em" }}>
-                Filters
-              </span>
-              <button
-                onClick={onClose}
-                style={{
-                  background: "rgba(255,255,255,0.07)", border: "1px solid rgba(255,255,255,0.10)",
-                  borderRadius: 8, padding: "6px 8px", cursor: "pointer", lineHeight: 0,
-                  color: "rgba(148,163,184,0.55)",
-                }}
-              >
-                <X size={14} />
-              </button>
+          {/* Trade Side */}
+          <div>
+            <SheetSectionLabel>Trade Side</SheetSectionLabel>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {[
+                { v: "all",   label: "All Sides" },
+                { v: "long",  label: "Long",  accent: "#60a5fa" },
+                { v: "short", label: "Short", accent: "#f97316" },
+              ].map(({ v, label, accent }) => (
+                <FilterChip
+                  key={v} label={label} accent={accent}
+                  active={draftSide === v}
+                  onClick={() => setDraftSide(v)}
+                />
+              ))}
             </div>
+          </div>
 
-            {/* Filter groups */}
-            <div style={{ padding: "18px 18px 8px", display: "flex", flexDirection: "column", gap: 20 }}>
-              {/* Trade Result */}
-              <div>
-                <SectionLabel>Trade Result</SectionLabel>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {[
-                    { v: "all",       label: "All" },
-                    { v: "win",       label: "Win",       accent: "#10b981" },
-                    { v: "loss",      label: "Loss",      accent: "#ef4444" },
-                    { v: "breakeven", label: "Breakeven", accent: "#f59e0b" },
-                  ].map(({ v, label, accent }) => (
-                    <Chip
-                      key={v} label={label} accent={accent}
-                      active={draftOutcome === v}
-                      onClick={() => setDraftOutcome(v)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Trade Side */}
-              <div>
-                <SectionLabel>Trade Side</SectionLabel>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {[
-                    { v: "all",   label: "All Sides" },
-                    { v: "long",  label: "Long",  accent: "#60a5fa" },
-                    { v: "short", label: "Short", accent: "#f97316" },
-                  ].map(({ v, label, accent }) => (
-                    <Chip
-                      key={v} label={label} accent={accent}
-                      active={draftSide === v}
-                      onClick={() => setDraftSide(v)}
-                    />
-                  ))}
-                </div>
-              </div>
-
-              {/* Broker */}
-              <div>
-                <SectionLabel>Broker</SectionLabel>
-                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                  {BROKER_OPTS.map(({ value, label, color }) => (
-                    <Chip
-                      key={value} label={label} accent={color as string | undefined}
-                      active={draftBroker === value}
-                      onClick={() => setDraftBroker(value)}
-                    />
-                  ))}
-                </div>
-              </div>
+          {/* Broker */}
+          <div>
+            <SheetSectionLabel>Broker</SheetSectionLabel>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {BROKER_OPTS.map(({ value, label, color }) => (
+                <FilterChip
+                  key={value} label={label} accent={color as string | undefined}
+                  active={draftBroker === value}
+                  onClick={() => setDraftBroker(value)}
+                />
+              ))}
             </div>
+          </div>
+        </div>
 
-            {/* Footer actions */}
-            <div style={{
-              display: "flex", gap: 10, padding: "14px 18px 4px",
-              borderTop: "1px solid rgba(255,255,255,0.06)",
-              marginTop: 4,
-            }}>
-              <button
-                onClick={handleReset}
-                style={{
-                  flex: 1, height: 44, borderRadius: 12,
-                  background: "rgba(255,255,255,0.04)",
-                  border: "1px solid rgba(255,255,255,0.10)",
-                  color: "rgba(148,163,184,0.8)", fontSize: 13.5, fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                Reset Filters
-              </button>
-              <button
-                onClick={handleApply}
-                style={{
-                  flex: 2, height: 44, borderRadius: 12,
-                  background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
-                  border: "1.5px solid rgba(255,255,255,0.85)",
-                  color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
-                  boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
-                  cursor: "pointer",
-                }}
-              >
-                Apply
-              </button>
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>,
+        {/* Footer actions */}
+        <div style={{
+          display: "flex", gap: 10, padding: "14px 18px 4px",
+          borderTop: "1px solid rgba(255,255,255,0.06)",
+          marginTop: 4,
+        }}>
+          <button
+            onClick={handleReset}
+            style={{
+              flex: 1, height: 44, borderRadius: 12,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.10)",
+              color: "rgba(148,163,184,0.8)", fontSize: 13.5, fontWeight: 600,
+              cursor: "pointer",
+            }}
+          >
+            Reset Filters
+          </button>
+          <button
+            onClick={handleApply}
+            style={{
+              flex: 2, height: 44, borderRadius: 12,
+              background: "linear-gradient(135deg, rgba(255,255,255,0.97) 0%, rgba(220,228,255,0.92) 50%, rgba(255,255,255,0.88) 100%)",
+              border: "1.5px solid rgba(255,255,255,0.85)",
+              color: "#0a0a0f", fontSize: 13.5, fontWeight: 700,
+              boxShadow: "0 2px 12px rgba(255,255,255,0.18), inset 0 1px 0 rgba(255,255,255,1)",
+              cursor: "pointer",
+            }}
+          >
+            Apply
+          </button>
+        </div>
+      </div>
+    </>,
     document.body,
   );
-}
+});
 
 const modalOverlayVariants = {
   hidden: { opacity: 0 },
@@ -391,14 +402,105 @@ const glossyWhiteStyle: React.CSSProperties = {
   boxShadow: "0 2px 12px rgba(255,255,255,0.22), inset 0 1px 0 rgba(255,255,255,1), inset 0 -1px 0 rgba(190,205,255,0.35)",
 };
 
+// ── TradeRow — memoized so the list stays completely static during filter
+// sheet open/close. Without memo every trade in the list re-renders whenever
+// Trades() re-renders, even though the trade data hasn't changed. React.memo
+// short-circuits that: rows only re-render when their own props change
+// (i.e. when applied filters change the trade data or isLast position).
+interface TradeRowProps {
+  trade: {
+    id: number;
+    symbol: string;
+    side: string;
+    pnl: number;
+    entryPrice: number;
+    exitPrice: number | null;
+    entryDate: string;
+    riskRewardRatio?: number | null;
+  };
+  isLast: boolean;
+  onSelect: (id: number) => void;
+  fc: (v: number) => string;
+}
+
+const TradeRow = memo(function TradeRow({ trade, isLast, onSelect, fc }: TradeRowProps) {
+  const isWin   = trade.pnl >= 0;
+  const dateStr = new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  const fPrice  = (v: number) => v < 1 ? v.toFixed(4) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+  return (
+    <div
+      onClick={() => onSelect(trade.id)}
+      className="cursor-pointer"
+      style={{
+        padding:                 "12px 8px",
+        borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
+        WebkitTapHighlightColor: "transparent",
+        transition:              "background 0.15s",
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
+      onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+    >
+      <motion.div layoutId={`trd-${trade.id}`} transition={{ layout: { duration: 0.23, ease: [0.25, 0.46, 0.45, 0.94] } }}>
+        {/* Row 1 — Symbol + side badge | PNL */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold leading-none" style={{ fontSize: 15, color: "#F0F0F0" }}>
+              {trade.symbol}
+            </span>
+            <span
+              className="font-semibold leading-none"
+              style={{ fontSize: 10, color: trade.side === "long" ? "#35C37A" : "#E0524F", letterSpacing: "0.06em" }}
+            >
+              {trade.side === "long" ? "LONG" : "SHORT"}
+            </span>
+          </div>
+          <span className="font-semibold leading-none tabular-nums" style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}>
+            {isWin ? "+" : ""}{fc(trade.pnl)}
+          </span>
+        </div>
+
+        {/* Row 2 — Entry price | Date */}
+        <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
+          <div className="flex items-center gap-0.5">
+            <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+              {fPrice(trade.entryPrice)}
+            </span>
+            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", margin: "0 2px" }}>→</span>
+            <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+              {trade.exitPrice != null ? fPrice(trade.exitPrice) : "—"}
+            </span>
+          </div>
+          <span className="font-medium tabular-nums" style={{ fontSize: 12, color: "#6B6B6B" }}>
+            {dateStr}
+          </span>
+        </div>
+      </motion.div>
+    </div>
+  );
+});
+
 export default function Trades() {
   const [page, setPage] = useState(1);
   const [symbolFilter, setSymbolFilter] = useState("");
   const [outcomeFilter, setOutcomeFilter] = useState<string>("all");
   const [sideFilter, setSideFilter] = useState<string>("all");
   const [brokerFilter, setBrokerFilter] = useState<string>("all");
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Imperative ref for the filter sheet — opening/closing the sheet calls
+  // ref.current.open() which sets state only inside FilterBottomSheet, so
+  // Trades never re-renders just because the sheet opens or closes.
+  const filterSheetRef = useRef<FilterSheetHandle>(null);
+
+  // Stable callback so FilterBottomSheet never gets a new function reference
+  // on Trades re-renders caused by other state (page, isModalOpen, etc.)
+  const handleApplyFilters = useCallback((outcome: string, side: string, broker: string) => {
+    setOutcomeFilter(outcome);
+    setSideFilter(side);
+    setBrokerFilter(broker);
+    setPage(1);
+  }, []);
   const [modalTab, setModalTab] = useState<ModalTab>("details");
   const [selectedTradeId, setSelectedTradeId] = useState<number | null>(null);
   const isMobile = useIsMobile();
@@ -500,7 +602,7 @@ export default function Trades() {
         <div className="flex items-center gap-2">
           {/* Filter icon with active-count badge */}
           <AnimatedIconButton
-            onClick={() => setFilterSheetOpen(true)}
+            onClick={() => filterSheetRef.current?.open()}
             className="relative flex items-center justify-center w-9 h-9 rounded-xl border border-white/[0.10] bg-white/[0.04] text-muted-foreground hover:text-white hover:bg-white/[0.08] transition-all shrink-0"
           >
             <SlidersHorizontal className="w-4 h-4" />
@@ -595,20 +697,9 @@ export default function Trades() {
             )}
           </div>
 
-      {/* ── Mobile filter bottom sheet ── */}
-      <FilterBottomSheet
-        open={filterSheetOpen}
-        onClose={() => setFilterSheetOpen(false)}
-        outcomeFilter={outcomeFilter}
-        sideFilter={sideFilter}
-        brokerFilter={brokerFilter}
-        onApply={(outcome, side, broker) => {
-          setOutcomeFilter(outcome);
-          setSideFilter(side);
-          setBrokerFilter(broker);
-          setPage(1);
-        }}
-      />
+      {/* FilterBottomSheet is rendered outside this scroll container (see
+          below, as a sibling of the scroll div) so it is always mounted and
+          uses its own internal state — no Trades re-render on open/close. */}
 
       {/* ── Trade list ── */}
       <div>
@@ -643,86 +734,15 @@ export default function Trades() {
 
         ) : (
           <div>
-            {filteredTrades.map((trade, idx) => {
-              const isLast    = idx === filteredTrades.length - 1;
-              const rr        = trade.riskRewardRatio || 0;
-              const setupTags = trade.setupTags ? trade.setupTags.split(",").filter(Boolean) : [];
-              const isWin     = trade.pnl >= 0;
-              const pnlColor  = isWin ? "#35C37A" : "#E0524F";
-              const dateStr   = new Date(trade.entryDate).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-              const fPrice    = (v: number) => v < 1 ? v.toFixed(4) : v.toLocaleString(undefined, { maximumFractionDigits: 1 });
-
-              return (
-                <div
-                  key={trade.id}
-                  onClick={() => setSelectedTradeId(trade.id)}
-                  className="cursor-pointer"
-                  style={{
-                    padding:                 "12px 8px",
-                    borderBottom:            isLast ? "none" : "1px solid rgba(255,255,255,0.12)",
-                    WebkitTapHighlightColor: "transparent",
-                    transition:              "background 0.15s",
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
-                  onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
-                >
-                  <motion.div layoutId={`trd-${trade.id}`} transition={{ layout: { duration: 0.23, ease: [0.25, 0.46, 0.45, 0.94] } }}>
-                  {/* Row 1 — Symbol + side badge | PNL */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="font-semibold leading-none"
-                        style={{ fontSize: 15, color: "#F0F0F0" }}
-                      >
-                        {trade.symbol}
-                      </span>
-                      <span
-                        className="font-semibold leading-none"
-                        style={{
-                          fontSize:      10,
-                          color:         trade.side === "long" ? "#35C37A" : "#E0524F",
-                          letterSpacing: "0.06em",
-                        }}
-                      >
-                        {trade.side === "long" ? "LONG" : "SHORT"}
-                      </span>
-                    </div>
-                    <span
-                      className="font-semibold leading-none tabular-nums"
-                      style={{ fontSize: 15, color: "rgba(255,255,255,0.55)" }}
-                    >
-                      {isWin ? "+" : ""}{fc(trade.pnl)}
-                    </span>
-                  </div>
-
-                  {/* Row 2 — Entry price + meta | Date */}
-                  <div className="flex items-center justify-between" style={{ marginTop: 6 }}>
-                    <div className="flex items-center gap-0.5">
-                      <span
-                        className="font-medium tabular-nums"
-                        style={{ fontSize: 12, color: "#6B6B6B" }}
-                      >
-                        {fPrice(trade.entryPrice)}
-                      </span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.25)", margin: "0 2px" }}>→</span>
-                      <span
-                        className="font-medium tabular-nums"
-                        style={{ fontSize: 12, color: "#6B6B6B" }}
-                      >
-                        {trade.exitPrice != null ? fPrice(trade.exitPrice) : "—"}
-                      </span>
-                    </div>
-                    <span
-                      className="font-medium tabular-nums"
-                      style={{ fontSize: 12, color: "#6B6B6B" }}
-                    >
-                      {dateStr}
-                    </span>
-                  </div>
-                  </motion.div>
-                </div>
-              );
-            })}
+            {filteredTrades.map((trade, idx) => (
+              <TradeRow
+                key={trade.id}
+                trade={trade}
+                isLast={idx === filteredTrades.length - 1}
+                onSelect={setSelectedTradeId}
+                fc={fc}
+              />
+            ))}
           </div>
         )}
 
@@ -751,6 +771,18 @@ export default function Trades() {
       </div>{/* /glass-card */}
         </div>{/* /inner padding div */}
       </div>{/* /scroll container */}
+
+      {/* ── Filter bottom sheet — always mounted as a sibling of the scroll
+          container so it is never part of the list's reconciliation subtree.
+          State is internal to FilterBottomSheet; opening it via ref.current.open()
+          causes zero re-renders here in Trades. ── */}
+      <FilterBottomSheet
+        ref={filterSheetRef}
+        outcomeFilter={outcomeFilter}
+        sideFilter={sideFilter}
+        brokerFilter={brokerFilter}
+        onApply={handleApplyFilters}
+      />
 
       {/* ── Framer Motion Log Trade Modal ── */}
       <AnimatePresence>
