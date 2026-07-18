@@ -198,9 +198,9 @@ export const cardVariants: Variants = {
 
 // ── Lists ─────────────────────────────────────────────────────────────────
 export const listContainerVariants: Variants = {
-  hidden:  {},
-  visible: { transition: { staggerChildren: 0.065, delayChildren: 0.04 } },
-  exit:    { transition: { staggerChildren: 0.03, staggerDirection: -1 } },
+  hidden:  { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.22, ease: "easeOut" } },
+  exit:    { opacity: 0,       transition: { duration: 0.15 } },
 };
 
 export const listItemVariants: Variants = {

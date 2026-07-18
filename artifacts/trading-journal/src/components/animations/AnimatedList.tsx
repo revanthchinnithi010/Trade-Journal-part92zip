@@ -1,6 +1,7 @@
 /**
- * AnimatedList — staggered list container + item using Motion.dev.
- * Wraps any list structure; children receive the item variant automatically.
+ * AnimatedList — container entrance animation via Motion.dev.
+ * The list container fades + slides in as a unit; individual items are static.
+ * Per-item presence animations (add/remove) are handled by AnimatedPresenceList.
  *
  * GPU-safe: opacity + transform only.
  */
@@ -79,8 +80,7 @@ export function AnimatedListItem({
   return (
     <MotionTag
       className={className}
-      style={{ ...style, willChange: "transform, opacity" }}
-      variants={listItemVariants}
+      style={{ ...style, willChange: tappable ? "transform" : undefined }}
       onClick={onClick}
       whileTap={tappable ? { scale: 0.97 } : undefined}
       transition={tappable ? { type: "tween", duration: 0.09, ease: "easeOut" } : undefined}
