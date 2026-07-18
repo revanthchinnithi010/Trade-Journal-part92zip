@@ -75,12 +75,24 @@ export const pageDetailVariants: Variants = pageVariants;
 
 /**
  * Cover-detail pages (Portfolio / Balances / Net-PnL — position:fixed overlay).
- * Starts fully opaque so keep-alive content is immediately hidden on enter.
+ *
+ * Starts fully opaque AND at y:0 — the overlay occupies the entire viewport
+ * from the very first frame. No y translate here because:
+ *   - A y offset on a position:fixed, inset:0 element creates a gap at the top
+ *     of the viewport for the duration of the enter animation.
+ *   - That gap exposes the Layout header, which used to trigger a height
+ *     collapse animation on the same tick — the combination looked like the
+ *     Dashboard header sliding upward before the page arrived.
+ *
+ * The shared element on the tapped card provides the visual transition context;
+ * the cover page itself just needs to be present and opaque immediately.
+ * A subtle opacity ramp (0.96 → 1) keeps the arrival from feeling abrupt while
+ * contributing zero positional movement.
  */
 export const pageDetailCoverVariants: Variants = {
-  initial: { opacity: 1, y: 9 },
-  enter:   { opacity: 1, y: 0,  transition: PAGE_ENTER },
-  exit:    { opacity: 0, y: -4, transition: PAGE_EXIT  },
+  initial: { opacity: 0.96, y: 0 },
+  enter:   { opacity: 1,    y: 0, transition: PAGE_ENTER },
+  exit:    { opacity: 0,    y: 0, transition: PAGE_EXIT  },
 };
 
 /** Slide pages — full-screen slide removed, unified to premium system. */

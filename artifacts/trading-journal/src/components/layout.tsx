@@ -393,7 +393,19 @@ export const Layout = memo(function Layout({
 
   // Pages that suppress the layout header entirely.
   const NO_HEADER_PATHS = new Set([
-    "/charts", "/position-detail", "/balances", "/portfolio", "/net-pnl", "/pnl", "/trades",
+    // /charts — gesture surface owns the full viewport (no header room).
+    // /position-detail — clip-path shared-element covers the entire screen.
+    // /pnl, /trades — these pages render their own full-viewport UI.
+    //
+    // NOTE: /portfolio, /balances, /net-pnl are intentionally excluded here.
+    // Those pages mount as position:fixed, inset:0, zIndex:50 overlays that
+    // fully cover the Layout header (zIndex:30) on their own. Adding them to
+    // this set caused the header to animate height 60→0 the instant the
+    // pathname changed, visually sliding the header upward just as the overlay
+    // was mounting — exactly the "header moves up" bug on Dashboard→Portfolio/
+    // Balances drill-down. The header stays at full height and is simply
+    // occluded by the overlay; it never moves.
+    "/charts", "/position-detail", "/pnl", "/trades",
   ]);
   const headerVisible = !NO_HEADER_PATHS.has(pathname);
 
