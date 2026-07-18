@@ -839,16 +839,20 @@ export const Layout = memo(function Layout({
         <div className="flex-1 overflow-hidden" style={{ position: "relative" }}>
 
           {/* Charts — keep-alive; touch/scroll locked for LWC gesture handling.
+              position:fixed (not absolute) so it anchors to the viewport, not
+              the flex-column content area. When the header collapses (60→0px)
+              on Dashboard→Charts navigation, the flex-1 content area shifts
+              upward by 60px — position:absolute elements inside it follow that
+              shift, producing the visible upward jump. position:fixed is immune
+              to that reflow: the viewport is always the same regardless of
+              header height. No paddingTop needed — Charts always fills the full
+              viewport with no header when active.
               opacity+pointer-events instead of display:none so the element stays
-              in the GPU compositor layer at all times. display:none evicts the
-              canvas texture from the GPU — on restore the browser must re-layout,
-              re-paint and re-upload, which costs at least one paint frame and
-              causes the intermittent "one-frame flash" seen on Dashboard↔Charts
-              transitions. opacity:0 keeps the texture hot; the GPU compositor
-              can flip it to fully visible in the same frame with zero repaint. */}
+              in the GPU compositor layer at all times (display:none evicts the
+              canvas texture; restoring it costs at least one repaint frame). */}
           {chartsNode && (
             <div style={{
-              position:           "absolute",
+              position:           "fixed",
               inset:              0,
               display:            "flex",
               flexDirection:      "column",
@@ -867,15 +871,20 @@ export const Layout = memo(function Layout({
               permanently (instead of unmount/remount via AnimatePresence)
               means: no refetch of stats/equity/trades on every tab switch,
               no first-frame skeleton flash, no layout jump — switching to "/"
-              is just an instant opacity flip on an already fully-rendered
-              tree. See .agents/memory dashboard-keep-alive notes.
-              opacity+pointer-events instead of display:none — same reasoning
-              as the Charts wrapper above: keeps the subtree in the GPU
-              compositor so the show/hide is a zero-repaint frame flip. */}
+              is just an instant opacity flip on an already fully-rendered tree.
+              See .agents/memory dashboard-keep-alive notes.
+              position:fixed (not absolute) — same reasoning as the Charts
+              wrapper: anchors to the viewport so the header-height reflow
+              (60↔0px when header visibility toggles) cannot cause a vertical
+              layout jump. Dashboard always shows the 60px header, so
+              paddingTop:60 ensures content is never hidden behind it.
+              opacity+pointer-events instead of display:none — keeps the subtree
+              in the GPU compositor for a zero-repaint frame flip. */}
           {dashboardNode && (
             <div style={{
-              position:      "absolute",
+              position:      "fixed",
               inset:         0,
+              paddingTop:    60,
               display:       "flex",
               flexDirection: "column",
               overflow:      "hidden",
