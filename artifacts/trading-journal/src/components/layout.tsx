@@ -902,22 +902,32 @@ export const Layout = memo(function Layout({
       </main>
 
       {/* ── Mobile bottom navigation bar ── */}
-      {/* Always mounted — visibility:hidden (not display:none) so the pill keeps
-          its clientWidth, ResizeObserver never fires tabW=0, and animation state
-          is fully preserved across fullscreen toggles. */}
-      {isMobile && (
-        <div style={{
-          position:      "fixed",
-          left:          0,
-          right:         0,
-          bottom:        0,
-          zIndex:        60,
-          visibility:    (mobileChartFullscreen || dashboardSheetOpen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "hidden" : "visible",
-          pointerEvents: (mobileChartFullscreen || dashboardSheetOpen || pathname === "/position-detail" || pathname === "/portfolio" || pathname === "/balances" || pathname === "/net-pnl" || pathname === "/pnl") ? "none"   : "auto",
-        }}>
-          <MobileBottomNav />
-        </div>
-      )}
+      {/* Mounted unconditionally — never gated on isMobile so the component
+          never remounts on orientation change or across any page transition.
+          display:none on desktop keeps it invisible without unmounting.
+
+          zIndex:45 sits below all cover-detail and keep-alive overlay pages
+          (portfolio / balances / net-pnl / position-detail / pnl all use
+          zIndex:50 in App.tsx / layout.tsx), so those pages naturally occlude
+          the nav bar without any visibility toggle — eliminating the
+          synchronous hide/show flash that previously fired on the same render
+          tick as the pathname change, before the exit animation could complete.
+
+          visibility:hidden is retained only for fullscreen modes that have no
+          dedicated z-index layer of their own (chart fullscreen, dashboard sheet)
+          and therefore cannot occlude the nav by stacking alone. */}
+      <div style={{
+        position:      "fixed",
+        left:          0,
+        right:         0,
+        bottom:        0,
+        zIndex:        45,
+        display:       isMobile ? undefined : "none",
+        visibility:    (mobileChartFullscreen || dashboardSheetOpen) ? "hidden" : "visible",
+        pointerEvents: (mobileChartFullscreen || dashboardSheetOpen) ? "none"   : "auto",
+      }}>
+        <MobileBottomNav />
+      </div>
     </div>
     </ChartFocusContext.Provider>
   );
