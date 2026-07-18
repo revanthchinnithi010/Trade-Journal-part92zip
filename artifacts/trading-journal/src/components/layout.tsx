@@ -402,6 +402,7 @@ export const Layout = memo(function Layout({
   const [profileOpen,     setProfileOpen]     = useState(false);
   const [profilePageOpen, setProfilePageOpen] = useState(false);
   const [bellShake,       setBellShake]       = useState(false);
+  const [notifOrigin,     setNotifOrigin]     = useState<{ x: number; y: number } | null>(null);
 
   const openSidebar  = useCallback(() => setSidebarOpen(true),  []);
   const closeSidebar = useCallback(() => setSidebarOpen(false), []);
@@ -684,7 +685,13 @@ export const Layout = memo(function Layout({
                 <div className="relative">
                   <button
                     ref={bellBtnRef}
-                    onClick={toggleNotif}
+                    onClick={() => {
+                      if (!notifOpen && bellBtnRef.current) {
+                        const r = bellBtnRef.current.getBoundingClientRect();
+                        setNotifOrigin({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+                      }
+                      toggleNotif();
+                    }}
                     aria-label="Notifications"
                     className="relative w-9 h-9 flex items-center justify-center rounded-full transition-all duration-150"
                     style={{
@@ -716,6 +723,7 @@ export const Layout = memo(function Layout({
                   <NotificationPanel
                     open={notifOpen}
                     onClose={closeNotif}
+                    origin={notifOrigin}
                   />
                 </div>
               </div>

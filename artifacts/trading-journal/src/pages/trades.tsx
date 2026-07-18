@@ -23,7 +23,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
-import { motion, AnimatePresence, type Variants } from "framer-motion";
+import { motion, AnimatePresence, LayoutGroup, type Variants } from "framer-motion";
 import {
   BROKER_MAP,
   ALL_SYMBOLS,
@@ -488,6 +488,7 @@ export default function Trades() {
   const labelCls = "text-[11px] font-semibold text-muted-foreground/80 uppercase tracking-wider";
 
   return (
+    <LayoutGroup id="trades-hero">
     <div style={{ display: "flex", flexDirection: "column", height: "100%", background: "#000000" }}>
 
       {/* ── Secondary header ── */}
@@ -665,6 +666,7 @@ export default function Trades() {
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
+                  <motion.div layoutId={`trd-${trade.id}`} transition={{ layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}>
                   {/* Row 1 — Symbol + side badge | PNL */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -717,6 +719,7 @@ export default function Trades() {
                       {dateStr}
                     </span>
                   </div>
+                  </motion.div>
                 </div>
               );
             })}
@@ -1133,7 +1136,12 @@ export default function Trades() {
               </div>
 
               {/* ── Summary Card ── */}
-              <div className="mx-4 mt-4 mb-1 rounded-2xl border border-white/[0.08] overflow-hidden" style={{ background: "linear-gradient(145deg, #0f0f0f 0%, #0a0a0a 100%)" }}>
+              <motion.div
+                layoutId={selectedTradeId !== null ? `trd-${selectedTradeId}` : undefined}
+                transition={{ layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+                className="mx-4 mt-4 mb-1 rounded-2xl border border-white/[0.08] overflow-hidden"
+                style={{ background: "linear-gradient(145deg, #0f0f0f 0%, #0a0a0a 100%)" }}
+              >
                 {/* top row: symbol + position badge */}
                 <div className="flex items-center justify-between px-4 pt-4 pb-3">
                   <div>
@@ -1169,7 +1177,7 @@ export default function Trades() {
                     </p>
                   </div>
                 </div>
-              </div>
+              </motion.div>
 
               <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6" style={{ background: "#000000" }}>
                 {/* Metrics Grid */}
@@ -1287,5 +1295,6 @@ export default function Trades() {
         </SheetContent>
       </Sheet>
     </div>
+    </LayoutGroup>
   );
 }

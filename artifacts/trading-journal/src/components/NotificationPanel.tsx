@@ -136,9 +136,9 @@ const NotifList = memo(function NotifList({
 
 /* ─── component ───────────────────────────────────────────────────────────── */
 
-interface Props { open: boolean; onClose: () => void; }
+interface Props { open: boolean; onClose: () => void; origin?: { x: number; y: number } | null; }
 
-export const NotificationPanel = memo(function NotificationPanel({ open, onClose }: Props) {
+export const NotificationPanel = memo(function NotificationPanel({ open, onClose, origin }: Props) {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
 
   const hasOpenedRef = useRef(open);
@@ -165,6 +165,15 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
      without making it a dependency. */
   const onCloseRef = useRef(onClose);
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  /* Capture the bell's viewport-centre coordinates at the moment the panel
+     opens so the scale animation stays anchored there even if layout shifts
+     during the transition.  A ref (not state) avoids any re-render. */
+  const originRef = useRef(origin);
+  if (open && origin) originRef.current = origin;
+  const transformOrigin = originRef.current
+    ? `${originRef.current.x}px ${originRef.current.y}px`
+    : `calc(100% - 44px) 44px`; // fallback: approx bell position, top-right
 
   /* body scroll lock — background page must never scroll while open */
   useEffect(() => {
@@ -245,9 +254,14 @@ export const NotificationPanel = memo(function NotificationPanel({ open, onClose
           height: "100%",
           display: "flex", flexDirection: "column",
           background: "#000000",
-          transform: open ? "translateX(0)" : "translateX(100%)",
-          transition: `transform ${open ? OPEN_MS : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
-          willChange: "transform",
+          transformOrigin,
+          transform: open ? "scale(1)" : "scale(0.04)",
+          opacity: open ? 1 : 0,
+          transition: [
+            `transform ${open ? OPEN_MS : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
+            `opacity ${open ? Math.round(OPEN_MS * 0.55) : CLOSE_MS}ms ${open ? EASE_OPEN : EASE_CLOSE}`,
+          ].join(", "),
+          willChange: "transform, opacity",
           /* Top inset consumed once by native spacer in index.tsx — no CSS env() needed.
              Bottom inset not consumed natively, so kept here. */
           paddingBottom: "env(safe-area-inset-bottom)",

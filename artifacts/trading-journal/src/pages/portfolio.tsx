@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   TrendingUp, ArrowLeft,
@@ -16,6 +16,7 @@ import { useCtraderAccount } from "@/store/ctraderAccountStore";
 import { useSelectedPositionStore } from "@/store/selectedPositionStore";
 import { classifyBrokerForSymbol } from "@/lib/brokerClassification";
 import { livePnlForPosition, liveUnrealizedPnlUSD } from "@/lib/livePnl";
+import { setHeroRect } from "@/lib/heroTransition";
 
 const USD_TO_INR_FALLBACK = 85;
 
@@ -97,6 +98,7 @@ function fPrice(n: number): string {
 }
 
 function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () => void; isLast: boolean }) {
+  const rowRef    = useRef<HTMLDivElement>(null);
   const ticks     = useTickStore(s => s.ticks);
   // cTrader positions report their symbol as the raw symbol-catalog name
   // (e.g. "NAS100", "GBPJPY", "XAUUSD") — the same key the WS "ctrader_tick"
@@ -127,7 +129,11 @@ function PositionRow({ pos, onTap, isLast }: { pos: BrokerPosition; onTap: () =>
 
   return (
     <div
-      onClick={onTap}
+      ref={rowRef}
+      onClick={() => {
+        if (rowRef.current) setHeroRect("position-detail", rowRef.current.getBoundingClientRect());
+        onTap();
+      }}
       className="cursor-pointer"
       style={{
         padding: "12px 8px",

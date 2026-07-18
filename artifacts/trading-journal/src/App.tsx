@@ -11,7 +11,8 @@ import { Layout } from "@/components/layout";
 import { LiveMarketProvider } from "@/contexts/LiveMarketContext";
 import { WatchlistProvider } from "@/contexts/WatchlistContext";
 import { NotificationsProvider } from "@/contexts/NotificationsContext";
-import { AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
+import { consumeHeroRect } from "@/lib/heroTransition";
 import { PageTransition } from "@/components/animations/PageTransition";
 import { SplashScreen } from "@/components/animations/SplashScreen";
 import { getSymbolBreakdown, getGetSymbolBreakdownQueryKey } from "@workspace/api-client-react";
@@ -306,6 +307,41 @@ const KNOWN_PATHS = new Set([
  */
 const TAB_ORDER: string[] = ["/", "/markets", "/charts", "/trades", "/alerts"];
 
+/** Wraps PositionDetail in a clip-path expand animation originating from the
+ *  tapped position row.  Falls back to the standard CSS entrance when no hero
+ *  rect has been stored (direct URL load, keyboard navigation, reduced motion). */
+function PositionDetailWrapper() {
+  // consumeHeroRect reads once and clears — safe inside a useState initializer
+  const [heroRect] = useState(() => consumeHeroRect("position-detail"));
+  const prefersReduced =
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  if (!heroRect || prefersReduced) {
+    return (
+      <div className="cover-page-enter" style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}>
+        <PositionDetail />
+      </div>
+    );
+  }
+
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  // inset(top right bottom left round radius) — starts clipped to the row rect
+  const clipFrom = `inset(${heroRect.top}px ${vw - heroRect.right}px ${vh - heroRect.bottom}px ${heroRect.left}px round 18px)`;
+
+  return (
+    <motion.div
+      style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}
+      initial={{ clipPath: clipFrom }}
+      animate={{ clipPath: "inset(0px round 0px)" }}
+      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+    >
+      <PositionDetail />
+    </motion.div>
+  );
+}
+
 function Router() {
   const [location] = useLocation();
   const isMobile   = useIsMobile();
@@ -480,7 +516,7 @@ function Router() {
 
       {/* ── Cover-scale pages — CSS compositor animation, outside AnimatePresence ── */}
       {/* /pnl is a keep-alive node (PNL_NODE) rendered in Layout — not here */}
-      {pathname === "/position-detail"  && <Suspense fallback={null}><div className="cover-page-enter" style={{ position:"fixed", inset:0, zIndex:50, background:"#000" }}><PositionDetail   /></div></Suspense>}
+      {pathname === "/position-detail"  && <Suspense fallback={null}><PositionDetailWrapper /></Suspense>}
     </Layout>
   );
 }
