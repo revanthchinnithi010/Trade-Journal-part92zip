@@ -31,7 +31,7 @@ const BUBBLE_H   = 52;
 const BUBBLE_R   = 16;
 const PROTRUDE   = (BUBBLE_H - BAR_H) / 2;
 const CIRCLE_D   = BUBBLE_W;
-const TRAVEL_SCALE = 1.42;
+const TRAVEL_SCALE = 1.03;
 
 const CSS_ID = "tj-circle-nav-v2";
 function ensureCSS() {
@@ -177,10 +177,10 @@ export function MobileBottomNav() {
     prevCircleX.current = circleX;
     controls.start({
       x:     circleX,
-      scale: [1, TRAVEL_SCALE, TRAVEL_SCALE, 1],
+      scale: [1, TRAVEL_SCALE, 1],
       transition: {
-        x: { type: "tween", duration: 0.22, ease: [0.25, 1, 0.35, 1] },
-        scale: { type: "tween", duration: 0.22, times: [0, 0.08, 0.60, 1], ease: ["easeOut", "linear", "easeOut"] },
+        x:     { type: "tween", duration: 0.22, ease: [0.25, 1, 0.35, 1] },
+        scale: { type: "spring", stiffness: 900, damping: 85, mass: 0.8 },
       },
     });
   }, [circleX, tabW, controls]);
