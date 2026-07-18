@@ -182,9 +182,9 @@ export const sheetVariants: Variants = {
 
 /** Centered dialog */
 export const dialogVariants: Variants = {
-  hidden:  { opacity: 0, scale: 0.90, y: 20 },
-  visible: { opacity: 1, scale: 1,    y: 0,  transition: { ...SPRING_MODAL } },
-  exit:    { opacity: 0, scale: 0.96, y: 10, transition: { duration: 0.16 } },
+  hidden:  { opacity: 0, scale: 0.985, y: 20 },
+  visible: { opacity: 1, scale: 1,     y: 0,  transition: { type: "tween", duration: 0.22, ease: "easeOut" } },
+  exit:    { opacity: 0, scale: 0.96,  y: 10, transition: { duration: 0.16 } },
 };
 
 // ── Cards ─────────────────────────────────────────────────────────────────

@@ -606,10 +606,10 @@ export function DrawingAlertModal({
         {/* Panel */}
         <motion.div
           key="panel"
-          initial={{ opacity: 0, scale: 0.94, y: 16 }}
-          animate={{ opacity: 1, scale: 1,    y: 0 }}
-          exit={{   opacity: 0, scale: 0.94, y: 16 }}
-          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+          initial={{ opacity: 0, scale: 0.985, y: 16 }}
+          animate={{ opacity: 1, scale: 1,     y: 0 }}
+          exit={{   opacity: 0, scale: 0.985,  y: 16 }}
+          transition={{ type: "tween", duration: 0.22, ease: "easeOut" }}
           className="w-full max-w-[500px] max-h-[92dvh] flex flex-col rounded-2xl overflow-hidden"
           style={{
             background: "rgba(7,17,13,0.96)",

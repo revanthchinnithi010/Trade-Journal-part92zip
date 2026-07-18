@@ -61,9 +61,9 @@ export const staggerItemVariants: Variants = {
 };
 
 export const modalVariants: Variants = {
-  hidden:  { opacity: 0, scale: 0.94, y: 16 },
-  visible: { opacity: 1, scale: 1,    y: 0,  transition: SPRING_MODAL },
-  exit:    { opacity: 0, scale: 0.96, y: 8,  transition: { duration: 0.16 } },
+  hidden:  { opacity: 0, scale: 0.985, y: 16 },
+  visible: { opacity: 1, scale: 1,     y: 0,  transition: { type: "tween", duration: 0.22, ease: "easeOut" } },
+  exit:    { opacity: 0, scale: 0.96,  y: 8,  transition: { duration: 0.16 } },
 };
 
 export const overlayVariants: Variants = {

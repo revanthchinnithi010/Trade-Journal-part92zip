@@ -379,8 +379,8 @@ const modalOverlayVariants = {
 };
 
 const modalContentVariants: Variants = {
-  hidden: { opacity: 0, scale: 0.94, y: 24 },
-  show: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.28, ease: [0.22, 0.8, 0.36, 1] as [number, number, number, number] } },
+  hidden: { opacity: 0, scale: 0.985, y: 24 },
+  show: { opacity: 1, scale: 1, y: 0, transition: { type: "tween", duration: 0.22, ease: "easeOut" } },
   exit: { opacity: 0, scale: 0.96, y: 16, transition: { duration: 0.18, ease: "easeIn" } },
 };
 

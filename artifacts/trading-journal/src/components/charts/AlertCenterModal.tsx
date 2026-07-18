@@ -279,7 +279,7 @@ function EditAlertModal({
         border: "1px solid rgba(255,255,255,0.08)",
         boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
         padding: 20,
-        animation: "acFadeScale 0.18s ease-out",
+        animation: "acFadeScale 0.22s ease-out",
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
@@ -600,7 +600,7 @@ function QuickCreateModal({
         width: 400, borderRadius: 16,
         background: "#0F1618", border: "1px solid rgba(255,255,255,0.08)",
         boxShadow: "0 20px 60px rgba(0,0,0,0.6)", padding: 20,
-        animation: "acFadeScale 0.18s ease-out",
+        animation: "acFadeScale 0.22s ease-out",
       }}>
         {/* Header */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
@@ -830,7 +830,7 @@ export function AlertSheetContent({ onClose: _onClose }: { onClose: () => void }
       <style>{`
         @keyframes acPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
         @keyframes acGlow { 0% { background: rgba(183,255,90,0.18); } 100% { background: transparent; } }
-        @keyframes acFadeScale { from { opacity: 0; transform: scale(0.94) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+        @keyframes acFadeScale { from { opacity: 0; transform: scale(0.985) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
       `}</style>
 
       {/* ── Sticky header: summary + Create button + Search + Filters ── */}
@@ -1095,7 +1095,7 @@ export default function AlertCenterModal({ onClose }: AlertCenterModalProps) {
       {/* Keyframes */}
       <style>{`
         @keyframes acFadeScale {
-          from { opacity: 0; transform: scale(0.94) translateY(8px); }
+          from { opacity: 0; transform: scale(0.985) translateY(8px); }
           to   { opacity: 1; transform: scale(1) translateY(0); }
         }
         @keyframes acFadeOut {
@@ -1139,7 +1139,7 @@ export default function AlertCenterModal({ onClose }: AlertCenterModalProps) {
             display: "flex",
             flexDirection: "column",
             overflow: "hidden",
-            animation: visible ? "acFadeScale 0.22s cubic-bezier(0.22,1,0.36,1) forwards" : "acFadeOut 0.18s ease-in forwards",
+            animation: visible ? "acFadeScale 0.22s ease-out forwards" : "acFadeOut 0.18s ease-in forwards",
           }}
         >
           {/* ── Header ── */}
