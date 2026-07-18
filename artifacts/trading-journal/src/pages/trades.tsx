@@ -666,7 +666,7 @@ export default function Trades() {
                   onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.025)")}
                   onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                 >
-                  <motion.div layoutId={`trd-${trade.id}`} transition={{ layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}>
+                  <motion.div layoutId={`trd-${trade.id}`} transition={{ layout: { duration: 0.23, ease: [0.25, 0.46, 0.45, 0.94] } }}>
                   {/* Row 1 — Symbol + side badge | PNL */}
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
@@ -1138,7 +1138,7 @@ export default function Trades() {
               {/* ── Summary Card ── */}
               <motion.div
                 layoutId={selectedTradeId !== null ? `trd-${selectedTradeId}` : undefined}
-                transition={{ layout: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } }}
+                transition={{ layout: { duration: 0.23, ease: [0.25, 0.46, 0.45, 0.94] } }}
                 className="mx-4 mt-4 mb-1 rounded-2xl border border-white/[0.08] overflow-hidden"
                 style={{ background: "linear-gradient(145deg, #0f0f0f 0%, #0a0a0a 100%)" }}
               >

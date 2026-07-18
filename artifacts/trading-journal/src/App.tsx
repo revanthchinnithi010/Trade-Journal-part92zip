@@ -335,7 +335,7 @@ function PositionDetailWrapper() {
       style={{ position: "fixed", inset: 0, zIndex: 50, background: "#000" }}
       initial={{ clipPath: clipFrom }}
       animate={{ clipPath: "inset(0px round 0px)" }}
-      transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+      transition={{ duration: 0.23, ease: [0.25, 0.46, 0.45, 0.94] }}
     >
       <PositionDetail />
     </motion.div>
