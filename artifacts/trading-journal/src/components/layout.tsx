@@ -838,16 +838,26 @@ export const Layout = memo(function Layout({
             flex-1 div here fills the full viewport height when on /markets. */}
         <div className="flex-1 overflow-hidden" style={{ position: "relative" }}>
 
-          {/* Charts — keep-alive; touch/scroll locked for LWC gesture handling. */}
+          {/* Charts — keep-alive; touch/scroll locked for LWC gesture handling.
+              opacity+pointer-events instead of display:none so the element stays
+              in the GPU compositor layer at all times. display:none evicts the
+              canvas texture from the GPU — on restore the browser must re-layout,
+              re-paint and re-upload, which costs at least one paint frame and
+              causes the intermittent "one-frame flash" seen on Dashboard↔Charts
+              transitions. opacity:0 keeps the texture hot; the GPU compositor
+              can flip it to fully visible in the same frame with zero repaint. */}
           {chartsNode && (
             <div style={{
               position:           "absolute",
               inset:              0,
-              display:            pathname === "/charts" ? "flex" : "none",
+              display:            "flex",
               flexDirection:      "column",
               touchAction:        "none",
               overscrollBehavior: "none",
               paddingBottom:      (isMobile && !mobileChartFullscreen) ? 80 : 0,
+              opacity:            pathname === "/charts" ? 1 : 0,
+              pointerEvents:      pathname === "/charts" ? "auto" : "none",
+              transition:         "opacity 0.12s ease",
             }}>
               {chartsNode}
             </div>
@@ -857,16 +867,22 @@ export const Layout = memo(function Layout({
               permanently (instead of unmount/remount via AnimatePresence)
               means: no refetch of stats/equity/trades on every tab switch,
               no first-frame skeleton flash, no layout jump — switching to "/"
-              is just an instant display:flex on an already fully-rendered
-              tree. See .agents/memory dashboard-keep-alive notes. */}
+              is just an instant opacity flip on an already fully-rendered
+              tree. See .agents/memory dashboard-keep-alive notes.
+              opacity+pointer-events instead of display:none — same reasoning
+              as the Charts wrapper above: keeps the subtree in the GPU
+              compositor so the show/hide is a zero-repaint frame flip. */}
           {dashboardNode && (
             <div style={{
               position:      "absolute",
               inset:         0,
-              display:       pathname === "/" ? "flex" : "none",
+              display:       "flex",
               flexDirection: "column",
               overflow:      "hidden",
               background:    "#000000",
+              opacity:       pathname === "/" ? 1 : 0,
+              pointerEvents: pathname === "/" ? "auto" : "none",
+              transition:    "opacity 0.12s ease",
             }}>
               {dashboardNode}
             </div>
