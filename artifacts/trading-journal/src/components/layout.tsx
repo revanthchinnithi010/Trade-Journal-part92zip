@@ -370,6 +370,25 @@ function ReconnectBanner() {
   );
 }
 
+// ── Module-level header-path constants ──────────────────────────────────────
+// Defined outside Layout so they are stable (no re-creation per render) and
+// usable inside the deferred-header useEffect without ESLint dep warnings.
+
+/** Pages that suppress the layout header entirely. */
+const NO_HEADER_PATHS_LAYOUT = new Set([
+  "/charts",           // gesture surface owns the full viewport
+  "/position-detail",  // clip-path shared-element covers the full screen
+  "/pnl",              // keep-alive full-viewport UI
+  "/trades",           // page has its own secondary header
+]);
+
+/**
+ * Pages that use a CSS display-toggle keep-alive (never mount/unmount via
+ * AnimatePresence). Transitions FROM these pages have no AnimatePresence exit
+ * animation to wait for, so the header update can be applied immediately.
+ */
+const KEEP_ALIVE_PATHS_LAYOUT = new Set(["/", "/charts", "/reports", "/pnl"]);
+
 export const Layout = memo(function Layout({
   children,
   chartsNode,
@@ -391,23 +410,61 @@ export const Layout = memo(function Layout({
   // Strip query-string so "/markets?x=1" matches "/markets" in all comparisons.
   const pathname      = location.split("?")[0];
 
-  // Pages that suppress the layout header entirely.
-  const NO_HEADER_PATHS = new Set([
-    // /charts — gesture surface owns the full viewport (no header room).
-    // /position-detail — clip-path shared-element covers the entire screen.
-    // /pnl, /trades — these pages render their own full-viewport UI.
-    //
-    // NOTE: /portfolio, /balances, /net-pnl are intentionally excluded here.
-    // Those pages mount as position:fixed, inset:0, zIndex:50 overlays that
-    // fully cover the Layout header (zIndex:30) on their own. Adding them to
-    // this set caused the header to animate height 60→0 the instant the
-    // pathname changed, visually sliding the header upward just as the overlay
-    // was mounting — exactly the "header moves up" bug on Dashboard→Portfolio/
-    // Balances drill-down. The header stays at full height and is simply
-    // occluded by the overlay; it never moves.
-    "/charts", "/position-detail", "/pnl", "/trades",
-  ]);
-  const headerVisible = !NO_HEADER_PATHS.has(pathname);
+  // ── Header visibility ────────────────────────────────────────────────────
+  //
+  // headerVisible drives the Layout header height (60 ↔ 0). The header change
+  // is instant (no CSS transition), so it MUST be timed correctly against the
+  // AnimatePresence page transition or the header and page will be visibly
+  // out of sync.
+  //
+  // Problem: `pathname` updates on the same React render as the navigation.
+  // AnimatePresence mode="wait" runs the exit animation for PAGE_EXIT (140ms)
+  // before mounting the entering page. Computing `headerVisible` directly from
+  // `pathname` makes the header change 140ms before the page transition
+  // completes its exit — the header disappears/appears while the old page is
+  // still visibly on screen.
+  //
+  // Fix: `headerPath` is a deferred copy of `pathname`.
+  //   • When the header visibility would CHANGE and the transition is between
+  //     two animated (AnimatePresence) pages, we wait 150ms (> PAGE_EXIT 140ms)
+  //     so the header flips exactly between exit-complete and enter-start.
+  //   • When the transition is FROM a keep-alive page (/, /charts, /reports,
+  //     /pnl) there is no AnimatePresence exit to wait for, so we apply
+  //     immediately to avoid the entering page briefly showing the wrong
+  //     header state.
+  //   • When header visibility does not change at all, we apply immediately.
+  //
+  // NOTE: /portfolio, /balances, /net-pnl are intentionally excluded from
+  // NO_HEADER_PATHS. Those pages mount as position:fixed inset:0 zIndex:50
+  // overlays that occlude the Layout header on their own; adding them caused
+  // the "header slides up" bug on Dashboard → Portfolio drill-down.
+  const [headerPath, setHeaderPath] = useState(pathname);
+  const _headerTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (_headerTimerRef.current !== null) {
+      clearTimeout(_headerTimerRef.current);
+      _headerTimerRef.current = null;
+    }
+
+    const currentVisible = !NO_HEADER_PATHS_LAYOUT.has(headerPath);
+    const nextVisible    = !NO_HEADER_PATHS_LAYOUT.has(pathname);
+
+    if (currentVisible !== nextVisible && !KEEP_ALIVE_PATHS_LAYOUT.has(headerPath)) {
+      // Header changes AND we're leaving an animated page — defer to after exit.
+      _headerTimerRef.current = setTimeout(() => {
+        setHeaderPath(pathname);
+        _headerTimerRef.current = null;
+      }, 150); // 10 ms past PAGE_EXIT (140 ms)
+    } else {
+      setHeaderPath(pathname);
+    }
+  }, [pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+  // ^ headerPath intentionally omitted: we read it as a "previous value"
+  //   snapshot taken when pathname changes. Including it would cause the
+  //   effect to re-fire when the deferred setHeaderPath resolves.
+
+  const headerVisible = !NO_HEADER_PATHS_LAYOUT.has(headerPath);
 
   const [sidebarOpen,     setSidebarOpen]     = useState(false);
   const [notifOpen,       setNotifOpen]       = useState(false);
