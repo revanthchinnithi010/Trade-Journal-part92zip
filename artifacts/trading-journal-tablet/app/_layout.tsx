@@ -5,6 +5,8 @@ import {
   Inter_700Bold,
   useFonts,
 } from "@expo-google-fonts/inter";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setBaseUrl } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
@@ -14,6 +16,45 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API base URL
+//
+// EXPO_PUBLIC_API_BASE_URL takes precedence (production-friendly override).
+// Falls back to EXPO_PUBLIC_DOMAIN which is set to $REPLIT_DEV_DOMAIN in the
+// dev script — giving us the correct Replit proxy URL automatically.
+//
+// To swap for production: set EXPO_PUBLIC_API_BASE_URL in your release build.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const _apiBaseUrl: string | null =
+  process.env.EXPO_PUBLIC_API_BASE_URL ??
+  (process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : null);
+
+setBaseUrl(_apiBaseUrl);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// React Query client
+//
+// Created once at module level — never inside a component — to prevent
+// duplicate instances across hot reloads or re-renders.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 2,
+      staleTime: 5 * 60 * 1_000,   // 5 min — fresh enough for trading data
+      gcTime: 10 * 60 * 1_000,     // 10 min — keep inactive queries in cache
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: false,                  // mutations are not idempotent; never auto-retry
+    },
+  },
+});
 
 SplashScreen.preventAutoHideAsync();
 
@@ -90,11 +131,13 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <ErrorBoundary>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <RootLayoutNav />
-          </GestureHandlerRootView>
-        </ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <ErrorBoundary>
+            <GestureHandlerRootView style={{ flex: 1 }}>
+              <RootLayoutNav />
+            </GestureHandlerRootView>
+          </ErrorBoundary>
+        </QueryClientProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );
