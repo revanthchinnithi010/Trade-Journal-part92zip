@@ -12,7 +12,7 @@
  *   align / sideOffset       → accepted for API compat; positioning not
  *                              trigger-relative in RN (no getBoundingClientRect)
  *   data-[state=*]:animate-* → animationType="fade" on Modal
- *   origin-[--radix-*]       → removed (Radix CSS custom properties)
+ *   origin-[--radix-X]       → removed (Radix CSS custom properties; * in class name breaks NativeWind parser)
  *   data-[side=*]:slide-*    → removed (Radix positioning data attributes)
  *
  * Behavioral note: content is centered on screen (not anchored to trigger).

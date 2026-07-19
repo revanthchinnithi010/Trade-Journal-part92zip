@@ -1,4 +1,7 @@
 /* NativeWind v4 entry point — must be imported in app/_layout.tsx */
-@tailwind base;
-@tailwind components;
+/* NOTE: @tailwind base is intentionally omitted.
+   Tailwind Preflight generates "*, ::before, ::after { ... }" which uses the
+   CSS universal selector (*). react-native-css-interop cannot parse it and
+   crashes Metro with "Unexpected token Delim('*')". React Native has its own
+   reset; Preflight is browser-only and unnecessary here. */
 @tailwind utilities;

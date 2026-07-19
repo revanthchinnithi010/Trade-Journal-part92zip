@@ -12,7 +12,7 @@
  *   sideOffset                  → API compat; ignored (no trigger positioning)
  *   data-[state=*]:animate-*   → animationType="fade" on Modal
  *   data-[side=*]:slide-*       → removed
- *   origin-[--radix-*]          → removed
+ *   origin-[--radix-X]          → removed (wildcard in class name breaks NativeWind parser)
  *
  * Behavioral note: tooltip is shown on long-press (500ms default) since RN
  * has no hover state. delayDuration from TooltipProvider maps to the

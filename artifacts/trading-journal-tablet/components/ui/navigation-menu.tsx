@@ -18,7 +18,7 @@
  *   data-[motion=*]:*                 → removed (Radix motion data attributes)
  *   md:absolute / md:w-auto           → removed (no breakpoints)
  *   group-data-[state=open]:rotate-180 → Animated rotation on chevron
- *   origin-[--radix-*]               → removed
+ *   origin-[--radix-X]               → removed (wildcard in class name breaks NativeWind parser)
  *
  * Architecture in RN:
  *   - NavigationMenuContext tracks the `value` of the currently open item.
