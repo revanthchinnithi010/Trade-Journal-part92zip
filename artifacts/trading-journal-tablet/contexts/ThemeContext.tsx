@@ -220,7 +220,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hook  (same name as web — drop-in compatible)
+// Hooks  (same names as web — drop-in compatible)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Full theme context — theme, themeMode, isThemeReady and all actions. */
 export const useTheme = () => useContext(ThemeCtx);
+
+/**
+ * Convenience hook — returns only the resolved `Theme` ("dark" | "light").
+ * Use when you only need to branch on the active color scheme and do not
+ * need `themeMode`, `isThemeReady`, or the action callbacks.
+ *
+ * Equivalent to `useTheme().theme`.
+ */
+export function useColorScheme(): Theme {
+  return useContext(ThemeCtx).theme;
+}

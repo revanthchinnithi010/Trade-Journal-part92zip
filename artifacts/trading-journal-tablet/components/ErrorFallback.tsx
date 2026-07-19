@@ -51,6 +51,7 @@ export function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {__DEV__ ? (
+        /* ── Dev-only: tap to open the stack-trace modal ──────────────────── */
         <Pressable
           onPress={() => setIsModalVisible(true)}
           accessibilityLabel="View error details"

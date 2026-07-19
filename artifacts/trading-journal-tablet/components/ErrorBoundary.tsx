@@ -4,14 +4,28 @@ import { ErrorFallback, ErrorFallbackProps } from "@/components/ErrorFallback";
 
 export type ErrorBoundaryProps = PropsWithChildren<{
   FallbackComponent?: ComponentType<ErrorFallbackProps>;
+  /**
+   * Optional callback invoked after the default console.error logging.
+   * Use for crash reporting services (Sentry, Bugsnag, etc.).
+   */
   onError?: (error: Error, stackTrace: string) => void;
 }>;
 
 type ErrorBoundaryState = { error: Error | null };
 
 /**
- * This is a special case for for using the class components. Error boundaries must be class components because React only provides error boundary functionality through lifecycle methods (componentDidCatch and getDerivedStateFromError) which are not available in functional components.
+ * Production-ready React Error Boundary.
+ *
+ * Must be a class component — React's error boundary lifecycle methods
+ * (getDerivedStateFromError, componentDidCatch) are not available in
+ * functional components.
  * https://react.dev/reference/react/Component#catching-rendering-errors-with-an-error-boundary
+ *
+ * Behaviour:
+ *  - Catches any render-time error thrown by a descendant.
+ *  - Always logs to console.error (visible in Metro / Xcode / Logcat).
+ *  - Renders FallbackComponent (defaults to ErrorFallback) with a resetError
+ *    callback so the user can attempt recovery without a full app restart.
  */
 export class ErrorBoundary extends Component<
   ErrorBoundaryProps,
@@ -29,9 +43,15 @@ export class ErrorBoundary extends Component<
     return { error };
   }
 
-  componentDidCatch(error: Error, info: { componentStack: string }): void {
+  componentDidCatch(error: Error, info: React.ErrorInfo): void {
+    // Always log — Metro bundler, Xcode console, and Android Logcat all show
+    // console.error output, making this the primary crash signal in development
+    // and in production builds that do not use a remote error reporter.
+    console.error("[ErrorBoundary] Unhandled render error:", error);
+    console.error("[ErrorBoundary] Component stack:", info.componentStack);
+
     if (typeof this.props.onError === "function") {
-      this.props.onError(error, info.componentStack);
+      this.props.onError(error, info.componentStack ?? "");
     }
   }
 
