@@ -227,9 +227,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 export const useTheme = () => useContext(ThemeCtx);
 
 /**
+ * Returns the resolved `Theme` ("dark" | "light") — the concrete color
+ * scheme that is actually applied right now.
+ *
+ * Unlike `themeMode`, this is never "system" — it is always a concrete value
+ * that can be used directly to pick a color palette:
+ *
+ *   const theme = useResolvedTheme();
+ *   const colors = theme === "dark" ? darkPalette : lightPalette;
+ *
+ * Use `useTheme().themeMode` when you need to know whether the user chose
+ * "system" vs an explicit override.
+ */
+export function useResolvedTheme(): Theme {
+  return useContext(ThemeCtx).theme;
+}
+
+/**
  * Convenience hook — returns only the resolved `Theme` ("dark" | "light").
- * Use when you only need to branch on the active color scheme and do not
- * need `themeMode`, `isThemeReady`, or the action callbacks.
+ * Alias for `useResolvedTheme()` — provided so components migrated from the
+ * web can keep using the same hook name they used there.
  *
  * Equivalent to `useTheme().theme`.
  */
