@@ -424,8 +424,8 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
   useEffect(() => {
     if (mode !== "sheet") return;
     if (visible) {
-      // Open at index 1 = 95% (FULL snap) — matches web behaviour
-      bottomSheetRef.current?.present(1);
+      // Open at 95% snap — index prop on BottomSheetModal sets initial snap; present() takes no arg in v5
+      bottomSheetRef.current?.present();
     } else {
       bottomSheetRef.current?.dismiss();
     }
@@ -1029,7 +1029,6 @@ export const SharedMarketSelector = memo(function SharedMarketSelector({
           data={listItems}
           renderItem={renderItem}
           keyExtractor={keyExtractor}
-          estimatedItemSize={56}
           extraData={activeSymbol}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
