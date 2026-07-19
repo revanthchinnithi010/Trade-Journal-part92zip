@@ -1,34 +1,39 @@
 /**
  * Z-index / elevation layer constants — React Native port of src/constants/zIndex.ts
  *
- * Replacements made vs the web original
- * ──────────────────────────────────────
- * None — the object is identical to the web source.
+ * React Native stacking model
+ * ───────────────────────────
+ * • zIndex works on any <View> on both platforms and behaves like CSS z-index
+ *   within the same stacking context (siblings within the same parent).
+ * • Android additionally requires `elevation` to guarantee a View renders
+ *   above siblings and casts a drop shadow.  Without elevation, Android may
+ *   ignore zIndex for Views that cross stacking-context boundaries (e.g. a
+ *   portal rendered via a Modal or absolute-positioned root View).
+ * • iOS honours zIndex without elevation; elevation has no effect on iOS.
  *
- * React Native honours `zIndex` inside a `StyleSheet` on both platforms and
- * its semantics match the web: higher values render on top of lower values
- * within the same stacking context.  The numeric values are therefore
- * unchanged from the web version.
+ * Recommended usage
+ * ─────────────────
+ *   import { LAYERS, ELEVATION } from "@/constants/zIndex";
  *
- * Platform notes
- * ──────────────
- * iOS   — zIndex works on any View; no extra config needed.
- * Android — zIndex requires `elevation` to be set on the same View when
- *           the component needs to render above its siblings AND cast a
- *           shadow.  For purely logical stacking (no shadow needed) zIndex
- *           alone is sufficient on Android as of RN 0.65+.
+ *   // zIndex only (iOS + Android same stacking context):
+ *   <View style={{ zIndex: LAYERS.modal }}>…</View>
  *
- * Usage
- * ─────
- *   import { LAYERS } from "@/constants/zIndex";
+ *   // zIndex + elevation (guaranteed cross-context stacking on Android):
+ *   <View style={{ zIndex: LAYERS.modal, elevation: ELEVATION.modal }}>…</View>
  *
- *   <View style={{ zIndex: LAYERS.modalOverlay }}>…</View>
- *
- *   // With elevation (Android shadow + guaranteed stacking):
- *   <View style={{ zIndex: LAYERS.modalOverlay, elevation: LAYERS.modalOverlay }}>…</View>
+ * Values
+ * ──────
+ * All numeric values are RN-friendly integers.  No CSS-only concepts
+ * (auto, inherit, unset) are used.  Position styles are NOT included here —
+ * use StyleSheet in components.
  */
 
+// ─────────────────────────────────────────────────────────────────────────────
+// LAYERS — z-index values for every semantic UI layer
+// ─────────────────────────────────────────────────────────────────────────────
+
 export const LAYERS = {
+  // ── Web-origin layers (public API preserved verbatim) ──────────────────────
   chart:          1,
   toolbar:        100,
   floatingWidget: 200,
@@ -36,7 +41,65 @@ export const LAYERS = {
   subPopup:       600,
   colorPicker:    700,
   modalOverlay:   2000,
+
+  // ── React Native extended semantic layers ──────────────────────────────────
+  /** Decorative backgrounds, chart canvas, map tiles. */
+  background:     0,
+  /** Main scrollable content area. */
+  content:        1,
+  /** Floating action buttons, persistent floating chips. */
+  floating:       200,
+  /** Inline dropdowns / select menus anchored to a field. */
+  dropdown:       400,
+  /** Tooltip bubbles shown on long-press or hover. */
+  tooltip:        700,
+  /** Full-screen or sheet modals. */
+  modal:          2000,
+  /** Bottom sheets (action sheets, pickers, drawer panels). */
+  bottomSheet:    800,
+  /** Ephemeral toasts / snackbars rendered above everything except overlays. */
+  toast:          900,
+  /** Semi-transparent screen overlays (dimming, blocking). */
+  overlay:        1000,
+  /** Full-screen takeovers (onboarding, camera, immersive views). */
+  fullscreen:     3000,
 } as const;
 
-/** Convenience type — the union of all valid layer values. */
+/** The union of all valid LAYERS values. */
 export type LayerValue = (typeof LAYERS)[keyof typeof LAYERS];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ELEVATION — Android elevation values (dp) matching each semantic layer
+//
+// Rules of thumb:
+//   • Elevation must be ≥ 0.
+//   • Higher elevation = larger shadow + guaranteed rendering above lower views.
+//   • On iOS these values are ignored; include them for cross-platform code
+//     without branching.
+//   • Values intentionally stay below 24 dp (Material Design ceiling for
+//     floating elements) except for fullscreen which uses 0 (occupies the
+//     whole screen, no siblings to compete with).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ELEVATION = {
+  background:     0,
+  content:        0,
+  chart:          1,
+  toolbar:        4,
+  floatingWidget: 6,
+  floating:       6,
+  dropdown:       8,
+  settingsPanel:  8,
+  subPopup:       10,
+  tooltip:        12,
+  colorPicker:    12,
+  bottomSheet:    16,
+  toast:          18,
+  overlay:        20,
+  modal:          24,
+  modalOverlay:   24,
+  fullscreen:     0,   // occupies full screen — no sibling competition
+} as const satisfies Record<keyof typeof LAYERS, number>;
+
+/** The union of all valid ELEVATION values. */
+export type ElevationValue = (typeof ELEVATION)[keyof typeof ELEVATION];
