@@ -20,6 +20,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { Toaster } from "@/components/ui/toaster";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API base URL
@@ -152,6 +153,8 @@ export default function RootLayout() {
           </ErrorBoundary>
         </QueryClientProvider>
       </ThemeProvider>
+      {/* Global toast overlay — must be last so it renders above all screens */}
+      <Toaster topOffset={56} bottomOffset={80} />
     </SafeAreaProvider>
   );
 }
