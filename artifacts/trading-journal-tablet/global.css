@@ -1,0 +1,4 @@
+/* NativeWind v4 entry point — must be imported in app/_layout.tsx */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

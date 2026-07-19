@@ -1,4 +1,5 @@
 const { getDefaultConfig } = require("expo/metro-config");
+const { withNativeWind } = require("nativewind/metro");
 const path = require("path");
 
 const projectRoot = __dirname;
@@ -36,4 +37,6 @@ config.resolver.blockList = [
   /\/\.local\/.*/,
 ];
 
-module.exports = config;
+// 6. Wrap with NativeWind so Metro applies the CSS→JS transform for
+//    className props. The input must match the CSS file imported in _layout.tsx.
+module.exports = withNativeWind(config, { input: "./global.css" });

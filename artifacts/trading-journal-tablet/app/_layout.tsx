@@ -1,3 +1,7 @@
+// NativeWind v4 — must be the first import in the root layout so the
+// CSS→JS transform is registered before any component tree is evaluated.
+import "../global.css";
+
 import {
   Inter_400Regular,
   Inter_500Medium,
@@ -77,7 +81,15 @@ function RootLayoutNav() {
       <StatusBar style="auto" />
 
       <Stack screenOptions={{ headerShown: false, animation: "none" }}>
+        {/* Current WebView wrapper — the entry point for the web-bridge phase */}
         <Stack.Screen name="index" />
+        {/*
+          (tabs) route group — the native navigation shell.
+          Route groups are transparent in URLs; (tabs)/index resolves to /tabs/index
+          while app/index.tsx retains ownership of /.
+          This screen is additive — it does not replace the WebView root.
+        */}
+        <Stack.Screen name="(tabs)" />
         {/* +not-found must be declared so Expo Router can match unknown routes. */}
         <Stack.Screen name="+not-found" />
       </Stack>
@@ -93,7 +105,8 @@ function RootLayoutNav() {
 //     ThemeProvider    — theme must be available to ErrorBoundary fallback UI
 //       ErrorBoundary  — catches errors thrown by everything below
 //         GestureHandlerRootView
-//           RootLayoutNav
+//           QueryClientProvider
+//             RootLayoutNav
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function RootLayout() {
