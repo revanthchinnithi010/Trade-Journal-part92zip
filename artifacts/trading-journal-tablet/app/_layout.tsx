@@ -15,12 +15,14 @@ import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import React, { useEffect, useState } from "react";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { Toaster } from "@/components/ui/toaster";
+import { WatchlistProvider } from "@/contexts/WatchlistContext";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API base URL
@@ -148,7 +150,11 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <ErrorBoundary>
             <GestureHandlerRootView style={{ flex: 1 }}>
-              <RootLayoutNav />
+              <BottomSheetModalProvider>
+                <WatchlistProvider>
+                  <RootLayoutNav />
+                </WatchlistProvider>
+              </BottomSheetModalProvider>
             </GestureHandlerRootView>
           </ErrorBoundary>
         </QueryClientProvider>
