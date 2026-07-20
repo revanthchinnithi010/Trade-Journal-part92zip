@@ -274,10 +274,13 @@ const ctStyles = StyleSheet.create({
 
 // ── SymbolRow ─────────────────────────────────────────────────────────────────
 
-interface RowItem extends SymbolInfo {
+interface RowItem {
+  symbol:   string;
   isFav:    boolean;
+  label:    string;
   market:   string;
   badge:    string;
+  provider: string;
 }
 
 interface SymbolRowProps {
@@ -474,8 +477,8 @@ function CTraderStatusBar() {
     setBusy(false);
   }, [busy]);
 
-  const isConnected  = status === "connected";
-  const isConnecting = status === "connecting";
+  const isConnected  = status === "streaming";
+  const isConnecting = status === "connecting" || status === "app_auth" || status === "acct_auth" || status === "subscribing";
 
   return (
     <View style={csStyles.bar}>
@@ -617,7 +620,7 @@ export const BrokerWatchlist = memo(function BrokerWatchlist({
       return (
         <SymbolRow
           item={item}
-          broker={activeBroker}
+          broker={activeBroker ?? "delta"}
           isActive={item.symbol === activeSymbol}
           onSelect={getOnSelect(item.symbol)}
           onStar={getOnStar(item.symbol, wEntry?.id ?? 0, item.isFav)}

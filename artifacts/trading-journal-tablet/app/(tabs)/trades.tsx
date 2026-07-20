@@ -759,7 +759,7 @@ const TradeDetailModal = memo(function TradeDetailModal({
                   <Text style={detailStyles.tagGroupLabel}>Setup</Text>
                 </View>
                 <View style={detailStyles.tagWrap}>
-                  {setupTags.map(tag => (
+                  {setupTags.map((tag: string) => (
                     <View key={tag} style={detailStyles.setupTag}>
                       <Text style={detailStyles.setupTagText}>{tag}</Text>
                     </View>
@@ -775,7 +775,7 @@ const TradeDetailModal = memo(function TradeDetailModal({
                   <Text style={detailStyles.tagGroupLabel}>Mistakes</Text>
                 </View>
                 <View style={detailStyles.tagWrap}>
-                  {mistakeTags.map(tag => (
+                  {mistakeTags.map((tag: string) => (
                     <View key={tag} style={detailStyles.mistakeTag}>
                       <Text style={detailStyles.mistakeTagText}>{tag}</Text>
                     </View>
@@ -1891,7 +1891,7 @@ export default function TradesScreen() {
   // ── filteredTrades memo (preserved exactly from web) ──────────────────────
   const filteredTrades = useMemo(() => {
     if (!tradesResponse) return [];
-    return tradesResponse.trades.filter(t => {
+    return tradesResponse.trades.filter((t: Trade) => {
       const broker = BROKER_MAP[t.symbol] || "";
       return t.exitPrice != null &&
              (sideFilter    === "all" || t.side   === sideFilter) &&
@@ -1899,7 +1899,7 @@ export default function TradesScreen() {
     });
   }, [tradesResponse, sideFilter, brokerFilter]);
 
-  const selectedTrade = tradesResponse?.trades.find(t => t.id === selectedTradeId);
+  const selectedTrade = tradesResponse?.trades.find((t: Trade) => t.id === selectedTradeId);
 
   // ── FlashList helpers ──────────────────────────────────────────────────────
   const keyExtractor = useCallback((item: Trade) => String(item.id), []);

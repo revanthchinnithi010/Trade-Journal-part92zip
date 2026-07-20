@@ -594,7 +594,9 @@ export default function HomeScreen() {
 
   const handleDateClick = useCallback((date: string) => {
     const calMap = (calData ?? []).reduce<Record<string, { pnl: number; trades: number }>>(
-      (m, d) => { m[d.date] = { pnl: d.pnl, trades: d.trades }; return m; },
+      (m: Record<string, { pnl: number; trades: number }>, d: { date: string; pnl: number; trades: number }) => {
+        m[d.date] = { pnl: d.pnl, trades: d.trades }; return m;
+      },
       {},
     );
     const entry = calMap[date];
@@ -605,7 +607,7 @@ export default function HomeScreen() {
 
   const selectedDayData = useMemo(() => {
     if (!selectedDate || !calData) return null;
-    return calData.find((d) => d.date === selectedDate) ?? null;
+    return calData.find((d: { date: string; pnl: number; trades: number }) => d.date === selectedDate) ?? null;
   }, [selectedDate, calData]);
 
   // ── Segmented control ──────────────────────────────────────────────────────

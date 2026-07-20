@@ -165,7 +165,7 @@ export default function AccountCard({ account }: Props) {
               <ActivityIndicator size={12} color={CONNECTED_CLR} />
             ) : (
               <Ionicons
-                name={isConnected ? "wifi" : "wifi-off-outline"}
+                name={isConnected ? "wifi" : "wifi-outline"}
                 size={14}
                 color={isConnected ? CONNECTED_CLR : "#6b7280"}
               />
