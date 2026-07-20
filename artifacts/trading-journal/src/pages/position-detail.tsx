@@ -155,7 +155,7 @@ export default function PositionDetail() {
   const closePosition    = useBrokerStore(s => s.closePosition);
   const placeOrder       = useBrokerStore(s => s.placeOrder);
   const connectionStatus = useBrokerStore(s => s.connectionStatus);
-  const activeBrokerId   = useBrokerStore(s => s.activeAccount?.brokerId ?? "");
+  const activeBrokerId   = useBrokerStore(s => s.activeAccount?.broker_id ?? "");
 
   const ticks = useTickStore(s => s.ticks);
   const xr    = useCurrencyStore(s => s.exchangeRate) || USD_TO_INR_FALLBACK;
@@ -260,19 +260,19 @@ export default function PositionDetail() {
   // ─── Bracket order helpers ────────────────────────────────────────────────
   const pctChips = [0.25, 0.5, 1, 2];
   function pnlAtPrice(price: number) {
-    return position.side === "Long"
-      ? (price - position.entryPrice) * position.size
-      : (position.entryPrice - price) * position.size;
+    return position!.side === "Long"
+      ? (price - position!.entryPrice) * position!.size
+      : (position!.entryPrice - price) * position!.size;
   }
   function tpPriceForPct(pct: number) {
-    return position.side === "Long"
-      ? position.entryPrice * (1 + pct / 100)
-      : position.entryPrice * (1 - pct / 100);
+    return position!.side === "Long"
+      ? position!.entryPrice * (1 + pct / 100)
+      : position!.entryPrice * (1 - pct / 100);
   }
   function slPriceForPct(pct: number) {
-    return position.side === "Long"
-      ? position.entryPrice * (1 - pct / 100)
-      : position.entryPrice * (1 + pct / 100);
+    return position!.side === "Long"
+      ? position!.entryPrice * (1 - pct / 100)
+      : position!.entryPrice * (1 + pct / 100);
   }
   const tpPnlPreview = tpValue ? pnlAtPrice(parseFloat(tpValue)) : null;
   const slPnlPreview = slValue ? pnlAtPrice(parseFloat(slValue)) : null;
@@ -282,7 +282,7 @@ export default function PositionDetail() {
     if (closing || connectionStatus !== "connected") return;
     setClosing(true);
     try {
-      await closePosition(position);
+      await closePosition(position!);
       navigate("/portfolio?tab=positions");
     } catch { /* toast handled by broker service */ }
     finally { setClosing(false); setShowCloseConfirm(false); }
@@ -293,23 +293,23 @@ export default function PositionDetail() {
     if (!tpValue && !slValue) return;
     setUpdating(true);
     try {
-      const exitSide = position.side === "Long" ? "Sell" : "Buy";
+      const exitSide = position!.side === "Long" ? "Sell" : "Buy";
       if (tpValue) {
         await placeOrder({
-          symbol:     position.symbol,
+          symbol:     position!.symbol,
           side:       exitSide,
           orderType:  tpOrderType,
-          qty:        String(position.size),
+          qty:        String(position!.size),
           ...(tpOrderType === "Limit" ? { price: tpLimitPrice || tpValue } : {}),
           takeProfit: tpValue,
         });
       }
       if (slValue) {
         await placeOrder({
-          symbol:     position.symbol,
+          symbol:     position!.symbol,
           side:       exitSide,
           orderType:  slOrderType,
-          qty:        String(position.size),
+          qty:        String(position!.size),
           ...(slOrderType === "Limit" ? { price: slLimitPrice || slValue } : {}),
           stopLoss:   slValue,
         });

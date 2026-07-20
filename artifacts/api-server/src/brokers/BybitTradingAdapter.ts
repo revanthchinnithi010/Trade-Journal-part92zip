@@ -115,14 +115,14 @@ export class BybitTradingAdapter extends BrokerAdapter {
 
   async placeOrder(params: PlaceOrderParams): Promise<{ orderId: string }> {
     const result = await this.request<{ orderId: string }>("POST", "/v5/order/create", undefined, {
-      category: params.category ?? "linear",
+      category: "linear",
       symbol: params.symbol,
       side: params.side,
       orderType: params.orderType,
       qty: params.qty,
       ...(params.orderType === "Limit" && params.price ? { price: params.price } : {}),
-      ...(params.stopLoss ? { stopLoss: params.stopLoss } : {}),
-      ...(params.takeProfit ? { takeProfit: params.takeProfit } : {}),
+      ...(params.stopLossPrice ? { stopLoss: params.stopLossPrice } : {}),
+      ...(params.takeProfitPrice ? { takeProfit: params.takeProfitPrice } : {}),
     });
     return { orderId: result.orderId };
   }

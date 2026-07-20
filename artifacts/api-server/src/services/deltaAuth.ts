@@ -76,13 +76,13 @@ async function tryEndpoint(
     const code = data.error?.code ?? "unknown";
     const msg  = data.error?.message ?? data.message ?? "Unauthorized";
     logger.warn({ restBase, envName, code, msg }, "DeltaAuth: 401 on this endpoint");
-    return { valid: false, error: `${code}: ${msg}`, ...env };
+    return { valid: false, error: `${code}: ${msg}`, ...env, envName: env.name };
   }
 
   if (!res.ok || data.success === false) {
     const msg = data.error?.message ?? data.message ?? `HTTP ${res.status}`;
     logger.warn({ restBase, envName, status: res.status, msg }, "DeltaAuth: non-OK response");
-    return { valid: false, error: msg, ...env };
+    return { valid: false, error: msg, ...env, envName: env.name };
   }
 
   const usdt = (data.result ?? []).find(b => b.asset_symbol === "USDT");
@@ -97,6 +97,7 @@ async function tryEndpoint(
     usdtBalance:  usdt?.balance,
     walletBalance: usdt?.available_balance,
     ...env,
+    envName:      env.name,
   };
 }
 

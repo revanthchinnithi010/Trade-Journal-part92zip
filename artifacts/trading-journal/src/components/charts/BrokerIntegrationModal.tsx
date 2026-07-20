@@ -148,7 +148,7 @@ function InlineMt5Form({ onBack }: { onBack: () => void }) {
       setStatus("success");
       await loadAccounts();
       setTimeout(() => {
-        connect({ ...data.account!, api_token: data.api_token! } as Parameters<typeof connect>[0]);
+        connect({ ...data.account!, api_token: data.api_token! } as unknown as Parameters<typeof connect>[0]);
       }, 1200);
     } catch (err) {
       setStatus("error");

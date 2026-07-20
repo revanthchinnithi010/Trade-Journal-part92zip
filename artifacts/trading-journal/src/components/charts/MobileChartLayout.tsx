@@ -3975,7 +3975,7 @@ function TradeSheet({ onClose }: { onClose: () => void }) {
   // Balance: use cTrader account equity when symbol is cTrader, otherwise Delta wallet
   const ctraderAccount = connectedAccounts["ctrader"];
   const availMargin = activeBroker === "ctrader"
-    ? (ctraderAccount?.balance ? parseFloat(String(ctraderAccount.balance.equity ?? ctraderAccount.balance.walletBalance ?? 0)) : 0)
+    ? (balance ? parseFloat(String(balance.equity ?? balance.walletBalance ?? 0)) : 0)
     : (balance ? parseFloat(balance.walletBalance) : 0);
   const isConnected = activeBroker === "ctrader"
     ? !!ctraderAccount

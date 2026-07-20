@@ -116,7 +116,7 @@ router.patch("/broker/delta/order/:id",
   validateModifyOrder,
   async (req, res) => {
     const { adapter, accountId } = req.brokerCtx!;
-    const orderId = req.params["id"]!;
+    const orderId = req.params["id"] as string;
     logger.info({ accountId, orderId, body: req.body }, "broker/delta: modifyOrder");
     try {
       await (adapter as DeltaTradingAdapter).modifyOrder(orderId, req.body);
@@ -135,7 +135,7 @@ router.delete("/broker/delta/order/:id",
   requireDelta,
   async (req, res) => {
     const { adapter, accountId } = req.brokerCtx!;
-    const orderId = req.params["id"]!;
+    const orderId = req.params["id"] as string;
     logger.info({ accountId, orderId }, "broker/delta: cancelOrder");
     try {
       await adapter.cancelOrder(orderId);
@@ -155,7 +155,7 @@ router.delete("/broker/delta/position/:productId",
   validateClosePosition,
   async (req, res) => {
     const { adapter, accountId } = req.brokerCtx!;
-    const productId = req.params["productId"]!;
+    const productId = req.params["productId"] as string;
     const { size, side } = req.body as { size: number; side: "Long" | "Short" };
     logger.info({ accountId, productId, size, side }, "broker/delta: closePosition");
     try {

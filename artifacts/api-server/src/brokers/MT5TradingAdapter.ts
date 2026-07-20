@@ -137,8 +137,8 @@ export class MT5TradingAdapter extends BrokerAdapter {
         type: `${params.side.toUpperCase()}_${params.orderType.toUpperCase()}`,
         volume: parseFloat(params.qty),
         ...(params.price ? { price: parseFloat(params.price) } : {}),
-        ...(params.stopLoss ? { stopLoss: parseFloat(params.stopLoss) } : {}),
-        ...(params.takeProfit ? { takeProfit: parseFloat(params.takeProfit) } : {}),
+        ...(params.stopLossPrice ? { stopLoss: parseFloat(params.stopLossPrice) } : {}),
+        ...(params.takeProfitPrice ? { takeProfit: parseFloat(params.takeProfitPrice) } : {}),
       },
     );
     return { orderId: String(data.ticket ?? data.orderId ?? "") };

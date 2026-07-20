@@ -4,7 +4,7 @@ import {
 } from "react";
 import { useTickStore } from "@/store/tickStore";
 import type { TickState, FlashDir } from "@/store/tickStore";
-import { useCtraderSpotStore } from "@/store/ctraderSpotStore";
+import { useCtraderSpotStore, type CtraderConnStatus } from "@/store/ctraderSpotStore";
 // Re-export for backward compat — all consumers can import from here or tickStore
 export type { FlashDir, TickState } from "@/store/tickStore";
 
@@ -286,7 +286,7 @@ export function LiveMarketProvider({ children }: { children: ReactNode }) {
           });
         } else if (msg.type === "ctrader_status") {
           useCtraderSpotStore.getState().setStatus({
-            connStatus:      msg.status         as string,
+            connStatus:      msg.status         as CtraderConnStatus,
             accountId:       (msg.accountId     as number) ?? 0,
             isLive:          (msg.isLive        as boolean) ?? false,
             subscribedCount: (msg.subscribedCount as number) ?? 0,
