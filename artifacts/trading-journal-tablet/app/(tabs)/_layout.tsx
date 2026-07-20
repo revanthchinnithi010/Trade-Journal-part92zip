@@ -305,6 +305,34 @@ export default function TabsLayout() {
           />
         );
       })}
+
+      {/*
+       * Hidden screens — accessible via router.push("/brokers") and
+       * router.push("/balances") but NOT displayed in the tab bar.
+       *
+       * href: null removes the screen from the tab bar while keeping it
+       * routable as a stack screen within the (tabs) layout group.
+       *
+       * Web equivalents:
+       *   brokers  → src/pages/brokers.tsx  (Layout-routed, not in nav bar)
+       *   balances → src/pages/balances.tsx (cover page, uses navigate("/") to go back)
+       */}
+      <Tabs.Screen
+        name="brokers"
+        options={{
+          title:    "Broker Connections",
+          href:     null,     // hidden from tab bar
+          headerShown: false,
+        }}
+      />
+      <Tabs.Screen
+        name="balances"
+        options={{
+          title:    "Balances",
+          href:     null,     // hidden from tab bar
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }
