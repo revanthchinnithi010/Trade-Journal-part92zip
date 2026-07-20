@@ -146,6 +146,12 @@ const TABS: TabDef[] = [
     iconInactive: "bar-chart-outline",
   },
   {
+    name:         "calendar",
+    label:        "Calendar",
+    iconActive:   "calendar",
+    iconInactive: "calendar-outline",
+  },
+  {
     name:         "alerts",
     label:        "Alerts",
     iconActive:   "notifications",
