@@ -151,6 +151,12 @@ const TABS: TabDef[] = [
     iconActive:   "notifications",
     iconInactive: "notifications-outline",
   },
+  {
+    name:         "notebook",
+    label:        "Notebook",
+    iconActive:   "book",
+    iconInactive: "book-outline",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
