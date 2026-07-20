@@ -93,6 +93,15 @@ function RootLayoutNav() {
           This screen is additive — it does not replace the WebView root.
         */}
         <Stack.Screen name="(tabs)" />
+        {/*
+          Stack screens for detail pages pushed on top of the tab bar.
+          trade/[id]    — Trade detail (currently a "coming soon" stub,
+                          matching web src/pages/trade.tsx)
+          position/[id] — Full position detail screen with live PnL, bracket
+                          orders, close/update actions.
+        */}
+        <Stack.Screen name="trade/[id]" />
+        <Stack.Screen name="position/[id]" />
         {/* +not-found must be declared so Expo Router can match unknown routes. */}
         <Stack.Screen name="+not-found" />
       </Stack>
