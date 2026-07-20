@@ -4,12 +4,13 @@
  * RN compatibility changes vs the web original
  * ─────────────────────────────────────────────
  * 1. div/span/button → View/Text/Pressable + StyleSheet
- * 2. Inline map() list → FlatList (fully virtualized)
- *    - keyExtractor: stable (item.id)
- *    - renderItem:   memoized via useCallback
- *    - OrderRow:     wrapped in React.memo to prevent unnecessary re-renders
+ * 2. Inline map() list → FlashList (@shopify/flash-list, fully virtualized)
+ *    - keyExtractor:     stable (item.id)
+ *    - renderItem:       memoized via useCallback
+ *    - OrderRow:         wrapped in React.memo to prevent unnecessary re-renders
  *    - onRefresh / refreshing: pull-to-refresh via RefreshControl
  *    - ListEmptyComponent: loading + empty states
+ *    - estimatedItemSize: 78px (measured from row height)
  * 3. Lucide icons → Ionicons (@expo/vector-icons)
  *    BarChart2      → bar-chart-outline
  *    Loader2        → ActivityIndicator (built-in)
@@ -36,9 +37,9 @@
 import { useState, useCallback, memo } from "react";
 import {
   View, Text, Pressable, StyleSheet,
-  FlatList, ActivityIndicator, RefreshControl,
-  type ListRenderItem,
+  ActivityIndicator, RefreshControl,
 } from "react-native";
+import { FlashList, type ListRenderItem } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { useBrokerStore } from "@/store/brokerStore";
 import { BROKERS } from "@/types/broker";
@@ -233,7 +234,7 @@ export function OrdersList() {
       </View>
 
       {/* List */}
-      <FlatList
+      <FlashList
         data={orders}
         keyExtractor={keyExtractor}
         renderItem={renderItem}
@@ -247,10 +248,6 @@ export function OrdersList() {
         }
         contentContainerStyle={orders.length === 0 ? listStyles.emptyFill : undefined}
         showsVerticalScrollIndicator={false}
-        removeClippedSubviews
-        maxToRenderPerBatch={10}
-        updateCellsBatchingPeriod={50}
-        windowSize={10}
       />
     </View>
   );
