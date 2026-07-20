@@ -58,6 +58,7 @@
   "dependencies": {
     "@gorhom/bottom-sheet": "^5.2.14",
     "@shopify/flash-list": "^2.3.2",
+    "expo-clipboard": "~7.0.1",
     "nativewind": "^4.2.6",
     "react-native-toast-message": "^2.4.0",
     "react-native-webview": "13.15.0",
