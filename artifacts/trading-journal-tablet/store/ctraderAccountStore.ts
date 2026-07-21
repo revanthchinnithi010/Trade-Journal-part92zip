@@ -31,6 +31,12 @@ import { classifyBrokerForSymbol } from "@/lib/brokerClassification";
 import { liveUnrealizedPnlUSD } from "@/lib/livePnl";
 import type { AccountSnapshot } from "./accountTypes";
 
+// Stable empty-array sentinel — same rationale as deltaAccountStore.ts:
+// `?? []` inside a Zustand selector returns a new array reference on every
+// call when the key is absent, which breaks useSyncExternalStore's
+// Object.is snapshot comparison and causes an infinite re-render loop.
+const EMPTY_POSITIONS: never[] = [];
+
 /**
  * Derived, read-only view of the cTrader account.
  * Unlike Delta, cTrader converts USD → INR using the LIVE market rate
@@ -40,7 +46,7 @@ export function useCtraderAccount(): AccountSnapshot {
   const balance   = useBrokerStore(s => s.brokerBalances["ctrader"] ?? null);
   const status    = useBrokerStore(s => s.brokerStatuses["ctrader"] ?? "disconnected");
   const account   = useBrokerStore(s => s.connectedAccounts["ctrader"] ?? null);
-  const positions = useBrokerStore(s => s.brokerPositions["ctrader"] ?? []);
+  const positions = useBrokerStore(s => s.brokerPositions["ctrader"] ?? EMPTY_POSITIONS);
   const ticks     = useTickStore(s => s.ticks);
   const liveRate  = useCurrencyStore(s => s.exchangeRate);
   const { data: tradeRes } = useListTrades({ limit: 500 });

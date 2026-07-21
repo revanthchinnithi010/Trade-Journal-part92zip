@@ -29,6 +29,12 @@ import { classifyBrokerForSymbol } from "@/lib/brokerClassification";
 import { liveUnrealizedPnlUSD } from "@/lib/livePnl";
 import type { AccountSnapshot } from "./accountTypes";
 
+// Stable empty-array sentinel used by Zustand selectors below.
+// MUST be module-level: `?? []` inside a selector creates a new array reference
+// on every call, which fails useSyncExternalStore's Object.is snapshot check
+// and causes an infinite re-render loop ("getSnapshot should be cached").
+const EMPTY_POSITIONS: never[] = [];
+
 /** Delta Exchange always converts USD → INR at a fixed rate, per product spec. */
 export const DELTA_FIXED_USD_INR_RATE = 85;
 
@@ -41,7 +47,7 @@ export function useDeltaAccount(): AccountSnapshot {
   const balance   = useBrokerStore(s => s.brokerBalances["delta"] ?? null);
   const status    = useBrokerStore(s => s.brokerStatuses["delta"] ?? "disconnected");
   const account   = useBrokerStore(s => s.connectedAccounts["delta"] ?? null);
-  const positions = useBrokerStore(s => s.brokerPositions["delta"] ?? []);
+  const positions = useBrokerStore(s => s.brokerPositions["delta"] ?? EMPTY_POSITIONS);
   const ticks     = useTickStore(s => s.ticks);
   const { data: tradeRes } = useListTrades({ limit: 500 });
 
