@@ -25,6 +25,7 @@ export type ToolType =
   | "rect"
   | "ellipse"
   | "fib"
+  | "fib_ext"
   | "fib_channel"
   | "arrow"
   | "brush"
