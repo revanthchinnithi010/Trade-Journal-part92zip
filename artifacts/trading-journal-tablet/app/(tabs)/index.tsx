@@ -554,12 +554,17 @@ export default function HomeScreen() {
   const combined = useCombinedPortfolio();
 
   // Open positions and orders — summed across all connected brokers.
-  const deltaPositions   = useBrokerStore(s => s.brokerPositions["delta"]   ?? []);
-  const ctraderPositions = useBrokerStore(s => s.brokerPositions["ctrader"] ?? []);
-  const deltaOrders      = useBrokerStore(s => s.brokerOrders["delta"]      ?? []);
-  const ctraderOrders    = useBrokerStore(s => s.brokerOrders["ctrader"]    ?? []);
-  const openPositionsCount = deltaPositions.length + ctraderPositions.length;
-  const brokerOrdersCount  = deltaOrders.length + ctraderOrders.length;
+  // WHY primitive selectors: `?? []` returns a new array reference every call when
+  // the key is absent.  useSyncExternalStore calls getSnapshot twice per render;
+  // Object.is([], []) === false → store appears "changed" every render → infinite
+  // re-render loop → "Maximum update depth exceeded".  Returning a number (primitive)
+  // is always stable under Object.is, so no extra renders are scheduled.
+  const openPositionsCount = useBrokerStore(
+    s => (s.brokerPositions["delta"]?.length ?? 0) + (s.brokerPositions["ctrader"]?.length ?? 0)
+  );
+  const brokerOrdersCount = useBrokerStore(
+    s => (s.brokerOrders["delta"]?.length ?? 0) + (s.brokerOrders["ctrader"]?.length ?? 0)
+  );
 
   // Collapse loading state once data arrives or timeout fires
   useEffect(() => {
