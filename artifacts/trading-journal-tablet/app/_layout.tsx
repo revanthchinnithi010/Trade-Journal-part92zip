@@ -102,6 +102,12 @@ function RootLayoutNav() {
         */}
         <Stack.Screen name="trade/[id]" />
         <Stack.Screen name="position/[id]" />
+        {/*
+          webview — preserved WebView bridge, accessible via router.push("/webview").
+          Not in the tab bar; not the default launch screen.  Available for
+          intentional use (e.g. opening the full web app from a settings screen).
+        */}
+        <Stack.Screen name="webview" />
         {/* +not-found must be declared so Expo Router can match unknown routes. */}
         <Stack.Screen name="+not-found" />
       </Stack>

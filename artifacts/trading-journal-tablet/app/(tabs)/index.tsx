@@ -67,6 +67,7 @@ import {
   useCurrencyFormatter,
 } from "@/store/currencyStore";
 import { useCombinedPortfolio } from "@/store/combinedPortfolioStore";
+import { useBrokerStore } from "@/store/brokerStore";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -552,10 +553,13 @@ export default function HomeScreen() {
 
   const combined = useCombinedPortfolio();
 
-  // openPositions / openOrders: useBrokerStore not yet migrated → 0 for now.
-  // TODO: wire to migrated broker store when available.
-  const openPositionsCount = 0;
-  const brokerOrdersCount  = 0;
+  // Open positions and orders — summed across all connected brokers.
+  const deltaPositions   = useBrokerStore(s => s.brokerPositions["delta"]   ?? []);
+  const ctraderPositions = useBrokerStore(s => s.brokerPositions["ctrader"] ?? []);
+  const deltaOrders      = useBrokerStore(s => s.brokerOrders["delta"]      ?? []);
+  const ctraderOrders    = useBrokerStore(s => s.brokerOrders["ctrader"]    ?? []);
+  const openPositionsCount = deltaPositions.length + ctraderPositions.length;
+  const brokerOrdersCount  = deltaOrders.length + ctraderOrders.length;
 
   // Collapse loading state once data arrives or timeout fires
   useEffect(() => {

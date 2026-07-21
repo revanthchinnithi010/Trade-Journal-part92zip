@@ -52,6 +52,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 import { zustandStorage } from "@/lib/rnStorage";
+import { getApiBase } from "@/lib/apiBase";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — identical to web
@@ -245,10 +246,10 @@ export const useMarketStore = create<MarketStoreState>()(
       setProviders: (providers) => set({ providers }),
 
       fetchSymbolCatalog: async (broker) => {
-        // TODO: prefix with the configured API base URL (no window.location in RN).
-        // The catch block below makes this non-fatal — the catalog stays empty
-        // until a proper base URL is configured via the api-client-react layer.
-        const url = broker ? `/api/symbols?broker=${broker}` : "/api/symbols";
+        // Absolute URL constructed via getApiBase() — relative paths are not
+        // resolved in React Native's fetch (no window.location).
+        const path = broker ? `/api/symbols?broker=${broker}` : "/api/symbols";
+        const url  = getApiBase() + path;
         try {
           // `cache: "no-store"` removed — unsupported in React Native's fetch.
           const res  = await fetch(url);
