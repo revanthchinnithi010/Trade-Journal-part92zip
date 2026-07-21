@@ -320,7 +320,7 @@ class SkiaCtx {
     const p = Skia.Paint();
     p.setStyle(PaintStyle.Fill);
     p.setAntiAlias(true);
-    p.setColor(Color(multiplyAlpha(this.fillStyle, this.globalAlpha)));
+    p.setColor(Skia.Color(multiplyAlpha(this.fillStyle, this.globalAlpha)));
     if (this.shadowBlur > 0 && this.shadowColor !== "transparent") {
       p.setMaskFilter(
         Skia.MaskFilter.MakeBlur(BlurStyle.Normal, this.shadowBlur / 2, true),
@@ -333,7 +333,7 @@ class SkiaCtx {
     const p = Skia.Paint();
     p.setStyle(PaintStyle.Stroke);
     p.setAntiAlias(true);
-    p.setColor(Color(multiplyAlpha(this.strokeStyle, this.globalAlpha)));
+    p.setColor(Skia.Color(multiplyAlpha(this.strokeStyle, this.globalAlpha)));
     p.setStrokeWidth(this.lineWidth);
 
     if (this.lineCap === "round")        p.setStrokeCap(StrokeCap.Round);
@@ -643,7 +643,7 @@ export function renderDrawingsToCanvas(
   clipH: number = H,
 ): void {
   // Clear canvas (transparent) — equivalent to clearRect(0, 0, W*dpr, H*dpr)
-  skCanvas.clear(Color("rgba(0,0,0,0)"));
+  skCanvas.clear(Skia.Color("rgba(0,0,0,0)"));
   if (W <= 0 || H <= 0) return;
 
   // Wrap SkCanvas in the Canvas2D-compatible state machine
