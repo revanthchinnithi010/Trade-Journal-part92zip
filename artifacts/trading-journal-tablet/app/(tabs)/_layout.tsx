@@ -345,6 +345,19 @@ export default function TabsLayout() {
           headerShown: false,
         }}
       />
+      {/*
+       * Reports — navigated to via DashboardSegmentedControl from the Home tab.
+       * Hidden from the tab bar; accessible via router.replace("/reports") or
+       * router.push("/reports") from the Dashboard segmented control.
+       */}
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title:       "Reports",
+          href:        null,   // hidden from tab bar
+          headerShown: false,
+        }}
+      />
     </Tabs>
   );
 }
