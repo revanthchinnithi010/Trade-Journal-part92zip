@@ -1,0 +1,8 @@
+{
+  "name": "tar",
+  "version": "7.5.16",
+  "description": "Local stub replacing the blocked tar npm package",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "license": "ISC"
+}
